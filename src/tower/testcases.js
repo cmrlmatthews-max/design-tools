@@ -248,4 +248,23 @@ export const TEST_CASES = [
     }),
     expect: { gfa: 61600, floors: 10, height: 121, tolerancePct: 0.01 },
   },
+
+  {
+    id: 'tc-15-u-podium-gfa-floors',
+    description: 'U-shaped multifamily on podium (the U preset): 260 x 220 site, 6-floor podium, then 1 amenity + 16 residential floors on a 200 x 140 U with 50 ft arms.',
+    // Podium plate = 240 x 200 = 48,000 sf. Podium GFA = 48,000 x 6 = 288,000 sf.
+    // U plate = w x d - (w - 2a) x (d - a) = 200 x 140 - (200 - 100) x (140 - 50) = 28,000 - 9,000 = 19,000 sf.
+    // Tower = 1 + 16 = 17 floors, all on the U plate. Tower GFA = 19,000 x 17 = 323,000 sf.
+    // GFA = 288,000 + 323,000 = 611,000 sf. Floors = 6 + 17 = 23.
+    state: makeState('TC-15', {
+      site: { ...baseState().site, width: 260, depth: 220, heightLimit: 0 },
+      podium: podium({ floors: 6, groundFtf: 18, ftf: 10.5, shape: rect(240, 200), program: 'retail', upperProgram: 'parking' }),
+      segments: [
+        seg({ floors: 1, ftf: 15, program: 'amenity', shape: { type: 'U', w: 200, d: 140, radius: 0, arm: 50, points: [] } }),
+        seg({ floors: 16, ftf: 10, shape: { type: 'U', w: 200, d: 140, radius: 0, arm: 50, points: [] } }),
+      ],
+      crown: { type: 'flat', height: 4, steps: 3, slopeSide: 'front' },
+    }),
+    expect: { gfa: 611000, floors: 23, tolerancePct: 0.01 },
+  },
 ];

@@ -240,7 +240,7 @@ This tool is the first tool in a future toolkit. Build these parts so that the n
 2. **Units:** Feet and square feet only. No metric toggle in version 1.
 3. **Context:** Simple neighbor blocks are in version 1. A toggle shows or hides them.
 4. **Compare view:** A side-by-side view of two to four saved options is in version 1.
-5. **Starting presets:** Slim residential point tower, office slab, hotel on a podium, and Tampa-type multifamily.
+5. **Starting presets:** Slim residential point tower, office slab, hotel on a podium, L-shaped multifamily on podium, and U-shaped multifamily on podium.
 
 ---
 

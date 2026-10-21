@@ -368,7 +368,8 @@ Phase 6 (Haiku) fills in the full values. These are the starting targets.
 | Slim residential point tower | 2 floors, retail and lobby | 45 floors, 90' × 90' plate, 10'-0" | Small taper, flat crown with screen |
 | Office slab | None | 32 floors, 200' × 90' plate, 13'-6" | Two setbacks, flat crown |
 | Hotel on a podium | 4 floors, 220' × 170' | 24 floors, 160' × 65' plate, 10'-0" | Stepped crown |
-| Tampa-type multifamily | 6 floors, parking and amenity | 17 floors, L-shape, 10'-0" | 23 stories total, amenity deck on podium roof |
+| L-shaped multifamily on podium | 6 floors, parking and amenity | 17 floors, L-shape, 10'-0" | 23 stories total, amenity deck on podium roof |
+| U-shaped multifamily on podium | 6 floors, parking and amenity | 17 floors, U-shape (200' × 140', 50' arms), 10'-0" | 23 stories total, amenity deck on podium roof, U open to the back |
 
 ---
 

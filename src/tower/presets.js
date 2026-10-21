@@ -21,6 +21,8 @@ const rect = (w, d) => ({ type: 'rect', w, d, radius: 0, points: [] });
 
 const lShape = (w, d, arm) => ({ type: 'L', w, d, radius: 0, arm, points: [] });
 
+const uShape = (w, d, arm) => ({ type: 'U', w, d, radius: 0, arm, points: [] });
+
 export const PRESETS = [
   {
     id: 'point-tower',
@@ -147,12 +149,12 @@ export const PRESETS = [
   },
 
   {
-    id: 'tampa-multifamily',
-    name: 'Tampa-type multifamily',
-    description: 'A 23-story L-shaped multifamily tower on a six-level retail and parking podium, with its amenity deck on the podium roof as the first tower floor.',
+    id: 'l-multifamily-podium',
+    name: 'L-shaped multifamily on podium',
+    description: 'A 23-story L-shaped multifamily building on a six-level retail and parking podium, with its amenity deck on the podium roof as the first tower floor.',
     state: {
       schema: 1,
-      name: 'Tampa-type multifamily',
+      name: 'L-shaped multifamily on podium',
       site: {
         shape: 'rect', width: 260, depth: 220, points: [],
         setbacks: { front: 10, back: 10, left: 10, right: 10 },
@@ -184,6 +186,65 @@ export const PRESETS = [
       setbacks: [], mechanical: [], carves: [], cuts: [],
       crown: { type: 'flat', height: 4, steps: 3, slopeSide: 'front' },
       core: { mode: 'percent', percent: 20, w: 40, d: 30 },
+      programs: copyPrograms(),
+      targets: { gfa: 0, far: 0 },
+      view: {
+        style: 'model', colorBy: 'zone', floorLines: true, shadows: true,
+        sun: { azimuth: 135, altitude: 40 }, grid: true, figure: true,
+      },
+    },
+  },
+
+  // U-shaped multifamily on podium. Same structure as the L preset; only the tower plate differs.
+  // Hand calculation of GFA (sf):
+  //   U plate = w x d - (w - 2a) x (d - a), with w = 200, d = 140, a = 50 (arm width; the notch opens to the back).
+  //           = 200 x 140 - (200 - 100) x (140 - 50) = 28,000 - 100 x 90 = 28,000 - 9,000 = 19,000.
+  //   Podium plate = 240 x 200 = 48,000. Podium GFA = 48,000 x 6 floors = 288,000.
+  //   Tower = 1 amenity floor + 16 residential floors = 17 floors, all on the U plate.
+  //   Tower GFA = 19,000 x 17 = 323,000.
+  //   Total GFA = 288,000 + 323,000 = 611,000 sf. Total floors = 6 + 17 = 23.
+  //   Double-check: 17 x 28,000 (full 200 x 140 plates) = 476,000; the notch removes 17 x 9,000 = 153,000;
+  //   476,000 - 153,000 = 323,000. Same tower GFA.
+  {
+    id: 'u-multifamily-podium',
+    name: 'U-shaped multifamily on podium',
+    description: 'A 23-story U-shaped multifamily building on a six-level retail and parking podium, with its amenity deck on the podium roof as the first tower floor. The U opens toward the back of the site.',
+    state: {
+      schema: 1,
+      name: 'U-shaped multifamily on podium',
+      site: {
+        shape: 'rect', width: 260, depth: 220, points: [],
+        setbacks: { front: 10, back: 10, left: 10, right: 10 },
+        heightLimit: 0,                         // no limit; planned top 249.5 ft (245.5 + 4 ft parapet)
+        stepback: { on: false, aboveHeight: 85, distance: 15 },
+      },
+      context: { show: true, blocks: [{ x: 0, y: -180, w: 200, d: 120, h: 60 }] },
+      podium: {
+        on: true, floors: 6, groundFtf: 18, ftf: 10.5,
+        shape: rect(240, 200), offset: { x: 0, y: 0 },
+        program: 'retail', upperProgram: 'parking',
+      },
+      segments: [
+        {
+          floors: 1, ftf: 15, program: 'amenity',          // amenity deck on the podium roof
+          shape: uShape(200, 140, 50), offset: { x: 0, y: 0 }, rotation: 0,
+          taper: { x: 0, y: 0, curve: 'linear' },
+          twist: { deg: 0, start: 0, end: 1, curve: 'linear' },
+          lean: { x: 0, y: 0 },
+        },
+        {
+          floors: 16, ftf: 10, program: 'residential',
+          shape: uShape(200, 140, 50), offset: { x: 0, y: 0 }, rotation: 0,
+          taper: { x: 0, y: 0, curve: 'linear' },
+          twist: { deg: 0, start: 0, end: 1, curve: 'linear' },
+          lean: { x: 0, y: 0 },
+        },
+      ],
+      setbacks: [], mechanical: [], carves: [], cuts: [],
+      crown: { type: 'flat', height: 4, steps: 3, slopeSide: 'front' },
+      // The L preset's 20% core does not fit the U's 50 ft arms (about 74 x 52 ft; the base arm is 50 ft deep),
+      // so it raises a core-outside warning. 15% (about 64 x 45 ft) fits in the front arm. The core is not in GFA.
+      core: { mode: 'percent', percent: 15, w: 40, d: 30 },
       programs: copyPrograms(),
       targets: { gfa: 0, far: 0 },
       view: {

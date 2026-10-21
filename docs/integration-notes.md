@@ -8,7 +8,7 @@ Decisions the integrator must apply. They override any conflicting module defaul
 3. **Floor count:** podium + tower + mechanical. The crown is not a floor.
 4. **tolerancePct:** a percent (0.01 means 0.01%).
 5. **Floor grouping text:** use one helper everywhere (geometry `groupFloors`). Envelope `describeFloors` must give the same text; pick one and reuse it.
-6. **Envelope boundary:** a plate that touches the allowed footprint exactly is inside (1 sf threshold in envelope.js). Tampa preset tests this.
+6. **Envelope boundary:** a plate that touches the allowed footprint exactly is inside (1 sf threshold in envelope.js). The L-shaped multifamily on podium preset tests this.
 
 ## Preset and test data notes
 - Presets keep a default context block that can sit outside small sites. Integrator: replace each preset's context with the "Surround" set for that site.
