@@ -94,6 +94,7 @@ js = ''.join([
     part('10_screenshot.js'), '\n',
     part('11_compare.js'), '\n',
     part('12_tests.js'), '\n',
+    part('12b_tests_layout.js'), '\n',
     part('13_start.js'),
 ])
 

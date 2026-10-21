@@ -17,6 +17,7 @@ const Options = (() => {
   let currentId = null;            // the saved option the working copy came from (null = unsaved)
   let savedPrint = null;           // fingerprint of that option's state, to show "unsaved changes"
   let dirtyTimer = null;
+  let autosaveHeld = false;       // tests hold the autosave so a ?test visit cannot overwrite the saved working copy
 
   const fingerprint = (s) => JSON.stringify({ ...s, name: '' });
   const savedNames = () => storage.list().map((o) => o.name);
@@ -65,6 +66,7 @@ const Options = (() => {
     const s = fillDefaults(p.state);
     s.context.blocks = surroundBlocks(s);
     s.context.show = true;
+    s.view.colorBy = 'program';          // v1.1: a preset is a new option, and new options color the Diagram by program
     show(s, { id: null, name: p.name });
     Toast.show(`Started from the preset ${quoted(p.name)}. It is not saved yet.`);
     return true;
@@ -142,31 +144,32 @@ const Options = (() => {
 
   const when = (t) => { try { return new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch (e) { return ''; } };
   function openMenu(anchor) {
-    const el = h('div', { role: 'menu' });
-    const item = (title, sub, onclick, o = {}) => {
-      const b = h('button', { class: 'pop-item', type: 'button', role: 'menuitem', disabled: o.disabled, onclick: () => { Pop.close(); onclick(); } },
-        h('span', { class: 'tick' }, o.tick ? '✓' : ''), h('span', { class: 'grow' }, title, sub ? h('small', null, sub) : null));
-      return b;
-    };
-    el.append(h('div', { class: 'label pop-label' }, 'Saved options'));
+    const el = h('div', { role: 'menu', id: 'optionMenu' });
+    const item = (title, sub, onclick, o = {}) => h('button', { class: 'pop-item', type: 'button', role: 'menuitem', id: o.id, disabled: o.disabled, onclick: () => { if (!o.keep) Pop.close(); onclick(); } },
+      h('span', { class: 'tick' }, o.tick ? '✓' : ''), h('span', { class: 'grow' }, title, sub ? h('small', null, sub) : null));
+
+    // The option name is edited here. It is committed when the field changes or the menu closes.
+    const nameField = h('input', { class: 'pop-name', id: 'optionName', type: 'text', maxlength: '60', spellcheck: 'false', autocomplete: 'off', 'aria-label': 'Option name', value: Store.get('name') || '' });
+    const commitName = () => { if (nameField.value.trim() !== (Store.get('name') || '')) rename(nameField.value); };
+    nameField.addEventListener('change', commitName);
+    nameField.addEventListener('keydown', (e) => { if (e.key === 'Enter') { commitName(); Pop.close(); } });
+    el.append(h('div', { class: 'label pop-label' }, 'Option name'), h('div', { style: 'padding:0 6px 4px' }, nameField));
+
+    el.append(h('div', { class: 'label pop-label' }, 'This option'));
+    el.append(
+      item('Save', 'Keep the design as it is now', save, { id: 'miSave' }),
+      item('Duplicate', 'Save a copy as a new option', duplicate, { id: 'miDuplicate' }),
+      item('Rename', 'Edit the name above', () => { nameField.focus(); nameField.select(); }, { id: 'miRename', keep: true }),
+      item('Delete', 'Remove it from the saved options', remove, { id: 'miDelete', disabled: !currentId }),
+      item(Compare.isActive() ? 'Exit compare' : 'Compare', 'Compare 2 to 4 options side by side', () => Compare.toggle(), { id: 'miCompare' }),
+    );
+    el.append(h('div', { class: 'pop-sep' }), h('div', { class: 'label pop-label' }, 'Saved options'));
     const saved = storage.list();
     if (!saved.length) el.append(h('div', { class: 'pop-note' }, 'Nothing saved yet. Use Save to keep this design.'));
     for (const o of saved) el.append(item(o.name, `Saved ${when(o.updatedAt)}`, () => loadOption(o.id), { tick: o.id === currentId }));
     el.append(h('div', { class: 'pop-sep' }), h('div', { class: 'label pop-label' }, 'New from a preset'));
-    for (const p of CONFIG.presets) el.append(item(p.name, p.description, () => loadPreset(p.id)));
-    el.append(h('div', { class: 'pop-sep' }), h('div', { class: 'label pop-label' }, 'This option'));
-    el.append(
-      item('Save', 'Keep the design as it is now', save),
-      item('Duplicate', 'Save a copy as a new option', duplicate),
-      item('Rename', 'Edit the name in the top bar', () => { const f = document.getElementById('optionName'); f.focus(); f.select(); }),
-      item('Delete', 'Remove it from the saved options', remove, { disabled: !currentId }),
-    );
-    el.append(h('div', { class: 'pop-sep' }), h('div', { class: 'label pop-label' }, 'Files'));
-    el.append(
-      item('Export JSON', 'Download all saved options', exportJson),
-      item('Import JSON', 'Add the options from a file', () => document.getElementById('importFile').click()),
-    );
-    Pop.open(anchor, el);
+    for (const p of CONFIG.presets) el.append(item(p.name, p.description, () => loadPreset(p.id), { id: `preset-${p.id}` }));
+    Pop.open(anchor, el, { onClose: commitName });
   }
 
   function init({ restore = true } = {}) {
@@ -180,7 +183,7 @@ const Options = (() => {
       } else link(null);
     } else link(null);
     Store.subscribe((s, info) => {
-      storage.autosave(s);
+      if (!autosaveHeld) storage.autosave(s);
       if (!info || !info.live) { clearTimeout(dirtyTimer); dirtyTimer = setTimeout(syncDirty, 250); }
     });
     const input = document.getElementById('importFile');
@@ -193,6 +196,7 @@ const Options = (() => {
 
   return {
     onImport: (fn) => importListeners.push(fn),
+    holdAutosave: (v) => { autosaveHeld = !!v; },
     init, save, duplicate, rename, remove, openMenu, loadOption, loadPreset, exportJson, importFile, syncDirty,
     list: () => storage.list(), get: (id) => storage.get(id), flush: () => storage.flush(),
     current: () => currentId, storage,

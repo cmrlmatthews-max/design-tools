@@ -109,8 +109,15 @@ const Compare = (() => {
     renderTable();
     Render.enterCompare(entries.map((e) => ({ name: e.name, state: e.state, d: e.d, uid: e.uid })), reserve, { keepView: wasActive });
     layoutChanged();
-    $('btnCompare').classList.add('is-on');
-    $('btnCompare').setAttribute('aria-pressed', 'true');
+    markComparing(true);
+  }
+  /** The Option button shows a highlight while comparing (the Compare item itself lives in the Option menu). */
+  function markComparing(on) {
+    const b = $('btnOption');
+    if (!b) return;
+    b.classList.toggle('is-on', on);
+    b.dataset.comparing = on ? 'true' : 'false';
+    b.title = on ? 'Comparing options. Open the menu to exit.' : 'Option: name, presets, save, compare';
   }
   function select(keys) {
     chosen = keys.slice(0, MAX);
@@ -142,8 +149,7 @@ const Compare = (() => {
     $('viewport').dataset.compare = 'false';
     $('viewport').style.removeProperty('--cmp-table-h');
     $('cmpLabels').textContent = '';
-    const b = $('btnCompare');
-    b.classList.remove('is-on'); b.setAttribute('aria-pressed', 'false');
+    markComparing(false);
   }
   function toggle() { if (active) exit(); else enter(); }
 

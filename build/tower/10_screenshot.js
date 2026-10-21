@@ -1,8 +1,8 @@
 /* ==========================================================================
    SHARED: screenshot
    src/shared/screenshot.js inlined unchanged (apart from the export keywords),
-   plus `Shots`: the tower tool's button and the popover that chooses which
-   overlay items appear. The choices are kept in state.view.shot.
+   plus `Shots`: the image actions and the overlay choices (shown in the Export menu's
+   "Image overlay" view). The choices are kept in state.view.shot.
    ========================================================================== */
 //@@MODULE screenshot@@
 
@@ -64,25 +64,21 @@ const Shots = (() => {
     try { return await aiReady({ deliver: true }); } catch (e) { console.error(e); Toast.show(e && e.message ? e.message : 'The image could not be made.', 'bad', 6000); return null; }
   }
 
-  function openMenu(anchor) {
-    const el = h('div', { role: 'group', 'aria-label': 'Image options' });
-    el.append(h('div', { class: 'label pop-label' }, 'The image shows'));
+  /** The overlay choices as menu elements (a label and one switch per item). Used by the Export menu's "Image overlay" view. */
+  function overlayControls() {
+    const out = [h('div', { class: 'label pop-label' }, 'The image shows')];
     for (const [key, text] of SHOT_ITEMS) {
-      const btn = h('button', { class: 'toggle-row', type: 'button', role: 'switch', 'aria-checked': String(!!Store.get(`view.shot.${key}`)), style: 'padding:0 8px' },
+      const btn = h('button', { class: 'toggle-row', type: 'button', role: 'switch', 'aria-checked': String(!!Store.get(`view.shot.${key}`)), 'data-shot': key, style: 'padding:0 8px' },
         h('span', null, text), h('span', { class: 'switch', 'aria-hidden': 'true' }));
       btn.addEventListener('click', () => {
         const next = !Store.get(`view.shot.${key}`);
         Store.set(`view.shot.${key}`, next, { live: false });
         btn.setAttribute('aria-checked', String(next));
       });
-      el.append(btn);
+      out.push(btn);
     }
-    el.append(h('div', { class: 'pop-sep' }));
-    el.append(h('button', { class: 'pop-item', type: 'button', role: 'menuitem', id: 'btnAiReady', onclick: () => { Pop.close(); takeAiReady(); } },
-      h('span', { class: 'grow' }, 'AI-ready image', h('small', null, 'Plain model, no overlay, grid or wireframe. For ChatGPT or Gemini.'))));
-    el.append(h('div', { class: 'pop-actions' }, h('button', { class: 'btn solid', type: 'button', onclick: () => { Pop.close(); take(); } }, 'Save image')));
-    Pop.open(anchor, el, { align: 'right' });
+    return out;
   }
 
-  return { take, capture, aiReady, takeAiReady, openMenu, buildOverlay, keyMetrics };
+  return { take, capture, aiReady, takeAiReady, overlayControls, buildOverlay, keyMetrics };
 })();

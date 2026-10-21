@@ -225,7 +225,8 @@ const Controls = (() => {
   /**
    * Editable list of cards (segments, setbacks, carves, ...).
    * o: { bind (array), title(i, item) -> text, render(i) -> { children, more }, make(arr) -> new item,
-   *      addLabel, min, reorder, openDefault(i), empty }
+   *      addLabel, min, reorder, openDefault(i), empty, swatch(i, item) -> css color or null (a color chip before the title) }
+   * Returns { el, refresh, openAt(i) -> the row element (opens it), rowAt(i) }.
    */
   function list(o) {
     const host = h('div', { class: 'list' });
@@ -251,8 +252,10 @@ const Controls = (() => {
       const isOpen = open[i] === undefined ? (o.openDefault ? !!o.openDefault(i) : i === 0) : open[i];
       const title = h('span', { class: 't' });
       const head = h('button', { class: 'item-title', type: 'button', 'aria-expanded': isOpen ? 'true' : 'false', html: CARET_SVG });
+      const sw = o.swatch ? h('span', { class: 'sw', 'aria-hidden': 'true' }) : null;
+      if (sw) head.append(sw);
       head.append(title);
-      const item = h('div', { class: 'item', 'data-open': isOpen ? 'true' : 'false' });
+      const item = h('div', { class: 'item', 'data-open': isOpen ? 'true' : 'false', 'data-index': String(i) });
       head.addEventListener('click', () => {
         const next = item.dataset.open !== 'true';
         item.dataset.open = next ? 'true' : 'false'; open[i] = next;
@@ -269,6 +272,7 @@ const Controls = (() => {
       reg.push(() => {
         const arr = o.bind.get() || [];
         title.textContent = arr[i] ? o.title(i, arr[i]) : '';
+        if (sw) sw.style.background = (arr[i] && o.swatch(i, arr[i])) || 'transparent';
         up.disabled = i === 0; down.disabled = i >= arr.length - 1;
         del.disabled = arr.length <= (o.min || 0);
       });
@@ -286,24 +290,39 @@ const Controls = (() => {
       if (len() !== rendered) rebuild(); else kids.forEach((fn) => fn());
       if (emptyNote) emptyNote.hidden = len() > 0;
     };
-    return track({ el, refresh });
+    /** Opens row i (for example when something is selected in the 3D view) and returns its element. */
+    function openAt(i) {
+      refresh();
+      if (!(i >= 0 && i < len())) return null;
+      open[i] = true;
+      const row = host.children[i];
+      if (row) { row.dataset.open = 'true'; const hd = row.querySelector('.item-title'); if (hd) hd.setAttribute('aria-expanded', 'true'); }
+      return row || null;
+    }
+    const ctl = track({ el, refresh });
+    ctl.openAt = openAt;
+    ctl.rowAt = (i) => host.children[i] || null;
+    return ctl;
   }
 
   /**
    * Accordion section with an optional "More" area for advanced controls.
-   * o: { id, title, open, children:[el], more:[el], onToggle }
+   * o: { id, title, open, children:[el], more:[el], onToggle, headExtra (an element placed at the right of the title) }
+   * Returns { el, setOpen, isOpen }.
    */
   function section(o) {
     const bodyId = uid('acc');
     const root = h('section', { class: 'acc', 'data-open': 'false' });
     const head = h('button', { class: 'acc-head', type: 'button', 'aria-expanded': 'false', 'aria-controls': bodyId, html: `${CARET_SVG}<span>${o.title}</span>` });
+    if (o.headExtra) head.append(o.headExtra);
     root.append(h('h2', { style: 'margin:0' }, head));
     const body = h('div', { class: 'acc-body', id: bodyId }, o.children || [], moreBlock(o.more));
     root.append(body);
     const setOpen = (open) => { root.dataset.open = open ? 'true' : 'false'; head.setAttribute('aria-expanded', open ? 'true' : 'false'); };
     head.addEventListener('click', () => { setOpen(root.dataset.open !== 'true'); if (o.onToggle) o.onToggle(root.dataset.open === 'true'); });
     setOpen(!!o.open);
-    return { el: root, setOpen };
+    root.dataset.section = o.id || '';
+    return { el: root, setOpen, isOpen: () => root.dataset.open === 'true' };
   }
 
   return { bindStore, mapBind, slider, toggle, select, chips, color, points, when, group, help, label, button, list, section, refreshAll, scoped: (fn) => { const prev = reg; const mine = []; reg = mine; try { fn(); } finally { reg = prev; } return mine; } };

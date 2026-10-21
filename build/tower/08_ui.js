@@ -11,6 +11,8 @@ const ICONS = {
   camera: '<svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
   option: '<svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg>',
   sparkle: '<svg viewBox="0 0 24 24"><path d="M10 3l1.8 5.2L17 10l-5.2 1.8L10 17l-1.8-5.2L3 10l5.2-1.8z"/><path d="M18 14l.9 2.1L21 17l-2.1.9L18 20l-.9-2.1L15 17l2.1-.9z"/></svg>',
+  snap: '<svg viewBox="0 0 24 24"><path d="M6 3v8a6 6 0 0012 0V3h-4v8a2 2 0 01-4 0V3z"/><path d="M6 7h4M14 7h4"/></svg>',
+  export: '<svg viewBox="0 0 24 24"><path d="M12 15V4"/><path d="M8 8l4-4 4 4"/><path d="M5 13v6h14v-6"/></svg>',
   chev: '<svg class="chev" viewBox="0 0 14 14" fill="none" stroke="currentColor"><path d="M3 5l4 4 4-4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
 const UI_STORAGE_KEY = 'towergen.ui.v1';
@@ -123,6 +125,8 @@ const UI = (() => {
   const get = (path) => Store.get(path);
   const levels = () => Derived.get().floors.length;
   const els = (list) => list.map((c) => c.el || c);
+  let segList = null, carveList = null, ctxList = null;       // the row lists, kept so openItem can open a row
+  const progColor = (k) => ((get(`programs.${k}`) || {}).color) || ((CONFIG.programs[k] || {}).color) || '#999';
 
   /* ---- shape editor (podium and segments) --------------------------------------- */
   const SHAPE_TYPES = opts([['rect', 'Rectangle'], ['square', 'Square'], ['circle', 'Circle'], ['ellipse', 'Ellipse'], ['triangle', 'Triangle'], ['L', 'L-shape'], ['U', 'U-shape'], ['polygon', 'Custom polygon']]);
@@ -169,22 +173,45 @@ const UI = (() => {
       },
       commit: () => {},
     };
+    return {
+      children: els([
+        sel('Shape', null, opts([['rect', 'Rectangle'], ['polygon', 'Polygon']]), shapeBind),
+        Controls.when(() => get('site.shape') !== 'polygon', [lenS('Width', 'site.width', 50, 600), lenS('Depth', 'site.depth', 50, 600)]),
+        Controls.when(() => get('site.shape') === 'polygon', [Controls.points({ label: 'Site corners (x, y in feet)', bind: bs('site.points'), need: 3, needText: 'Needs at least 3 points. Until then the rectangle is used.' })]),
+      ]),
+    };
+  }
+
+  function buildSetbacks() {
+    return {
+      children: els([
+        Controls.group(els([
+          lenF('Front (south)', 'site.setbacks.front', { hardMin: 0 }), lenF('Back (north)', 'site.setbacks.back', { hardMin: 0 }),
+          lenF('Left (west)', 'site.setbacks.left', { hardMin: 0 }), lenF('Right (east)', 'site.setbacks.right', { hardMin: 0 }),
+        ])),
+        Controls.help('The tower must stay inside the site shrunk by these distances.'),
+      ]),
+    };
+  }
+
+  function buildHeight() {
     const limitBind = Controls.mapBind(bs('site.heightLimit'), (v) => num(v, 0), (v) => Math.max(0, v));
-    const children = [
-      sel('Shape', null, opts([['rect', 'Rectangle'], ['polygon', 'Polygon']]), shapeBind),
-      Controls.when(() => get('site.shape') !== 'polygon', [lenS('Width', 'site.width', 50, 600), lenS('Depth', 'site.depth', 50, 600)]),
-      Controls.when(() => get('site.shape') === 'polygon', [Controls.points({ label: 'Site corners (x, y in feet)', bind: bs('site.points'), need: 3, needText: 'Needs at least 3 points. Until then the rectangle is used.' })]),
-      Controls.slider({
-        label: 'Height limit (0 = none)', bind: limitBind, min: 0, max: 800, step: 5, hardMin: 0, hardMax: 5000,
-        format: (v) => (v > 0 ? Units.formatFeetInches(v) : 'None'), parse: (t) => (/^\s*(none|off)\s*$/i.test(t) ? 0 : Units.parseLength(t)), inputMode: 'text',
-      }),
-      Controls.label('Setbacks'),
-      Controls.group(els([
-        lenF('Front (south)', 'site.setbacks.front', { hardMin: 0 }), lenF('Back (north)', 'site.setbacks.back', { hardMin: 0 }),
-        lenF('Left (west)', 'site.setbacks.left', { hardMin: 0 }), lenF('Right (east)', 'site.setbacks.right', { hardMin: 0 }),
-      ])),
-    ];
-    const blocks = Controls.list({
+    return {
+      children: els([
+        Controls.slider({
+          label: 'Height limit (0 = none)', bind: limitBind, min: 0, max: 800, step: 5, hardMin: 0, hardMax: 5000,
+          format: (v) => (v > 0 ? Units.formatFeetInches(v) : 'None'), parse: (t) => (/^\s*(none|off)\s*$/i.test(t) ? 0 : Units.parseLength(t)), inputMode: 'text',
+        }),
+        Controls.label('Stepback'),
+        Controls.toggle({ label: 'Stepback above a height', bind: bs('site.stepback.on') }),
+        Controls.when(() => get('site.stepback.on'), [lenS('Above height', 'site.stepback.aboveHeight', 20, 400), lenS('Step in by', 'site.stepback.distance', 5, 60)]),
+        Controls.help('Above the stepback height the allowed footprint shrinks by the step-in distance on every side.'),
+      ]),
+    };
+  }
+
+  function buildContext() {
+    ctxList = Controls.list({
       bind: bs('context.blocks'), addLabel: 'Add block', reorder: false, openDefault: () => false,
       empty: 'No context blocks.',
       title: (i, b) => `Block ${i + 1} · ${Units.formatFeetInches(num(b.h, 0))} high`,
@@ -196,20 +223,16 @@ const UI = (() => {
         ]))],
       }),
     });
-    const more = [
-      Controls.label('Stepback'),
-      Controls.toggle({ label: 'Stepback above a height', bind: bs('site.stepback.on') }),
-      Controls.when(() => get('site.stepback.on'), [lenS('Above height', 'site.stepback.aboveHeight', 20, 400), lenS('Step in by', 'site.stepback.distance', 5, 60)]).el,
-      Controls.help('Above the stepback height the allowed footprint shrinks by the step-in distance on every side.'),
-      Controls.label('Context blocks'),
-      Controls.help('Neighbouring buildings, drawn for scale. They never change any number.'),
-      blocks.el,
-      h('div', { class: 'add-row' }, Controls.button('Surround', () => {
-        Store.set('context.blocks', surroundBlocks(Store.raw()), { live: false });
-        if (!get('context.show')) Store.set('context.show', true, { live: false });
-      }), h('span', { class: 'help', style: 'margin:0' }, 'One block on each side of the site.')),
-    ].map((x) => x.el || x);
-    return { children: els(children), more };
+    return {
+      children: els([
+        Controls.help('Neighbouring buildings, drawn for scale. They never change any number. Show or hide them in the View tab.'),
+        ctxList.el,
+        h('div', { class: 'add-row' }, Controls.button('Surround', () => {
+          Store.set('context.blocks', surroundBlocks(Store.raw()), { live: false });
+          if (!get('context.show')) Store.set('context.show', true, { live: false });
+        }), h('span', { class: 'help', style: 'margin:0' }, 'One block on each side of the site.')),
+      ]),
+    };
   }
 
   function buildPodium() {
@@ -237,8 +260,9 @@ const UI = (() => {
 
   const CURVES = opts([['linear', 'Linear'], ['eased', 'Eased']]);
   function buildSegments() {
-    const list = Controls.list({
+    const list = segList = Controls.list({
       bind: bs('segments'), addLabel: 'Add segment', min: 1,
+      swatch: (i, g) => progColor(g.program),
       title: (i, g) => `Segment ${i + 1} · ${g.floors} fl · ${(CONFIG.programs[g.program] || {}).label || g.program}`,
       make: (arr) => { const s = deepClone(arr[arr.length - 1] || defaultSegment()); s.floors = 10; return s; },
       render: (i) => {
@@ -308,7 +332,7 @@ const UI = (() => {
   function buildCarves() {
     const mid = () => Math.max(2, Math.round(levels() / 2));
     const kind = (i) => () => get(`carves.${i}.kind`);
-    const carves = Controls.list({
+    const carves = carveList = Controls.list({
       bind: bs('carves'), addLabel: 'Add carve', reorder: false, openDefault: () => true, empty: 'No carves.',
       title: (i, c) => `${{ corner: 'Corner', center: 'Center', full: 'Sky gap' }[c.kind] || c.kind} · floors ${c.startFloor}–${c.endFloor}`,
       make: () => ({ startFloor: mid(), endFloor: mid() + 1, kind: 'corner', corner: 'NE', w: 30, d: 30 }),
@@ -415,67 +439,255 @@ const UI = (() => {
     };
   }
 
-  function buildView() {
+  function buildDisplay() {
     const v = (k) => bs(`view.${k}`);
     return {
       children: els([
         sel('Style', 'view.style', opts([['model', 'Model'], ['diagram', 'Diagram']])),
+        sel('Color by (diagram)', 'view.colorBy', opts([['program', 'Program'], ['zone', 'Zone']])),
         Controls.toggle({ label: 'Floor lines', bind: v('floorLines') }),
         Controls.toggle({ label: 'Shadows', bind: v('shadows') }),
-        Controls.toggle({ label: 'Show zoning envelope', bind: v('envelope') }),
-        Controls.toggle({ label: 'Show context blocks', bind: bs('context.show') }),
-      ]),
-      more: els([
-        sel('Color by (diagram)', 'view.colorBy', opts([['zone', 'Zone'], ['program', 'Program']])),
-        Controls.slider({ label: 'Sun azimuth', bind: v('sun.azimuth'), min: 0, max: 360, step: 1, hardMin: 0, hardMax: 360, integer: true, format: Units.formatDeg, inputMode: 'numeric' }),
-        Controls.slider({ label: 'Sun altitude', bind: v('sun.altitude'), min: 5, max: 90, step: 1, hardMin: 3, hardMax: 90, integer: true, format: Units.formatDeg, inputMode: 'numeric' }),
         Controls.toggle({ label: 'Grid', bind: v('grid') }),
         Controls.toggle({ label: 'Scale figure', bind: v('figure') }),
       ]),
     };
   }
+  function buildScene() {
+    return {
+      children: els([
+        Controls.toggle({ label: 'Show zoning envelope', bind: bs('view.envelope') }),
+        Controls.toggle({ label: 'Show context blocks', bind: bs('context.show') }),
+        Controls.help('Edit the context blocks in the Site tab.'),
+      ]),
+    };
+  }
+  function buildSun() {
+    const v = (k) => bs(`view.${k}`);
+    return {
+      children: els([
+        Controls.slider({ label: 'Sun azimuth', bind: v('sun.azimuth'), min: 0, max: 360, step: 1, hardMin: 0, hardMax: 360, integer: true, format: Units.formatDeg, inputMode: 'numeric' }),
+        Controls.slider({ label: 'Sun altitude', bind: v('sun.altitude'), min: 5, max: 90, step: 1, hardMin: 3, hardMax: 90, integer: true, format: Units.formatDeg, inputMode: 'numeric' }),
+      ]),
+    };
+  }
 
-  // Plan order (section 8.1) plus Targets.
-  const SECTIONS = [
-    { id: 'site', title: 'Site', open: true, build: buildSite },
-    { id: 'podium', title: 'Podium', build: buildPodium },
-    { id: 'segments', title: 'Segments', open: true, build: buildSegments },
-    { id: 'moves', title: 'Form moves', build: buildMoves },
-    { id: 'carves', title: 'Carves', build: buildCarves },
-    { id: 'crown', title: 'Crown', build: buildCrown },
-    { id: 'core', title: 'Core', build: buildCore },
-    { id: 'programs', title: 'Programs', build: buildPrograms },
-    { id: 'targets', title: 'Targets', build: buildTargets },
-    { id: 'view', title: 'View', build: buildView },
+  // Four tabs (v1.1 layout, Direction A). Each tab is a stack of accordion sections.
+  const TABS = [
+    { id: 'form', title: 'Form' },
+    { id: 'program', title: 'Program' },
+    { id: 'view', title: 'View' },
+    { id: 'site', title: 'Site' },
   ];
+  const SECTIONS = [
+    { id: 'podium', tab: 'form', title: 'Podium', build: buildPodium },
+    { id: 'segments', tab: 'form', title: 'Segments', open: true, build: buildSegments },
+    { id: 'moves', tab: 'form', title: 'Form moves', build: buildMoves },
+    { id: 'carves', tab: 'form', title: 'Carves', build: buildCarves },
+    { id: 'crown', tab: 'form', title: 'Crown', build: buildCrown },
+    { id: 'core', tab: 'form', title: 'Core', build: buildCore },
+    { id: 'programs', tab: 'program', title: 'Programs', open: true, build: buildPrograms },
+    { id: 'targets', tab: 'program', title: 'Targets', open: true, build: buildTargets },
+    { id: 'display', tab: 'view', title: 'Display', open: true, build: buildDisplay },
+    { id: 'scene', tab: 'view', title: 'Context and envelope', open: true, build: buildScene },
+    { id: 'sun', tab: 'view', title: 'Sun', open: true, build: buildSun },
+    { id: 'site', tab: 'site', title: 'Site', open: true, build: buildSite },
+    { id: 'setbacks', tab: 'site', title: 'Setbacks', open: true, build: buildSetbacks },
+    { id: 'height', tab: 'site', title: 'Height limit and stepback', open: true, build: buildHeight },
+    { id: 'context', tab: 'site', title: 'Context blocks', build: buildContext },
+  ];
+  const sectionCtl = {};          // id -> Controls.section result
+  const swatchSyncs = [];         // functions that repaint section-head swatches
+  let activeTab = 'form';
+  const scrollPos = {};
 
   function buildPanel() {
     const host = $('sections');
     host.textContent = '';
+    const panels = {};
+    for (const t of TABS) {
+      panels[t.id] = h('div', { class: 'tabpanel', id: `tabpanel-${t.id}`, role: 'tabpanel', 'aria-labelledby': `tab-${t.id}`, hidden: true });
+      host.append(panels[t.id]);
+    }
     for (const s of SECTIONS) {
       const parts = s.build();
       const open = prefs.sections && s.id in prefs.sections ? !!prefs.sections[s.id] : !!s.open;
-      host.append(Controls.section({
+      const opt = {
         id: s.id, title: s.title, open, children: parts.children, more: parts.more,
-        onToggle: (isOpen) => { prefs.sections = { ...(prefs.sections || {}), [s.id]: isOpen }; saveUiPrefs(prefs); },
-      }).el);
+        onToggle: (isOpen) => rememberSection(s.id, isOpen),
+      };
+      if (s.id === 'podium') opt.headExtra = podiumSwatches();
+      const sec = Controls.section(opt);
+      sectionCtl[s.id] = sec;
+      panels[s.tab].append(sec.el);
     }
+  }
+  function rememberSection(id, isOpen) { prefs.sections = { ...(prefs.sections || {}), [id]: isOpen }; saveUiPrefs(prefs); }
+
+  /** Two small color chips in the Podium header: the ground-floor and upper-floor programs. Hidden while the podium is off. */
+  function podiumSwatches() {
+    const box = h('span', { class: 'acc-sw', 'aria-hidden': 'true' }, h('span', { class: 'sw' }), h('span', { class: 'sw' }));
+    const sync = () => {
+      const on = !!get('podium.on');
+      box.hidden = !on;
+      if (!on) return;
+      box.children[0].style.background = progColor(get('podium.program'));
+      box.children[1].style.background = progColor(get('podium.upperProgram'));
+    };
+    swatchSyncs.push(sync);
+    return box;
+  }
+
+  /* ---- tabs ------------------------------------------------------------------------ */
+  function buildTabs() {
+    const bar = $('panelTabs');
+    bar.textContent = '';
+    for (const t of TABS) {
+      bar.append(h('button', {
+        class: 'tab', type: 'button', role: 'tab', id: `tab-${t.id}`, 'data-tab': t.id, 'aria-controls': `tabpanel-${t.id}`, 'aria-selected': 'false', tabindex: '-1',
+        onclick: () => { setTab(t.id); raiseSheet(); },
+      }, t.title));
+    }
+    bar.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Home' && e.key !== 'End') return;
+      e.preventDefault();
+      const i = TABS.findIndex((t) => t.id === activeTab);
+      const next = e.key === 'Home' ? 0 : e.key === 'End' ? TABS.length - 1 : (i + (e.key === 'ArrowRight' ? 1 : -1) + TABS.length) % TABS.length;
+      setTab(TABS[next].id);
+      $(`tab-${TABS[next].id}`).focus();
+    });
+  }
+  /** Shows one tab. Remembered in the UI prefs (localStorage), and each tab keeps its own scroll position. */
+  function setTab(id, { remember = true } = {}) {
+    if (!TABS.some((t) => t.id === id)) return false;
+    const scroller = $('panelScroll');
+    if (id !== activeTab) scrollPos[activeTab] = scroller.scrollTop;
+    activeTab = id;
+    for (const t of TABS) {
+      const on = t.id === id;
+      const btn = $(`tab-${t.id}`), pnl = $(`tabpanel-${t.id}`);
+      btn.setAttribute('aria-selected', on ? 'true' : 'false');
+      btn.tabIndex = on ? 0 : -1;
+      pnl.hidden = !on;
+    }
+    scroller.scrollTop = scrollPos[id] || 0;
+    if (remember && prefs.tab !== id) { prefs.tab = id; saveUiPrefs(prefs); }
+    return true;
+  }
+
+  /* ---- hooks for the selection card (v1.1) ------------------------------------------- */
+  const ITEM_MAP = {
+    segment: { tab: 'form', section: 'segments', list: () => segList },
+    podium: { tab: 'form', section: 'podium' },
+    crown: { tab: 'form', section: 'crown' },
+    carve: { tab: 'form', section: 'carves', list: () => carveList },
+    context: { tab: 'site', section: 'context', list: () => ctxList },
+  };
+  /**
+   * Switches to the tab that holds the item, opens its section (and its row when the kind is a list), and scrolls it into view.
+   * item: { kind: 'segment' | 'podium' | 'crown' | 'carve' | 'context', index }. Returns true when something was opened.
+   */
+  function openItem(item) {
+    const m = item && ITEM_MAP[item.kind];
+    if (!m) return false;
+    setTab(m.tab);
+    const sec = sectionCtl[m.section];
+    if (!sec) return false;
+    if (!sec.isOpen()) { sec.setOpen(true); rememberSection(m.section, true); }
+    let target = sec.el;
+    if (m.list) {
+      const lst = m.list();
+      const row = lst && Number.isInteger(item.index) ? lst.openAt(item.index) : null;
+      if (row) target = row;
+    }
+    raiseSheet();
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    try { target.scrollIntoView({ block: 'start', behavior: reduce ? 'auto' : 'smooth' }); } catch (e) { target.scrollIntoView(); }
+    target.classList.remove('is-focus'); void target.offsetWidth; target.classList.add('is-focus');
+    setTimeout(() => target.classList.remove('is-focus'), 1600);
+    return true;
+  }
+  /**
+   * Sets the program of every item that has one (segments, and the podium: both its ground and upper programs, or just one
+   * with item.part = 'ground' | 'upper'). Crown, carve and context items are skipped. ONE undo step for the whole call.
+   * Returns the number of items it applied to (0 when the program is unknown).
+   */
+  function setProgramForItems(items, program) {
+    if (!CONFIG.programs[program] || program === 'mechanical') return 0;
+    const next = deepClone(Store.raw());
+    let n = 0;
+    for (const it of items || []) {
+      if (!it) continue;
+      if (it.kind === 'segment' && next.segments[it.index]) { next.segments[it.index].program = program; n++; }
+      else if (it.kind === 'podium') {
+        if (it.part !== 'upper') next.podium.program = program;
+        if (it.part !== 'ground') next.podium.upperProgram = program;
+        n++;
+      }
+    }
+    if (n && JSON.stringify(next) !== JSON.stringify(Store.raw())) Store.replace(next);
+    return n;
   }
 
   /* ---- top bar -------------------------------------------------------------------- */
   const iconBtn = (icon, text, attrs = {}) => h('button', { class: 'btn has-text', type: 'button', 'aria-label': text, title: text, ...attrs },
     h('span', { html: icon, style: 'display:contents' }), h('span', { class: 'btn-text' }, text));
 
-  function buildTopBar() {
-    const name = $('optionName');
-    name.value = Store.get('name') || '';
-    name.addEventListener('change', () => Options.rename(name.value));
-    name.addEventListener('keydown', (e) => { if (e.key === 'Enter') name.blur(); });
-    Store.subscribe(() => { if (document.activeElement !== name) name.value = Store.get('name') || ''; });
+  const snapState = () => { const s = get('view.snap') || {}; return { on: s.on !== false, grid: s.grid === 10 ? 10 : 5 }; };
+  const setSnap = (patch) => Store.set('view.snap', { ...snapState(), ...patch }, { live: false });
 
-    const optBtn = h('button', { class: 'btn has-text menu-btn', type: 'button', id: 'btnOption', 'aria-haspopup': 'true', 'aria-expanded': 'false', title: 'Saved options, presets and files', 'aria-label': 'Option menu', onclick: () => Options.openMenu(optBtn) },
-      h('span', { html: ICONS.option, style: 'display:contents' }), h('span', { class: 'btn-text menu-name' }, 'Option'), h('span', { class: 'dot', id: 'unsavedDot', hidden: true, title: 'Unsaved changes' }), h('span', { html: ICONS.chev, style: 'display:contents' }));
+  function openSnapMenu(anchor) {
+    const el = h('div', { role: 'group', 'aria-label': 'Snap options' });
+    const sw = h('button', { class: 'toggle-row', type: 'button', role: 'switch', id: 'snapSwitch', style: 'padding:0 8px' }, h('span', null, 'Snap while dragging'), h('span', { class: 'switch', 'aria-hidden': 'true' }));
+    const chips = [5, 10].map((g) => h('button', { class: 'chip', type: 'button', 'data-grid': String(g), 'aria-pressed': 'false', onclick: () => setSnap({ grid: g }) }, `${g} ft`));
+    const sync = () => {
+      const st = snapState();
+      sw.setAttribute('aria-checked', String(st.on));
+      chips.forEach((c) => c.setAttribute('aria-pressed', String(Number(c.dataset.grid) === st.grid)));
+    };
+    sw.addEventListener('click', () => setSnap({ on: !snapState().on }));
+    const off = Store.subscribe(sync);
+    sync();
+    el.append(
+      sw,
+      h('div', { class: 'label pop-label' }, 'Grid'),
+      h('div', { class: 'chips', style: 'padding:2px 8px 6px', role: 'group', 'aria-label': 'Grid size' }, chips),
+      h('div', { class: 'pop-note' }, 'Snaps to the grid, the site, setbacks and the edges and centers of other pieces. Hold Option (Alt) while dragging to skip it.'),
+    );
+    Pop.open(anchor, el, { align: 'right', onClose: off });
+  }
+
+  /** The Export menu: Image, AI-ready image, AI Prompts, the image overlay choices (a sub-view), Export / Import JSON. */
+  function openExportMenu(anchor) {
+    const el = h('div', { role: 'menu', id: 'exportMenu' });
+    const item = (id, title, sub, onclick, o = {}) => h('button', { class: 'pop-item', type: 'button', role: 'menuitem', id, onclick: () => { if (!o.keep) Pop.close(); onclick(); } },
+      h('span', { class: 'grow' }, title, sub ? h('small', null, sub) : null), o.chev ? h('span', { html: ICONS.chev, class: 'chev-r', style: 'display:contents' }) : null);
+    const main = () => {
+      el.textContent = '';
+      el.append(h('div', { class: 'label pop-label' }, 'Pictures'),
+        item('miImage', 'Image', 'Save a PNG of this view', () => Shots.take()),
+        item('miAiReady', 'AI-ready image', 'Plain model, no overlay, grid or wireframe. For ChatGPT or Gemini.', () => Shots.takeAiReady()),
+        item('miAiPrompts', 'AI Prompts', 'A prompt to pair with the AI-ready image', () => Prompts.toggle()),
+        item('miOverlay', 'Image overlay', 'Choose what the Image shows', () => overlay(), { keep: true, chev: true }),
+        h('div', { class: 'pop-sep' }), h('div', { class: 'label pop-label' }, 'Files'),
+        item('miExportJson', 'Export JSON', 'Download all saved options', () => Options.exportJson()),
+        item('miImportJson', 'Import JSON', 'Add the options from a file', () => $('importFile').click()));
+    };
+    const overlay = () => {
+      el.textContent = '';
+      el.append(h('button', { class: 'pop-item', type: 'button', id: 'miOverlayBack', onclick: main }, h('span', { class: 'grow' }, '‹  Export')));
+      el.append(...Shots.overlayControls());
+      el.append(h('div', { class: 'pop-actions' }, h('button', { class: 'btn solid', type: 'button', onclick: () => { Pop.close(); Shots.take(); } }, 'Save image')));
+    };
+    main();
+    Pop.open(anchor, el, { align: 'right' });
+  }
+
+  function buildTopBar() {
+    const optBtn = h('button', { class: 'btn has-text menu-btn', type: 'button', id: 'btnOption', 'aria-haspopup': 'true', 'aria-expanded': 'false', title: 'Option: name, presets, save, compare', 'aria-label': 'Option menu', onclick: () => Options.openMenu(optBtn) },
+      h('span', { html: ICONS.option, style: 'display:contents' }), h('span', { class: 'menu-name', id: 'optionLabel' }, Store.get('name') || 'Option'), h('span', { class: 'dot', id: 'unsavedDot', hidden: true, title: 'Unsaved changes' }), h('span', { html: ICONS.chev, style: 'display:contents' }));
     $('tbOption').append(optBtn);
+    const syncName = () => { const n = Store.get('name') || 'Option'; const l = $('optionLabel'); if (l.textContent !== n) l.textContent = n; };
+    Store.subscribe(syncName);
 
     const undo = h('button', { class: 'btn icon', type: 'button', title: 'Undo (Cmd/Ctrl+Z)', 'aria-label': 'Undo', html: ICONS.undo, onclick: () => Store.undo() });
     const redo = h('button', { class: 'btn icon', type: 'button', title: 'Redo (Shift+Cmd/Ctrl+Z)', 'aria-label': 'Redo', html: ICONS.redo, onclick: () => Store.redo() });
@@ -483,25 +695,28 @@ const UI = (() => {
     const syncHistory = () => { undo.disabled = !Store.canUndo(); redo.disabled = !Store.canRedo(); };
     Store.subscribe(syncHistory); syncHistory();
 
-    // The AI Prompts entry button sits beside the Image button (the panel itself is in 08b_prompts.js).
-    const aiBtn = iconBtn(ICONS.sparkle, 'AI Prompts', { id: 'btnAiPrompts', title: 'AI Prompts: an AI-ready image and a prompt for ChatGPT or Gemini', 'aria-haspopup': 'dialog', 'aria-expanded': 'false', 'aria-controls': 'aiPanel', onclick: () => Prompts.toggle() });
-    $('tbActions').append(
-      iconBtn(ICONS.save, 'Save', { id: 'btnSave', title: 'Save this option (Cmd/Ctrl+S)', onclick: () => Options.save() }),
-      iconBtn(ICONS.duplicate, 'Duplicate', { id: 'btnDuplicate', title: 'Save a copy as a new option', onclick: () => Options.duplicate() }),
-      iconBtn(ICONS.compare, 'Compare', { id: 'btnCompare', title: 'Compare 2 to 4 options', 'aria-pressed': 'false', onclick: () => Compare.toggle() }),
-    );
-
-    const shotBtn = iconBtn(ICONS.camera, 'Image', { id: 'btnShot', title: 'Save an image of this view', onclick: () => Shots.take() });
-    const shotMenu = h('button', { class: 'btn caret-only', type: 'button', id: 'btnShotMenu', 'aria-label': 'Image options', title: 'Choose what the image shows', 'aria-haspopup': 'true', 'aria-expanded': 'false', html: ICONS.chev, onclick: () => Shots.openMenu(shotMenu) });
-    $('tbShot').append(shotBtn, shotMenu);
-    $('tbShot').before(aiBtn);
-
     // Model / Diagram toggle: a working material switch.
     const seg = $('styleToggle');
     const mk = (value, text) => h('button', { type: 'button', 'data-style': value, 'aria-pressed': 'false', onclick: () => Store.set('view.style', value, { live: false }) }, text);
     seg.append(mk('model', 'Model'), mk('diagram', 'Diagram'));
     const syncStyle = () => seg.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.style === Store.get('view.style') ? 'true' : 'false'));
     Store.subscribe(syncStyle); syncStyle();
+
+    // Snap: the main button toggles, the caret opens the grid choice. state.view.snap = { on, grid }.
+    const snapBtn = iconBtn(ICONS.snap, 'Snap', { id: 'btnSnap', title: 'Snap to guides and the grid while dragging', 'aria-pressed': 'true', onclick: () => setSnap({ on: !snapState().on }) });
+    const snapCaret = h('button', { class: 'btn caret-only', type: 'button', id: 'btnSnapMenu', 'aria-label': 'Snap grid size', title: 'Choose the snap grid (5 or 10 ft)', 'aria-haspopup': 'true', 'aria-expanded': 'false', html: ICONS.chev, onclick: () => openSnapMenu(snapCaret) });
+    $('tbSnap').append(snapBtn, snapCaret);
+    const syncSnap = () => {
+      const st = snapState();
+      snapBtn.classList.toggle('is-on', st.on);
+      snapBtn.setAttribute('aria-pressed', String(st.on));
+      snapBtn.title = st.on ? `Snap is on (${st.grid} ft grid). Click to turn off.` : 'Snap is off. Click to turn on.';
+    };
+    Store.subscribe(syncSnap); syncSnap();
+
+    const exp = h('button', { class: 'btn has-text menu-btn', type: 'button', id: 'btnExport', 'aria-haspopup': 'true', 'aria-expanded': 'false', title: 'Export: image, AI-ready image, AI prompts, JSON', 'aria-label': 'Export menu', onclick: () => openExportMenu(exp) },
+      h('span', { html: ICONS.export, style: 'display:contents' }), h('span', { class: 'btn-text' }, 'Export'), h('span', { html: ICONS.chev, style: 'display:contents' }));
+    $('tbExport').append(exp);
   }
 
   /* ---- preset views ------------------------------------------------------------------ */
@@ -527,19 +742,24 @@ const UI = (() => {
 
   function buildHud() {
     const hud = $('hud');
-    hud.dataset.collapsed = sheetQuery.matches ? 'true' : 'false';
+    const open = !!prefs.hudOpen;                      // remembered: expanded or compact
+    hud.dataset.collapsed = open ? 'false' : 'true';
     hud.innerHTML = `
-      <button class="hud-head" type="button" aria-expanded="true" aria-controls="hudBody">
-        <span class="label">Metrics</span>
-        <span class="hud-summary" id="hudSummary"></span>
-        ${CARET_SVG}
+      <button class="hud-toggle" id="hudToggle" type="button" aria-expanded="${open}" aria-controls="hudBody" title="Show or hide all metrics">
+        <span class="hud-top">
+          <span class="label">Metrics</span>
+          <span class="hud-badge" id="hudBadge" data-n="0" title="Warnings">0 warnings</span>
+          ${CARET_SVG}
+        </span>
+        <span class="hud-core">
+          <span class="m"><span class="k">GFA</span><span class="v" id="mGfa">-</span></span>
+          <span class="m"><span class="k">FAR</span><span class="v" id="mFar">-</span></span>
+          <span class="m"><span class="k">Total height</span><span class="v" id="mHeight">-</span></span>
+          <span class="m"><span class="k">Floors</span><span class="v" id="mFloors">-<small id="mFloorsSub"></small></span></span>
+        </span>
       </button>
       <div class="hud-body" id="hudBody">
-        <div class="metric-hero"><div class="label">GFA</div><div class="v" id="mGfa">-</div></div>
         <dl class="metrics compact">
-          <div class="m"><dt>FAR</dt><dd id="mFar">-</dd></div>
-          <div class="m"><dt>Total height</dt><dd id="mHeight">-</dd></div>
-          <div class="m"><dt>Floors</dt><dd id="mFloors">-<small id="mFloorsSub"></small></dd></div>
           <div class="m"><dt>Site area</dt><dd id="mSite">-</dd></div>
           <div class="m"><dt>Site coverage</dt><dd id="mCover">-</dd></div>
           <div class="m"><dt>Efficiency (avg)</dt><dd id="mEff">-</dd></div>
@@ -557,20 +777,20 @@ const UI = (() => {
           <ul class="warns" id="warnList"></ul>
         </div>
       </div>`;
-    const head = hud.querySelector('.hud-head');
-    head.addEventListener('click', () => {
-      const collapsed = hud.dataset.collapsed !== 'true';
-      hud.dataset.collapsed = collapsed ? 'true' : 'false';
-      head.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-      Render.refreshInsets(true);
-    });
-    // Views are framed beside the HUD when it is open and there is room for both.
+    const head = $('hudToggle');
+    head.addEventListener('click', () => setHudOpen(hud.dataset.collapsed === 'true'));
+    // Views are framed beside the HUD when there is room for both. The card is the same width compact or expanded, so toggling never reframes.
     Render.setInsetProvider(() => {
-      if (hud.dataset.collapsed === 'true' || Render.comparing()) return { right: 0 };
+      if (Render.comparing()) return { right: 0 };
       const vw = $('viewport').clientWidth, w = hud.offsetWidth + 24;
       return { right: vw - w >= 380 ? w : 0 };
     });
-    head.setAttribute('aria-expanded', hud.dataset.collapsed === 'true' ? 'false' : 'true');
+  }
+  function setHudOpen(open) {
+    const hud = $('hud');
+    hud.dataset.collapsed = open ? 'false' : 'true';
+    $('hudToggle').setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (!!prefs.hudOpen !== open) { prefs.hudOpen = open; saveUiPrefs(prefs); }
   }
   function setText(id, text) { const el = $(id); if (el.firstChild && el.firstChild.nodeType === 3) el.firstChild.nodeValue = text; else el.prepend(document.createTextNode(text)); }
   function updateHud(d) {
@@ -590,7 +810,6 @@ const UI = (() => {
     setText('mPlateMin', Units.formatInt(m.plateMin));
     setText('mPlateAvg', Units.formatInt(m.plateAvg));
     setText('mPlateMax', Units.formatInt(m.plateMax));
-    $('hudSummary').textContent = `${Units.formatArea(m.gfa)} · FAR ${Units.formatRatio(m.far)}`;
 
     // Units per program
     // Dwelling units and hotel keys first, then their total, then parking spaces on their own (never added in).
@@ -625,6 +844,38 @@ const UI = (() => {
     for (const w of d.warnings) list.append(h('li', { class: `warn-${w.level}` }, w.text));
     $('warnCount').textContent = String(d.warnings.length);
     $('warnBlock').dataset.n = String(d.warnings.length);
+    const nw = d.warnings.length;
+    $('hudBadge').dataset.n = String(nw);
+    $('hudBadge').textContent = `${nw} ${nw === 1 ? 'warning' : 'warnings'}`;
+    updateLegend(d);
+  }
+
+  /* ---- color legend (Diagram style) ------------------------------------------------------ */
+  const ZONE_LABELS = { podium: 'Podium', tower: 'Tower', mechanical: 'Mechanical' };
+  /** Lists only what appears in the model: programs (colored by program) or zones (colored by zone), the crown, and red for anything outside the envelope. */
+  function updateLegend(d) {
+    const box = $('legend');
+    const st = Store.raw(), v = st.view;
+    if (v.style !== 'diagram' || Render.comparing()) { box.hidden = true; return; }
+    const plates = (d && d.plates) || [];
+    const used = plates.filter((p) => !p.void && p.polygons && p.polygons.length);
+    const rows = [];
+    if (v.colorBy === 'program') {
+      const seen = new Set(used.filter((p) => p.outsideEnvelopeArea <= 1).map((p) => p.program));
+      for (const k of Object.keys(CONFIG.programs)) if (seen.has(k)) rows.push([progColor(k), CONFIG.programs[k].label, `prog-${k}`]);
+    } else {
+      const seen = new Set(used.filter((p) => p.outsideEnvelopeArea <= 1).map((p) => p.zone));
+      for (const z of ['podium', 'tower', 'mechanical']) if (seen.has(z)) rows.push([CONFIG.zoneColors[z], ZONE_LABELS[z], `zone-${z}`]);
+    }
+    if ((d && d.solids || []).some((x, i) => !(d.solidsOutside && d.solidsOutside[i]))) rows.push([CONFIG.zoneColors.crown, 'Crown', 'crown']);
+    if (used.some((p) => p.outsideEnvelopeArea > 1) || (d && (d.solidsOutside || []).some(Boolean))) rows.push([CONFIG.outsideColor, 'Outside envelope', 'outside']);
+    const key = JSON.stringify([rows, v.colorBy]);
+    box.hidden = !rows.length;
+    if (box.dataset.key === key) return;
+    box.dataset.key = key;
+    box.textContent = '';
+    box.append(h('div', { class: 'label' }, v.colorBy === 'program' ? 'Program' : 'Zone'));
+    for (const [color, text, id] of rows) box.append(h('div', { class: 'lg-row', 'data-key': id }, h('span', { class: 'sw', style: `background:${color}` }), h('span', null, text)));
   }
 
   /* ---- bottom sheet (iPad portrait / narrow) -------------------------------------------- */
@@ -632,8 +883,10 @@ const UI = (() => {
     const app = $('app'), grabber = $('grabber');
     const GRAB = 44;
     const total = () => app.clientHeight;
-    const snaps = () => [GRAB + 8, Math.round(total() * 0.42), Math.round(total() * 0.86)];
-    const setH = (px) => app.style.setProperty('--sheet-h', `${Math.round(clamp(px, GRAB + 8, total() * 0.9))}px`);
+    // The lowest stop shows the grabber and the tab bar, so the tabs sit at the top of the sheet even when it is pulled down.
+    const lowest = () => GRAB + ($('panelTabs').offsetHeight || 45) + 2;
+    const snaps = () => [lowest(), Math.round(total() * 0.42), Math.round(total() * 0.86)];
+    const setH = (px) => app.style.setProperty('--sheet-h', `${Math.round(clamp(px, lowest(), total() * 0.9))}px`);
     const curH = () => $('panel').getBoundingClientRect().height;
     const animateTo = (to) => {
       if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return setH(to);
@@ -678,7 +931,11 @@ const UI = (() => {
     (sheetQuery.addEventListener ? sheetQuery.addEventListener('change', reset) : sheetQuery.addListener(reset));
     reset();
     window.addEventListener('resize', () => { if (sheetQuery.matches) { const px = parseFloat(app.style.getPropertyValue('--sheet-h')); if (px) setH(px); } });
+    /** Pulls a collapsed sheet up to its middle stop (a tab was tapped, or an item was opened). */
+    sheetRaise = () => { if (sheetQuery.matches && curH() < lowest() + 24) animateTo(snaps()[1]); };
   }
+  let sheetRaise = () => {};
+  const raiseSheet = () => sheetRaise();
 
   /* ---- keyboard ---------------------------------------------------------------------------- */
   function initKeys() {
@@ -697,18 +954,26 @@ const UI = (() => {
   function init() {
     buildTopBar();
     buildPanel();
+    buildTabs();
+    setTab(TABS.some((t) => t.id === prefs.tab) ? prefs.tab : 'form', { remember: false });
     buildViews();
     buildHud();
     initSheet();
     initKeys();
-    Store.subscribe(() => Controls.refreshAll());
+    Store.subscribe(() => { Controls.refreshAll(); swatchSyncs.forEach((fn) => fn()); updateLegend(Derived.get()); });
     Controls.refreshAll();
+    swatchSyncs.forEach((fn) => fn());
     Render.onRebuild(updateHud);
     // A viewport that is not WebGL-capable still gets numbers.
     updateHud(Derived.get());
   }
-  return { init, updateHud, rebuildPanel: () => { Controls.refreshAll(); } };
+  return {
+    init, updateHud, rebuildPanel: () => { Controls.refreshAll(); },
+    // v1.1 hooks for the selection card
+    openItem, setProgramForItems, setTab, activeTab: () => activeTab, tabs: () => TABS.map((t) => t.id),
+    setHudOpen, hudOpen: () => $('hud').dataset.collapsed === 'false',
+  };
 })();
 
 /* SLOT: ai-prompts */
-/* Filled: the entry button is #btnAiPrompts (UI.buildTopBar above); the panel and its logic are in 08b_prompts.js. */
+/* Filled: the entry is the AI Prompts item (#miAiPrompts) in the Export menu (UI.openExportMenu above); the panel and its logic are in 08b_prompts.js. */

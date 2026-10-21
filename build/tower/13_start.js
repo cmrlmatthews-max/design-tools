@@ -56,10 +56,16 @@ window.__tower = {
   setView: (id, animate = false) => Render.setView(id, animate),
   getView: () => Render.info(),
   units: Units,
-  runTests,
+  runTests: runAllTests,
+  // v1.1 layout hooks (the same functions the selection card calls)
+  openItem: (item) => UI.openItem(item),
+  setProgramForItems: (items, program) => UI.setProgramForItems(items, program),
+  setTab: (id) => UI.setTab(id),
+  getTab: () => UI.activeTab(),
+  setSnap: (patch) => Store.set('view.snap', { ...(Store.get('view.snap') || {}), ...patch }, { live: false }),
 };
 if (TEST_MODE) {
-  runTests().then((r) => {
+  runAllTests().then((r) => {
     const msg = r.failed.length
       ? `Tests: ${r.failed.length} of ${r.total} failed. ${r.failed.map((f) => `${f.name} (${f.detail})`).join(' | ')}`
       : `Tests: all ${r.total} passed`;

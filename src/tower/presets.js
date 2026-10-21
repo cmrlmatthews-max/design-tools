@@ -58,7 +58,7 @@ export const PRESETS = [
       programs: copyPrograms(),
       targets: { gfa: 0, far: 0 },
       view: {
-        style: 'model', colorBy: 'zone', floorLines: true, shadows: true,
+        style: 'model', colorBy: 'program', floorLines: true, shadows: true,
         sun: { azimuth: 135, altitude: 40 }, grid: true, figure: true,
       },
     },
@@ -102,7 +102,7 @@ export const PRESETS = [
       programs: copyPrograms(),
       targets: { gfa: 0, far: 0 },
       view: {
-        style: 'model', colorBy: 'zone', floorLines: true, shadows: true,
+        style: 'model', colorBy: 'program', floorLines: true, shadows: true,
         sun: { azimuth: 135, altitude: 40 }, grid: true, figure: true,
       },
     },
@@ -142,7 +142,7 @@ export const PRESETS = [
       programs: copyPrograms(),
       targets: { gfa: 0, far: 0 },
       view: {
-        style: 'model', colorBy: 'zone', floorLines: true, shadows: true,
+        style: 'model', colorBy: 'program', floorLines: true, shadows: true,
         sun: { azimuth: 135, altitude: 40 }, grid: true, figure: true,
       },
     },
@@ -189,7 +189,7 @@ export const PRESETS = [
       programs: copyPrograms(),
       targets: { gfa: 0, far: 0 },
       view: {
-        style: 'model', colorBy: 'zone', floorLines: true, shadows: true,
+        style: 'model', colorBy: 'program', floorLines: true, shadows: true,
         sun: { azimuth: 135, altitude: 40 }, grid: true, figure: true,
       },
     },
@@ -248,7 +248,7 @@ export const PRESETS = [
       programs: copyPrograms(),
       targets: { gfa: 0, far: 0 },
       view: {
-        style: 'model', colorBy: 'zone', floorLines: true, shadows: true,
+        style: 'model', colorBy: 'program', floorLines: true, shadows: true,
         sun: { azimuth: 135, altitude: 40 }, grid: true, figure: true,
       },
     },

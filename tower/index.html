@@ -349,7 +349,8 @@ button { cursor: pointer; }
 .btn.menu-btn .menu-name { overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
 .btn-split { display: flex; flex: none; align-items: center; }
 .btn-split .btn.caret-only { min-width: 28px; padding: 0 4px; margin-left: -6px; }
-@media (max-width: 1049px) { .btn.menu-btn .menu-name { display: none; } }
+@media (max-width: 1049px) { .btn.menu-btn .menu-name { max-width: 96px; } }
+@media (max-width: 560px) { .btn.menu-btn .menu-name { display: none; } }
 @media (max-width: 1250px) { .app-title { display: none; } .brand-sep { display: none; } }
 
 /* popovers / menus */
@@ -575,6 +576,70 @@ textarea.ai-preview {
   .ai-sheet-inner { max-width: 680px; }
 }
 @media (max-width: 420px) { .ai-uses { grid-template-columns: 1fr; } }
+
+
+/* ---- v1.1 layout (Direction A) ------------------------------------------------------------------ */
+.sw {
+  display: inline-block; width: 12px; height: 12px; border-radius: 3px; flex: none; background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(120, 128, 138, .45);
+}
+.pop-name {
+  display: block; width: 100%; height: var(--hit); padding: 0 10px; border: 1px solid var(--line-2); border-radius: var(--radius);
+  background: var(--surface); color: var(--ink); font-size: 16px;
+}
+.pop-name:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+.pop-item .chev { width: 12px; height: 12px; flex: none; fill: none; stroke: var(--ink-3); stroke-width: 2; transform: rotate(-90deg); }
+.btn.is-on .chev { stroke: currentColor; }
+.pop .toggle-row { min-height: var(--hit); }
+
+/* panel: selection card, tabs, scroll */
+.panel { overflow: hidden; }
+#selection-card { flex: none; max-height: 45%; overflow-y: auto; padding: 10px 16px 12px; border-bottom: 1px solid var(--line); background: var(--panel); overscroll-behavior: contain; }
+.tabs { display: flex; flex: none; border-bottom: 1px solid var(--line); background: var(--panel); }
+.tab {
+  flex: 1 1 0; min-width: 0; min-height: var(--hit); padding: 0 6px; border: 0; border-bottom: 2px solid transparent; border-radius: 0;
+  background: transparent; color: var(--ink-2); font-size: 13px; font-weight: 600; letter-spacing: .01em;
+}
+.tab:hover { background: var(--surface-2); }
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tab:focus-visible { outline-offset: -3px; }
+.tabpanel[hidden] { display: none; }
+.acc, .item { scroll-margin-top: 6px; }
+@keyframes flash-ring { from { box-shadow: 0 0 0 3px var(--accent); } to { box-shadow: 0 0 0 3px transparent; } }
+.is-focus { animation: flash-ring 1.5s ease-out; }
+.acc-sw { display: inline-flex; gap: 4px; margin-left: auto; }
+.item-title .sw { margin-right: -2px; }
+
+/* metrics card: four always visible, one tap for the rest */
+.hud-toggle { display: block; width: 100%; padding: 0 14px 12px; border: 0; background: transparent; text-align: left; }
+.hud-top { display: flex; align-items: center; gap: 8px; min-height: var(--hit); }
+.hud-top .caret { width: 14px; height: 14px; flex: none; fill: none; stroke: var(--ink-3); stroke-width: 2; transition: transform .15s; }
+.hud[data-collapsed="false"] .hud-top .caret { transform: rotate(180deg); }
+.hud-badge {
+  display: inline-flex; align-items: center; margin-left: auto; padding: 2px 9px; border-radius: 999px;
+  background: var(--surface-2); color: var(--ink-3); font-size: 11.5px; font-weight: 600; white-space: nowrap;
+}
+.hud-badge:not([data-n="0"]) { background: var(--warn-soft); color: var(--warn); }
+.hud-core { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+.hud-core .m { display: block; min-width: 0; }
+.hud-core .k { display: block; font-size: 11px; color: var(--ink-3); letter-spacing: .02em; }
+.hud-core .v { display: block; margin-top: 1px; font-size: 17px; font-weight: 600; letter-spacing: -.01em; white-space: nowrap; }
+.hud-core .v small { display: block; font-size: 11px; font-weight: 400; color: var(--ink-3); letter-spacing: 0; white-space: normal; }
+.hud-body { padding: 12px 14px 12px; border-top: 1px solid var(--line); }
+.hud[data-collapsed="true"] .hud-toggle { padding-bottom: 12px; }
+.metrics.compact { margin-top: 0; }
+
+/* color legend (Diagram style): bottom-left, above the view buttons */
+.legend {
+  position: absolute; z-index: 2; left: 12px;
+  bottom: calc(max(12px, env(safe-area-inset-bottom)) + var(--hit) + 6px + 2px + 8px + var(--cmp-table-h, 0px));
+  display: grid; gap: 5px; padding: 9px 12px 10px; max-width: calc(100% - 24px);
+  background: var(--hud-bg); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); font-size: 12px; pointer-events: none;
+}
+.legend .label { margin-bottom: 1px; font-size: 10.5px; }
+.lg-row { display: flex; align-items: center; gap: 8px; line-height: 1.2; }
+.viewport[data-compare="true"] .legend { display: none; }
 </style>
 </head>
 <body>
@@ -586,18 +651,18 @@ textarea.ai-preview {
       <h1 class="app-title">Tower Generator</h1>
     </div>
     <div class="tb-group" id="tbOption"></div>
-    <input class="name-field" id="optionName" type="text" maxlength="60" spellcheck="false" autocomplete="off" aria-label="Option name">
-    <div class="tb-group" id="tbHistory"></div>
     <div class="tb-spacer"></div>
-    <div class="tb-group" id="tbActions"></div>
+    <div class="tb-group" id="tbHistory"></div>
     <div class="seg" id="styleToggle" role="group" aria-label="Visual style"></div>
-    <div class="btn-split" id="tbShot"></div>
+    <div class="btn-split" id="tbSnap"></div>
+    <div class="tb-group" id="tbExport"></div>
   </header>
 
   <main class="app" id="app">
     <section class="viewport" id="viewport" aria-label="3D view" data-compare="false">
       <div class="canvas-host" id="canvasHost"></div>
-      <aside class="hud" id="hud" data-collapsed="false" aria-label="Metrics and warnings"></aside>
+      <aside class="hud" id="hud" data-collapsed="true" aria-label="Metrics and warnings"></aside>
+      <div class="legend" id="legend" hidden role="group" aria-label="Color legend"></div>
       <nav class="views" id="views" aria-label="Preset views"></nav>
       <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
       <div class="compare" id="compare" hidden>
@@ -609,15 +674,15 @@ textarea.ai-preview {
 
     <aside class="panel" id="panel" aria-label="Controls">
       <div class="grabber" id="grabber" role="separator" aria-orientation="horizontal" aria-label="Drag to resize the controls sheet" tabindex="0"><span></span></div>
+      <div id="selection-card" hidden></div>
+      <div class="tabs" id="panelTabs" role="tablist" aria-label="Control groups"></div>
       <div class="panel-scroll" id="panelScroll">
-        <div class="panel-title label">Controls</div>
         <div id="sections"></div>
       </div>
     </aside>
   </main>
 </div>
 <input type="file" id="importFile" accept=".json,application/json" hidden>
-
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -654,6 +719,8 @@ const rect = (w, d) => ({ type: 'rect', w, d, radius: 0, points: [] });
 
 const lShape = (w, d, arm) => ({ type: 'L', w, d, radius: 0, arm, points: [] });
 
+const uShape = (w, d, arm) => ({ type: 'U', w, d, radius: 0, arm, points: [] });
+
 const PRESETS = [
   {
     id: 'point-tower',
@@ -689,7 +756,7 @@ const PRESETS = [
       programs: copyPrograms(),
       targets: { gfa: 0, far: 0 },
       view: {
-        style: 'model', colorBy: 'zone', floorLines: true, shadows: true,
+        style: 'model', colorBy: 'program', floorLines: true, shadows: true,
         sun: { azimuth: 135, altitude: 40 }, grid: true, figure: true,
       },
     },
@@ -733,7 +800,7 @@ const PRESETS = [
       programs: copyPrograms(),
       targets: { gfa: 0, far: 0 },
       view: {
-        style: 'model', colorBy: 'zone', floorLines: true, shadows: true,
+        style: 'model', colorBy: 'program', floorLines: true, shadows: true,
         sun: { azimuth: 135, altitude: 40 }, grid: true, figure: true,
       },
     },
@@ -773,19 +840,19 @@ const PRESETS = [
       programs: copyPrograms(),
       targets: { gfa: 0, far: 0 },
       view: {
-        style: 'model', colorBy: 'zone', floorLines: true, shadows: true,
+        style: 'model', colorBy: 'program', floorLines: true, shadows: true,
         sun: { azimuth: 135, altitude: 40 }, grid: true, figure: true,
       },
     },
   },
 
   {
-    id: 'tampa-multifamily',
-    name: 'Tampa-type multifamily',
-    description: 'A 23-story L-shaped multifamily tower on a six-level retail and parking podium, with its amenity deck on the podium roof as the first tower floor.',
+    id: 'l-multifamily-podium',
+    name: 'L-shaped multifamily on podium',
+    description: 'A 23-story L-shaped multifamily building on a six-level retail and parking podium, with its amenity deck on the podium roof as the first tower floor.',
     state: {
       schema: 1,
-      name: 'Tampa-type multifamily',
+      name: 'L-shaped multifamily on podium',
       site: {
         shape: 'rect', width: 260, depth: 220, points: [],
         setbacks: { front: 10, back: 10, left: 10, right: 10 },
@@ -820,7 +887,66 @@ const PRESETS = [
       programs: copyPrograms(),
       targets: { gfa: 0, far: 0 },
       view: {
-        style: 'model', colorBy: 'zone', floorLines: true, shadows: true,
+        style: 'model', colorBy: 'program', floorLines: true, shadows: true,
+        sun: { azimuth: 135, altitude: 40 }, grid: true, figure: true,
+      },
+    },
+  },
+
+  // U-shaped multifamily on podium. Same structure as the L preset; only the tower plate differs.
+  // Hand calculation of GFA (sf):
+  //   U plate = w x d - (w - 2a) x (d - a), with w = 200, d = 140, a = 50 (arm width; the notch opens to the back).
+  //           = 200 x 140 - (200 - 100) x (140 - 50) = 28,000 - 100 x 90 = 28,000 - 9,000 = 19,000.
+  //   Podium plate = 240 x 200 = 48,000. Podium GFA = 48,000 x 6 floors = 288,000.
+  //   Tower = 1 amenity floor + 16 residential floors = 17 floors, all on the U plate.
+  //   Tower GFA = 19,000 x 17 = 323,000.
+  //   Total GFA = 288,000 + 323,000 = 611,000 sf. Total floors = 6 + 17 = 23.
+  //   Double-check: 17 x 28,000 (full 200 x 140 plates) = 476,000; the notch removes 17 x 9,000 = 153,000;
+  //   476,000 - 153,000 = 323,000. Same tower GFA.
+  {
+    id: 'u-multifamily-podium',
+    name: 'U-shaped multifamily on podium',
+    description: 'A 23-story U-shaped multifamily building on a six-level retail and parking podium, with its amenity deck on the podium roof as the first tower floor. The U opens toward the back of the site.',
+    state: {
+      schema: 1,
+      name: 'U-shaped multifamily on podium',
+      site: {
+        shape: 'rect', width: 260, depth: 220, points: [],
+        setbacks: { front: 10, back: 10, left: 10, right: 10 },
+        heightLimit: 0,                         // no limit; planned top 249.5 ft (245.5 + 4 ft parapet)
+        stepback: { on: false, aboveHeight: 85, distance: 15 },
+      },
+      context: { show: true, blocks: [{ x: 0, y: -180, w: 200, d: 120, h: 60 }] },
+      podium: {
+        on: true, floors: 6, groundFtf: 18, ftf: 10.5,
+        shape: rect(240, 200), offset: { x: 0, y: 0 },
+        program: 'retail', upperProgram: 'parking',
+      },
+      segments: [
+        {
+          floors: 1, ftf: 15, program: 'amenity',          // amenity deck on the podium roof
+          shape: uShape(200, 140, 50), offset: { x: 0, y: 0 }, rotation: 0,
+          taper: { x: 0, y: 0, curve: 'linear' },
+          twist: { deg: 0, start: 0, end: 1, curve: 'linear' },
+          lean: { x: 0, y: 0 },
+        },
+        {
+          floors: 16, ftf: 10, program: 'residential',
+          shape: uShape(200, 140, 50), offset: { x: 0, y: 0 }, rotation: 0,
+          taper: { x: 0, y: 0, curve: 'linear' },
+          twist: { deg: 0, start: 0, end: 1, curve: 'linear' },
+          lean: { x: 0, y: 0 },
+        },
+      ],
+      setbacks: [], mechanical: [], carves: [], cuts: [],
+      crown: { type: 'flat', height: 4, steps: 3, slopeSide: 'front' },
+      // The L preset's 20% core does not fit the U's 50 ft arms (about 74 x 52 ft; the base arm is 50 ft deep),
+      // so it raises a core-outside warning. 15% (about 64 x 45 ft) fits in the front arm. The core is not in GFA.
+      core: { mode: 'percent', percent: 15, w: 40, d: 30 },
+      programs: copyPrograms(),
+      targets: { gfa: 0, far: 0 },
+      view: {
+        style: 'model', colorBy: 'program', floorLines: true, shadows: true,
         sun: { azimuth: 135, altitude: 40 }, grid: true, figure: true,
       },
     },
@@ -992,7 +1118,8 @@ function defaultState() {
 
     view: {
       style: 'model',
-      colorBy: 'zone',
+      colorBy: 'program',        // v1.1: new options color the Diagram by program (saved options that say "zone" keep it)
+      snap: { on: true, grid: 5 },   // v1.1: drag snapping. grid is 5 or 10 (ft)
       floorLines: true,
       shadows: true,
       sun: { azimuth: 135, altitude: 40 },
@@ -1002,6 +1129,15 @@ function defaultState() {
       shot: { title: true, date: true, metrics: true, mark: true },
     },
   };
+}
+
+/** v1.1 view migration. colorBy keeps whatever an older saved option stored ("zone"); anything unknown becomes "program". snap is
+ *  { on, grid } with grid 5 or 10. */
+function migrateView(v) {
+  if (v.colorBy !== 'zone' && v.colorBy !== 'program') v.colorBy = 'program';
+  if (!v.snap || typeof v.snap !== 'object') v.snap = { on: true, grid: 5 };
+  v.snap = { on: v.snap.on !== false, grid: v.snap.grid === 10 ? 10 : 5 };
+  return v;
 }
 
 /** Fill every missing field from the defaults so older or partial states (presets, imports) are complete. */
@@ -1015,7 +1151,8 @@ function fillDefaults(src) {
     }
   };
   const base = defaultState();
-  merge(s, base);
+  merge(s, base);                                           // a state with no colorBy gets "program"; an explicit "zone" or "program" is kept
+  migrateView(s.view);
   if (!Array.isArray(s.segments) || !s.segments.length) s.segments = [defaultSegment()];
   const seg0 = defaultSegment();
   s.segments.forEach((seg) => merge(seg, seg0));
@@ -3957,7 +4094,8 @@ const Controls = (() => {
   /**
    * Editable list of cards (segments, setbacks, carves, ...).
    * o: { bind (array), title(i, item) -> text, render(i) -> { children, more }, make(arr) -> new item,
-   *      addLabel, min, reorder, openDefault(i), empty }
+   *      addLabel, min, reorder, openDefault(i), empty, swatch(i, item) -> css color or null (a color chip before the title) }
+   * Returns { el, refresh, openAt(i) -> the row element (opens it), rowAt(i) }.
    */
   function list(o) {
     const host = h('div', { class: 'list' });
@@ -3983,8 +4121,10 @@ const Controls = (() => {
       const isOpen = open[i] === undefined ? (o.openDefault ? !!o.openDefault(i) : i === 0) : open[i];
       const title = h('span', { class: 't' });
       const head = h('button', { class: 'item-title', type: 'button', 'aria-expanded': isOpen ? 'true' : 'false', html: CARET_SVG });
+      const sw = o.swatch ? h('span', { class: 'sw', 'aria-hidden': 'true' }) : null;
+      if (sw) head.append(sw);
       head.append(title);
-      const item = h('div', { class: 'item', 'data-open': isOpen ? 'true' : 'false' });
+      const item = h('div', { class: 'item', 'data-open': isOpen ? 'true' : 'false', 'data-index': String(i) });
       head.addEventListener('click', () => {
         const next = item.dataset.open !== 'true';
         item.dataset.open = next ? 'true' : 'false'; open[i] = next;
@@ -4001,6 +4141,7 @@ const Controls = (() => {
       reg.push(() => {
         const arr = o.bind.get() || [];
         title.textContent = arr[i] ? o.title(i, arr[i]) : '';
+        if (sw) sw.style.background = (arr[i] && o.swatch(i, arr[i])) || 'transparent';
         up.disabled = i === 0; down.disabled = i >= arr.length - 1;
         del.disabled = arr.length <= (o.min || 0);
       });
@@ -4018,24 +4159,39 @@ const Controls = (() => {
       if (len() !== rendered) rebuild(); else kids.forEach((fn) => fn());
       if (emptyNote) emptyNote.hidden = len() > 0;
     };
-    return track({ el, refresh });
+    /** Opens row i (for example when something is selected in the 3D view) and returns its element. */
+    function openAt(i) {
+      refresh();
+      if (!(i >= 0 && i < len())) return null;
+      open[i] = true;
+      const row = host.children[i];
+      if (row) { row.dataset.open = 'true'; const hd = row.querySelector('.item-title'); if (hd) hd.setAttribute('aria-expanded', 'true'); }
+      return row || null;
+    }
+    const ctl = track({ el, refresh });
+    ctl.openAt = openAt;
+    ctl.rowAt = (i) => host.children[i] || null;
+    return ctl;
   }
 
   /**
    * Accordion section with an optional "More" area for advanced controls.
-   * o: { id, title, open, children:[el], more:[el], onToggle }
+   * o: { id, title, open, children:[el], more:[el], onToggle, headExtra (an element placed at the right of the title) }
+   * Returns { el, setOpen, isOpen }.
    */
   function section(o) {
     const bodyId = uid('acc');
     const root = h('section', { class: 'acc', 'data-open': 'false' });
     const head = h('button', { class: 'acc-head', type: 'button', 'aria-expanded': 'false', 'aria-controls': bodyId, html: `${CARET_SVG}<span>${o.title}</span>` });
+    if (o.headExtra) head.append(o.headExtra);
     root.append(h('h2', { style: 'margin:0' }, head));
     const body = h('div', { class: 'acc-body', id: bodyId }, o.children || [], moreBlock(o.more));
     root.append(body);
     const setOpen = (open) => { root.dataset.open = open ? 'true' : 'false'; head.setAttribute('aria-expanded', open ? 'true' : 'false'); };
     head.addEventListener('click', () => { setOpen(root.dataset.open !== 'true'); if (o.onToggle) o.onToggle(root.dataset.open === 'true'); });
     setOpen(!!o.open);
-    return { el: root, setOpen };
+    root.dataset.section = o.id || '';
+    return { el: root, setOpen, isOpen: () => root.dataset.open === 'true' };
   }
 
   return { bindStore, mapBind, slider, toggle, select, chips, color, points, when, group, help, label, button, list, section, refreshAll, scoped: (fn) => { const prev = reg; const mine = []; reg = mine; try { fn(); } finally { reg = prev; } return mine; } };
@@ -4054,6 +4210,8 @@ const ICONS = {
   camera: '<svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
   option: '<svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg>',
   sparkle: '<svg viewBox="0 0 24 24"><path d="M10 3l1.8 5.2L17 10l-5.2 1.8L10 17l-1.8-5.2L3 10l5.2-1.8z"/><path d="M18 14l.9 2.1L21 17l-2.1.9L18 20l-.9-2.1L15 17l2.1-.9z"/></svg>',
+  snap: '<svg viewBox="0 0 24 24"><path d="M6 3v8a6 6 0 0012 0V3h-4v8a2 2 0 01-4 0V3z"/><path d="M6 7h4M14 7h4"/></svg>',
+  export: '<svg viewBox="0 0 24 24"><path d="M12 15V4"/><path d="M8 8l4-4 4 4"/><path d="M5 13v6h14v-6"/></svg>',
   chev: '<svg class="chev" viewBox="0 0 14 14" fill="none" stroke="currentColor"><path d="M3 5l4 4 4-4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
 const UI_STORAGE_KEY = 'towergen.ui.v1';
@@ -4166,6 +4324,8 @@ const UI = (() => {
   const get = (path) => Store.get(path);
   const levels = () => Derived.get().floors.length;
   const els = (list) => list.map((c) => c.el || c);
+  let segList = null, carveList = null, ctxList = null;       // the row lists, kept so openItem can open a row
+  const progColor = (k) => ((get(`programs.${k}`) || {}).color) || ((CONFIG.programs[k] || {}).color) || '#999';
 
   /* ---- shape editor (podium and segments) --------------------------------------- */
   const SHAPE_TYPES = opts([['rect', 'Rectangle'], ['square', 'Square'], ['circle', 'Circle'], ['ellipse', 'Ellipse'], ['triangle', 'Triangle'], ['L', 'L-shape'], ['U', 'U-shape'], ['polygon', 'Custom polygon']]);
@@ -4212,22 +4372,45 @@ const UI = (() => {
       },
       commit: () => {},
     };
+    return {
+      children: els([
+        sel('Shape', null, opts([['rect', 'Rectangle'], ['polygon', 'Polygon']]), shapeBind),
+        Controls.when(() => get('site.shape') !== 'polygon', [lenS('Width', 'site.width', 50, 600), lenS('Depth', 'site.depth', 50, 600)]),
+        Controls.when(() => get('site.shape') === 'polygon', [Controls.points({ label: 'Site corners (x, y in feet)', bind: bs('site.points'), need: 3, needText: 'Needs at least 3 points. Until then the rectangle is used.' })]),
+      ]),
+    };
+  }
+
+  function buildSetbacks() {
+    return {
+      children: els([
+        Controls.group(els([
+          lenF('Front (south)', 'site.setbacks.front', { hardMin: 0 }), lenF('Back (north)', 'site.setbacks.back', { hardMin: 0 }),
+          lenF('Left (west)', 'site.setbacks.left', { hardMin: 0 }), lenF('Right (east)', 'site.setbacks.right', { hardMin: 0 }),
+        ])),
+        Controls.help('The tower must stay inside the site shrunk by these distances.'),
+      ]),
+    };
+  }
+
+  function buildHeight() {
     const limitBind = Controls.mapBind(bs('site.heightLimit'), (v) => num(v, 0), (v) => Math.max(0, v));
-    const children = [
-      sel('Shape', null, opts([['rect', 'Rectangle'], ['polygon', 'Polygon']]), shapeBind),
-      Controls.when(() => get('site.shape') !== 'polygon', [lenS('Width', 'site.width', 50, 600), lenS('Depth', 'site.depth', 50, 600)]),
-      Controls.when(() => get('site.shape') === 'polygon', [Controls.points({ label: 'Site corners (x, y in feet)', bind: bs('site.points'), need: 3, needText: 'Needs at least 3 points. Until then the rectangle is used.' })]),
-      Controls.slider({
-        label: 'Height limit (0 = none)', bind: limitBind, min: 0, max: 800, step: 5, hardMin: 0, hardMax: 5000,
-        format: (v) => (v > 0 ? Units.formatFeetInches(v) : 'None'), parse: (t) => (/^\s*(none|off)\s*$/i.test(t) ? 0 : Units.parseLength(t)), inputMode: 'text',
-      }),
-      Controls.label('Setbacks'),
-      Controls.group(els([
-        lenF('Front (south)', 'site.setbacks.front', { hardMin: 0 }), lenF('Back (north)', 'site.setbacks.back', { hardMin: 0 }),
-        lenF('Left (west)', 'site.setbacks.left', { hardMin: 0 }), lenF('Right (east)', 'site.setbacks.right', { hardMin: 0 }),
-      ])),
-    ];
-    const blocks = Controls.list({
+    return {
+      children: els([
+        Controls.slider({
+          label: 'Height limit (0 = none)', bind: limitBind, min: 0, max: 800, step: 5, hardMin: 0, hardMax: 5000,
+          format: (v) => (v > 0 ? Units.formatFeetInches(v) : 'None'), parse: (t) => (/^\s*(none|off)\s*$/i.test(t) ? 0 : Units.parseLength(t)), inputMode: 'text',
+        }),
+        Controls.label('Stepback'),
+        Controls.toggle({ label: 'Stepback above a height', bind: bs('site.stepback.on') }),
+        Controls.when(() => get('site.stepback.on'), [lenS('Above height', 'site.stepback.aboveHeight', 20, 400), lenS('Step in by', 'site.stepback.distance', 5, 60)]),
+        Controls.help('Above the stepback height the allowed footprint shrinks by the step-in distance on every side.'),
+      ]),
+    };
+  }
+
+  function buildContext() {
+    ctxList = Controls.list({
       bind: bs('context.blocks'), addLabel: 'Add block', reorder: false, openDefault: () => false,
       empty: 'No context blocks.',
       title: (i, b) => `Block ${i + 1} · ${Units.formatFeetInches(num(b.h, 0))} high`,
@@ -4239,20 +4422,16 @@ const UI = (() => {
         ]))],
       }),
     });
-    const more = [
-      Controls.label('Stepback'),
-      Controls.toggle({ label: 'Stepback above a height', bind: bs('site.stepback.on') }),
-      Controls.when(() => get('site.stepback.on'), [lenS('Above height', 'site.stepback.aboveHeight', 20, 400), lenS('Step in by', 'site.stepback.distance', 5, 60)]).el,
-      Controls.help('Above the stepback height the allowed footprint shrinks by the step-in distance on every side.'),
-      Controls.label('Context blocks'),
-      Controls.help('Neighbouring buildings, drawn for scale. They never change any number.'),
-      blocks.el,
-      h('div', { class: 'add-row' }, Controls.button('Surround', () => {
-        Store.set('context.blocks', surroundBlocks(Store.raw()), { live: false });
-        if (!get('context.show')) Store.set('context.show', true, { live: false });
-      }), h('span', { class: 'help', style: 'margin:0' }, 'One block on each side of the site.')),
-    ].map((x) => x.el || x);
-    return { children: els(children), more };
+    return {
+      children: els([
+        Controls.help('Neighbouring buildings, drawn for scale. They never change any number. Show or hide them in the View tab.'),
+        ctxList.el,
+        h('div', { class: 'add-row' }, Controls.button('Surround', () => {
+          Store.set('context.blocks', surroundBlocks(Store.raw()), { live: false });
+          if (!get('context.show')) Store.set('context.show', true, { live: false });
+        }), h('span', { class: 'help', style: 'margin:0' }, 'One block on each side of the site.')),
+      ]),
+    };
   }
 
   function buildPodium() {
@@ -4280,8 +4459,9 @@ const UI = (() => {
 
   const CURVES = opts([['linear', 'Linear'], ['eased', 'Eased']]);
   function buildSegments() {
-    const list = Controls.list({
+    const list = segList = Controls.list({
       bind: bs('segments'), addLabel: 'Add segment', min: 1,
+      swatch: (i, g) => progColor(g.program),
       title: (i, g) => `Segment ${i + 1} · ${g.floors} fl · ${(CONFIG.programs[g.program] || {}).label || g.program}`,
       make: (arr) => { const s = deepClone(arr[arr.length - 1] || defaultSegment()); s.floors = 10; return s; },
       render: (i) => {
@@ -4351,7 +4531,7 @@ const UI = (() => {
   function buildCarves() {
     const mid = () => Math.max(2, Math.round(levels() / 2));
     const kind = (i) => () => get(`carves.${i}.kind`);
-    const carves = Controls.list({
+    const carves = carveList = Controls.list({
       bind: bs('carves'), addLabel: 'Add carve', reorder: false, openDefault: () => true, empty: 'No carves.',
       title: (i, c) => `${{ corner: 'Corner', center: 'Center', full: 'Sky gap' }[c.kind] || c.kind} · floors ${c.startFloor}–${c.endFloor}`,
       make: () => ({ startFloor: mid(), endFloor: mid() + 1, kind: 'corner', corner: 'NE', w: 30, d: 30 }),
@@ -4458,67 +4638,255 @@ const UI = (() => {
     };
   }
 
-  function buildView() {
+  function buildDisplay() {
     const v = (k) => bs(`view.${k}`);
     return {
       children: els([
         sel('Style', 'view.style', opts([['model', 'Model'], ['diagram', 'Diagram']])),
+        sel('Color by (diagram)', 'view.colorBy', opts([['program', 'Program'], ['zone', 'Zone']])),
         Controls.toggle({ label: 'Floor lines', bind: v('floorLines') }),
         Controls.toggle({ label: 'Shadows', bind: v('shadows') }),
-        Controls.toggle({ label: 'Show zoning envelope', bind: v('envelope') }),
-        Controls.toggle({ label: 'Show context blocks', bind: bs('context.show') }),
-      ]),
-      more: els([
-        sel('Color by (diagram)', 'view.colorBy', opts([['zone', 'Zone'], ['program', 'Program']])),
-        Controls.slider({ label: 'Sun azimuth', bind: v('sun.azimuth'), min: 0, max: 360, step: 1, hardMin: 0, hardMax: 360, integer: true, format: Units.formatDeg, inputMode: 'numeric' }),
-        Controls.slider({ label: 'Sun altitude', bind: v('sun.altitude'), min: 5, max: 90, step: 1, hardMin: 3, hardMax: 90, integer: true, format: Units.formatDeg, inputMode: 'numeric' }),
         Controls.toggle({ label: 'Grid', bind: v('grid') }),
         Controls.toggle({ label: 'Scale figure', bind: v('figure') }),
       ]),
     };
   }
+  function buildScene() {
+    return {
+      children: els([
+        Controls.toggle({ label: 'Show zoning envelope', bind: bs('view.envelope') }),
+        Controls.toggle({ label: 'Show context blocks', bind: bs('context.show') }),
+        Controls.help('Edit the context blocks in the Site tab.'),
+      ]),
+    };
+  }
+  function buildSun() {
+    const v = (k) => bs(`view.${k}`);
+    return {
+      children: els([
+        Controls.slider({ label: 'Sun azimuth', bind: v('sun.azimuth'), min: 0, max: 360, step: 1, hardMin: 0, hardMax: 360, integer: true, format: Units.formatDeg, inputMode: 'numeric' }),
+        Controls.slider({ label: 'Sun altitude', bind: v('sun.altitude'), min: 5, max: 90, step: 1, hardMin: 3, hardMax: 90, integer: true, format: Units.formatDeg, inputMode: 'numeric' }),
+      ]),
+    };
+  }
 
-  // Plan order (section 8.1) plus Targets.
-  const SECTIONS = [
-    { id: 'site', title: 'Site', open: true, build: buildSite },
-    { id: 'podium', title: 'Podium', build: buildPodium },
-    { id: 'segments', title: 'Segments', open: true, build: buildSegments },
-    { id: 'moves', title: 'Form moves', build: buildMoves },
-    { id: 'carves', title: 'Carves', build: buildCarves },
-    { id: 'crown', title: 'Crown', build: buildCrown },
-    { id: 'core', title: 'Core', build: buildCore },
-    { id: 'programs', title: 'Programs', build: buildPrograms },
-    { id: 'targets', title: 'Targets', build: buildTargets },
-    { id: 'view', title: 'View', build: buildView },
+  // Four tabs (v1.1 layout, Direction A). Each tab is a stack of accordion sections.
+  const TABS = [
+    { id: 'form', title: 'Form' },
+    { id: 'program', title: 'Program' },
+    { id: 'view', title: 'View' },
+    { id: 'site', title: 'Site' },
   ];
+  const SECTIONS = [
+    { id: 'podium', tab: 'form', title: 'Podium', build: buildPodium },
+    { id: 'segments', tab: 'form', title: 'Segments', open: true, build: buildSegments },
+    { id: 'moves', tab: 'form', title: 'Form moves', build: buildMoves },
+    { id: 'carves', tab: 'form', title: 'Carves', build: buildCarves },
+    { id: 'crown', tab: 'form', title: 'Crown', build: buildCrown },
+    { id: 'core', tab: 'form', title: 'Core', build: buildCore },
+    { id: 'programs', tab: 'program', title: 'Programs', open: true, build: buildPrograms },
+    { id: 'targets', tab: 'program', title: 'Targets', open: true, build: buildTargets },
+    { id: 'display', tab: 'view', title: 'Display', open: true, build: buildDisplay },
+    { id: 'scene', tab: 'view', title: 'Context and envelope', open: true, build: buildScene },
+    { id: 'sun', tab: 'view', title: 'Sun', open: true, build: buildSun },
+    { id: 'site', tab: 'site', title: 'Site', open: true, build: buildSite },
+    { id: 'setbacks', tab: 'site', title: 'Setbacks', open: true, build: buildSetbacks },
+    { id: 'height', tab: 'site', title: 'Height limit and stepback', open: true, build: buildHeight },
+    { id: 'context', tab: 'site', title: 'Context blocks', build: buildContext },
+  ];
+  const sectionCtl = {};          // id -> Controls.section result
+  const swatchSyncs = [];         // functions that repaint section-head swatches
+  let activeTab = 'form';
+  const scrollPos = {};
 
   function buildPanel() {
     const host = $('sections');
     host.textContent = '';
+    const panels = {};
+    for (const t of TABS) {
+      panels[t.id] = h('div', { class: 'tabpanel', id: `tabpanel-${t.id}`, role: 'tabpanel', 'aria-labelledby': `tab-${t.id}`, hidden: true });
+      host.append(panels[t.id]);
+    }
     for (const s of SECTIONS) {
       const parts = s.build();
       const open = prefs.sections && s.id in prefs.sections ? !!prefs.sections[s.id] : !!s.open;
-      host.append(Controls.section({
+      const opt = {
         id: s.id, title: s.title, open, children: parts.children, more: parts.more,
-        onToggle: (isOpen) => { prefs.sections = { ...(prefs.sections || {}), [s.id]: isOpen }; saveUiPrefs(prefs); },
-      }).el);
+        onToggle: (isOpen) => rememberSection(s.id, isOpen),
+      };
+      if (s.id === 'podium') opt.headExtra = podiumSwatches();
+      const sec = Controls.section(opt);
+      sectionCtl[s.id] = sec;
+      panels[s.tab].append(sec.el);
     }
+  }
+  function rememberSection(id, isOpen) { prefs.sections = { ...(prefs.sections || {}), [id]: isOpen }; saveUiPrefs(prefs); }
+
+  /** Two small color chips in the Podium header: the ground-floor and upper-floor programs. Hidden while the podium is off. */
+  function podiumSwatches() {
+    const box = h('span', { class: 'acc-sw', 'aria-hidden': 'true' }, h('span', { class: 'sw' }), h('span', { class: 'sw' }));
+    const sync = () => {
+      const on = !!get('podium.on');
+      box.hidden = !on;
+      if (!on) return;
+      box.children[0].style.background = progColor(get('podium.program'));
+      box.children[1].style.background = progColor(get('podium.upperProgram'));
+    };
+    swatchSyncs.push(sync);
+    return box;
+  }
+
+  /* ---- tabs ------------------------------------------------------------------------ */
+  function buildTabs() {
+    const bar = $('panelTabs');
+    bar.textContent = '';
+    for (const t of TABS) {
+      bar.append(h('button', {
+        class: 'tab', type: 'button', role: 'tab', id: `tab-${t.id}`, 'data-tab': t.id, 'aria-controls': `tabpanel-${t.id}`, 'aria-selected': 'false', tabindex: '-1',
+        onclick: () => { setTab(t.id); raiseSheet(); },
+      }, t.title));
+    }
+    bar.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Home' && e.key !== 'End') return;
+      e.preventDefault();
+      const i = TABS.findIndex((t) => t.id === activeTab);
+      const next = e.key === 'Home' ? 0 : e.key === 'End' ? TABS.length - 1 : (i + (e.key === 'ArrowRight' ? 1 : -1) + TABS.length) % TABS.length;
+      setTab(TABS[next].id);
+      $(`tab-${TABS[next].id}`).focus();
+    });
+  }
+  /** Shows one tab. Remembered in the UI prefs (localStorage), and each tab keeps its own scroll position. */
+  function setTab(id, { remember = true } = {}) {
+    if (!TABS.some((t) => t.id === id)) return false;
+    const scroller = $('panelScroll');
+    if (id !== activeTab) scrollPos[activeTab] = scroller.scrollTop;
+    activeTab = id;
+    for (const t of TABS) {
+      const on = t.id === id;
+      const btn = $(`tab-${t.id}`), pnl = $(`tabpanel-${t.id}`);
+      btn.setAttribute('aria-selected', on ? 'true' : 'false');
+      btn.tabIndex = on ? 0 : -1;
+      pnl.hidden = !on;
+    }
+    scroller.scrollTop = scrollPos[id] || 0;
+    if (remember && prefs.tab !== id) { prefs.tab = id; saveUiPrefs(prefs); }
+    return true;
+  }
+
+  /* ---- hooks for the selection card (v1.1) ------------------------------------------- */
+  const ITEM_MAP = {
+    segment: { tab: 'form', section: 'segments', list: () => segList },
+    podium: { tab: 'form', section: 'podium' },
+    crown: { tab: 'form', section: 'crown' },
+    carve: { tab: 'form', section: 'carves', list: () => carveList },
+    context: { tab: 'site', section: 'context', list: () => ctxList },
+  };
+  /**
+   * Switches to the tab that holds the item, opens its section (and its row when the kind is a list), and scrolls it into view.
+   * item: { kind: 'segment' | 'podium' | 'crown' | 'carve' | 'context', index }. Returns true when something was opened.
+   */
+  function openItem(item) {
+    const m = item && ITEM_MAP[item.kind];
+    if (!m) return false;
+    setTab(m.tab);
+    const sec = sectionCtl[m.section];
+    if (!sec) return false;
+    if (!sec.isOpen()) { sec.setOpen(true); rememberSection(m.section, true); }
+    let target = sec.el;
+    if (m.list) {
+      const lst = m.list();
+      const row = lst && Number.isInteger(item.index) ? lst.openAt(item.index) : null;
+      if (row) target = row;
+    }
+    raiseSheet();
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    try { target.scrollIntoView({ block: 'start', behavior: reduce ? 'auto' : 'smooth' }); } catch (e) { target.scrollIntoView(); }
+    target.classList.remove('is-focus'); void target.offsetWidth; target.classList.add('is-focus');
+    setTimeout(() => target.classList.remove('is-focus'), 1600);
+    return true;
+  }
+  /**
+   * Sets the program of every item that has one (segments, and the podium: both its ground and upper programs, or just one
+   * with item.part = 'ground' | 'upper'). Crown, carve and context items are skipped. ONE undo step for the whole call.
+   * Returns the number of items it applied to (0 when the program is unknown).
+   */
+  function setProgramForItems(items, program) {
+    if (!CONFIG.programs[program] || program === 'mechanical') return 0;
+    const next = deepClone(Store.raw());
+    let n = 0;
+    for (const it of items || []) {
+      if (!it) continue;
+      if (it.kind === 'segment' && next.segments[it.index]) { next.segments[it.index].program = program; n++; }
+      else if (it.kind === 'podium') {
+        if (it.part !== 'upper') next.podium.program = program;
+        if (it.part !== 'ground') next.podium.upperProgram = program;
+        n++;
+      }
+    }
+    if (n && JSON.stringify(next) !== JSON.stringify(Store.raw())) Store.replace(next);
+    return n;
   }
 
   /* ---- top bar -------------------------------------------------------------------- */
   const iconBtn = (icon, text, attrs = {}) => h('button', { class: 'btn has-text', type: 'button', 'aria-label': text, title: text, ...attrs },
     h('span', { html: icon, style: 'display:contents' }), h('span', { class: 'btn-text' }, text));
 
-  function buildTopBar() {
-    const name = $('optionName');
-    name.value = Store.get('name') || '';
-    name.addEventListener('change', () => Options.rename(name.value));
-    name.addEventListener('keydown', (e) => { if (e.key === 'Enter') name.blur(); });
-    Store.subscribe(() => { if (document.activeElement !== name) name.value = Store.get('name') || ''; });
+  const snapState = () => { const s = get('view.snap') || {}; return { on: s.on !== false, grid: s.grid === 10 ? 10 : 5 }; };
+  const setSnap = (patch) => Store.set('view.snap', { ...snapState(), ...patch }, { live: false });
 
-    const optBtn = h('button', { class: 'btn has-text menu-btn', type: 'button', id: 'btnOption', 'aria-haspopup': 'true', 'aria-expanded': 'false', title: 'Saved options, presets and files', 'aria-label': 'Option menu', onclick: () => Options.openMenu(optBtn) },
-      h('span', { html: ICONS.option, style: 'display:contents' }), h('span', { class: 'btn-text menu-name' }, 'Option'), h('span', { class: 'dot', id: 'unsavedDot', hidden: true, title: 'Unsaved changes' }), h('span', { html: ICONS.chev, style: 'display:contents' }));
+  function openSnapMenu(anchor) {
+    const el = h('div', { role: 'group', 'aria-label': 'Snap options' });
+    const sw = h('button', { class: 'toggle-row', type: 'button', role: 'switch', id: 'snapSwitch', style: 'padding:0 8px' }, h('span', null, 'Snap while dragging'), h('span', { class: 'switch', 'aria-hidden': 'true' }));
+    const chips = [5, 10].map((g) => h('button', { class: 'chip', type: 'button', 'data-grid': String(g), 'aria-pressed': 'false', onclick: () => setSnap({ grid: g }) }, `${g} ft`));
+    const sync = () => {
+      const st = snapState();
+      sw.setAttribute('aria-checked', String(st.on));
+      chips.forEach((c) => c.setAttribute('aria-pressed', String(Number(c.dataset.grid) === st.grid)));
+    };
+    sw.addEventListener('click', () => setSnap({ on: !snapState().on }));
+    const off = Store.subscribe(sync);
+    sync();
+    el.append(
+      sw,
+      h('div', { class: 'label pop-label' }, 'Grid'),
+      h('div', { class: 'chips', style: 'padding:2px 8px 6px', role: 'group', 'aria-label': 'Grid size' }, chips),
+      h('div', { class: 'pop-note' }, 'Snaps to the grid, the site, setbacks and the edges and centers of other pieces. Hold Option (Alt) while dragging to skip it.'),
+    );
+    Pop.open(anchor, el, { align: 'right', onClose: off });
+  }
+
+  /** The Export menu: Image, AI-ready image, AI Prompts, the image overlay choices (a sub-view), Export / Import JSON. */
+  function openExportMenu(anchor) {
+    const el = h('div', { role: 'menu', id: 'exportMenu' });
+    const item = (id, title, sub, onclick, o = {}) => h('button', { class: 'pop-item', type: 'button', role: 'menuitem', id, onclick: () => { if (!o.keep) Pop.close(); onclick(); } },
+      h('span', { class: 'grow' }, title, sub ? h('small', null, sub) : null), o.chev ? h('span', { html: ICONS.chev, class: 'chev-r', style: 'display:contents' }) : null);
+    const main = () => {
+      el.textContent = '';
+      el.append(h('div', { class: 'label pop-label' }, 'Pictures'),
+        item('miImage', 'Image', 'Save a PNG of this view', () => Shots.take()),
+        item('miAiReady', 'AI-ready image', 'Plain model, no overlay, grid or wireframe. For ChatGPT or Gemini.', () => Shots.takeAiReady()),
+        item('miAiPrompts', 'AI Prompts', 'A prompt to pair with the AI-ready image', () => Prompts.toggle()),
+        item('miOverlay', 'Image overlay', 'Choose what the Image shows', () => overlay(), { keep: true, chev: true }),
+        h('div', { class: 'pop-sep' }), h('div', { class: 'label pop-label' }, 'Files'),
+        item('miExportJson', 'Export JSON', 'Download all saved options', () => Options.exportJson()),
+        item('miImportJson', 'Import JSON', 'Add the options from a file', () => $('importFile').click()));
+    };
+    const overlay = () => {
+      el.textContent = '';
+      el.append(h('button', { class: 'pop-item', type: 'button', id: 'miOverlayBack', onclick: main }, h('span', { class: 'grow' }, '‹  Export')));
+      el.append(...Shots.overlayControls());
+      el.append(h('div', { class: 'pop-actions' }, h('button', { class: 'btn solid', type: 'button', onclick: () => { Pop.close(); Shots.take(); } }, 'Save image')));
+    };
+    main();
+    Pop.open(anchor, el, { align: 'right' });
+  }
+
+  function buildTopBar() {
+    const optBtn = h('button', { class: 'btn has-text menu-btn', type: 'button', id: 'btnOption', 'aria-haspopup': 'true', 'aria-expanded': 'false', title: 'Option: name, presets, save, compare', 'aria-label': 'Option menu', onclick: () => Options.openMenu(optBtn) },
+      h('span', { html: ICONS.option, style: 'display:contents' }), h('span', { class: 'menu-name', id: 'optionLabel' }, Store.get('name') || 'Option'), h('span', { class: 'dot', id: 'unsavedDot', hidden: true, title: 'Unsaved changes' }), h('span', { html: ICONS.chev, style: 'display:contents' }));
     $('tbOption').append(optBtn);
+    const syncName = () => { const n = Store.get('name') || 'Option'; const l = $('optionLabel'); if (l.textContent !== n) l.textContent = n; };
+    Store.subscribe(syncName);
 
     const undo = h('button', { class: 'btn icon', type: 'button', title: 'Undo (Cmd/Ctrl+Z)', 'aria-label': 'Undo', html: ICONS.undo, onclick: () => Store.undo() });
     const redo = h('button', { class: 'btn icon', type: 'button', title: 'Redo (Shift+Cmd/Ctrl+Z)', 'aria-label': 'Redo', html: ICONS.redo, onclick: () => Store.redo() });
@@ -4526,25 +4894,28 @@ const UI = (() => {
     const syncHistory = () => { undo.disabled = !Store.canUndo(); redo.disabled = !Store.canRedo(); };
     Store.subscribe(syncHistory); syncHistory();
 
-    // The AI Prompts entry button sits beside the Image button (the panel itself is in 08b_prompts.js).
-    const aiBtn = iconBtn(ICONS.sparkle, 'AI Prompts', { id: 'btnAiPrompts', title: 'AI Prompts: an AI-ready image and a prompt for ChatGPT or Gemini', 'aria-haspopup': 'dialog', 'aria-expanded': 'false', 'aria-controls': 'aiPanel', onclick: () => Prompts.toggle() });
-    $('tbActions').append(
-      iconBtn(ICONS.save, 'Save', { id: 'btnSave', title: 'Save this option (Cmd/Ctrl+S)', onclick: () => Options.save() }),
-      iconBtn(ICONS.duplicate, 'Duplicate', { id: 'btnDuplicate', title: 'Save a copy as a new option', onclick: () => Options.duplicate() }),
-      iconBtn(ICONS.compare, 'Compare', { id: 'btnCompare', title: 'Compare 2 to 4 options', 'aria-pressed': 'false', onclick: () => Compare.toggle() }),
-    );
-
-    const shotBtn = iconBtn(ICONS.camera, 'Image', { id: 'btnShot', title: 'Save an image of this view', onclick: () => Shots.take() });
-    const shotMenu = h('button', { class: 'btn caret-only', type: 'button', id: 'btnShotMenu', 'aria-label': 'Image options', title: 'Choose what the image shows', 'aria-haspopup': 'true', 'aria-expanded': 'false', html: ICONS.chev, onclick: () => Shots.openMenu(shotMenu) });
-    $('tbShot').append(shotBtn, shotMenu);
-    $('tbShot').before(aiBtn);
-
     // Model / Diagram toggle: a working material switch.
     const seg = $('styleToggle');
     const mk = (value, text) => h('button', { type: 'button', 'data-style': value, 'aria-pressed': 'false', onclick: () => Store.set('view.style', value, { live: false }) }, text);
     seg.append(mk('model', 'Model'), mk('diagram', 'Diagram'));
     const syncStyle = () => seg.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.style === Store.get('view.style') ? 'true' : 'false'));
     Store.subscribe(syncStyle); syncStyle();
+
+    // Snap: the main button toggles, the caret opens the grid choice. state.view.snap = { on, grid }.
+    const snapBtn = iconBtn(ICONS.snap, 'Snap', { id: 'btnSnap', title: 'Snap to guides and the grid while dragging', 'aria-pressed': 'true', onclick: () => setSnap({ on: !snapState().on }) });
+    const snapCaret = h('button', { class: 'btn caret-only', type: 'button', id: 'btnSnapMenu', 'aria-label': 'Snap grid size', title: 'Choose the snap grid (5 or 10 ft)', 'aria-haspopup': 'true', 'aria-expanded': 'false', html: ICONS.chev, onclick: () => openSnapMenu(snapCaret) });
+    $('tbSnap').append(snapBtn, snapCaret);
+    const syncSnap = () => {
+      const st = snapState();
+      snapBtn.classList.toggle('is-on', st.on);
+      snapBtn.setAttribute('aria-pressed', String(st.on));
+      snapBtn.title = st.on ? `Snap is on (${st.grid} ft grid). Click to turn off.` : 'Snap is off. Click to turn on.';
+    };
+    Store.subscribe(syncSnap); syncSnap();
+
+    const exp = h('button', { class: 'btn has-text menu-btn', type: 'button', id: 'btnExport', 'aria-haspopup': 'true', 'aria-expanded': 'false', title: 'Export: image, AI-ready image, AI prompts, JSON', 'aria-label': 'Export menu', onclick: () => openExportMenu(exp) },
+      h('span', { html: ICONS.export, style: 'display:contents' }), h('span', { class: 'btn-text' }, 'Export'), h('span', { html: ICONS.chev, style: 'display:contents' }));
+    $('tbExport').append(exp);
   }
 
   /* ---- preset views ------------------------------------------------------------------ */
@@ -4570,19 +4941,24 @@ const UI = (() => {
 
   function buildHud() {
     const hud = $('hud');
-    hud.dataset.collapsed = sheetQuery.matches ? 'true' : 'false';
+    const open = !!prefs.hudOpen;                      // remembered: expanded or compact
+    hud.dataset.collapsed = open ? 'false' : 'true';
     hud.innerHTML = `
-      <button class="hud-head" type="button" aria-expanded="true" aria-controls="hudBody">
-        <span class="label">Metrics</span>
-        <span class="hud-summary" id="hudSummary"></span>
-        ${CARET_SVG}
+      <button class="hud-toggle" id="hudToggle" type="button" aria-expanded="${open}" aria-controls="hudBody" title="Show or hide all metrics">
+        <span class="hud-top">
+          <span class="label">Metrics</span>
+          <span class="hud-badge" id="hudBadge" data-n="0" title="Warnings">0 warnings</span>
+          ${CARET_SVG}
+        </span>
+        <span class="hud-core">
+          <span class="m"><span class="k">GFA</span><span class="v" id="mGfa">-</span></span>
+          <span class="m"><span class="k">FAR</span><span class="v" id="mFar">-</span></span>
+          <span class="m"><span class="k">Total height</span><span class="v" id="mHeight">-</span></span>
+          <span class="m"><span class="k">Floors</span><span class="v" id="mFloors">-<small id="mFloorsSub"></small></span></span>
+        </span>
       </button>
       <div class="hud-body" id="hudBody">
-        <div class="metric-hero"><div class="label">GFA</div><div class="v" id="mGfa">-</div></div>
         <dl class="metrics compact">
-          <div class="m"><dt>FAR</dt><dd id="mFar">-</dd></div>
-          <div class="m"><dt>Total height</dt><dd id="mHeight">-</dd></div>
-          <div class="m"><dt>Floors</dt><dd id="mFloors">-<small id="mFloorsSub"></small></dd></div>
           <div class="m"><dt>Site area</dt><dd id="mSite">-</dd></div>
           <div class="m"><dt>Site coverage</dt><dd id="mCover">-</dd></div>
           <div class="m"><dt>Efficiency (avg)</dt><dd id="mEff">-</dd></div>
@@ -4600,20 +4976,20 @@ const UI = (() => {
           <ul class="warns" id="warnList"></ul>
         </div>
       </div>`;
-    const head = hud.querySelector('.hud-head');
-    head.addEventListener('click', () => {
-      const collapsed = hud.dataset.collapsed !== 'true';
-      hud.dataset.collapsed = collapsed ? 'true' : 'false';
-      head.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-      Render.refreshInsets(true);
-    });
-    // Views are framed beside the HUD when it is open and there is room for both.
+    const head = $('hudToggle');
+    head.addEventListener('click', () => setHudOpen(hud.dataset.collapsed === 'true'));
+    // Views are framed beside the HUD when there is room for both. The card is the same width compact or expanded, so toggling never reframes.
     Render.setInsetProvider(() => {
-      if (hud.dataset.collapsed === 'true' || Render.comparing()) return { right: 0 };
+      if (Render.comparing()) return { right: 0 };
       const vw = $('viewport').clientWidth, w = hud.offsetWidth + 24;
       return { right: vw - w >= 380 ? w : 0 };
     });
-    head.setAttribute('aria-expanded', hud.dataset.collapsed === 'true' ? 'false' : 'true');
+  }
+  function setHudOpen(open) {
+    const hud = $('hud');
+    hud.dataset.collapsed = open ? 'false' : 'true';
+    $('hudToggle').setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (!!prefs.hudOpen !== open) { prefs.hudOpen = open; saveUiPrefs(prefs); }
   }
   function setText(id, text) { const el = $(id); if (el.firstChild && el.firstChild.nodeType === 3) el.firstChild.nodeValue = text; else el.prepend(document.createTextNode(text)); }
   function updateHud(d) {
@@ -4633,7 +5009,6 @@ const UI = (() => {
     setText('mPlateMin', Units.formatInt(m.plateMin));
     setText('mPlateAvg', Units.formatInt(m.plateAvg));
     setText('mPlateMax', Units.formatInt(m.plateMax));
-    $('hudSummary').textContent = `${Units.formatArea(m.gfa)} · FAR ${Units.formatRatio(m.far)}`;
 
     // Units per program
     // Dwelling units and hotel keys first, then their total, then parking spaces on their own (never added in).
@@ -4668,6 +5043,38 @@ const UI = (() => {
     for (const w of d.warnings) list.append(h('li', { class: `warn-${w.level}` }, w.text));
     $('warnCount').textContent = String(d.warnings.length);
     $('warnBlock').dataset.n = String(d.warnings.length);
+    const nw = d.warnings.length;
+    $('hudBadge').dataset.n = String(nw);
+    $('hudBadge').textContent = `${nw} ${nw === 1 ? 'warning' : 'warnings'}`;
+    updateLegend(d);
+  }
+
+  /* ---- color legend (Diagram style) ------------------------------------------------------ */
+  const ZONE_LABELS = { podium: 'Podium', tower: 'Tower', mechanical: 'Mechanical' };
+  /** Lists only what appears in the model: programs (colored by program) or zones (colored by zone), the crown, and red for anything outside the envelope. */
+  function updateLegend(d) {
+    const box = $('legend');
+    const st = Store.raw(), v = st.view;
+    if (v.style !== 'diagram' || Render.comparing()) { box.hidden = true; return; }
+    const plates = (d && d.plates) || [];
+    const used = plates.filter((p) => !p.void && p.polygons && p.polygons.length);
+    const rows = [];
+    if (v.colorBy === 'program') {
+      const seen = new Set(used.filter((p) => p.outsideEnvelopeArea <= 1).map((p) => p.program));
+      for (const k of Object.keys(CONFIG.programs)) if (seen.has(k)) rows.push([progColor(k), CONFIG.programs[k].label, `prog-${k}`]);
+    } else {
+      const seen = new Set(used.filter((p) => p.outsideEnvelopeArea <= 1).map((p) => p.zone));
+      for (const z of ['podium', 'tower', 'mechanical']) if (seen.has(z)) rows.push([CONFIG.zoneColors[z], ZONE_LABELS[z], `zone-${z}`]);
+    }
+    if ((d && d.solids || []).some((x, i) => !(d.solidsOutside && d.solidsOutside[i]))) rows.push([CONFIG.zoneColors.crown, 'Crown', 'crown']);
+    if (used.some((p) => p.outsideEnvelopeArea > 1) || (d && (d.solidsOutside || []).some(Boolean))) rows.push([CONFIG.outsideColor, 'Outside envelope', 'outside']);
+    const key = JSON.stringify([rows, v.colorBy]);
+    box.hidden = !rows.length;
+    if (box.dataset.key === key) return;
+    box.dataset.key = key;
+    box.textContent = '';
+    box.append(h('div', { class: 'label' }, v.colorBy === 'program' ? 'Program' : 'Zone'));
+    for (const [color, text, id] of rows) box.append(h('div', { class: 'lg-row', 'data-key': id }, h('span', { class: 'sw', style: `background:${color}` }), h('span', null, text)));
   }
 
   /* ---- bottom sheet (iPad portrait / narrow) -------------------------------------------- */
@@ -4675,8 +5082,10 @@ const UI = (() => {
     const app = $('app'), grabber = $('grabber');
     const GRAB = 44;
     const total = () => app.clientHeight;
-    const snaps = () => [GRAB + 8, Math.round(total() * 0.42), Math.round(total() * 0.86)];
-    const setH = (px) => app.style.setProperty('--sheet-h', `${Math.round(clamp(px, GRAB + 8, total() * 0.9))}px`);
+    // The lowest stop shows the grabber and the tab bar, so the tabs sit at the top of the sheet even when it is pulled down.
+    const lowest = () => GRAB + ($('panelTabs').offsetHeight || 45) + 2;
+    const snaps = () => [lowest(), Math.round(total() * 0.42), Math.round(total() * 0.86)];
+    const setH = (px) => app.style.setProperty('--sheet-h', `${Math.round(clamp(px, lowest(), total() * 0.9))}px`);
     const curH = () => $('panel').getBoundingClientRect().height;
     const animateTo = (to) => {
       if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return setH(to);
@@ -4721,7 +5130,11 @@ const UI = (() => {
     (sheetQuery.addEventListener ? sheetQuery.addEventListener('change', reset) : sheetQuery.addListener(reset));
     reset();
     window.addEventListener('resize', () => { if (sheetQuery.matches) { const px = parseFloat(app.style.getPropertyValue('--sheet-h')); if (px) setH(px); } });
+    /** Pulls a collapsed sheet up to its middle stop (a tab was tapped, or an item was opened). */
+    sheetRaise = () => { if (sheetQuery.matches && curH() < lowest() + 24) animateTo(snaps()[1]); };
   }
+  let sheetRaise = () => {};
+  const raiseSheet = () => sheetRaise();
 
   /* ---- keyboard ---------------------------------------------------------------------------- */
   function initKeys() {
@@ -4740,21 +5153,29 @@ const UI = (() => {
   function init() {
     buildTopBar();
     buildPanel();
+    buildTabs();
+    setTab(TABS.some((t) => t.id === prefs.tab) ? prefs.tab : 'form', { remember: false });
     buildViews();
     buildHud();
     initSheet();
     initKeys();
-    Store.subscribe(() => Controls.refreshAll());
+    Store.subscribe(() => { Controls.refreshAll(); swatchSyncs.forEach((fn) => fn()); updateLegend(Derived.get()); });
     Controls.refreshAll();
+    swatchSyncs.forEach((fn) => fn());
     Render.onRebuild(updateHud);
     // A viewport that is not WebGL-capable still gets numbers.
     updateHud(Derived.get());
   }
-  return { init, updateHud, rebuildPanel: () => { Controls.refreshAll(); } };
+  return {
+    init, updateHud, rebuildPanel: () => { Controls.refreshAll(); },
+    // v1.1 hooks for the selection card
+    openItem, setProgramForItems, setTab, activeTab: () => activeTab, tabs: () => TABS.map((t) => t.id),
+    setHudOpen, hudOpen: () => $('hud').dataset.collapsed === 'false',
+  };
 })();
 
 /* SLOT: ai-prompts */
-/* Filled: the entry button is #btnAiPrompts (UI.buildTopBar above); the panel and its logic are in 08b_prompts.js. */
+/* Filled: the entry is the AI Prompts item (#miAiPrompts) in the Export menu (UI.openExportMenu above); the panel and its logic are in 08b_prompts.js. */
 
 /* ==========================================================================
    AI PROMPTS
@@ -5597,13 +6018,13 @@ const Prompts = (() => {
     if (ui.open) return true;
     Pop.close();
     ui.open = true;
-    ui.restoreFocus = document.activeElement;
+    { const ae = document.activeElement; ui.restoreFocus = ae && ae !== document.body && document.contains(ae) ? ae : document.getElementById('btnExport'); }
     render();
     ui.back.hidden = false;
     ui.el.setAttribute('data-open', 'true');
     ui.el.removeAttribute('aria-hidden');
-    const btn = document.getElementById('btnAiPrompts');
-    if (btn) { btn.setAttribute('aria-expanded', 'true'); btn.classList.add('is-on'); }
+    const btn = document.getElementById('btnExport');
+    if (btn) btn.classList.add('is-on');
     try { ui.el.focus({ preventScroll: true }); } catch (e) { /* ignore */ }
     return true;
   }
@@ -5614,8 +6035,8 @@ const Prompts = (() => {
     ui.el.setAttribute('data-open', 'false');
     ui.el.setAttribute('aria-hidden', 'true');
     ui.toasts.textContent = '';
-    const btn = document.getElementById('btnAiPrompts');
-    if (btn) { btn.setAttribute('aria-expanded', 'false'); btn.classList.remove('is-on'); }
+    const btn = document.getElementById('btnExport');
+    if (btn) btn.classList.remove('is-on');
     const f = ui.restoreFocus;
     ui.restoreFocus = null;
     if (f && f.focus && document.contains(f)) { try { f.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
@@ -6187,6 +6608,7 @@ const Options = (() => {
   let currentId = null;            // the saved option the working copy came from (null = unsaved)
   let savedPrint = null;           // fingerprint of that option's state, to show "unsaved changes"
   let dirtyTimer = null;
+  let autosaveHeld = false;       // tests hold the autosave so a ?test visit cannot overwrite the saved working copy
 
   const fingerprint = (s) => JSON.stringify({ ...s, name: '' });
   const savedNames = () => storage.list().map((o) => o.name);
@@ -6235,6 +6657,7 @@ const Options = (() => {
     const s = fillDefaults(p.state);
     s.context.blocks = surroundBlocks(s);
     s.context.show = true;
+    s.view.colorBy = 'program';          // v1.1: a preset is a new option, and new options color the Diagram by program
     show(s, { id: null, name: p.name });
     Toast.show(`Started from the preset ${quoted(p.name)}. It is not saved yet.`);
     return true;
@@ -6312,31 +6735,32 @@ const Options = (() => {
 
   const when = (t) => { try { return new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch (e) { return ''; } };
   function openMenu(anchor) {
-    const el = h('div', { role: 'menu' });
-    const item = (title, sub, onclick, o = {}) => {
-      const b = h('button', { class: 'pop-item', type: 'button', role: 'menuitem', disabled: o.disabled, onclick: () => { Pop.close(); onclick(); } },
-        h('span', { class: 'tick' }, o.tick ? '✓' : ''), h('span', { class: 'grow' }, title, sub ? h('small', null, sub) : null));
-      return b;
-    };
-    el.append(h('div', { class: 'label pop-label' }, 'Saved options'));
+    const el = h('div', { role: 'menu', id: 'optionMenu' });
+    const item = (title, sub, onclick, o = {}) => h('button', { class: 'pop-item', type: 'button', role: 'menuitem', id: o.id, disabled: o.disabled, onclick: () => { if (!o.keep) Pop.close(); onclick(); } },
+      h('span', { class: 'tick' }, o.tick ? '✓' : ''), h('span', { class: 'grow' }, title, sub ? h('small', null, sub) : null));
+
+    // The option name is edited here. It is committed when the field changes or the menu closes.
+    const nameField = h('input', { class: 'pop-name', id: 'optionName', type: 'text', maxlength: '60', spellcheck: 'false', autocomplete: 'off', 'aria-label': 'Option name', value: Store.get('name') || '' });
+    const commitName = () => { if (nameField.value.trim() !== (Store.get('name') || '')) rename(nameField.value); };
+    nameField.addEventListener('change', commitName);
+    nameField.addEventListener('keydown', (e) => { if (e.key === 'Enter') { commitName(); Pop.close(); } });
+    el.append(h('div', { class: 'label pop-label' }, 'Option name'), h('div', { style: 'padding:0 6px 4px' }, nameField));
+
+    el.append(h('div', { class: 'label pop-label' }, 'This option'));
+    el.append(
+      item('Save', 'Keep the design as it is now', save, { id: 'miSave' }),
+      item('Duplicate', 'Save a copy as a new option', duplicate, { id: 'miDuplicate' }),
+      item('Rename', 'Edit the name above', () => { nameField.focus(); nameField.select(); }, { id: 'miRename', keep: true }),
+      item('Delete', 'Remove it from the saved options', remove, { id: 'miDelete', disabled: !currentId }),
+      item(Compare.isActive() ? 'Exit compare' : 'Compare', 'Compare 2 to 4 options side by side', () => Compare.toggle(), { id: 'miCompare' }),
+    );
+    el.append(h('div', { class: 'pop-sep' }), h('div', { class: 'label pop-label' }, 'Saved options'));
     const saved = storage.list();
     if (!saved.length) el.append(h('div', { class: 'pop-note' }, 'Nothing saved yet. Use Save to keep this design.'));
     for (const o of saved) el.append(item(o.name, `Saved ${when(o.updatedAt)}`, () => loadOption(o.id), { tick: o.id === currentId }));
     el.append(h('div', { class: 'pop-sep' }), h('div', { class: 'label pop-label' }, 'New from a preset'));
-    for (const p of CONFIG.presets) el.append(item(p.name, p.description, () => loadPreset(p.id)));
-    el.append(h('div', { class: 'pop-sep' }), h('div', { class: 'label pop-label' }, 'This option'));
-    el.append(
-      item('Save', 'Keep the design as it is now', save),
-      item('Duplicate', 'Save a copy as a new option', duplicate),
-      item('Rename', 'Edit the name in the top bar', () => { const f = document.getElementById('optionName'); f.focus(); f.select(); }),
-      item('Delete', 'Remove it from the saved options', remove, { disabled: !currentId }),
-    );
-    el.append(h('div', { class: 'pop-sep' }), h('div', { class: 'label pop-label' }, 'Files'));
-    el.append(
-      item('Export JSON', 'Download all saved options', exportJson),
-      item('Import JSON', 'Add the options from a file', () => document.getElementById('importFile').click()),
-    );
-    Pop.open(anchor, el);
+    for (const p of CONFIG.presets) el.append(item(p.name, p.description, () => loadPreset(p.id), { id: `preset-${p.id}` }));
+    Pop.open(anchor, el, { onClose: commitName });
   }
 
   function init({ restore = true } = {}) {
@@ -6350,7 +6774,7 @@ const Options = (() => {
       } else link(null);
     } else link(null);
     Store.subscribe((s, info) => {
-      storage.autosave(s);
+      if (!autosaveHeld) storage.autosave(s);
       if (!info || !info.live) { clearTimeout(dirtyTimer); dirtyTimer = setTimeout(syncDirty, 250); }
     });
     const input = document.getElementById('importFile');
@@ -6363,6 +6787,7 @@ const Options = (() => {
 
   return {
     onImport: (fn) => importListeners.push(fn),
+    holdAutosave: (v) => { autosaveHeld = !!v; },
     init, save, duplicate, rename, remove, openMenu, loadOption, loadPreset, exportJson, importFile, syncDirty,
     list: () => storage.list(), get: (id) => storage.get(id), flush: () => storage.flush(),
     current: () => currentId, storage,
@@ -6372,8 +6797,8 @@ const Options = (() => {
 /* ==========================================================================
    SHARED: screenshot
    src/shared/screenshot.js inlined unchanged (apart from the export keywords),
-   plus `Shots`: the tower tool's button and the popover that chooses which
-   overlay items appear. The choices are kept in state.view.shot.
+   plus `Shots`: the image actions and the overlay choices (shown in the Export menu's
+   "Image overlay" view). The choices are kept in state.view.shot.
    ========================================================================== */
 const ShotMod = (() => {
 /* ==========================================================================
@@ -6756,27 +7181,23 @@ const Shots = (() => {
     try { return await aiReady({ deliver: true }); } catch (e) { console.error(e); Toast.show(e && e.message ? e.message : 'The image could not be made.', 'bad', 6000); return null; }
   }
 
-  function openMenu(anchor) {
-    const el = h('div', { role: 'group', 'aria-label': 'Image options' });
-    el.append(h('div', { class: 'label pop-label' }, 'The image shows'));
+  /** The overlay choices as menu elements (a label and one switch per item). Used by the Export menu's "Image overlay" view. */
+  function overlayControls() {
+    const out = [h('div', { class: 'label pop-label' }, 'The image shows')];
     for (const [key, text] of SHOT_ITEMS) {
-      const btn = h('button', { class: 'toggle-row', type: 'button', role: 'switch', 'aria-checked': String(!!Store.get(`view.shot.${key}`)), style: 'padding:0 8px' },
+      const btn = h('button', { class: 'toggle-row', type: 'button', role: 'switch', 'aria-checked': String(!!Store.get(`view.shot.${key}`)), 'data-shot': key, style: 'padding:0 8px' },
         h('span', null, text), h('span', { class: 'switch', 'aria-hidden': 'true' }));
       btn.addEventListener('click', () => {
         const next = !Store.get(`view.shot.${key}`);
         Store.set(`view.shot.${key}`, next, { live: false });
         btn.setAttribute('aria-checked', String(next));
       });
-      el.append(btn);
+      out.push(btn);
     }
-    el.append(h('div', { class: 'pop-sep' }));
-    el.append(h('button', { class: 'pop-item', type: 'button', role: 'menuitem', id: 'btnAiReady', onclick: () => { Pop.close(); takeAiReady(); } },
-      h('span', { class: 'grow' }, 'AI-ready image', h('small', null, 'Plain model, no overlay, grid or wireframe. For ChatGPT or Gemini.'))));
-    el.append(h('div', { class: 'pop-actions' }, h('button', { class: 'btn solid', type: 'button', onclick: () => { Pop.close(); take(); } }, 'Save image')));
-    Pop.open(anchor, el, { align: 'right' });
+    return out;
   }
 
-  return { take, capture, aiReady, takeAiReady, openMenu, buildOverlay, keyMetrics };
+  return { take, capture, aiReady, takeAiReady, overlayControls, buildOverlay, keyMetrics };
 })();
 
 /* ==========================================================================
@@ -6890,8 +7311,15 @@ const Compare = (() => {
     renderTable();
     Render.enterCompare(entries.map((e) => ({ name: e.name, state: e.state, d: e.d, uid: e.uid })), reserve, { keepView: wasActive });
     layoutChanged();
-    $('btnCompare').classList.add('is-on');
-    $('btnCompare').setAttribute('aria-pressed', 'true');
+    markComparing(true);
+  }
+  /** The Option button shows a highlight while comparing (the Compare item itself lives in the Option menu). */
+  function markComparing(on) {
+    const b = $('btnOption');
+    if (!b) return;
+    b.classList.toggle('is-on', on);
+    b.dataset.comparing = on ? 'true' : 'false';
+    b.title = on ? 'Comparing options. Open the menu to exit.' : 'Option: name, presets, save, compare';
   }
   function select(keys) {
     chosen = keys.slice(0, MAX);
@@ -6923,8 +7351,7 @@ const Compare = (() => {
     $('viewport').dataset.compare = 'false';
     $('viewport').style.removeProperty('--cmp-table-h');
     $('cmpLabels').textContent = '';
-    const b = $('btnCompare');
-    b.classList.remove('is-on'); b.setAttribute('aria-pressed', 'false');
+    markComparing(false);
   }
   function toggle() { if (active) exit(); else enter(); }
 
@@ -7198,6 +7625,25 @@ const TEST_CASES = [
     }),
     expect: { gfa: 61600, floors: 10, height: 121, tolerancePct: 0.01 },
   },
+
+  {
+    id: 'tc-15-u-podium-gfa-floors',
+    description: 'U-shaped multifamily on podium (the U preset): 260 x 220 site, 6-floor podium, then 1 amenity + 16 residential floors on a 200 x 140 U with 50 ft arms.',
+    // Podium plate = 240 x 200 = 48,000 sf. Podium GFA = 48,000 x 6 = 288,000 sf.
+    // U plate = w x d - (w - 2a) x (d - a) = 200 x 140 - (200 - 100) x (140 - 50) = 28,000 - 9,000 = 19,000 sf.
+    // Tower = 1 + 16 = 17 floors, all on the U plate. Tower GFA = 19,000 x 17 = 323,000 sf.
+    // GFA = 288,000 + 323,000 = 611,000 sf. Floors = 6 + 17 = 23.
+    state: makeState('TC-15', {
+      site: { ...baseState().site, width: 260, depth: 220, heightLimit: 0 },
+      podium: podium({ floors: 6, groundFtf: 18, ftf: 10.5, shape: rect(240, 200), program: 'retail', upperProgram: 'parking' }),
+      segments: [
+        seg({ floors: 1, ftf: 15, program: 'amenity', shape: { type: 'U', w: 200, d: 140, radius: 0, arm: 50, points: [] } }),
+        seg({ floors: 16, ftf: 10, shape: { type: 'U', w: 200, d: 140, radius: 0, arm: 50, points: [] } }),
+      ],
+      crown: { type: 'flat', height: 4, steps: 3, slopeSide: 'front' },
+    }),
+    expect: { gfa: 611000, floors: 23, tolerancePct: 0.01 },
+  },
 ];
 
 return { TEST_CASES };
@@ -7438,6 +7884,209 @@ async function runTests() {
   return window.__towerTestResults;
 }
 
+/* ==========================================================================
+   TESTS: v1.1 layout
+   Panel tabs, program colors and legend, snap state, metrics card, the
+   Option and Export menus, and the hooks for the selection card (openItem,
+   setProgramForItems). Runs after the calculation tests in 12_tests.js
+   (runAllTests below runs both and merges the results).
+   The tests restore the design, the tab and the metrics card when they finish,
+   and hold the autosave so a ?test visit never overwrites the saved working copy.
+   ========================================================================== */
+async function runLayoutTests() {
+  const results = [];
+  const eq = (a, b) => (JSON.stringify(a) === JSON.stringify(b) ? true : `got ${JSON.stringify(a)}, expected ${JSON.stringify(b)}`);
+  const t = async (name, fn) => {
+    let r;
+    try { r = await fn(); } catch (e) { r = `threw ${e && e.message}`; }
+    results.push({ name, ok: r === true, detail: r === true ? '' : String(r) });
+  };
+  const $ = (id) => document.getElementById(id);
+  const norm = (c) => { const e = document.createElement('i'); e.style.background = c; return e.style.background; };
+  const visible = (el) => !!el && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
+  const savedState = Store.snapshot(), savedTab = UI.activeTab(), savedHud = UI.hudOpen();
+  Options.holdAutosave(true);
+  const twoSegments = () => {
+    const s = Store.snapshot();
+    s.segments = [{ ...s.segments[0], program: 'residential' }, { ...s.segments[0], program: 'office', floors: 5 }];
+    s.podium.on = false;
+    Store.replace(s);
+  };
+
+  try {
+    /* ---- tabs ---- */
+    await t('panel tabs are Form, Program, View, Site, in that order', () =>
+      eq([[...document.querySelectorAll('#panelTabs .tab')].map((b) => b.textContent), UI.tabs()], [['Form', 'Program', 'View', 'Site'], ['form', 'program', 'view', 'site']]));
+    await t('each tab shows its own sections and no others', () => {
+      const want = {
+        form: ['podium', 'segments', 'moves', 'carves', 'crown', 'core'], program: ['programs', 'targets'],
+        view: ['display', 'scene', 'sun'], site: ['site', 'setbacks', 'height', 'context'],
+      };
+      for (const [tab, ids] of Object.entries(want)) {
+        UI.setTab(tab);
+        const shown = [...document.querySelectorAll('.tabpanel')].filter(visible);
+        if (shown.length !== 1 || shown[0].id !== `tabpanel-${tab}`) return `tab ${tab}: ${shown.map((p) => p.id)}`;
+        const got = [...shown[0].querySelectorAll(':scope > .acc')].map((a) => a.dataset.section);
+        if (JSON.stringify(got) !== JSON.stringify(ids)) return `tab ${tab}: sections ${got}`;
+      }
+      return true;
+    });
+    await t('the active tab is remembered in the UI prefs', () => {
+      UI.setTab('view');
+      let tab;
+      try { tab = JSON.parse(localStorage.getItem(UI_STORAGE_KEY)).tab; } catch (e) { return true; }   // storage unavailable: nothing to check
+      return eq(tab, 'view');
+    });
+    await t('#selection-card sits above the tabs and is hidden when empty', () => {
+      const card = $('selection-card'), tabs = $('panelTabs');
+      if (!card || !tabs) return 'missing';
+      return eq([card.hidden, !!(card.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING)], [true, true]);
+    });
+
+    /* ---- program colors ---- */
+    await t('new options color the Diagram by program', () => eq(defaultState().view.colorBy, 'program'));
+    await t('an old saved option that says "zone" keeps it; a missing value becomes program', () =>
+      eq([fillDefaults({ view: { colorBy: 'zone' } }).view.colorBy, fillDefaults({ view: { colorBy: 'program' } }).view.colorBy, fillDefaults({ view: { style: 'model' } }).view.colorBy, fillDefaults({}).view.colorBy],
+        ['zone', 'program', 'program', 'program']));
+    await t('view.snap defaults to { on: true, grid: 5 }; a bad grid becomes 5; old states get it', () =>
+      eq([defaultState().view.snap, fillDefaults({ view: { style: 'model' } }).view.snap, fillDefaults({ view: { snap: { on: false, grid: 7 } } }).view.snap, fillDefaults({ view: { snap: { grid: 10 } } }).view.snap],
+        [{ on: true, grid: 5 }, { on: true, grid: 5 }, { on: false, grid: 5 }, { on: true, grid: 10 }]));
+    await t('a color swatch sits on each segment row and the podium, in the program color', () => {
+      twoSegments();
+      UI.setTab('form');
+      const sw = [...document.querySelectorAll('#tabpanel-form [data-section="segments"] .item-title .sw')];
+      if (sw.length !== 2) return `${sw.length} swatches`;
+      const col = (k) => norm(Store.get(`programs.${k}.color`));
+      if (sw[0].style.background !== col('residential') || sw[1].style.background !== col('office')) return `colors ${sw.map((x) => x.style.background)}`;
+      Store.set('podium.on', true, { live: false });
+      const box = document.querySelector('[data-section="podium"] .acc-sw');
+      return (box && !box.hidden && box.children[0].style.background === col(Store.get('podium.program')) && box.children[1].style.background === col(Store.get('podium.upperProgram'))) || 'podium swatches wrong';
+    });
+    await t('the legend (Diagram) lists only the programs in the model, and is hidden in Model style', () => {
+      twoSegments();
+      Store.set('view.style', 'model', { live: false });
+      const lg = $('legend');
+      if (!lg.hidden) return 'shown in Model style';
+      Store.set('view.style', 'diagram', { live: false });
+      const keys = () => [...lg.querySelectorAll('.lg-row')].map((r) => r.dataset.key).filter((k) => k.startsWith('prog-'));
+      const a = keys();
+      Store.set('segments.1.program', 'hotel', { live: false });
+      const b = keys();
+      Store.set('podium.on', true, { live: false });
+      const c = keys();
+      Store.set('view.style', 'model', { live: false });
+      return eq([a, b, c], [['prog-residential', 'prog-office'], ['prog-residential', 'prog-hotel'], ['prog-residential', 'prog-hotel', 'prog-retail', 'prog-amenity']]);
+    });
+
+    /* ---- hooks ---- */
+    await t('setProgramForItems changes segments and the podium in ONE undo step, and undo restores them', () => {
+      twoSegments();
+      Store.set('podium.on', true, { live: false });
+      const before = Store.snapshot(), depth = Store.historyDepth();
+      const n = UI.setProgramForItems([{ kind: 'segment', index: 0 }, { kind: 'segment', index: 1 }, { kind: 'podium' }], 'hotel');
+      const s = Store.snapshot();
+      if (n !== 3 || !s.segments.every((g) => g.program === 'hotel') || s.podium.program !== 'hotel' || s.podium.upperProgram !== 'hotel') return `applied ${n}, ${JSON.stringify(s.segments.map((g) => g.program))}`;
+      if (Store.historyDepth() !== depth + 1) return `depth ${depth} -> ${Store.historyDepth()}`;
+      Store.undo();
+      return eq(Store.snapshot(), before);
+    });
+    await t('setProgramForItems skips items with no program, unknown programs, and does nothing when nothing changes', () => {
+      twoSegments();
+      const depth = Store.historyDepth();
+      const a = UI.setProgramForItems([{ kind: 'crown' }, { kind: 'carve', index: 0 }, { kind: 'context', index: 0 }], 'hotel');
+      const b = UI.setProgramForItems([{ kind: 'segment', index: 0 }], 'no-such-program');
+      const c = UI.setProgramForItems([{ kind: 'segment', index: 0 }], 'residential');
+      return eq([a, b, c, Store.historyDepth()], [0, 0, 1, depth]);
+    });
+    await t('a segment program change recolors the Diagram state (plates carry the new program)', () => {
+      twoSegments();
+      Store.set('view.style', 'diagram', { live: false });
+      UI.setProgramForItems([{ kind: 'segment', index: 1 }], 'parking');
+      const progs = new Set(Derived.get().plates.filter((p) => !p.void).map((p) => p.program));
+      Store.set('view.style', 'model', { live: false });
+      return eq([...progs].sort(), ['parking', 'residential']);
+    });
+    await t('openItem switches tab, opens the row or section, and returns false for an unknown kind', () => {
+      twoSegments();
+      UI.setTab('site');
+      if (!UI.openItem({ kind: 'segment', index: 1 }) || UI.activeTab() !== 'form') return `segment: tab ${UI.activeTab()}`;
+      const row = document.querySelector('[data-section="segments"] .item[data-index="1"]');
+      if (!row || row.dataset.open !== 'true') return 'segment row 1 not open';
+      UI.setTab('program');
+      if (!UI.openItem({ kind: 'podium' }) || UI.activeTab() !== 'form' || document.querySelector('[data-section="podium"]').dataset.open !== 'true') return 'podium';
+      if (!UI.openItem({ kind: 'crown' }) || document.querySelector('[data-section="crown"]').dataset.open !== 'true') return 'crown';
+      Store.set('carves', [{ startFloor: 3, endFloor: 4, kind: 'corner', corner: 'NE', w: 20, d: 20 }], { live: false });
+      if (!UI.openItem({ kind: 'carve', index: 0 }) || document.querySelector('[data-section="carves"] .item[data-index="0"]').dataset.open !== 'true') return 'carve';
+      if (!UI.openItem({ kind: 'context', index: 0 }) || UI.activeTab() !== 'site' || document.querySelector('[data-section="context"] .item[data-index="0"]').dataset.open !== 'true') return 'context';
+      return eq(UI.openItem({ kind: 'wall', index: 0 }), false);
+    });
+
+    /* ---- metrics card ---- */
+    await t('four metrics and the warning badge are always visible; the rest appear when expanded', () => {
+      UI.setHudOpen(false);
+      const compactOk = ['mGfa', 'mFar', 'mHeight', 'mFloors', 'hudBadge'].every((id) => visible($(id)));
+      const hiddenOk = !visible($('mSite')) && !visible($('warnList'));
+      UI.setHudOpen(true);
+      const expandedOk = ['mSite', 'mCover', 'mEff', 'mNet', 'mCore', 'mMech', 'mCrown', 'mPlateAvg', 'warnList'].every((id) => visible($(id)));
+      return (compactOk && hiddenOk && expandedOk) || `compact ${compactOk} hidden ${hiddenOk} expanded ${expandedOk}`;
+    });
+    await t('the metrics card expanded or collapsed state is remembered', () => {
+      UI.setHudOpen(true);
+      let a, b;
+      try { a = JSON.parse(localStorage.getItem(UI_STORAGE_KEY)).hudOpen; UI.setHudOpen(false); b = JSON.parse(localStorage.getItem(UI_STORAGE_KEY)).hudOpen; } catch (e) { return true; }
+      return eq([a, b], [true, false]);
+    });
+
+    /* ---- top bar ---- */
+    await t('the Snap button writes state.view.snap; the popover chooses 5 or 10 ft', () => {
+      Store.set('view.snap', { on: true, grid: 5 }, { live: false });
+      $('btnSnap').click();
+      const off = Store.get('view.snap');
+      $('btnSnap').click();
+      $('btnSnapMenu').click();
+      const chip10 = document.querySelector('.pop .chip[data-grid="10"]');
+      if (!chip10) return 'no grid chip';
+      chip10.click();
+      const ten = Store.get('view.snap');
+      Pop.close();
+      return eq([off, ten], [{ on: false, grid: 5 }, { on: true, grid: 10 }]);
+    });
+    await t('the Option menu has name, Save, Duplicate, Rename, Delete, Compare and the presets', () => {
+      $('btnOption').click();
+      const ids = ['optionName', 'miSave', 'miDuplicate', 'miRename', 'miDelete', 'miCompare'].filter((id) => !$(id));
+      const presets = document.querySelectorAll('#optionMenu [id^="preset-"]').length;
+      Pop.close();
+      return eq([ids, presets === CONFIG.presets.length], [[], true]);
+    });
+    await t('the Export menu has Image, AI-ready image, AI Prompts, Image overlay, Export JSON, Import JSON', () => {
+      $('btnExport').click();
+      const missing = ['miImage', 'miAiReady', 'miAiPrompts', 'miOverlay', 'miExportJson', 'miImportJson'].filter((id) => !$(id));
+      $('miOverlay').click();
+      const toggles = [...document.querySelectorAll('#exportMenu [data-shot]')].map((b) => b.dataset.shot);
+      Pop.close();
+      return eq([missing, toggles], [[], ['title', 'date', 'metrics', 'mark']]);
+    });
+  } finally {
+    Pop.close();
+    Store.replace(savedState);
+    UI.setTab(savedTab);
+    UI.setHudOpen(savedHud);
+    Options.holdAutosave(false);
+  }
+  return results;
+}
+
+/** The calculation tests plus the layout tests, merged. This is what ?test and __tower.runTests run. */
+async function runAllTests() {
+  const base = await runTests();
+  const layout = await runLayoutTests();
+  const all = [...(base.results || []), ...layout];
+  const failed = all.filter((r) => !r.ok);
+  console.log(`[tests] layout ${layout.length - layout.filter((r) => !r.ok).length}/${layout.length} passed`, layout.filter((r) => !r.ok).length ? JSON.stringify(layout.filter((r) => !r.ok)) : '');
+  window.__towerTestResults = { total: all.length, passed: all.length - failed.length, failed, results: all };
+  return window.__towerTestResults;
+}
+
 
 /* ==========================================================================
    Start-up and test hook
@@ -7496,10 +8145,16 @@ window.__tower = {
   setView: (id, animate = false) => Render.setView(id, animate),
   getView: () => Render.info(),
   units: Units,
-  runTests,
+  runTests: runAllTests,
+  // v1.1 layout hooks (the same functions the selection card calls)
+  openItem: (item) => UI.openItem(item),
+  setProgramForItems: (items, program) => UI.setProgramForItems(items, program),
+  setTab: (id) => UI.setTab(id),
+  getTab: () => UI.activeTab(),
+  setSnap: (patch) => Store.set('view.snap', { ...(Store.get('view.snap') || {}), ...patch }, { live: false }),
 };
 if (TEST_MODE) {
-  runTests().then((r) => {
+  runAllTests().then((r) => {
     const msg = r.failed.length
       ? `Tests: ${r.failed.length} of ${r.total} failed. ${r.failed.map((f) => `${f.name} (${f.detail})`).join(' | ')}`
       : `Tests: all ${r.total} passed`;

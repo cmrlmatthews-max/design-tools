@@ -71,7 +71,8 @@ function defaultState() {
 
     view: {
       style: 'model',
-      colorBy: 'zone',
+      colorBy: 'program',        // v1.1: new options color the Diagram by program (saved options that say "zone" keep it)
+      snap: { on: true, grid: 5 },   // v1.1: drag snapping. grid is 5 or 10 (ft)
       floorLines: true,
       shadows: true,
       sun: { azimuth: 135, altitude: 40 },
@@ -81,6 +82,15 @@ function defaultState() {
       shot: { title: true, date: true, metrics: true, mark: true },
     },
   };
+}
+
+/** v1.1 view migration. colorBy keeps whatever an older saved option stored ("zone"); anything unknown becomes "program". snap is
+ *  { on, grid } with grid 5 or 10. */
+function migrateView(v) {
+  if (v.colorBy !== 'zone' && v.colorBy !== 'program') v.colorBy = 'program';
+  if (!v.snap || typeof v.snap !== 'object') v.snap = { on: true, grid: 5 };
+  v.snap = { on: v.snap.on !== false, grid: v.snap.grid === 10 ? 10 : 5 };
+  return v;
 }
 
 /** Fill every missing field from the defaults so older or partial states (presets, imports) are complete. */
@@ -94,7 +104,8 @@ function fillDefaults(src) {
     }
   };
   const base = defaultState();
-  merge(s, base);
+  merge(s, base);                                           // a state with no colorBy gets "program"; an explicit "zone" or "program" is kept
+  migrateView(s.view);
   if (!Array.isArray(s.segments) || !s.segments.length) s.segments = [defaultSegment()];
   const seg0 = defaultSegment();
   s.segments.forEach((seg) => merge(seg, seg0));

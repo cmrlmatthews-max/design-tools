@@ -392,13 +392,13 @@ const Prompts = (() => {
     if (ui.open) return true;
     Pop.close();
     ui.open = true;
-    ui.restoreFocus = document.activeElement;
+    { const ae = document.activeElement; ui.restoreFocus = ae && ae !== document.body && document.contains(ae) ? ae : document.getElementById('btnExport'); }
     render();
     ui.back.hidden = false;
     ui.el.setAttribute('data-open', 'true');
     ui.el.removeAttribute('aria-hidden');
-    const btn = document.getElementById('btnAiPrompts');
-    if (btn) { btn.setAttribute('aria-expanded', 'true'); btn.classList.add('is-on'); }
+    const btn = document.getElementById('btnExport');
+    if (btn) btn.classList.add('is-on');
     try { ui.el.focus({ preventScroll: true }); } catch (e) { /* ignore */ }
     return true;
   }
@@ -409,8 +409,8 @@ const Prompts = (() => {
     ui.el.setAttribute('data-open', 'false');
     ui.el.setAttribute('aria-hidden', 'true');
     ui.toasts.textContent = '';
-    const btn = document.getElementById('btnAiPrompts');
-    if (btn) { btn.setAttribute('aria-expanded', 'false'); btn.classList.remove('is-on'); }
+    const btn = document.getElementById('btnExport');
+    if (btn) btn.classList.remove('is-on');
     const f = ui.restoreFocus;
     ui.restoreFocus = null;
     if (f && f.focus && document.contains(f)) { try { f.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
