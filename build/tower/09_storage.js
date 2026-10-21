@@ -72,6 +72,33 @@ const Options = (() => {
     return true;
   }
 
+  /** Unsaved changes = a design linked to a saved option that no longer matches it, or an unsaved design that differs from the default
+   *  (an untouched new design has nothing to lose). The name is ignored, as in the dot next to Save. */
+  function hasUnsavedChanges() {
+    const rec = currentId && storage.get(currentId);
+    return rec ? savedPrint !== fingerprint(Store.raw()) : fingerprint(Store.raw()) !== fingerprint(defaultState());
+  }
+  /** Start fresh from the built-in default (what a first-ever visit gets) as a new, unsaved option named "Untitled" ("Untitled (2)"
+   *  when taken). Saved options are never touched. One undo step brings the previous design back (its name is part of the state;
+   *  like loadPreset, the link to a saved option is not restored). Resolves true when it happened, false when the user cancelled. */
+  async function newDesign({ confirm = true } = {}) {
+    if (confirm && hasUnsavedChanges()) {
+      const ok = await confirmDialog(`Start a new design? Unsaved changes to ${quoted(Store.get('name') || 'this design')} will be lost. You can undo this.`, 'Start new');
+      if (!ok) return false;
+    }
+    Select.cancelHandleDrag();
+    Select.clear();
+    Prompts.close();
+    if (Render.comparing()) Compare.exit();
+    const s = defaultState();
+    s.name = uniqueName0('Untitled');
+    Store.replace(s);
+    link(null, s);
+    if (Render.ready()) Render.setView('axon', true);       // always Axon, whatever view was on screen
+    Toast.show('New design started.');
+    return true;
+  }
+
   function save() {
     const state = Store.snapshot();
     const known = currentId && storage.get(currentId);
@@ -153,6 +180,10 @@ const Options = (() => {
     const commitName = () => { if (nameField.value.trim() !== (Store.get('name') || '')) rename(nameField.value); };
     nameField.addEventListener('change', commitName);
     nameField.addEventListener('keydown', (e) => { if (e.key === 'Enter') { commitName(); Pop.close(); } });
+    el.append(
+      item('New design', 'Start fresh from the default tower', () => { newDesign(); }, { id: 'miNewDesign' }),
+      h('div', { class: 'pop-sep' }),
+    );
     el.append(h('div', { class: 'label pop-label' }, 'Option name'), h('div', { style: 'padding:0 6px 4px' }, nameField));
 
     el.append(h('div', { class: 'label pop-label' }, 'This option'));
@@ -197,7 +228,7 @@ const Options = (() => {
   return {
     onImport: (fn) => importListeners.push(fn),
     holdAutosave: (v) => { autosaveHeld = !!v; },
-    init, save, duplicate, rename, remove, openMenu, loadOption, loadPreset, exportJson, importFile, syncDirty,
+    init, save, duplicate, rename, remove, openMenu, loadOption, loadPreset, newDesign, hasUnsavedChanges, exportJson, importFile, syncDirty,
     list: () => storage.list(), get: (id) => storage.get(id), flush: () => storage.flush(),
     current: () => currentId, storage,
   };

@@ -35,6 +35,8 @@ window.__tower = {
     };
   },
   loadPreset: (id) => Options.loadPreset(id),
+  newDesign: (opts) => Options.newDesign(opts),            // { confirm: false } skips the unsaved-changes question (tests)
+  hasUnsavedChanges: () => Options.hasUnsavedChanges(),
   listPresets: () => CONFIG.presets.map((p) => ({ id: p.id, name: p.name })),
   listOptions: () => Options.list().map(optionInfo),
   saveOption: () => Options.save(),
