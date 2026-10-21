@@ -321,14 +321,14 @@ const SiteTests = (() => {
         [true, true, true, 'Test Address', true, 1]);
     });
 
-    await t('project: the top bar has the Project button and both Send buttons; Mid-Rise is planned', () => eq(
-      [!!$('btnProject'), !!$('btnSendTower'), !!$('btnSendMidrise'), $('btnSendMidrise').disabled, $('btnSendMidrise').title, $('btnSendTower').textContent, $('btnSendMidrise').textContent, !!$('projFile')],
-      [true, true, true, true, 'Planned', 'Send to Tower Generator', 'Send to Mid-Rise Generator', true]));
-    await t('project: Send to Tower Generator is off before a run and on after one; Mid-Rise stays off', () => inProject(() => {
+    await t('project: the top bar has the Project button and both Send buttons', () => eq(
+      [!!$('btnProject'), !!$('btnSendTower'), !!$('btnSendMidrise'), $('btnSendTower').textContent, $('btnSendMidrise').textContent, !!$('projFile')],
+      [true, true, true, 'Send to Tower Generator', 'Send to Mid-Rise Generator', true]));
+    await t('project: both Send buttons are off before a run and on after one', () => inProject(() => {
       App.state.result = null; App.syncActions();
-      const before = $('btnSendTower').disabled;
+      const before = [$('btnSendTower').disabled, $('btnSendMidrise').disabled];
       App.state.result = fakeResult(); App.syncActions();
-      return eq([before, $('btnSendTower').disabled, $('btnSendMidrise').disabled], [true, false, true]);
+      return eq([before, $('btnSendTower').disabled, $('btnSendMidrise').disabled], [[true, true], false, false]);
     }));
     await t('project: the Project menu has New project, Open, Import and Export (Export is off without a project)', () => inProject((mem) => {
       ProjectMod.saveProject(mem, siteProjectDoc());
@@ -361,8 +361,14 @@ const SiteTests = (() => {
       const last = doc && doc.log[doc.log.length - 1];
       return eq([!!doc, doc.name, urls.length, urls[0], !!stored && !!ProjectMod.getSection(stored, 'site'), last && last.action], [true, 'Test Address', 1, `../tower/?project=${doc.id}`, true, 'send']);
     }));
-    await t('project: Send to Mid-Rise Generator does nothing', () => inProject(async (mem, urls) => {
-      const r = await App.projectSend('midrise');
+    await t('project: Send to Mid-Rise Generator goes to ../midrise/?project=<id>', () => inProject(async (mem, urls) => {
+      App.state.typed = 'Test Address';
+      await App.projectSend('midrise');
+      const doc = App.project.doc;
+      return eq([!!doc, urls.length, urls[0]], [true, 1, `../midrise/?project=${doc.id}`]);
+    }));
+    await t('project: Send to an unknown tool does nothing', () => inProject(async (mem, urls) => {
+      const r = await App.projectSend('nowhere');
       return eq([r, urls.length, App.project.doc, mem.keys().length], [false, 0, null, 0]);
     }));
     await t('project: a run does not touch storage when no project is open', () => inProject((mem) => {

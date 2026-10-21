@@ -266,6 +266,8 @@ const App = (() => {
     const canSend = has && !state.busy;
     els.btnSendTower.disabled = !canSend;
     els.btnSendTower.title = canSend ? 'Save this site in a project and open the Tower Generator' : 'Load a site first';
+    els.btnSendMid.disabled = !canSend;
+    els.btnSendMid.title = canSend ? 'Save this site in a project and open the Mid-Rise Generator' : 'Load a site first';
   }
 
   /* ---- project file (docs/project-file-spec.md, sections 8 and 12) ----------------------------------------------
@@ -445,7 +447,7 @@ const App = (() => {
   async function projectSend(toolId) {
     Pop.close();
     const r = state.result;
-    if (toolId !== 'tower' || !r || state.busy) return false;
+    if ((toolId !== 'tower' && toolId !== 'midrise') || !r || state.busy) return false;
     if (project.readOnly) { noticeOnce('readonly', READ_ONLY_TEXT); return false; }
     if (!project.doc) {
       if (!projectCreate(defaultProjectName(), { quiet: true })) return false;
@@ -574,7 +576,7 @@ const App = (() => {
     els.btnProject = tbBtn('btnProject', ICONS.folder, 'Project', 'Project: new, open, import, export', openProjectMenu, { 'aria-haspopup': 'true', 'aria-expanded': 'false' });
     els.btnProject.append(h('span', { html: ICONS.chev, style: 'display:contents' }));
     els.btnSendTower = tbBtn('btnSendTower', ICONS.tower, 'Send to Tower Generator', 'Load a site first', () => projectSend('tower'), { class: 'btn has-text send', disabled: true });
-    els.btnSendMid = tbBtn('btnSendMidrise', ICONS.midrise, 'Send to Mid-Rise Generator', 'Planned', null, { class: 'btn has-text send', disabled: true, 'aria-label': 'Send to Mid-Rise Generator (planned)' });
+    els.btnSendMid = tbBtn('btnSendMidrise', ICONS.midrise, 'Send to Mid-Rise Generator', 'Load a site first', () => projectSend('midrise'), { class: 'btn has-text send', disabled: true });
     $('tbActions').append(els.btnMaps, els.btnDl, els.btnShot, h('span', { class: 'tb-sep', 'aria-hidden': 'true' }), els.btnProject, els.btnSendTower, els.btnSendMid);
   }
 

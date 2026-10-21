@@ -2128,7 +2128,7 @@ function validateDoc(doc) {
   if (!doc || typeof doc !== "object") return { ok: false, errors: ["document: not an object"], counts };
   if (doc.format !== FORMAT) err("format", `must be "${FORMAT}"`);
   if (doc.version !== VERSION) err("version", `must be ${VERSION}`);
-  if (!["tower", "site"].includes(doc.source)) err("source", "must be tower or site");
+  if (!["tower", "site", "midrise"].includes(doc.source)) err("source", "must be tower, site, or midrise");
   if (doc.units !== "feet") err("units", "must be feet");
   if (!Number.isFinite(doc.zShift)) err("zShift", "must be a number");
   const tagNames = new Set(), matNames = new Set();
@@ -5001,6 +5001,8 @@ const App = (() => {
     const canSend = has && !state.busy;
     els.btnSendTower.disabled = !canSend;
     els.btnSendTower.title = canSend ? 'Save this site in a project and open the Tower Generator' : 'Load a site first';
+    els.btnSendMid.disabled = !canSend;
+    els.btnSendMid.title = canSend ? 'Save this site in a project and open the Mid-Rise Generator' : 'Load a site first';
   }
 
   /* ---- project file (docs/project-file-spec.md, sections 8 and 12) ----------------------------------------------
@@ -5180,7 +5182,7 @@ const App = (() => {
   async function projectSend(toolId) {
     Pop.close();
     const r = state.result;
-    if (toolId !== 'tower' || !r || state.busy) return false;
+    if ((toolId !== 'tower' && toolId !== 'midrise') || !r || state.busy) return false;
     if (project.readOnly) { noticeOnce('readonly', READ_ONLY_TEXT); return false; }
     if (!project.doc) {
       if (!projectCreate(defaultProjectName(), { quiet: true })) return false;
@@ -5309,7 +5311,7 @@ const App = (() => {
     els.btnProject = tbBtn('btnProject', ICONS.folder, 'Project', 'Project: new, open, import, export', openProjectMenu, { 'aria-haspopup': 'true', 'aria-expanded': 'false' });
     els.btnProject.append(h('span', { html: ICONS.chev, style: 'display:contents' }));
     els.btnSendTower = tbBtn('btnSendTower', ICONS.tower, 'Send to Tower Generator', 'Load a site first', () => projectSend('tower'), { class: 'btn has-text send', disabled: true });
-    els.btnSendMid = tbBtn('btnSendMidrise', ICONS.midrise, 'Send to Mid-Rise Generator', 'Planned', null, { class: 'btn has-text send', disabled: true, 'aria-label': 'Send to Mid-Rise Generator (planned)' });
+    els.btnSendMid = tbBtn('btnSendMidrise', ICONS.midrise, 'Send to Mid-Rise Generator', 'Load a site first', () => projectSend('midrise'), { class: 'btn has-text send', disabled: true });
     $('tbActions').append(els.btnMaps, els.btnDl, els.btnShot, h('span', { class: 'tb-sep', 'aria-hidden': 'true' }), els.btnProject, els.btnSendTower, els.btnSendMid);
   }
 
@@ -5788,14 +5790,14 @@ const SiteTests = (() => {
         [true, true, true, 'Test Address', true, 1]);
     });
 
-    await t('project: the top bar has the Project button and both Send buttons; Mid-Rise is planned', () => eq(
-      [!!$('btnProject'), !!$('btnSendTower'), !!$('btnSendMidrise'), $('btnSendMidrise').disabled, $('btnSendMidrise').title, $('btnSendTower').textContent, $('btnSendMidrise').textContent, !!$('projFile')],
-      [true, true, true, true, 'Planned', 'Send to Tower Generator', 'Send to Mid-Rise Generator', true]));
-    await t('project: Send to Tower Generator is off before a run and on after one; Mid-Rise stays off', () => inProject(() => {
+    await t('project: the top bar has the Project button and both Send buttons', () => eq(
+      [!!$('btnProject'), !!$('btnSendTower'), !!$('btnSendMidrise'), $('btnSendTower').textContent, $('btnSendMidrise').textContent, !!$('projFile')],
+      [true, true, true, 'Send to Tower Generator', 'Send to Mid-Rise Generator', true]));
+    await t('project: both Send buttons are off before a run and on after one', () => inProject(() => {
       App.state.result = null; App.syncActions();
-      const before = $('btnSendTower').disabled;
+      const before = [$('btnSendTower').disabled, $('btnSendMidrise').disabled];
       App.state.result = fakeResult(); App.syncActions();
-      return eq([before, $('btnSendTower').disabled, $('btnSendMidrise').disabled], [true, false, true]);
+      return eq([before, $('btnSendTower').disabled, $('btnSendMidrise').disabled], [[true, true], false, false]);
     }));
     await t('project: the Project menu has New project, Open, Import and Export (Export is off without a project)', () => inProject((mem) => {
       ProjectMod.saveProject(mem, siteProjectDoc());
@@ -5828,8 +5830,14 @@ const SiteTests = (() => {
       const last = doc && doc.log[doc.log.length - 1];
       return eq([!!doc, doc.name, urls.length, urls[0], !!stored && !!ProjectMod.getSection(stored, 'site'), last && last.action], [true, 'Test Address', 1, `../tower/?project=${doc.id}`, true, 'send']);
     }));
-    await t('project: Send to Mid-Rise Generator does nothing', () => inProject(async (mem, urls) => {
-      const r = await App.projectSend('midrise');
+    await t('project: Send to Mid-Rise Generator goes to ../midrise/?project=<id>', () => inProject(async (mem, urls) => {
+      App.state.typed = 'Test Address';
+      await App.projectSend('midrise');
+      const doc = App.project.doc;
+      return eq([!!doc, urls.length, urls[0]], [true, 1, `../midrise/?project=${doc.id}`]);
+    }));
+    await t('project: Send to an unknown tool does nothing', () => inProject(async (mem, urls) => {
+      const r = await App.projectSend('nowhere');
       return eq([r, urls.length, App.project.doc, mem.keys().length], [false, 0, null, 0]);
     }));
     await t('project: a run does not touch storage when no project is open', () => inProject((mem) => {

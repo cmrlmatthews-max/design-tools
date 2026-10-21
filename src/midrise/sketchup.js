@@ -19,7 +19,7 @@
    - Courts: outline lines at ground level, in a hidden group: the open courts of state.courts and the
      closed courtyards of built.courtyards.
    - The roof screen (a prism in built.solids) is a solid "Screen" inside Bars.
-   - doc.source is "tower": validateDoc and the SketchUp importer accept only "tower" and "site" today.
+   - doc.source is "midrise" (SKETCHUP_SOURCE). validateDoc and the SketchUp importer accept it.
    ========================================================================== */
 
 import { cleanRing2, makeDoc } from "../shared/sketchup-format.js";
