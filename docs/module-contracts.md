@@ -109,3 +109,47 @@ export const PROGRAM_DEFAULTS = { residential: { ftf, unitSize, unitFactor, colo
 export const PRESETS = [ { id, name, description, state } ]   // full state objects, plan section 2 schema
 export const TEST_CASES = [ { id, description, state, expect: { gfa?, floors?, height?, tolerancePct } } ]
 ```
+
+---
+
+## AI prompt library (added October 20, 2026)
+
+Canonical folder from now on: `/home/claude/repo-design-tools` (the git clone). Test server: `http://localhost:8766/` serves that folder.
+
+### src/tower/prompts.js (Agent PL, Opus — data only)
+
+```js
+export const PROMPT_LIBRARY_VERSION = 1;
+
+// Fields the user picks in the panel. Each option: { value, label }.
+export const PROMPT_FIELDS = {
+  material: { label: "Facade material", options: [...], default: "..." },
+  location: { label: "Site context",    options: [...], default: "..." },
+  time:     { label: "Time of day",     options: [...], default: "..." },
+  season:   { label: "Season",          options: [...], default: "..." },
+};
+
+// Fields the tool fills from the current option (the panel computes them):
+//   {{floors}}   e.g. "32"            (metrics.floorCount)
+//   {{height}}   e.g. "432 feet"      (metrics.totalHeight, rounded to the foot)
+//   {{program}}  e.g. "residential"   (program of the tallest segment; hotel → "hotel", office → "office")
+//   {{podium}}   e.g. "a 4-story podium" or "no podium"
+//   {{form}}     e.g. "a rectangular tower with two setbacks and a stepped crown" (short phrase built by the panel)
+
+export const FORM_LOCK = "...";   // fixed rule block, may use {{floors}} and {{form}}; prepended to every prompt
+
+export const PROMPTS = [
+  { id, group: "time" | "material" | "context" | "camera", title, description,
+    template,            // text with {{tokens}}; must NOT repeat the form lock
+    uses: ["material", "location", "time", "season"],   // which pick fields this prompt shows
+    defaults: { material?, location?, time?, season? } } // per-prompt overrides of field defaults
+];  // exactly 20: 5 time, 6 material, 5 context, 4 camera
+
+export function fillPrompt(prompt, values) // → full text: FORM_LOCK + "\n\n" + template, all {{tokens}} replaced; unknown tokens left visible as [token]
+```
+
+### Panel (Agent PP, Sonnet — build parts)
+
+- Fills `/* SLOT: ai-prompts */` and the hidden "AI Prompts" top-bar button.
+- Imports the data by inlining `src/tower/prompts.js` through build.py (add it the same way as the other src modules).
+- Custom prompts: stored in the same storage blob under `prompts: [{ id, title, group: "custom", template, uses, createdAt, updatedAt }]`; included in Export/Import JSON. Built-in prompts are read-only; "Duplicate to edit" makes a custom copy.
