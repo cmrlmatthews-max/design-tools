@@ -21,7 +21,7 @@ This file is the one place that lists every tool in the suite, who builds it, an
 | `plate` | Plate Planner | `plate/` | In work | Work |
 | — | Project file (`src/shared/project.js`), Workspace page, Site Model handoff | `index.html`, `src/shared/`, `site/` | Version 1 live | Home |
 | `midrise` | Mid-Rise Generator | `midrise/` | Version 1 built, in review | Home |
-| `parking` | Parking Deck Generator | `parking/` | Next | Home |
+| `parking` | Parking Deck Generator | `parking/` | Concept written, waiting on Cade | Home |
 | `facade` | Facade Studio | `facade/` | Queued after Parking | Home |
 | `grading` | Grading Sketch | `grading/` | Queued after Facade | Home |
 | `view` | View Study | `view/` | Later | — |
@@ -63,7 +63,8 @@ Caution: the work session cannot push to GitHub. It works on a download. Merge b
 |---|---|
 | `docs/project-file-spec.md` | The shared project file and `project.js` contract |
 | `docs/plate-planner-notes.md` | Design notes for the Plate Planner (work session) |
-| `docs/mid-rise-generator-concept.md` | Concept for the Mid-Rise Generator (home session, next) |
+| `docs/mid-rise-generator-concept.md`, `docs/mid-rise-generator-technical-plan.md` | Mid-Rise Generator |
+| `docs/parking-deck-concept.md` | Concept for the Parking Deck Generator (home session, next) |
 | `docs/tower-generator-concept.md`, `docs/tower-generator-technical-plan.md`, `docs/v1.1-spec.md` | Tower Generator |
 | `docs/site-tool-spec.md`, `docs/site-tool-tampa-comparison.md` | Site Model |
 | `docs/sketchup-spec.md`, `docs/sketchup-install.md` | SketchUp export |
