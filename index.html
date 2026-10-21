@@ -6,41 +6,522 @@
 <meta name="color-scheme" content="light dark">
 <title>Design Tools</title>
 <style>
-  :root {
-    --bg: #f3f4f6; --surface: #ffffff; --line: #dde0e4;
-    --ink: #1b1f24; --ink-2: #4e5763; --ink-3: #848d98; --accent: #23508f;
-    --font: -apple-system, "SF Pro Text", "Inter", system-ui, "Segoe UI", sans-serif;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg: #111417; --surface: #1b2025; --line: #2b3138; --ink: #e7eaee; --ink-2: #a5adb7; --ink-3: #747d88; --accent: #6aa2ea; }
-  }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font); -webkit-text-size-adjust: 100%; }
-  main { max-width: 640px; margin: 0 auto; padding: 56px 20px 40px; }
-  .mark { font-size: 12px; font-weight: 600; letter-spacing: .22em; color: var(--ink-3); }
-  h1 { font-size: 28px; font-weight: 600; letter-spacing: -.01em; margin: 6px 0 4px; }
-  p.lede { color: var(--ink-2); margin: 0 0 28px; line-height: 1.5; }
-  .label { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 8px; }
-  a.tool { display: block; min-height: 44px; padding: 16px 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; color: inherit; text-decoration: none; }
-  a.tool:hover, a.tool:focus-visible { border-color: var(--accent); outline: none; }
-  a.tool strong { display: block; font-size: 17px; font-weight: 600; }
-  a.tool span { color: var(--ink-2); font-size: 14px; line-height: 1.45; }
+@font-face{font-family:"RC";font-weight:700;src:url(data:font/woff2;base64,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) format("woff2")}
+:root{--ink:#1D2733;--soft:#4F5A66;--grid:#9AA3AD;--hair:#C9CED4;--red:#D12A2A;--green:#2F7D4F;--paper:#FFFFFF;--desk:#EDEFF1;--edge:#1D2733;--org:#C0561B}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--desk:#1b2025;--edge:#9AA3AD}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;background:var(--desk);color:var(--ink);font-family:-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
+.rc,.date,h1,.al,.dtt,.dts,.t,.stamp,.tb,.n,.sched,.note,.msg,.stl,.hint{font-family:"RC","Arial Narrow","Roboto Condensed",sans-serif;font-weight:700}
+.sheet{max-width:1040px;margin:24px auto;background:var(--paper);color:var(--ink);color-scheme:light;border:2px solid var(--ink);outline:1px solid var(--edge);outline-offset:4px;display:grid;grid-template-columns:1fr 176px}
+.draw{padding:30px 34px 36px;min-width:0}
+.date{font-size:12px;letter-spacing:.16em;color:var(--soft);text-transform:uppercase}
+h1{font-size:34px;line-height:1.12;letter-spacing:.01em;text-transform:uppercase;margin:8px 0 8px}
+.lede{margin:0 0 14px;font-size:14px;line-height:1.55;color:var(--soft)}
+:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.note{margin:10px 0;padding:8px 12px;border:2px solid var(--red);border-radius:2px;color:var(--red);font-size:12px;line-height:1.4;letter-spacing:.08em;text-transform:uppercase}
+.note.info{border-color:var(--ink);color:var(--ink)}
+.tl.m{display:none}.tl svg{display:block;width:100%;height:auto}
+.tl{margin:4px 0 12px}
+.sched{margin-top:8px}
+.sched .st{font-size:13px;letter-spacing:.08em;border-bottom:2px solid var(--ink);padding-bottom:3px;margin:4px 0 8px;text-transform:uppercase}
+.sched table{width:100%;border-collapse:collapse;border:1.2px solid var(--ink);font-size:11.5px;letter-spacing:.03em;text-transform:uppercase}
+.sched th{background:var(--desk);color:var(--soft);font-size:10px;letter-spacing:.06em;text-align:left;padding:4px 6px;border:1px solid var(--ink)}
+.sched td{padding:4px 6px;border:1px solid var(--ink);vertical-align:middle;line-height:1.25}
+.sched tbody td{height:44px}
+.sched td.mk{width:48px;text-align:center;padding:2px 4px}
+.sched td.pj{padding:0;overflow-wrap:anywhere}
+.sched tfoot td{color:var(--org);border-top:1.6px solid var(--ink)}
+.sched tbody tr[data-id]:not(.askr){cursor:pointer}
+.sched tbody tr[data-id]:not(.askr):hover td{background:var(--desk)}
+.sched tbody tr.on td{background:#F6F7F8}
+.sched td.ask{padding:6px 10px;outline:2px dashed var(--red);outline-offset:-4px}
+.askr td{background:var(--paper)!important}
+.askrow{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px}
+.askrow .nm{flex:1 1 140px;min-width:0;overflow-wrap:anywhere}
+.askrow .q{color:var(--red);letter-spacing:.1em}
+.askrow .stamp{margin:0}
+.pk{display:block;width:100%;min-height:44px;padding:4px 6px;font:inherit;letter-spacing:inherit;text-transform:inherit;text-align:left;color:var(--ink);background:none;border:0;cursor:pointer}
+.tm{color:var(--soft)}
+.opn{color:var(--red);letter-spacing:.1em}
+.hx{width:30px;height:23px;display:block;margin:0 auto}.hx text{font-family:"RC","Arial Narrow","Roboto Condensed",sans-serif;font-weight:700}
+.tri{width:26px;height:23px}
+.tri path{fill:#fff;stroke:var(--ink);stroke-width:1.8;stroke-linejoin:round}.tri text{fill:var(--ink);font-family:"RC","Arial Narrow","Roboto Condensed",sans-serif;font-weight:700}
+li.plan .tri path{stroke:#8E9399}li.plan .tri text{fill:#8E9399}
+li.warn .tri path{stroke:var(--red)}li.warn .tri text{fill:var(--red)}
+.stamps{display:flex;flex-wrap:wrap;align-items:center}
+.stamp{display:inline-flex;align-items:center;justify-content:center;min-height:44px;margin:10px 10px 0 0;padding:6px 12px;border:2px solid var(--red);border-radius:2px;background:none;color:var(--red);font-size:12px;letter-spacing:.1em;text-transform:uppercase;text-decoration:none;cursor:pointer;line-height:1.2}
+.stamp:not(:disabled):not(.off):hover{background:var(--red);color:#fff}
+.stamp:disabled,.stamp.off{border-color:var(--grid);color:var(--grid);cursor:not-allowed}
+.stamp.ink{border-color:var(--ink);color:var(--ink)}
+.stamp.ink:not(:disabled):hover{background:var(--ink);color:#fff}
+.newf{display:flex;flex-wrap:wrap;align-items:flex-end;gap:6px 10px;margin:10px 0 0;padding:10px 12px;border:1px solid var(--ink)}
+.newf label{flex:1 0 100%;font-size:10px;letter-spacing:.1em;color:var(--soft);text-transform:uppercase;font-family:"RC","Arial Narrow","Roboto Condensed",sans-serif;font-weight:700}
+.newf input{flex:1 1 200px;min-width:0;min-height:44px;padding:0 10px;font:inherit;font-size:16px;color:var(--ink);background:var(--paper);border:1px solid var(--ink);border-radius:0}
+.newf input::placeholder{font-family:"RC","Arial Narrow","Roboto Condensed",sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--grid)}
+.newf .stamp{margin:0}
+.msg{margin:10px 0 0;font-size:12px;line-height:1.4;letter-spacing:.06em;text-transform:uppercase;color:var(--soft)}
+.msg.err{color:var(--red)}.msg:empty{display:none}
+.empty{margin:8px 0 0;font-size:14px;color:var(--soft)}
+.lists{margin-top:30px}
+.dt{display:flex;align-items:center;gap:12px;margin-bottom:12px}.bub{width:44px;height:44px;flex:none}
+.dtt{font-size:16px;letter-spacing:.08em;text-transform:uppercase;border-bottom:2.5px solid var(--ink);padding-bottom:2px;display:inline-block;min-width:220px}
+.dts{font-size:11px;letter-spacing:.1em;color:var(--soft);text-transform:uppercase;margin-top:3px}
+.hint{display:flex;flex-wrap:wrap;align-items:center;gap:0 8px;margin:0 0 14px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--soft)}
+.hint strong{color:var(--ink);overflow-wrap:anywhere}
+.link{min-height:44px;padding:0 10px;font:inherit;letter-spacing:inherit;text-transform:inherit;color:var(--ink);background:none;border:0;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+ol{list-style:none;margin:0;padding:0}
+li.tool{display:flex;gap:14px;margin:0 0 20px}
+.tag{flex:none;width:44px;display:flex;align-items:flex-start;justify-content:center;padding-top:2px}
+.c{flex:1;min-width:0}
+.t{font-size:15px;letter-spacing:.02em;color:var(--ink);margin:0}
+li p.d{margin:3px 0 0;font-size:14px;line-height:1.55;color:var(--soft)}
+li.plan .t{color:var(--soft)}
+.stl{margin:5px 0 0;font-size:11px;letter-spacing:.1em;color:var(--soft);text-transform:uppercase}
+.stl:empty{display:none}
+li.warn .stl{color:var(--red)}
+.tool .stamps .stamp{margin-top:8px}
+#testOut{margin:0;padding:8px 10px;overflow-x:auto;font:12px/1.6 ui-monospace,"SF Mono",Menlo,Consolas,monospace;white-space:pre-wrap;color:var(--ink);background:var(--paper);border:1px solid var(--ink)}
+.tb{border-left:2px solid var(--ink);display:flex;flex-direction:column;font-size:11px;letter-spacing:.06em}
+.tb>div{padding:12px 14px;border-bottom:1px solid var(--ink);min-width:0}.tb .c5{margin-top:auto;border-bottom:none;border-top:2px solid var(--ink)}
+.lg{display:flex;align-items:center;gap:8px;font-size:10px;margin-top:7px}.lg svg{width:22px;height:14px;flex:none}.firm{font-size:26px;letter-spacing:.12em}.s{font-size:9.5px;color:var(--soft);margin-top:2px}
+.k{font-size:9.5px;color:var(--soft)}.v{font-size:13px;margin-top:3px;overflow-wrap:anywhere;text-transform:uppercase}.sh{font-size:40px;line-height:1;margin-top:4px}
+@media (max-width:640px){
+.sheet{margin:12px 16px;grid-template-columns:1fr;outline-offset:3px}
+.draw{padding:20px 16px 24px}h1{font-size:26px}
+.tl.d{display:none}.tl.m{display:block}
+.sched td.mk{width:40px}
+.sched th,.sched td{padding:4px}
+.sched .tm{display:none}
+.stamp{margin-right:8px}
+.tb{border-left:none;border-top:2px solid var(--ink);display:grid;grid-template-columns:1fr 1fr}
+.tb>div{border-bottom:1px solid var(--ink)}.tb .c1{grid-column:1/-1}.tb .c6{order:2;grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;column-gap:8px}.tb .c6 .k{grid-column:1/-1}.tb .c4{order:3;border-bottom:none}.tb .c5{order:3;margin-top:0;border-top:none;border-left:1px solid var(--ink);border-bottom:none}
+.dtt{min-width:0}.tag{width:30px}li.tool{gap:10px}
+}
 </style>
 </head>
 <body>
-<main>
-  <div class="mark">CMRLM</div>
-  <h1>Design Tools</h1>
-  <p class="lede">Small browser tools for early-stage architectural design. Each tool is a single page that runs in the browser.</p>
-  <div class="label">Tools</div>
-  <a class="tool" href="tower/">
-    <strong>Tower Generator</strong>
-    <span>Massing studies with live floor-area metrics. Shape a tower with sliders and watch the 3D form and the numbers change together.</span>
-  </a>
-  <a class="tool" href="site/" style="margin-top:12px">
-    <strong>Site Model</strong>
-    <span>Context model of a real site from public map data. Ground, buildings, roads, trees, and water, with Revit CSV and DXF downloads.</span>
-  </a>
-</main>
+<main class="sheet"><div class="draw">
+<div class="date rc" id="date"></div>
+<h1>Design Tools — Workspace</h1>
+<p class="lede">One project file moves between the tools. Pick a project, then open a tool.</p>
+<p id="notice" class="note" role="alert" hidden>Browser storage is not available. Projects cannot be saved on this device.</p>
+<p id="modNote" class="note" hidden>Projects are not available right now. The tools below still open on their own.</p>
+<p id="testNote" class="note info" hidden>Test mode. Projects on this page are temporary. Nothing is read from or saved to the browser.</p>
+<div class="tl d" id="plD"></div><div class="tl m" id="plM"></div>
+<section class="sched"><div class="st">Project schedule</div>
+<table aria-label="Saved projects"><thead><tr><th>Mark</th><th>Project</th><th>Updated</th><th>Size</th><th>Status</th></tr></thead><tbody id="list"></tbody><tfoot><tr><td colspan="5" id="sum">0 projects · 0.0 KB</td></tr></tfoot></table>
+<p id="empty" class="empty" hidden>No saved projects yet. Create one or import a file.</p>
+<div class="stamps"><button class="stamp" id="newBtn" type="button" aria-expanded="false" aria-controls="newForm" disabled>New project</button><button class="stamp" id="impBtn" type="button" disabled>Import</button><button class="stamp" id="expBtn" type="button" disabled>Export</button><button class="stamp" id="delBtn" type="button" disabled>Delete</button><input id="file" type="file" accept=".json,application/json" hidden></div>
+<form id="newForm" class="newf" novalidate hidden><label for="newName">Project name</label><input id="newName" maxlength="80" autocomplete="off" enterkeyhint="done" placeholder="Name"><button class="stamp" type="submit">Create</button><button class="stamp" id="newCancel" type="button">Cancel</button></form>
+<p id="msg" class="msg" role="status"></p>
+</section>
+<div class="lists"><section><div class="dt"><svg viewBox="0 0 44 44" class="bub" aria-hidden="true"><circle cx="22" cy="22" r="20" fill="#fff" stroke="#1D2733" stroke-width="1.4"/><line x1="4" y1="22" x2="40" y2="22" stroke="#1D2733" stroke-width="1"/><text x="22" y="18" text-anchor="middle" class="rc" font-size="13" fill="#1D2733">8</text><text x="22" y="35" text-anchor="middle" class="rc" font-size="9.5" fill="#1D2733">G-001</text></svg><div><h2 class="dtt" style="margin:0">Tools</h2><div class="dts" id="toolSub">No project open</div></div></div>
+<p id="open" class="hint">No project open. Each tool opens on its own.</p>
+<ol><li class="tool" data-section="site"><div class="tag"><svg class="tri" viewBox="0 0 26 23" aria-hidden="true"><path d="M13,1.5 L24.5,21.5 L1.5,21.5 Z"/><text x="13" y="18" text-anchor="middle" font-size="11">1</text></svg></div><div class="c"><h3 class="t">Site Model</h3><p class="d">Context model of a real site from public map data, with Revit CSV and DXF downloads.</p><p class="stl"></p><div class="stamps"><a class="stamp" id="siteOpen" data-base="site/" href="site/" aria-label="Open Site Model">Open</a></div></div></li><li class="tool" data-section="massing"><div class="tag"><svg class="tri" viewBox="0 0 26 23" aria-hidden="true"><path d="M13,1.5 L24.5,21.5 L1.5,21.5 Z"/><text x="13" y="18" text-anchor="middle" font-size="11">2</text></svg></div><div class="c"><h3 class="t">Massing</h3><p class="d">Tower or mid-rise form with live floor-area metrics. A project holds one massing.</p><p class="stl"></p><div class="stamps"><a class="stamp" data-base="tower/" href="tower/">Tower Generator</a><button class="stamp" type="button" disabled>Mid-Rise Generator</button></div></div></li><li class="tool plan" data-section="plates"><div class="tag"><svg class="tri" viewBox="0 0 26 23" aria-hidden="true"><path d="M13,1.5 L24.5,21.5 L1.5,21.5 Z"/><text x="13" y="18" text-anchor="middle" font-size="11">3</text></svg></div><div class="c"><h3 class="t">Plate Planner</h3><p class="d">Counted test fit of a floor plate: core, corridor, and units.</p><p class="stl">Planned</p><div class="stamps"><button class="stamp" type="button" disabled aria-label="Plate Planner is planned">Planned</button></div></div></li><li class="tool plan" data-section="parking"><div class="tag"><svg class="tri" viewBox="0 0 26 23" aria-hidden="true"><path d="M13,1.5 L24.5,21.5 L1.5,21.5 Z"/><text x="13" y="18" text-anchor="middle" font-size="11">4</text></svg></div><div class="c"><h3 class="t">Parking Deck</h3><p class="d">Stalls, aisles, ramps, and columns for a parking deck.</p><p class="stl">Planned</p><div class="stamps"><button class="stamp" type="button" disabled aria-label="Parking Deck is planned">Planned</button></div></div></li><li class="tool plan" data-section="facade"><div class="tag"><svg class="tri" viewBox="0 0 26 23" aria-hidden="true"><path d="M13,1.5 L24.5,21.5 L1.5,21.5 Z"/><text x="13" y="18" text-anchor="middle" font-size="11">5</text></svg></div><div class="c"><h3 class="t">Facade Studio</h3><p class="d">Facade systems, glazing ratios, and balconies by face.</p><p class="stl">Planned</p><div class="stamps"><button class="stamp" type="button" disabled aria-label="Facade Studio is planned">Planned</button></div></div></li><li class="tool plan" data-section="sun"><div class="tag"><svg class="tri" viewBox="0 0 26 23" aria-hidden="true"><path d="M13,1.5 L24.5,21.5 L1.5,21.5 Z"/><text x="13" y="18" text-anchor="middle" font-size="11">6</text></svg></div><div class="c"><h3 class="t">Sun Study</h3><p class="d">Sun paths and sun hours on the ground. Built inside the Tower Generator.</p><p class="stl">Planned</p><div class="stamps"><button class="stamp" type="button" disabled aria-label="Sun Study is planned">Planned</button></div></div></li><li class="tool plan" data-section="grading"><div class="tag"><svg class="tri" viewBox="0 0 26 23" aria-hidden="true"><path d="M13,1.5 L24.5,21.5 L1.5,21.5 Z"/><text x="13" y="18" text-anchor="middle" font-size="11">7</text></svg></div><div class="c"><h3 class="t">Grading Sketch</h3><p class="d">Rough site grading and the finished floor elevation.</p><p class="stl">Planned</p><div class="stamps"><button class="stamp" type="button" disabled aria-label="Grading Sketch is planned">Planned</button></div></div></li><li class="tool plan" data-section="egress"><div class="tag"><svg class="tri" viewBox="0 0 26 23" aria-hidden="true"><path d="M13,1.5 L24.5,21.5 L1.5,21.5 Z"/><text x="13" y="18" text-anchor="middle" font-size="11">8</text></svg></div><div class="c"><h3 class="t">Egress Sketch</h3><p class="d">Exit stairs, doors, and corridors checked for egress.</p><p class="stl">Planned</p><div class="stamps"><button class="stamp" type="button" disabled aria-label="Egress Sketch is planned">Planned</button></div></div></li></ol></section>
+<section class="sched" id="testBox" hidden><div class="st">Self-test</div><pre id="testOut" hidden></pre></section>
+</div>
+</div><aside class="tb">
+<div class="c1"><div class="firm rc">CMRLM</div><div class="s">DESIGN TOOLS</div></div>
+<div class="c2"><div class="k">PROJECT</div><div class="v" id="tbName">—</div></div>
+<div class="c3"><div class="k">FRAME</div><div class="v" id="tbFrame">—</div></div>
+<div class="c4"><div class="k">UPDATED</div><div class="v" id="tbUpd">—</div></div>
+<div class="c6"><div class="k">LEGEND</div><div class="lg"><svg viewBox="0 0 22 14" aria-hidden="true"><defs><pattern id="hl" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="5" stroke="#1D2733" stroke-width="1"/></pattern></defs><rect x="1" y="1" width="20" height="12" fill="url(#hl)" stroke="#1D2733" stroke-width="1.2"/></svg>HAS DATA</div><div class="lg"><svg viewBox="0 0 22 14" aria-hidden="true"><rect x="1" y="1" width="20" height="12" fill="#fff" stroke="#1D2733" stroke-width="1.2"/></svg>EMPTY</div><div class="lg"><svg viewBox="0 0 22 14" aria-hidden="true"><rect x="1" y="1" width="20" height="12" fill="#fff" stroke="#9AA3AD" stroke-width="1.2" stroke-dasharray="3 2"/></svg>PLANNED</div><div class="lg"><svg viewBox="0 0 22 14" aria-hidden="true"><rect x="1" y="1" width="20" height="12" fill="#fff" stroke="#D12A2A" stroke-width="1.4" stroke-dasharray="3 2"/></svg>NEWER VERSION</div><div class="lg"><svg viewBox="0 0 22 14" aria-hidden="true"><path d="M3,7 L6.5,1.5 L15.5,1.5 L19,7 L15.5,12.5 L6.5,12.5 Z" fill="#1D2733" stroke="#1D2733" stroke-width="1.1"/></svg>OPEN PROJECT</div></div>
+<div class="c5"><div class="k">SHEET</div><div class="sh">G-001</div></div>
+</aside></main>
+<script type="module" onerror="var d=document,o=d.getElementById('testOut');d.getElementById('modNote').hidden=false;if(/[?&]test/.test(location.search)){d.getElementById('testBox').hidden=false;o.hidden=false;o.textContent='FAIL  src/shared/project.js did not load'}">
+// Workspace page. Calls src/shared/project.js (spec section 10).
+import * as Project from "./src/shared/project.js";
+
+const $ = (s) => document.querySelector(s);
+const LAST = "cmrlm.project.last";
+const KNOWN = { site: 1, massing: 1, plates: 1, parking: 1, facade: 1, sun: 1, grading: 1, egress: 1 };
+// project.js reports storage trouble through onNotice, the last argument of its storage functions.
+const opts = { onNotice: (m) => { const n = $("#notice"); if (m) n.textContent = m; n.hidden = false; } };
+
+/* ---------- helpers (project names go in as text, never as HTML) ---------- */
+const h = (tag, attrs, ...kids) => {
+  const el = document.createElement(tag);
+  for (const k in attrs) if (attrs[k] != null) el.setAttribute(k, attrs[k]);
+  el.append(...kids.filter((k) => k != null));
+  return el;
+};
+const say = (t, err) => { const m = $("#msg"); m.textContent = t || ""; m.className = err ? "msg err" : "msg"; };
+const probe = (get) => { try { const s = get(); s.getItem(LAST); return s; } catch (e) { return null; } };
+// project.js has no setter for the last-opened id, so this page reads and writes the key itself.
+const getLast = (s) => { try { return s.getItem(LAST) || ""; } catch (e) { return ""; } };
+const setLast = (s, id) => { try { if (id) s.setItem(LAST, id); else s.removeItem(LAST); return true; } catch (e) { return false; } };
+const pickOpen = (list, last) => (list.some((p) => p.id === last) ? last : "");
+const isEmpty = (o) => !o || typeof o !== "object" || !Object.keys(o).length;
+const fmt = (iso, o, none) => { const d = new Date(iso); return isNaN(d) ? none : d.toLocaleString([], o); };
+const fmtWhen = (iso) => fmt(iso, { dateStyle: "medium", timeStyle: "short" }, "unknown");
+const fmtDay = (iso) => fmt(iso, { year: "numeric", month: "short", day: "numeric" }, "");
+const fmtKB = (b) => { const k = (Number(b) || 0) / 1024; return (k < 10 ? k.toFixed(1) : Math.round(k).toLocaleString()) + " KB"; };
+const memStore = () => {
+  const m = new Map();
+  return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => void m.set(k, String(v)), removeItem: (k) => void m.delete(k) };
+};
+
+/* ---------- project actions (storage is a parameter) ---------- */
+function loadList(s) {
+  let list = [];
+  try { list = Project.listProjects(s, opts) || []; } catch (e) { list = []; }
+  return list.slice().sort((a, b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0));
+}
+function createProject(s, name) {
+  const doc = Project.newProject({ name });
+  const r = Project.saveProject(s, doc, opts);
+  if (!r || r.ok === false) throw new Error((r && r.warning) || "The project could not be saved.");
+  setLast(s, doc.id);
+  return { doc, warning: r.warning || "" };
+}
+async function importFile(s, file) {
+  const r = await Project.importProject(file, s, opts);   // validates, renames a copy when the id is taken, and saves
+  if (!r || !r.doc) throw new Error("The file has no project.");
+  setLast(s, r.doc.id);
+  return { doc: r.doc, renamed: !!r.renamed, warning: r.warning || "" };
+}
+function removeProject(s, id) {
+  Project.deleteProject(s, id, opts);
+  if (getLast(s) === id) setLast(s, "");
+}
+function statusFor(doc, key) {
+  let s = null;
+  try { s = Project.getSection(doc, key); } catch (e) { s = null; }
+  if (!s) return { text: "Empty", cls: "" };
+  if (Number(s.schema) > (KNOWN[key] || 1)) return { text: "Newer version", cls: "warn" };
+  if (isEmpty(s.state) && isEmpty(s.derived)) return { text: "Empty", cls: "" };
+  const d = fmtDay(s.updatedAt);
+  return { text: "Has data" + (d ? " · " + d : ""), cls: "data" };
+}
+
+/* ---------- drawing helpers ---------- */
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const pad2 = (n) => String(n).padStart(2, "0");
+const shortDate = (iso) => { const d = new Date(iso); return isNaN(d) ? "" : pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()) + "-" + pad2(d.getFullYear() % 100); };
+const shortTime = (iso) => fmt(iso, { hour: "numeric", minute: "2-digit" }, "");
+const SEC = [["site", "Site", "SM", "Site Model"], ["massing", "Massing", "MS", "Massing"], ["plates", "Plates", "PL", "Plate Planner"], ["parking", "Parking", "PK", "Parking Deck"], ["facade", "Facade", "FC", "Facade Studio"], ["sun", "Sun", "SN", "Sun Study"], ["grading", "Grading", "GR", "Grading Sketch"], ["egress", "Egress", "EG", "Egress Sketch"]];
+const PLANNED = { plates: 1, parking: 1, facade: 1, sun: 1, grading: 1, egress: 1 };
+const INK = "#1D2733", GRID = "#9AA3AD", RED = "#D12A2A", ORG = "#C0561B";
+
+// data | empty | newer | plan, the same words the pipeline legend uses
+function kindOf(doc, key) {
+  if (PLANNED[key]) return "plan";
+  if (!doc) return "empty";
+  const c = statusFor(doc, key).cls;
+  return c === "data" ? "data" : c === "warn" ? "newer" : "empty";
+}
+const KIND_WORDS = { data: "has data", empty: "empty", newer: "newer version", plan: "planned" };
+
+function boxSvg(k, x, y, w, hh, pat) {
+  const r = `x="${x}" y="${y}" width="${w}" height="${hh}"`;
+  if (k === "data") return `<rect ${r} fill="#fff"/><rect ${r} fill="url(#${pat})" stroke="${INK}" stroke-width="1.6"/>`;
+  if (k === "plan") return `<rect ${r} fill="#fff" stroke="${GRID}" stroke-width="1.6" stroke-dasharray="4 3"/>`;
+  if (k === "newer") return `<rect ${r} fill="#fff" stroke="${RED}" stroke-width="1.8" stroke-dasharray="4 3"/>`;
+  return `<rect ${r} fill="#fff" stroke="${INK}" stroke-width="1.6"/>`;
+}
+
+// The pipeline strip. mob = two rows of four, desktop = one row of eight.
+function pipeSvg(doc, mob) {
+  const id = mob ? "pm" : "pd", per = mob ? 4 : 8, rows = mob ? 2 : 1, W = mob ? 424 : 640;
+  const R = mob ? 13 : 11, bw = mob ? 40 : 46, left = mob ? 53 : 40, step = mob ? 106 : 80, rowH = 150;
+  let g = `<defs><pattern id="${id}h" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="${INK}" stroke-width="1.1"/></pattern></defs>`;
+  const words = [];
+  for (let r = 0; r < rows; r++) {
+    const oy = r * rowH, x0 = left - 20, x1 = left + (per - 1) * step + 20;
+    g += `<line x1="${x0}" y1="${oy + 138}" x2="${x1}" y2="${oy + 138}" stroke="${INK}" stroke-width="2.6"/>`;
+  }
+  SEC.forEach(([key, nm, code, full], i) => {
+    const col = i % per, oy = ((i / per) | 0) * rowH, cx = left + col * step, k = kindOf(doc, key), c = k === "plan" ? GRID : INK;
+    words.push(full + " " + KIND_WORDS[k]);
+    g += `<line x1="${cx}" y1="${oy + 58}" x2="${cx}" y2="${oy + 98}" stroke="${GRID}" stroke-width=".7" stroke-dasharray="8 3 1.5 3"/>`;
+    g += `<circle cx="${cx}" cy="${oy + 24}" r="${R}" fill="#fff" stroke="${c}" stroke-width="1.1"/>`;
+    g += `<text x="${cx}" y="${oy + 24 + R * 0.4}" class="rc" font-size="${R}" text-anchor="middle" fill="${c}">${i + 1}</text>`;
+    g += `<text x="${cx}" y="${oy + 52}" class="rc" font-size="10" letter-spacing=".08em" text-anchor="middle" fill="${c}">${nm.toUpperCase()}</text>`;
+    g += boxSvg(k, cx - bw / 2, oy + 98, bw, 40, id + "h");
+    g += `<line x1="${cx}" y1="${oy + 80}" x2="${cx}" y2="${oy + 98}" stroke="${c}" stroke-width="1"/>`;
+    g += `<path d="M${cx - 8.3},${oy + 73} l4.1,-6.8 h8.2 l4.1,6.8 l-4.1,6.8 h-8.2 z" fill="#fff" stroke="${c}" stroke-width="1.2"/>`;
+    g += `<text x="${cx}" y="${oy + 75.7}" class="rc" font-size="7.5" text-anchor="middle" fill="${c}">${code}</text>`;
+  });
+  const base = (rows - 1) * rowH + 138, ya = base + 38, xa = left, xb = left + (per - 1) * step, mid = (xa + xb) / 2;
+  let lab = doc ? "PROJECT · " + String(doc.name || "Untitled").toUpperCase() : "NO PROJECT OPEN";
+  const maxc = mob ? 28 : 44;
+  if (lab.length > maxc) lab = lab.slice(0, maxc - 1) + "…";
+  const half = Math.min(lab.length * 3.4 + 10, (xb - xa) / 2 - 10), fs = mob ? 13 : 12;
+  g += `<line x1="${xa}" y1="${base + 6}" x2="${xa}" y2="${base + 46}" stroke="${ORG}" stroke-width="1"/><line x1="${xa - 6}" y1="${base + 44}" x2="${xa + 6}" y2="${base + 32}" stroke="${ORG}" stroke-width="2"/>`;
+  g += `<line x1="${xb}" y1="${base + 6}" x2="${xb}" y2="${base + 46}" stroke="${ORG}" stroke-width="1"/><line x1="${xb - 6}" y1="${base + 44}" x2="${xb + 6}" y2="${base + 32}" stroke="${ORG}" stroke-width="2"/>`;
+  g += `<line x1="${xa - 10}" y1="${ya}" x2="${mid - half}" y2="${ya}" stroke="${ORG}" stroke-width="1.2"/><line x1="${mid + half}" y1="${ya}" x2="${xb + 10}" y2="${ya}" stroke="${ORG}" stroke-width="1.2"/>`;
+  g += `<text x="${mid}" y="${ya + 4.3}" class="rc" font-size="${fs}" text-anchor="middle" letter-spacing=".06em" fill="${ORG}">${esc(lab)}</text>`;
+  const aria = "Tool pipeline. " + words.join(", ") + ". " + (doc ? "Project " + String(doc.name || "Untitled") : "No project open") + ".";
+  return `<svg viewBox="0 0 ${W} ${base + 56}" role="img" aria-label="${esc(aria)}">${g}</svg>`;
+}
+
+const hexSvg = (txt, on) => `<svg class="hx" viewBox="0 0 26 20" aria-hidden="true"><path d="M1.5,10 L7,1.5 L19,1.5 L24.5,10 L19,18.5 L7,18.5 Z" fill="${on ? INK : "#fff"}" stroke="${INK}" stroke-width="1.2"/><text x="13" y="13.6" text-anchor="middle" font-size="10" fill="${on ? "#fff" : INK}">${txt}</text></svg>`;
+
+function frameText(doc) {
+  if (!doc) return "—";
+  const f = doc.frame || {};
+  if (f.kind !== "site") return "LOCAL";
+  const p = ["SITE"], n = (v) => (Number.isFinite(v) ? v.toFixed(3) : "");
+  if (n(f.lat) && n(f.lon)) p.push(n(f.lat) + ", " + n(f.lon));
+  if (Number.isFinite(f.size)) p.push(f.size.toLocaleString("en-US") + " FT");
+  return p.join(" · ");
+}
+
+/* ---------- page state and drawing ---------- */
+let store = null, shown = [], openId = "", openDoc = null, confirmId = "";
+
+function row(p, i) {
+  const on = p.id === openId, nm = p.name || "Untitled", tr = h("tr", { "data-id": p.id, class: on ? "on" : null });
+  const mark = h("td", { class: "mk" });
+  mark.innerHTML = hexSvg("P" + (i + 1), on);
+  if (p.id === confirmId) {
+    tr.className = "askr";
+    const box = h("div", { class: "askrow" }, h("span", { class: "nm" }, nm), h("span", { class: "q" }, "Delete?"),
+      h("button", { type: "button", class: "stamp", "data-act": "yes", "aria-label": "Yes, delete " + nm }, "Yes, delete"),
+      h("button", { type: "button", class: "stamp ink", "data-act": "keep", "aria-label": "Keep " + nm }, "Keep"));
+    tr.append(h("td", { class: "mk" }), h("td", { class: "ask", colspan: "4" }, box));
+    tr.firstChild.innerHTML = hexSvg("P" + (i + 1), true);
+    return tr;
+  }
+  tr.append(mark,
+    h("td", { class: "pj" }, h("button", { type: "button", class: "pk", "data-act": "pick", "aria-pressed": String(on) }, nm)),
+    h("td", {}, shortDate(p.updatedAt) || "unknown", h("span", { class: "tm" }, " " + shortTime(p.updatedAt))),
+    h("td", {}, fmtKB(p.bytes)),
+    h("td", {}, on ? h("span", { class: "opn" }, "Open") : ""));
+  return tr;
+}
+function focusRow(f) {
+  if (f.sel) { const e = $(f.sel); if (e && !e.disabled) e.focus(); return; }
+  const tr = [...document.querySelectorAll("#list tr")].find((x) => x.dataset.id === f.id);
+  const el = tr && (tr.querySelector('[data-act="' + (f.act || "pick") + '"]') || tr.querySelector("[data-act]"));
+  if (el) el.focus();
+}
+function renderTools() {
+  const hint = $("#open"), d = openDoc;
+  hint.replaceChildren();
+  if (d) hint.append("Open project:", h("strong", {}, d.name), h("button", { class: "link", id: "closeBtn", type: "button" }, "Close"));
+  else hint.append(openId ? "The open project could not be read. Each tool opens on its own." : "No project is open. Each tool opens on its own.");
+  let withData = 0;
+  document.querySelectorAll("li.tool[data-section]").forEach((card) => {
+    card.querySelectorAll("a[data-base]").forEach((a) => a.setAttribute("href", a.dataset.base + (d ? "?project=" + encodeURIComponent(d.id) : "")));
+    if (card.classList.contains("plan")) return;   // planned cards stay as written
+    const s = d ? statusFor(d, card.dataset.section) : { text: "", cls: "" };
+    card.querySelector(".stl").textContent = s.text;
+    card.classList.toggle("warn", s.cls === "warn");
+    if (s.cls === "data") withData++;
+  });
+  const so = $("#siteOpen");
+  so.textContent = d ? "Open with project" : "Open";
+  so.setAttribute("aria-label", (d ? "Open with project" : "Open") + ", Site Model");
+  $("#toolSub").textContent = d ? withData + " of 8 with data" : "No project open";
+  $("#plD").innerHTML = pipeSvg(d, false);
+  $("#plM").innerHTML = pipeSvg(d, true);
+  $("#tbName").textContent = d ? d.name : "—";
+  $("#tbFrame").textContent = frameText(d);
+  $("#tbUpd").textContent = d ? shortDate(d.updatedAt) || "—" : "—";
+}
+function renderDate() {
+  const n = new Date();
+  $("#date").textContent = n.toLocaleDateString("en-US", { weekday: "long" }).toUpperCase() + " · " + pad2(n.getMonth() + 1) + "-" + pad2(n.getDate()) + "-" + pad2(n.getFullYear() % 100);
+}
+function render(f) {
+  if (!f) { const a = document.activeElement, tr = a && a.closest && a.closest("#list tr"); if (tr) f = { id: tr.dataset.id, act: a.dataset.act }; }
+  shown = store ? loadList(store) : [];
+  openId = store ? pickOpen(shown, getLast(store)) : "";
+  if (!shown.some((p) => p.id === confirmId) || confirmId !== openId) confirmId = "";
+  openDoc = null;
+  if (openId) { try { openDoc = Project.loadProject(store, openId, opts); } catch (e) { openDoc = null; } }
+  $("#list").replaceChildren(...shown.map(row));
+  $("#empty").hidden = !store || shown.length > 0;
+  const n = shown.length;
+  $("#sum").textContent = n + (n === 1 ? " project" : " projects") + " · " + fmtKB(shown.reduce((t, p) => t + (Number(p.bytes) || 0), 0));
+  $("#expBtn").disabled = !store || !openId;
+  $("#delBtn").disabled = !store || !openId || !!confirmId;
+  renderDate();
+  renderTools();
+  if (f) focusRow(f);
+}
+
+/* ---------- events ---------- */
+function exportOne(id) {
+  try {
+    const doc = Project.loadProject(store, id, opts);
+    if (!doc) throw new Error("not found");
+    const { filename, blob } = Project.exportProject(doc);
+    const url = URL.createObjectURL(blob), a = h("a", { href: url, download: filename });
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    say("Downloaded " + filename + ".");
+  } catch (e) { say("The project could not be exported.", true); }
+}
+function removeOne(id) {
+  const p = shown.find((x) => x.id === id);
+  try { removeProject(store, id); } catch (e) { say("The project could not be deleted.", true); return; }
+  confirmId = "";
+  say("Deleted " + ((p && p.name) || "the project") + ".");
+  render();
+  $("#newBtn").focus();
+}
+$("#list").addEventListener("click", (e) => {
+  const tr = e.target.closest("tr[data-id]");
+  if (!tr || !store) return;
+  const b = e.target.closest("button[data-act]"), id = tr.dataset.id, a = b ? b.dataset.act : "pick";
+  if (!b && tr.classList.contains("askr")) return;
+  if (a === "pick") { confirmId = ""; if (!setLast(store, id)) $("#notice").hidden = false; say(""); render({ id }); }
+  else if (a === "keep") { confirmId = ""; render({ sel: "#delBtn" }); }
+  else if (a === "yes") removeOne(id);
+});
+$("#expBtn").addEventListener("click", () => { if (store && openId) exportOne(openId); });
+$("#delBtn").addEventListener("click", () => { if (store && openId) { confirmId = openId; render({ id: openId, act: "keep" }); } });
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && confirmId) { confirmId = ""; render({ sel: "#delBtn" }); }
+});
+$("#open").addEventListener("click", (e) => {
+  if (e.target.id !== "closeBtn" || !store) return;
+  setLast(store, "");
+  say("");
+  render();
+  $("#newBtn").focus();
+});
+
+const closeForm = () => { $("#newForm").hidden = true; $("#newBtn").setAttribute("aria-expanded", "false"); $("#newBtn").focus(); };
+$("#newBtn").addEventListener("click", () => {
+  const f = $("#newForm"), show = f.hidden;
+  f.hidden = !show;
+  $("#newBtn").setAttribute("aria-expanded", String(show));
+  if (show) { $("#newName").value = ""; $("#newName").focus(); }
+});
+$("#newCancel").addEventListener("click", closeForm);
+$("#newForm").addEventListener("keydown", (e) => { if (e.key === "Escape") closeForm(); });
+$("#newForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const name = $("#newName").value.trim();
+  if (!name) { say("Enter a name for the project.", true); $("#newName").focus(); return; }
+  try {
+    const { doc, warning } = createProject(store, name);
+    $("#newForm").hidden = true;
+    $("#newBtn").setAttribute("aria-expanded", "false");
+    say("Created " + doc.name + "." + (warning ? " " + warning : ""));
+    render({ id: doc.id });
+  } catch (err) { say((err && err.message) || "The project could not be saved.", true); }
+});
+
+$("#impBtn").addEventListener("click", () => $("#file").click());
+$("#file").addEventListener("change", async (e) => {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  try {
+    const r = await importFile(store, f);
+    say((r.renamed ? "Imported as " + r.doc.name + "." : "Imported " + r.doc.name + ".") + (r.warning ? " " + r.warning : ""));
+  } catch (err) { say("The file could not be imported. " + ((err && err.message) || ""), true); }
+  e.target.value = "";
+  render();
+});
+
+/* ---------- self-test: add ?test to the URL ---------- */
+async function selfTest() {
+  const out = $("#testOut"), mem = memStore();   // every check uses this object; real localStorage is never used
+  let pass = 0, fail = 0, A, B;
+  const ok = (c, m) => { if (!c) throw new Error(m); };
+  const t = async (name, fn) => {
+    try { await fn(); pass++; out.textContent += "PASS  " + name + "\n"; }
+    catch (e) { fail++; out.textContent += "FAIL  " + name + " - " + ((e && e.message) || e) + "\n"; }
+  };
+  out.hidden = false;
+  out.textContent = "Self-test, in-memory storage\n";
+  await t("module exports the functions this page calls", () => {
+    for (const n of ["newProject", "validate", "getSection", "writeSection", "listProjects", "loadProject", "saveProject", "deleteProject", "exportProject", "importProject"]) ok(typeof Project[n] === "function", n + " is missing");
+  });
+  await t("create and validate", () => {
+    A = Project.newProject({ name: "Test A" });
+    ok(A.id && A.name === "Test A", "id or name missing");
+    ok(Project.validate(A).ok, "validate rejected it");
+  });
+  await t("save and list", () => {
+    ok(Project.saveProject(mem, A).ok !== false, "save failed");
+    const l = loadList(mem);
+    ok(l.length === 1 && l[0].id === A.id && l[0].name === "Test A" && l[0].bytes > 0, "list entry is wrong");
+  });
+  await t("list is newest first", () => {
+    B = createProject(mem, "Test B").doc;
+    const l = Project.listProjects(mem);
+    ok(l.length === 2, "expected 2 entries, got " + l.length);
+    ok(Date.parse(l[0].updatedAt) >= Date.parse(l[1].updatedAt), "not newest first");
+  });
+  await t("select opens a project", () => {
+    const l = loadList(mem);
+    ok(pickOpen(l, getLast(mem)) === B.id, "a new project should be open");
+    ok(setLast(mem, A.id) && pickOpen(l, getLast(mem)) === A.id, "selected project is not open");
+    ok(pickOpen(l, "missing-id") === "", "unknown id should open nothing");
+  });
+  await t("section status labels", () => {
+    ok(statusFor(A, "site").text === "Empty", "absent section should read Empty");
+    const w = (k, o) => { const r = Project.writeSection(A, k, Object.assign({ tool: k, schema: 1, placement: { x: 0, y: 0, rotation: 0, baseZ: 0 }, state: {}, derived: {} }, o)); if (r && r.format) A = r; };
+    w("site", { state: { query: "x" } });
+    w("plates", { tool: "plate" });
+    w("massing", { tool: "tower", schema: 2, state: { a: 1 } });
+    ok(/^Has data · /.test(statusFor(A, "site").text), "site reads " + statusFor(A, "site").text);
+    ok(statusFor(A, "plates").text === "Empty", "empty halves should read Empty");
+    ok(statusFor(A, "massing").text === "Newer version", "schema 2 should read Newer version");
+    ok(fmtKB(512) === "0.5 KB" && fmtKB(319488) === "312 KB", "size format");
+  });
+  await t("export, then import a renamed copy", async () => {
+    Project.saveProject(mem, A);
+    const x = Project.exportProject(A);
+    ok(/\.cmrlm\.json$/.test(x.filename) && x.blob.size > 0, "export gave " + x.filename);
+    const r = await importFile(mem, new File([x.blob], x.filename, { type: "application/json" }));
+    ok(r.renamed && r.doc.id !== A.id, "renamed flag or new id missing");
+    ok(r.doc.name === "Test A (2)", "name is " + r.doc.name);
+    ok(loadList(mem).some((p) => p.id === r.doc.id) && getLast(mem) === r.doc.id, "copy is not stored and open");
+  });
+  await t("import rejects a file that is not a project", async () => {
+    let failed = false;
+    try { await importFile(mem, new File(['{"hello":1}'], "bad.json", { type: "application/json" })); } catch (e) { failed = true; }
+    ok(failed, "bad file was accepted");
+  });
+  await t("delete removes the project and clears the open id", () => {
+    const n = loadList(mem).length;
+    setLast(mem, B.id);
+    removeProject(mem, B.id);
+    ok(loadList(mem).length === n - 1 && !loadList(mem).some((p) => p.id === B.id), "project is still listed");
+    ok(getLast(mem) === "", "open id was not cleared");
+    ok(Project.loadProject(mem, B.id) === null, "loadProject should return null");
+  });
+  await t("blocked storage is detected", () => {
+    ok(probe(() => mem) === mem, "memory store rejected");
+    ok(probe(() => { throw new Error("blocked"); }) === null, "throwing getter accepted");
+    ok(probe(() => ({ getItem() { throw new Error("blocked"); } })) === null, "throwing getItem accepted");
+  });
+  out.textContent += "\n" + pass + " passed, " + fail + " failed\n";
+  out.dataset.fail = fail;
+  out.dataset.done = "1";
+}
+
+/* ---------- start ---------- */
+// Test mode only: two sample projects in the in-memory store so the page has something to show.
+function seedSamples(s) {
+  try {
+    Project.saveProject(s, Project.newProject({ name: "Local study" }), opts);
+    let B = Project.newProject({ name: "Ravinia test site", frame: { kind: "site", lat: 33.927, lon: -84.339, size: 1000 } });
+    B = Project.writeSection(B, "site", { tool: "site", schema: 1, state: { query: "Ravinia" }, derived: { ok: 1 } });
+    B = Project.writeSection(B, "massing", { tool: "tower", schema: 1, state: { floors: 12 }, derived: { gfa: 120000 } });
+    Project.saveProject(s, B, opts);
+    setLast(s, B.id);
+  } catch (e) { /* the page still works without samples */ }
+}
+const TEST = new URLSearchParams(location.search).has("test");
+store = TEST ? memStore() : probe(() => localStorage);   // test mode never touches real storage
+if (TEST) { $("#testNote").hidden = false; $("#testBox").hidden = false; seedSamples(store); }
+if (store) $("#newBtn").disabled = $("#impBtn").disabled = false;
+else $("#notice").hidden = false;
+render();
+addEventListener("pageshow", (e) => { if (e.persisted) render(); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden) render(); });
+addEventListener("storage", (e) => { if (!document.hidden && (!e.key || e.key.startsWith("cmrlm.project."))) render(); });
+if (TEST) selfTest();
+</script>
 </body>
 </html>
