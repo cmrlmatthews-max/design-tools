@@ -194,7 +194,8 @@ Shared types:
 ```
 
 - `nrsf` is net rentable square feet. `gsf` is gross square feet. `efficiency` = nrsf / gsf.
-- `bay.from` and `bay.to` are distances in feet along the corridor spine, from its first point.
+- `bay.from` and `bay.to` are distances in feet along the facade ring that the unit faces, counter-clockwise from the ring's first vertex. An optional `ring` on the unit names that ring: 0 = the outer ring, k = hole ring k.
+- Optional keys the Plate Planner also writes (see `docs/plate-planner-notes.md`, section 9): `massingUpdatedAt` on `derived`; `support: [{ id, outer, kind }]` on each level; `demising` (the two cut lines) on each unit.
 - `exposures` lists the compass sides of the unit with a facade, in the local frame after the massing rotation. The Facade Studio and the Egress Sketch read `units`, `corridor`, and `core`.
 
 ### 6.4 `parking.derived` (writer: Parking Deck)
