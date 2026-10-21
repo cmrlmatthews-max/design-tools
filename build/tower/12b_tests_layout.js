@@ -194,9 +194,11 @@ async function runLayoutTests() {
 async function runAllTests() {
   const base = await runTests();
   const layout = await runLayoutTests();
-  const all = [...(base.results || []), ...layout];
+  const select = await runSelectTests();
+  const all = [...(base.results || []), ...layout, ...select];
   const failed = all.filter((r) => !r.ok);
   console.log(`[tests] layout ${layout.length - layout.filter((r) => !r.ok).length}/${layout.length} passed`, layout.filter((r) => !r.ok).length ? JSON.stringify(layout.filter((r) => !r.ok)) : '');
+  console.log(`[tests] select ${select.length - select.filter((r) => !r.ok).length}/${select.length} passed`, select.filter((r) => !r.ok).length ? JSON.stringify(select.filter((r) => !r.ok)) : '');
   window.__towerTestResults = { total: all.length, passed: all.length - failed.length, failed, results: all };
   return window.__towerTestResults;
 }

@@ -45,14 +45,19 @@ MODS = {
     'prompts': ('PromptsMod', PROMPTS_SRC, ['PROMPT_LIBRARY_VERSION', 'PROMPT_FIELDS', 'FORM_LOCK', 'PROMPTS', 'fillPrompt'], None),
     'testcases': ('TestCasesMod', f'{SRC}/tower/testcases.js', ['TEST_CASES'],
                   ("import { PROGRAM_DEFAULTS } from './presets.js';", 'const { PROGRAM_DEFAULTS } = PresetsMod;')),
+    # v1.1 snapping. Must be placed (//@@MODULE snap@@) after the Env and Geo modules, which it reads at load time.
+    'snap': ('SnapMod', f'{SRC}/tower/snap.js', ['collectSnapTargets', 'snapMove', 'snapEdge', 'snapLength', 'itemBox'],
+             [('import { allowedFootprint } from "./envelope.js";', 'const { allowedFootprint } = Env;'),
+              ('import { shapeToRing } from "./geometry.js";', 'const { shapeToRing } = Geo;')]),
 }
 
 def wrap(key):
     name, path, exports, imp = MODS[key]
     src = rd(path)
     if imp:
-        assert imp[0] in src, key
-        src = src.replace(imp[0], imp[1])
+        for a, b in (imp if isinstance(imp, list) else [imp]):
+            assert a in src, (key, a)
+            src = src.replace(a, b)
     src = re.sub(r'^export\s+', '', src, flags=re.M)
     assert 'import ' not in re.sub(r'//.*', '', src).replace('/*', '').split('\n')[0] or True
     return f'const {name} = (() => {{\n{src}\nreturn {{ {", ".join(exports)} }};\n}})();\n'
@@ -87,6 +92,7 @@ js = ''.join([
     part('04_geometry.js'), '\n',
     part('05_envelope.js'), '\n',
     part('06_render.js'), '\n',
+    part('06b_select.js'), '\n',
     part('07_controls.js'), '\n',
     part('08_ui.js'), '\n',
     part('08b_prompts.js'), '\n',
@@ -95,6 +101,7 @@ js = ''.join([
     part('11_compare.js'), '\n',
     part('12_tests.js'), '\n',
     part('12b_tests_layout.js'), '\n',
+    part('12c_tests_select.js'), '\n',
     part('13_start.js'),
 ])
 

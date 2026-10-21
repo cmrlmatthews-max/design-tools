@@ -9,6 +9,7 @@ Prompts.init();
 Compare.init();
 Options.syncDirty();
 if (!Render.init(document.getElementById('canvasHost'))) Store.subscribe(() => UI.updateHud(Derived.get()));
+Select.init();
 
 const optionInfo = (o) => ({ id: o.id, name: o.name, updatedAt: o.updatedAt });
 window.__tower = {
@@ -63,6 +64,20 @@ window.__tower = {
   setTab: (id) => UI.setTab(id),
   getTab: () => UI.activeTab(),
   setSnap: (patch) => Store.set('view.snap', { ...(Store.get('view.snap') || {}), ...patch }, { live: false }),
+  // v1.1 direct editing (the same functions the clicks, the selection card and the handles call)
+  select: (items) => Select.select(items),
+  getSelection: () => Select.get(),
+  clearSelection: () => Select.clear(),
+  copySegment: (index, where) => Select.copySegment(index, where),
+  deleteSelection: () => Select.deleteSelection(),
+  pickAt: (x, y) => Select.pickAt(x, y),                      // client px -> item | null
+  screenPointFor: (item) => Select.screenPointFor(item),      // a client point where that item can be picked
+  visibleHandles: () => Select.visibleHandles(),
+  // Runs the handle-drag math without pointer events. ('move-x', dx) ('move-y', 0, dy) ('width', dx) ('depth', 0, dy) ('top', 0, dz);
+  // opts { alt, hold }. hold keeps the drag open (guides and label stay) until releaseHandleDrag().
+  simulateHandleDrag: (id, a, b, opts) => Select.simulateHandleDrag(id, a, b, opts),
+  releaseHandleDrag: () => Select.releaseHandleDrag(),
+  getDrag: () => ({ active: Select.dragging(), last: Select.lastDrag(), overlay: Select.overlayInfo(), orbit: Render.orbitEnabled() }),
 };
 if (TEST_MODE) {
   runAllTests().then((r) => {

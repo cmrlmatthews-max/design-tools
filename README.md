@@ -7,7 +7,7 @@ A small toolkit of browser-based design tools for early-stage architectural work
 | Tool | Path | Status |
 |---|---|---|
 | Menu page | `index.html` | Links to each tool |
-| Tower Generator | `tower/index.html` | Version 1: all form controls, site envelope, live metrics, presets, saved options, compare view, screenshots |
+| Tower Generator | `tower/index.html` | Version 1.1: click-to-select, 3D handles with snapping, copy segment, form controls, site envelope, live metrics, presets, saved options, compare view, screenshots, AI prompt library |
 
 ## Folders
 

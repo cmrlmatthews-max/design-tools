@@ -44,6 +44,8 @@ const Render = (() => {
 
   let host, renderer, scene, persp, ortho, cam, camType = 'persp', controls;
   let ground, shadowPlane, gridMesh, figure, sun, hemi;
+  let selOverlay = null;                   // v1.1: selection outline, carve outlines and snap guides (Select draws into it; never captured or saved)
+  const frameListeners = [];            // v1.1: called once per drawn frame, just before the render (handles follow the camera)
   let layers = null;                    // { model, context, envelope } each { group, key }
   let derived = null;
   let needsRender = true, tween = null, preset = null, refitPending = false, capturing = false, envSeen = null;
@@ -186,6 +188,10 @@ const Render = (() => {
     figure.add(body, head);
     figure.traverse((o) => { if (o.isMesh) o.castShadow = true; });
     scene.add(figure);
+
+    selOverlay = new THREE.Group();
+    selOverlay.renderOrder = 10;
+    scene.add(selOverlay);
 
     layers = {};
     for (const id of ['model', 'context', 'envelope']) {
@@ -672,6 +678,7 @@ const Render = (() => {
     const list = entries.map((e, i) => ({ ...e, uid: `${i}:${e.uid || e.name}`, group: null }));
     cmp = { entries: list, key: null, reserve, bounds: combineBounds(list.map((e) => e.d)) };
     layers.model.group.visible = layers.context.group.visible = layers.envelope.group.visible = false;
+    selOverlay.visible = false;
     figure.visible = false;
     applyViewOffset();
     syncCompare();
@@ -684,6 +691,7 @@ const Render = (() => {
     for (const e of cmp.entries) if (e.group) { clearGroup(e.group); scene.remove(e.group); }
     cmp = null;
     layers.model.group.visible = layers.context.group.visible = layers.envelope.group.visible = true;
+    selOverlay.visible = true;
     resetLayers();
     viewVersion = -1;
     if (!quiet) { applyViewOffset(); setCamAspect(hostAspect()); if (preset) setView(preset, false); needsRender = true; }
@@ -720,13 +728,18 @@ const Render = (() => {
     if (rebuildNotified !== d) { rebuildNotified = d; rebuildListeners.forEach((fn) => fn(d)); }
     if (refitPending && !Store.gestureActive()) { refitPending = false; if (preset) setView(preset, true); }
     if (viewVersion !== Store.version()) { viewVersion = Store.version(); applyView(); }
-    if (moved || needsRender) { updateClip(); renderer.render(scene, cam); needsRender = false; }
+    if (moved || needsRender) {
+      for (const fn of frameListeners) { try { fn(); } catch (e) { console.error(e); } }
+      updateClip(); renderer.render(scene, cam); needsRender = false;
+    }
   }
 
   /** Screenshot of what is on screen (main or compare). The HUD inset is removed so the model is centred. */
   async function capture(overlay, scale = 2) {
     if (!renderer) throw new Error('The 3D view is not available.');
     capturing = true;
+    const overlayWas = selOverlay.visible;
+    selOverlay.visible = false;
     try {
       for (const c of [persp, ortho]) c.clearViewOffset();
       return await ShotMod.captureView({
@@ -735,6 +748,7 @@ const Render = (() => {
       });
     } finally {
       capturing = false;
+      selOverlay.visible = overlayWas && !cmp;
       applyViewOffset();
       needsRender = true;
     }
@@ -782,6 +796,8 @@ const Render = (() => {
       viewVersion = -1;
     };
     capturing = true;
+    const overlayWas = selOverlay.visible;
+    selOverlay.visible = false;
     let pending;
     try {
       // captureView draws and copies the frame before its first await, so the scene can be put back straight away.
@@ -796,6 +812,7 @@ const Render = (() => {
       } finally { restore(); }
     } finally {
       capturing = false;
+      selOverlay.visible = overlayWas;
       applyViewOffset();
       needsRender = true;
     }
@@ -864,5 +881,13 @@ const Render = (() => {
     info: () => ({ camera: camType, preset, meshes: layers ? layers.model.group.children.length : 0, tweening: !!tween, distance: cam ? cam.position.distanceTo(controls.target) : 0, zoom: cam ? cam.zoom : 0, compare: !!cmp, drawQuality: derived ? Derived.display(Store.gestureActive() && !Store.gesturePath().startsWith('view')).quality : null }),
     ready: () => !!renderer,
     comparing: () => !!cmp,
+    // v1.1 hooks for direct editing (Select): the camera, the orbit controls, the overlay group and a per-frame callback
+    overlayGroup: () => selOverlay,
+    onFrame: (fn) => frameListeners.push(fn),
+    camera: () => cam,
+    cameraType: () => camType,
+    canvas: () => (renderer ? renderer.domElement : null),
+    setOrbitEnabled: (on) => { if (controls) { controls.enabled = !!on; if (!on) tween = null; } },
+    orbitEnabled: () => !!controls && controls.enabled,
   };
 })();
