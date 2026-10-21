@@ -217,6 +217,13 @@ Shared types:
 }
 ```
 
+Optional keys (added with the Parking Deck Generator, October 21, 2026):
+
+- On each level: `"cores": [ { "id": "S1", "kind": "stair" | "elevator", "outer": Ring } ]` and `"clearHeight": 8.0` (the lowest clear height on the level, ft).
+- On each stall: `"evReady": true`.
+- In `metrics`: `"accessible": { "required", "provided", "van" }`, `"ev": { "installed", "ready" }`, `"bike": { "required", "areaSf" }`, `"conflicts": 0`.
+- `index` 1 is the lowest parking level. `z` is relative to `baseZ`.
+
 ### 6.5 `facade.derived` (writer: Facade Studio)
 
 ```jsonc
