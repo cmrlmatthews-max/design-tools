@@ -26,6 +26,9 @@ MODS = {
     'sketchupFormat': ('SkFmt', 'shared/sketchup-format.js'),
     'sketchup': ('SkSite', 'site/sketchup.js'),
     'screenshot': ('ShotMod', 'shared/screenshot.js'),
+    # Project file (docs/project-file-spec.md). derived.js imports cleanRing2, so its marker comes after sketchupFormat.
+    'project': ('ProjectMod', 'shared/project.js'),
+    'derived': ('SiteDerivedMod', 'site/derived.js'),
 }
 BY_FILE = {os.path.basename(p): g for g, p in MODS.values()}
 
@@ -41,6 +44,8 @@ def rd(p):
 
 def wrap(key):
     name, rel = MODS[key]
+    if not os.path.isfile(os.path.join(SRC, rel)):
+        raise SystemExit('missing module: src/' + rel)
     src = rd(os.path.join(SRC, rel))
     exports = EXPORT_RE.findall(src)
     if not exports:
