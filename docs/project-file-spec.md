@@ -154,7 +154,8 @@ Shared types:
       "program": "retail",
       "plates": MultiPoly,            // the floor plate (several pieces allowed)
       "core": Ring | null,            // the core rectangle, or null
-      "spines": [ [[x, y], [x, y]], … ] | []   // corridor centerlines; bars give them, the tower leaves []
+      "spines": [ [[x, y], [x, y]], … ] | [],  // corridor centerlines; bars give them, the tower leaves []
+      "seeds": [ { "kind": "stair" | "exterior-stair" | "elevator", "outer": Ring } ] | []   // optional starting blocks for the Plate Planner
     }
   ],
   "context": { "blocks": [ { "x": 0, "y": -180, "w": 200, "d": 120, "h": 60 } ] },   // the neighbor blocks the tool shows
@@ -166,6 +167,7 @@ Shared types:
 - A void floor (full carve) is written with `plates: []`.
 - The Tower Generator needs one new pure function, `towerDerived(state, built)` in `src/tower/derived.js`, that maps `buildPlates(state)` plates to this shape. The Mid-Rise Generator writes the same shape from its own geometry.
 - `metrics.units` repeats the tool's unit estimate. The Plate Planner replaces it with a real count.
+- `seeds` is optional. The Mid-Rise Generator writes its stair and elevator blocks here. The tower writes `[]` or omits the key. The Plate Planner reads them as a starting core and may move or delete them.
 
 ### 6.3 `plates.derived` (writer: Plate Planner)
 
