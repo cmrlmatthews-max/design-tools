@@ -165,6 +165,7 @@ Shared types:
 
 - Zones `podium`, `tower`, `mechanical`, and `crown` come from the Tower Generator (`buildPlates` plates plus the crown). Zones `bar` and `deck` come from the Mid-Rise Generator. A crown level has `ftf` = the crown height and its plates = the crown footprint.
 - A void floor (full carve) is written with `plates: []`.
+- `index` is an id in list order, not an elevation order. The Mid-Rise Generator lists podium levels, then bar floors, then deck levels (deck indices come after the building levels). A reader that needs elevation order sorts by `z`.
 - The Tower Generator needs one new pure function, `towerDerived(state, built)` in `src/tower/derived.js`, that maps `buildPlates(state)` plates to this shape. The Mid-Rise Generator writes the same shape from its own geometry.
 - `metrics.units` repeats the tool's unit estimate. The Plate Planner replaces it with a real count.
 - `seeds` is optional. The Mid-Rise Generator writes its stair and elevator blocks here. The tower writes `[]` or omits the key. The Plate Planner reads them as a starting core and may move or delete them.
