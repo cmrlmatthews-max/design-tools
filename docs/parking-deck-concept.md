@@ -372,6 +372,11 @@ Haiku fills in the exact values in phase 7. The technical plan computes each exp
 8. **Names:** Generic names only in presets, tests, ids, and notes.
 9. **Project file:** Part of version 1. The tool writes its section and keeps the others unchanged.
 10. **Code values:** Every code-related default lives in an editable table with a Caution line.
+11. **Bays:** 90-degree two-way bays only in version 1. Angled one-way bays are a later version. (October 21, 2026)
+12. **Stall width alignment:** The tool suggests a stall width that aligns the columns with the unit bays. It never changes the width by itself. (October 21, 2026)
+13. **Apartment accessible rule:** The R-2 per-unit rule is on by default for decks under apartments. (October 21, 2026)
+14. **End walls:** The short end walls stay turn zones. No stalls along them by default. (October 21, 2026)
+15. **Compact stalls:** Default share 0 percent. (October 21, 2026)
 
 ---
 
@@ -438,8 +443,4 @@ The project file is the shared JSON file that carries one project between the to
 
 ## 15. Open questions for Cade
 
-1. **Angled parking:** Add 60-degree one-way bays in version 1, or keep 90-degree two-way only?
-2. **Aligned stall width:** When the overlay finds conflicts, should the tool change the stall width by itself, or only suggest it?
-3. **Residential accessible rule:** Turn the R-2 per-unit rule on by default for decks under apartments?
-4. **End stalls:** Park along the short end walls by default, or keep the ends as turn zones only?
-5. **Compact stalls:** Keep the compact share at 0 by default, or does the firm use a typical share?
+All five questions were answered on October 21, 2026. See decisions 11 to 15 in section 12.
