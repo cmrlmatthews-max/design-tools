@@ -1,0 +1,40 @@
+<div class="shell">
+  <header class="topbar" id="topbar">
+    <div class="brand">
+      <span class="wordmark">CMRLM</span>
+      <span class="brand-sep"></span>
+      <h1 class="app-title">Tower Generator</h1>
+    </div>
+    <div class="tb-group" id="tbOption"></div>
+    <input class="name-field" id="optionName" type="text" maxlength="60" spellcheck="false" autocomplete="off" aria-label="Option name">
+    <div class="tb-group" id="tbHistory"></div>
+    <div class="tb-spacer"></div>
+    <div class="tb-group" id="tbActions"></div>
+    <div class="seg" id="styleToggle" role="group" aria-label="Visual style"></div>
+    <div class="btn-split" id="tbShot"></div>
+  </header>
+
+  <main class="app" id="app">
+    <section class="viewport" id="viewport" aria-label="3D view" data-compare="false">
+      <div class="canvas-host" id="canvasHost"></div>
+      <aside class="hud" id="hud" data-collapsed="false" aria-label="Metrics and warnings"></aside>
+      <nav class="views" id="views" aria-label="Preset views"></nav>
+      <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+      <div class="compare" id="compare" hidden>
+        <div class="cmp-bar" id="cmpBar"></div>
+        <div id="cmpLabels"></div>
+        <div class="cmp-table" id="cmpTable"></div>
+      </div>
+    </section>
+
+    <aside class="panel" id="panel" aria-label="Controls">
+      <div class="grabber" id="grabber" role="separator" aria-orientation="horizontal" aria-label="Drag to resize the controls sheet" tabindex="0"><span></span></div>
+      <div class="panel-scroll" id="panelScroll">
+        <div class="panel-title label">Controls</div>
+        <div id="sections"></div>
+      </div>
+    </aside>
+  </main>
+</div>
+<input type="file" id="importFile" accept=".json,application/json" hidden>
+

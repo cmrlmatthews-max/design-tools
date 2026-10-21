@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>shared modules tests</title>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }
+</script>
+<style>
+  body { font: 14px -apple-system, system-ui, sans-serif; margin: 16px; background: #fff; color: #1b1f24; }
+  pre { white-space: pre-wrap; }
+  .fail { color: #b00020; } .pass { color: #176b2c; }
+  img { max-width: 100%; border: 1px solid #ccc; margin-top: 8px; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<h3>shared.test.html</h3>
+<pre id="log"></pre>
+<div id="shots"></div>
+<script type="module">
+import * as THREE from "three";
+import { createStorage, exportFilename, uniqueName } from "../src/shared/storage.js";
+import { captureView, deliverImage, screenshotFilename } from "../src/shared/screenshot.js";
+
+const tests = [];
+const test = (name, fn) => tests.push({ name, fn });
+const assert = (c, msg) => { if (!c) throw new Error(msg || "assertion failed"); };
+const eq = (a, b, msg) => assert(JSON.stringify(a) === JSON.stringify(b), `${msg || "eq"}: got ${JSON.stringify(a)} expected ${JSON.stringify(b)}`);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* in-memory Storage stand-in */
+function memStore(init = {}) {
+  const m = new Map(Object.entries(init));
+  return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => void m.set(k, String(v)), removeItem: (k) => void m.delete(k), _m: m };
+}
+const SCHEMA = 2;
+const mk = (extra = {}) => {
+  const notices = [];
+  const store = extra.storage || memStore();
+  const s = createStorage({ key: "towergen.options.v1", schema: SCHEMA, onNotice: (m) => notices.push(m), debounceMs: 50, storage: store,
+    migrate: (st, from) => ({ ...st, migratedFrom: from }), ...extra });
+  return { s, notices, store };
+};
+const fileOf = (obj, name = "o.json") => new File([typeof obj === "string" ? obj : JSON.stringify(obj)], name, { type: "application/json" });
+const rejects = async (p) => { try { await p; } catch (e) { return e; } throw new Error("expected rejection"); };
+
+/* ====================== storage ====================== */
+
+test("save / list / get", () => {
+  const { s, notices } = mk();
+  const id = s.save({ schema: 2, floors: 40 }, "Alpha");
+  const l = s.list();
+  eq(l.length, 1); eq(l[0].name, "Alpha"); eq(l[0].id, id);
+  eq(s.get(id).state.floors, 40);
+  assert(typeof l[0].createdAt === "number" && typeof l[0].updatedAt === "number", "timestamps");
+  eq(notices.length, 0);
+});
+
+test("get returns a copy, not live data", () => {
+  const { s } = mk();
+  const id = s.save({ schema: 2, a: 1 }, "A");
+  const g = s.get(id); g.state.a = 99;
+  eq(s.get(id).state.a, 1);
+});
+
+test("update and rename", async () => {
+  const { s } = mk();
+  const id = s.save({ schema: 2, floors: 40 }, "Alpha");
+  const t0 = s.get(id).updatedAt;
+  await sleep(5);
+  assert(s.update(id, { schema: 2, floors: 50 }), "update true");
+  assert(s.get(id).state.floors === 50, "state updated");
+  assert(s.get(id).updatedAt > t0, "updatedAt bumped");
+  eq(s.get(id).name, "Alpha");
+  assert(s.rename(id, "Beta"), "rename");
+  eq(s.get(id).name, "Beta");
+  eq(s.update("nope", {}), false);
+});
+
+test("remove", () => {
+  const { s } = mk();
+  const a = s.save({ schema: 2 }, "A"), b = s.save({ schema: 2 }, "B");
+  assert(s.remove(a)); eq(s.list().map((o) => o.name), ["B"]);
+  eq(s.remove(a), false); assert(s.get(b));
+});
+
+test("duplicate renames", () => {
+  const { s } = mk();
+  const id = s.save({ schema: 2, x: [1, 2] }, "Tower");
+  const d1 = s.duplicate(id), d2 = s.duplicate(id), d3 = s.duplicate(id, "Custom");
+  eq(s.get(d1).name, "Tower (2)"); eq(s.get(d2).name, "Tower (3)"); eq(s.get(d3).name, "Custom");
+  eq(s.get(d1).state, s.get(id).state);
+  assert(d1 !== id && s.get(d1).id === d1, "new id");
+  eq(s.duplicate("missing"), null);
+});
+
+test("persists across instances (same key)", () => {
+  const store = memStore();
+  const a = mk({ storage: store }).s; a.save({ schema: 2, n: 1 }, "Persisted");
+  const b = mk({ storage: store }).s;
+  eq(b.list().map((o) => o.name), ["Persisted"]);
+  const parsed = JSON.parse(store.getItem("towergen.options.v1"));
+  eq(parsed.schema, SCHEMA); assert(Array.isArray(parsed.options) && "current" in parsed, "blob shape");
+});
+
+test("works against real localStorage", () => {
+  const key = "towergen.test." + Math.random();
+  const s = createStorage({ key, schema: SCHEMA });
+  const id = s.save({ schema: 2, ok: true }, "Real");
+  const s2 = createStorage({ key, schema: SCHEMA });
+  eq(s2.get(id).state.ok, true);
+  localStorage.removeItem(key);
+});
+
+test("autosave is debounced and loadAutosave reads it", async () => {
+  const store = memStore();
+  const { s } = mk({ storage: store, debounceMs: 80 });
+  s.autosave({ schema: 2, v: 1 }); s.autosave({ schema: 2, v: 2 }); s.autosave({ schema: 2, v: 3 });
+  assert(store.getItem("towergen.options.v1") === null, "nothing written yet");
+  eq(s.loadAutosave().v, 3, "pending visible");
+  await sleep(150);
+  eq(JSON.parse(store.getItem("towergen.options.v1")).current.state.v, 3);
+  eq(mk({ storage: store }).s.loadAutosave().v, 3);
+  eq(mk().s.loadAutosave(), null);
+});
+
+test("autosave default delay is 1 s", async () => {
+  const store = memStore();
+  const s = createStorage({ key: "k", schema: 2, storage: store });
+  s.autosave({ schema: 2, v: 1 });
+  await sleep(600);
+  assert(store.getItem("k") === null, "not written at 0.6 s");
+  await sleep(700);
+  assert(store.getItem("k") !== null, "written by 1.3 s");
+});
+
+test("flush writes immediately", () => {
+  const store = memStore(); const { s } = mk({ storage: store });
+  s.autosave({ schema: 2, v: 7 }); s.flush();
+  eq(JSON.parse(store.getItem("towergen.options.v1")).current.state.v, 7);
+});
+
+test("migrate runs on load when state.schema < schema", () => {
+  const store = memStore({ "towergen.options.v1": JSON.stringify({ schema: 1, options: [{ id: "a", name: "Old", createdAt: 1, updatedAt: 2, state: { schema: 1, h: 5 } }], current: { state: { schema: 1, h: 6 }, updatedAt: 3 } }) });
+  const { s, notices } = mk({ storage: store });
+  const o = s.get("a");
+  eq(o.state.migratedFrom, 1); eq(o.state.schema, 2); eq(s.loadAutosave().migratedFrom, 1); eq(notices.length, 0);
+});
+
+test("migrate not run for current-schema states", () => {
+  const { s } = mk(); const id = s.save({ schema: 2, h: 1 }, "New");
+  assert(!("migratedFrom" in s.get(id).state), "not migrated");
+});
+
+test("export + filename", async () => {
+  const { s } = mk(); s.save({ schema: 2, a: 1 }, "A");
+  const b = s.exportAll();
+  eq(b.type, "application/json");
+  const j = JSON.parse(await b.text());
+  eq(j.schema, 2); eq(j.options.length, 1); eq(j.options[0].name, "A");
+  eq(exportFilename(new Date(2026, 9, 5)), "towergen-options-2026-10-05.json");
+  assert(/^towergen-options-\d{4}-\d{2}-\d{2}\.json$/.test(s.exportFilename()), "method");
+});
+
+test("import appends and renames collisions", async () => {
+  const src = mk().s; src.save({ schema: 2, n: 1 }, "Tower"); src.save({ schema: 2, n: 2 }, "Tower"); src.save({ schema: 2, n: 3 }, "Other");
+  const file = new File([src.exportAll()], "x.json");
+  const { s } = mk(); s.save({ schema: 2, n: 0 }, "Tower"); s.save({ schema: 2, n: 0 }, "Tower (2)");
+  const r = await s.importFile(file);
+  eq(r, { added: 3, skipped: 0 });
+  const names = s.list().map((o) => o.name).sort();
+  eq(names, ["Other", "Tower", "Tower (2)", "Tower (3)", "Tower (4)"].sort());
+  // importing again must not overwrite or reuse ids
+  const r2 = await s.importFile(file);
+  eq(r2.added, 3); eq(s.list().length, 8); eq(new Set(s.list().map((o) => o.id)).size, 8);
+});
+
+test("import migrates old states and skips bad entries", async () => {
+  const { s } = mk();
+  const r = await s.importFile(fileOf({ schema: 1, options: [{ name: "Good", state: { schema: 1, q: 1 } }, { name: "NoState" }, 7, { name: "Bad", state: "x" }] }));
+  eq(r, { added: 1, skipped: 3 });
+  const o = s.list()[0]; eq(o.state.migratedFrom, 1); eq(o.state.schema, 2); eq(o.name, "Good");
+});
+
+test("import rejects bad files with clear messages", async () => {
+  const { s } = mk(); s.save({ schema: 2 }, "Keep");
+  let e = await rejects(s.importFile(fileOf("not json {")));       assert(/not valid JSON/i.test(e.message), e.message);
+  e = await rejects(s.importFile(fileOf({ hello: 1 })));             assert(/options file/i.test(e.message), e.message);
+  e = await rejects(s.importFile(fileOf([1, 2])));                   assert(/options file/i.test(e.message), e.message);
+  e = await rejects(s.importFile(fileOf({ options: [] })));          assert(/schema/i.test(e.message), e.message);
+  e = await rejects(s.importFile(fileOf({ schema: 99, options: [] }))); assert(/newer version/i.test(e.message), e.message);
+  e = await rejects(s.importFile(fileOf({ schema: 2, options: [{ name: "x" }] }))); assert(/could be used|could not/i.test(e.message) || /None/.test(e.message), e.message);
+  e = await rejects(s.importFile(null));                              assert(/No file/i.test(e.message), e.message);
+  eq(s.list().length, 1, "existing data untouched");
+  eq(await s.importFile(fileOf({ schema: 2, options: [] })), { added: 0, skipped: 0 });
+});
+
+test("uniqueName helper", () => {
+  eq(uniqueName("A", ["A"]), "A (2)"); eq(uniqueName("a", ["A", "a (2)"]), "a (3)"); eq(uniqueName("", []), "Untitled");
+});
+
+test("corrupted storage value recovers", () => {
+  for (const bad of ["{not json", "[]", "null", '{"schema":2}', '{"schema":"x","options":[]}', "42"]) {
+    const store = memStore({ "towergen.options.v1": bad });
+    const { s, notices } = mk({ storage: store });
+    eq(s.list(), [], "empty after " + bad);
+    eq(notices.length, 1, "one notice for " + bad);
+    const id = s.save({ schema: 2, ok: 1 }, "After");        // fully usable, overwrites bad value
+    eq(mk({ storage: store }).s.get(id).name, "After");
+    eq(store.getItem("towergen.options.v1.corrupt"), bad, "backup kept");
+  }
+});
+
+test("corrupted record entries are dropped, good ones kept", () => {
+  const store = memStore({ "towergen.options.v1": JSON.stringify({ schema: 2, options: [null, { id: "g", name: "Good", state: { schema: 2 } }, { id: "b", state: 5 }], current: 3 }) });
+  const { s, notices } = mk({ storage: store });
+  eq(s.list().map((o) => o.name), ["Good"]); eq(s.loadAutosave(), null); eq(notices.length, 0);
+});
+
+test("storage that throws: one notice, still works in memory", () => {
+  const boom = () => { throw new DOMException("blocked", "SecurityError"); };
+  const stub = { getItem: boom, setItem: boom, removeItem: boom };
+  const { s, notices } = mk({ storage: stub });
+  const id = s.save({ schema: 2, v: 1 }, "Mem");
+  s.update(id, { schema: 2, v: 2 });
+  const d = s.duplicate(id);
+  s.autosave({ schema: 2, v: 3 }); s.flush();
+  eq(s.get(id).state.v, 2); eq(s.list().length, 2); eq(s.loadAutosave().v, 3);
+  s.remove(d); eq(s.list().length, 1);
+  eq(notices.length, 1, "exactly one notice"); assert(typeof notices[0] === "string" && notices[0].length > 10, "plain message");
+  assert(s.isPersistent() === false, "isPersistent false");
+});
+
+test("setItem failing later (quota): one notice, data kept in memory", () => {
+  const store = memStore(); let fail = false;
+  const stub = { getItem: (k) => store.getItem(k), setItem: (k, v) => { if (fail) throw new DOMException("full", "QuotaExceededError"); store.setItem(k, v); } };
+  const { s, notices } = mk({ storage: stub });
+  s.save({ schema: 2 }, "One"); eq(notices.length, 0);
+  fail = true;
+  s.save({ schema: 2 }, "Two"); s.save({ schema: 2 }, "Three");
+  eq(s.list().length, 3); eq(notices.length, 1);
+});
+
+test("stored data from a newer app version is preserved, not overwritten", () => {
+  const raw = JSON.stringify({ schema: 9, options: [{ id: "x", name: "Future", state: { schema: 9 } }], current: null });
+  const store = memStore({ "towergen.options.v1": raw });
+  const { s, notices } = mk({ storage: store });
+  s.save({ schema: 2 }, "Mine");
+  eq(store.getItem("towergen.options.v1"), raw); eq(notices.length, 1); eq(s.list().length, 2);
+});
+
+test("a second tab's changes are picked up", () => {
+  const store = memStore();
+  const a = mk({ storage: store }).s, b = mk({ storage: store }).s;
+  a.save({ schema: 2 }, "FromA");
+  b.save({ schema: 2 }, "FromB");
+  eq(a.list().map((o) => o.name).sort(), ["FromA", "FromB"]);
+});
+
+/* ====================== screenshot ====================== */
+
+function makeScene(w = 400, h = 300, pr = 1) {
+  const renderer = new THREE.WebGLRenderer({ antialias: true });       // no preserveDrawingBuffer
+  renderer.setPixelRatio(pr); renderer.setSize(w, h);
+  document.body.appendChild(renderer.domElement);
+  const scene = new THREE.Scene(); scene.background = new THREE.Color(0x3a6ea5);
+  const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 100); camera.position.set(3, 2.5, 4); camera.lookAt(0, 0, 0);
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(1.5, 2, 1.5), new THREE.MeshBasicMaterial({ color: 0xe8b04a }));
+  scene.add(mesh);
+  renderer.render(scene, camera);
+  return { renderer, scene, camera };
+}
+async function decode(blob) {
+  const bmp = await createImageBitmap(blob);
+  const c = document.createElement("canvas"); c.width = bmp.width; c.height = bmp.height;
+  const x = c.getContext("2d", { willReadFrequently: true }); x.drawImage(bmp, 0, 0);
+  return { w: bmp.width, h: bmp.height, px: (X, Y) => Array.from(x.getImageData(X, Y, 1, 1).data), region: (X, Y, W, H) => x.getImageData(X, Y, W, H).data };
+}
+const differs = (a, b) => a.some((v, i) => Math.abs(v - b[i]) > 3);
+async function show(blob, label) {
+  const img = new Image(); img.src = URL.createObjectURL(blob); img.title = label;
+  document.getElementById("shots").append(label + ": ", img);
+}
+const OVERLAY = { title: "Tower Study A", date: "Oct 20, 2026", metrics: [["GFA", "412,300 sf"], ["Floors", "45"], ["Height", "468'-0\""]], mark: "CMRLM" };
+
+test("captureView: PNG blob, 2x decoded size, overlay drawn", async () => {
+  const { renderer, scene, camera } = makeScene();
+  const plain = await captureView({ renderer, scene, camera, scale: 2 });
+  const full = await captureView({ renderer, scene, camera, scale: 2, overlay: OVERLAY });
+  eq(full.type, "image/png"); eq(plain.type, "image/png");
+  const p = await decode(plain), f = await decode(full);
+  eq([f.w, f.h], [800, 600], "size 2x"); eq([p.w, p.h], [800, 600]);
+  // scene is there: centre pixel is the box or sky, not transparent/black
+  const centre = f.px(400, 300); assert(centre[3] === 255 && (centre[0] + centre[1] + centre[2]) > 60, "scene rendered " + centre);
+  // sky corner (top-right, no overlay item there) equals the plain capture
+  eq(f.px(790, 10), p.px(790, 10), "untouched corner identical");
+  // mark corner (bottom-right) differs from the plain capture
+  assert(differs(f.px(760, 543), p.px(760, 543)), "mark panel pixel differs");
+  // title block (top-left), metrics block (bottom-left)
+  assert(differs(f.px(40, 40), p.px(40, 40)), "title panel pixel differs");
+  assert(differs(f.px(40, 600 - 40), p.px(40, 600 - 40)), "metrics panel pixel differs");
+  // glyph pixels exist inside the mark panel (dark ink on light panel)
+  const r = f.region(800 - 120, 600 - 50, 100, 36); let dark = 0;
+  for (let i = 0; i < r.length; i += 4) if (r[i] < 120 && r[i + 1] < 120) dark++;
+  assert(dark > 15, "mark glyphs drawn, dark px=" + dark);
+  assert(full.captureInfo.scale === 2, "captureInfo.scale");
+  await show(full, "overlay 2x");
+});
+
+test("captureView: renderer, size, pixel ratio, camera aspect restored", async () => {
+  const { renderer, scene, camera } = makeScene(400, 300, 1.5);
+  renderer.setViewport(0, 0, 400, 300);
+  const before = { size: renderer.getSize(new THREE.Vector2()).toArray(), pr: renderer.getPixelRatio(), cw: renderer.domElement.width, ch: renderer.domElement.height, aspect: camera.aspect, style: renderer.domElement.style.cssText, vp: renderer.getViewport(new THREE.Vector4()).toArray(), proj: camera.projectionMatrix.toArray(), st: renderer.getScissorTest() };
+  const blob = await captureView({ renderer, scene, camera, scale: 2, overlay: OVERLAY });
+  const after = { size: renderer.getSize(new THREE.Vector2()).toArray(), pr: renderer.getPixelRatio(), cw: renderer.domElement.width, ch: renderer.domElement.height, aspect: camera.aspect, style: renderer.domElement.style.cssText, vp: renderer.getViewport(new THREE.Vector4()).toArray(), proj: camera.projectionMatrix.toArray(), st: renderer.getScissorTest() };
+  eq(after, before, "restored");
+  const d = await decode(blob); eq([d.w, d.h], [1200, 900], "2x of 600x450 buffer (400x300 css at 1.5)");
+});
+
+test("captureView: device pixel ratio 2 basis", async () => {
+  const { renderer, scene, camera } = makeScene(300, 200, 2);
+  const blob = await captureView({ renderer, scene, camera, scale: 2, overlay: OVERLAY });
+  const d = await decode(blob); eq([d.w, d.h], [1200, 800]);
+});
+
+test("captureView: scale 1 and fractional scale", async () => {
+  const { renderer, scene, camera } = makeScene(400, 300, 1);
+  let d = await decode(await captureView({ renderer, scene, camera, scale: 1 })); eq([d.w, d.h], [400, 300]);
+  d = await decode(await captureView({ renderer, scene, camera, scale: 1.5 })); eq([d.w, d.h], [600, 450]);
+});
+
+test("captureView: pixel budget clamps scale (iPad limit)", async () => {
+  const { renderer, scene, camera } = makeScene(400, 300, 1);
+  const blob = await captureView({ renderer, scene, camera, scale: 4, maxPixels: 500000 });
+  const d = await decode(blob);
+  assert(d.w * d.h <= 500000 && d.w > 400, `clamped to ${d.w}x${d.h}`);
+  assert(Math.abs(d.w / d.h - 4 / 3) < 0.01, "aspect kept");
+  assert(blob.captureInfo.scale < 4, "captureInfo reports effective scale");
+});
+
+test("captureView: no overlay / partial overlay, dark theme, custom render fn", async () => {
+  const { renderer, scene, camera } = makeScene();
+  const plain = await decode(await captureView({ renderer, scene, camera }));
+  const markOnly = await decode(await captureView({ renderer, scene, camera, overlay: { mark: "CMRLM" } }));
+  eq(markOnly.px(40, 40), plain.px(40, 40), "no title block when not asked");
+  assert(differs(markOnly.px(760, 543), plain.px(760, 543)), "mark present");
+  const dark = await decode(await captureView({ renderer, scene, camera, overlay: { ...OVERLAY, theme: "dark" } }));
+  assert(dark.px(40, 40)[0] < 80, "dark panel " + dark.px(40, 40));
+  let calls = 0; await captureView({ renderer, scene, camera, render: (r, s, c) => { calls++; r.render(s, c); } });
+  eq(calls, 2, "custom render used for capture and repaint");
+});
+
+test("captureView: live canvas is repainted after restore", async () => {
+  const { renderer, scene, camera } = makeScene();
+  const probes = [];
+  const render = (r, s, c) => {
+    r.render(s, c);
+    const p = document.createElement("canvas"); p.width = r.domElement.width; p.height = r.domElement.height;
+    const x = p.getContext("2d"); x.drawImage(r.domElement, 0, 0);          // same task as the render
+    probes.push({ w: p.width, h: p.height, px: Array.from(x.getImageData(p.width >> 1, p.height >> 1, 1, 1).data) });
+  };
+  await captureView({ renderer, scene, camera, scale: 2, render });
+  eq(probes.length, 2); eq([probes[0].w, probes[0].h], [800, 600]); eq([probes[1].w, probes[1].h], [400, 300], "repaint at original size");
+  assert(probes[1].px[3] === 255 && probes[1].px[0] + probes[1].px[1] + probes[1].px[2] > 60, "repainted " + probes[1].px);
+});
+
+test("deliverImage: share on capable device, AbortError is silent, fallback downloads", async () => {
+  const blob = new Blob([new Uint8Array([137, 80, 78, 71])], { type: "image/png" });
+  const clicks = []; const origClick = HTMLAnchorElement.prototype.click;
+  HTMLAnchorElement.prototype.click = function () { clicks.push(this.download); };
+  const set = (k, v) => Object.defineProperty(navigator, k, { value: v, configurable: true, writable: true });
+  const saved = { share: navigator.share, canShare: navigator.canShare };
+  try {
+    let shared = null;
+    set("canShare", (d) => !!(d.files && d.files.length)); set("share", async (d) => { shared = d; });
+    eq(await deliverImage(blob, "a.png", { share: "always" }), "shared");
+    assert(shared.files[0] instanceof File && shared.files[0].name === "a.png" && shared.files[0].type === "image/png", "file shared");
+    eq(clicks.length, 0, "no download when shared");
+
+    set("share", async () => { throw new DOMException("cancelled", "AbortError"); });
+    eq(await deliverImage(blob, "b.png", { share: "always" }), "cancelled"); eq(clicks.length, 0, "abort -> nothing");
+
+    set("share", async () => { throw new DOMException("no gesture", "NotAllowedError"); });
+    eq(await deliverImage(blob, "c.png", { share: "always" }), "downloaded"); eq(clicks, ["c.png"]);
+
+    set("canShare", () => false);
+    eq(await deliverImage(blob, "d.png", { share: "always" }), "downloaded"); eq(clicks, ["c.png", "d.png"]);
+
+    set("canShare", () => true); set("share", async () => { throw new Error("should not be called"); });
+    eq(await deliverImage(blob, "e.png"), "downloaded", "auto on desktop UA downloads"); eq(clicks.length, 3);
+    eq(await deliverImage(blob, "f.png", { share: "never" }), "downloaded");
+  } finally {
+    HTMLAnchorElement.prototype.click = origClick;
+    set("share", saved.share); set("canShare", saved.canShare);
+  }
+});
+
+test("screenshotFilename", () => {
+  eq(screenshotFilename("Tower Study A", new Date(2026, 0, 9)), "tower-study-a-2026-01-09.png");
+});
+
+/* ====================== runner ====================== */
+const log = document.getElementById("log");
+const out = (s, cls) => { const d = document.createElement("div"); d.textContent = s; if (cls) d.className = cls; log.appendChild(d); };
+let passed = 0; const failures = [];
+for (const t of tests) {
+  try { await t.fn(); passed++; out("ok   " + t.name, "pass"); }
+  catch (e) { failures.push(t.name + ": " + (e && e.message)); out("FAIL " + t.name + " -- " + (e && e.message), "fail"); }
+}
+const summary = failures.length ? `FAIL ${passed}/${tests.length}\n${failures.join("\n")}` : `PASS ${passed}/${tests.length}`;
+console.log(summary);
+out(summary, failures.length ? "fail" : "pass");
+window.__testSummary = summary;
+</script>
+</body>
+</html>

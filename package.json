@@ -1,0 +1,12 @@
+{
+  "name": "design-tools",
+  "private": true,
+  "description": "Browser design tools for early-stage architecture. No build step for the pages; Node is only for the module tests.",
+  "scripts": {
+    "test": "node test/geometry.test.mjs && node test/envelope.test.mjs",
+    "build:tower": "python3 build/tower/build.py"
+  },
+  "devDependencies": {
+    "clipper-lib": "6.4.2"
+  }
+}

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Design Tools</title>
+<style>
+  :root {
+    --bg: #f3f4f6; --surface: #ffffff; --line: #dde0e4;
+    --ink: #1b1f24; --ink-2: #4e5763; --ink-3: #848d98; --accent: #23508f;
+    --font: -apple-system, "SF Pro Text", "Inter", system-ui, "Segoe UI", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #111417; --surface: #1b2025; --line: #2b3138; --ink: #e7eaee; --ink-2: #a5adb7; --ink-3: #747d88; --accent: #6aa2ea; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font); -webkit-text-size-adjust: 100%; }
+  main { max-width: 640px; margin: 0 auto; padding: 56px 20px 40px; }
+  .mark { font-size: 12px; font-weight: 600; letter-spacing: .22em; color: var(--ink-3); }
+  h1 { font-size: 28px; font-weight: 600; letter-spacing: -.01em; margin: 6px 0 4px; }
+  p.lede { color: var(--ink-2); margin: 0 0 28px; line-height: 1.5; }
+  .label { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 8px; }
+  a.tool { display: block; min-height: 44px; padding: 16px 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; color: inherit; text-decoration: none; }
+  a.tool:hover, a.tool:focus-visible { border-color: var(--accent); outline: none; }
+  a.tool strong { display: block; font-size: 17px; font-weight: 600; }
+  a.tool span { color: var(--ink-2); font-size: 14px; line-height: 1.45; }
+</style>
+</head>
+<body>
+<main>
+  <div class="mark">CMRLM</div>
+  <h1>Design Tools</h1>
+  <p class="lede">Small browser tools for early-stage architectural design. Each tool is a single page that runs in the browser.</p>
+  <div class="label">Tools</div>
+  <a class="tool" href="tower/">
+    <strong>Tower Generator</strong>
+    <span>Massing studies with live floor-area metrics. Shape a tower with sliders and watch the 3D form and the numbers change together.</span>
+  </a>
+</main>
+</body>
+</html>
