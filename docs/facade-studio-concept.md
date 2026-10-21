@@ -401,6 +401,11 @@ The technical plan computes each expected value by hand. Presets that fail the 4
 11. **Users:** Cade and RJTR teammates. A short Help panel in the tool.
 12. **Names:** Generic names only in presets, tests, ids, and notes. No district names.
 13. **Project file:** Part of version 1. The tool writes its section and keeps the others unchanged.
+14. **Module fill:** Modules stretch to fill each face. No closer panel. (October 21, 2026)
+15. **Glazing area:** The whole window opening counts as glazing, frames included. (October 21, 2026)
+16. **Inset balconies:** Door glass counts at the recessed plane. (October 21, 2026)
+17. **Transparency target:** Off by default; 60 percent in the retail presets. (October 21, 2026)
+18. **Parapets and screens:** Not counted as wall area. (October 21, 2026)
 
 ---
 
@@ -468,8 +473,4 @@ The project file is the shared JSON file that carries one project between the to
 
 ## 15. Open questions for Cade
 
-1. **Panel remainder:** Stretch the modules evenly, or keep the module and add a narrow closer panel at one end? Recommended: stretch the modules. Windows stay evenly spaced, and the stretch is small.
-2. **Glazing area rule:** Count the whole window opening with frames, or only the glass? Recommended: the whole opening. Energy codes count fenestration area this way.
-3. **Inset balconies:** Count the recessed door glass in the WWR? Recommended: yes, at the recessed plane, with the cut-back wall as wall area.
-4. **Ground transparency target:** Off by default, or on at a typical value? Recommended: off by default; the retail presets turn it on at 60 percent.
-5. **Parapets and roof screens:** Leave them out of the wall area? Recommended: leave them out. They enclose no floor and would lower the WWR without a real change.
+All five questions were answered on October 21, 2026. See decisions 14 to 18 in section 12.
