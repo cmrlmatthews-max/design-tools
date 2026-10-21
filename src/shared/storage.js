@@ -5,6 +5,8 @@
    One localStorage key holds:
      { schema, options: [{ id, name, createdAt, updatedAt, state }], current }
    where `current` is the autosave slot: { state, updatedAt } (slot "__current").
+   An optional `prompts: [{ id, title, template, ... }]` list (custom AI prompts) rides in the same blob; it is
+   omitted while empty, travels in export / import, and import renames title collisions "Title (2)".
 
    Rules
    - Every storage access is inside try/catch. On any failure onNotice(message)
@@ -84,7 +86,7 @@ export function createStorage({
   let persistent = true;     // false once any read/write failed
   let readOnly = false;      // data written by a newer app version: never overwrite
   let lastRaw = null;        // last string we know is in storage
-  let data = { schema, options: [], current: null };
+  let data = { schema, options: [], current: null, prompts: [] };
   let timer = null;
   let pendingAutosave = null;
 
@@ -136,12 +138,29 @@ export function createStorage({
     };
   }
 
+  /** A custom prompt record (any extra fields are kept), or null when it has no usable title and template. */
+  function normalizePrompt(p) {
+    if (!isObj(p) || typeof p.title !== "string" || !p.title.trim() || typeof p.template !== "string") return null;
+    const now = Date.now();
+    const num = (v) => (Number.isFinite(v) ? v : now);
+    return {
+      ...clone(p),
+      id: typeof p.id === "string" && p.id ? p.id : newId(),
+      title: p.title.trim(),
+      group: "custom",
+      template: p.template,
+      uses: Array.isArray(p.uses) ? p.uses.filter((u) => typeof u === "string") : [],
+      createdAt: num(p.createdAt),
+      updatedAt: num(p.updatedAt),
+    };
+  }
+
   /** @returns {object|null} normalized data, or null when raw is unusable. */
   function parseBlob(raw) {
     let obj;
     try { obj = JSON.parse(raw); } catch (e) { return null; }
     if (!isObj(obj) || !Array.isArray(obj.options) || !Number.isFinite(obj.schema)) return null;
-    const out = { schema, options: [], current: null, newer: obj.schema > schema };
+    const out = { schema, options: [], current: null, prompts: [], newer: obj.schema > schema };
     const seen = new Set();
     for (const r of obj.options) {
       const rec = normalizeRecord(r, obj.schema);
@@ -149,6 +168,16 @@ export function createStorage({
       if (seen.has(rec.id)) rec.id = newId();
       seen.add(rec.id);
       out.options.push(rec);
+    }
+    if (Array.isArray(obj.prompts)) {
+      const ids = new Set();
+      for (const p of obj.prompts) {
+        const rec = normalizePrompt(p);
+        if (!rec) continue;
+        if (ids.has(rec.id)) rec.id = newId();
+        ids.add(rec.id);
+        out.prompts.push(rec);
+      }
     }
     if (isObj(obj.current) && isObj(obj.current.state)) {
       out.current = {
@@ -178,7 +207,7 @@ export function createStorage({
       lastRaw = raw;
       notice("Saved options could not be read and were reset. A backup copy of the old data was kept.");
       if (initial) {
-        data = { schema, options: [], current: null };
+        data = { schema, options: [], current: null, prompts: [] };
         try { backend().setItem(key + ".corrupt", raw); } catch (e) { /* ignore */ }
       }
       // Not initial: keep the good in-memory copy; the next write overwrites the bad value.
@@ -197,7 +226,9 @@ export function createStorage({
     if (readOnly) return false;
     let raw;
     try {
-      raw = JSON.stringify({ schema, options: data.options, current: data.current });
+      const blob = { schema, options: data.options, current: data.current };
+      if (data.prompts.length) blob.prompts = data.prompts;
+      raw = JSON.stringify(blob);
     } catch (e) {
       notice("Options could not be saved.");
       return false;
@@ -302,6 +333,32 @@ export function createStorage({
       return rec.id;
     },
 
+    /** Custom prompts, oldest first (copies). */
+    listPrompts() {
+      load(false);
+      return data.prompts.map(clone);
+    },
+
+    /** Adds a custom prompt, or replaces the one with the same id. Returns the saved copy, or null when it has no title / template. */
+    savePrompt(prompt) {
+      load(false);
+      const old = isObj(prompt) ? data.prompts.find((p) => p.id === prompt.id) : null;
+      const rec = normalizePrompt({ ...prompt, updatedAt: Date.now(), createdAt: old ? old.createdAt : Date.now() });
+      if (!rec) return null;
+      if (old) data.prompts[data.prompts.indexOf(old)] = rec; else data.prompts.push(rec);
+      persist();
+      return clone(rec);
+    },
+
+    removePrompt(id) {
+      load(false);
+      const i = data.prompts.findIndex((p) => p.id === id);
+      if (i < 0) return false;
+      data.prompts.splice(i, 1);
+      persist();
+      return true;
+    },
+
     /** Debounced (1 s) save of the working state into the "__current" slot. */
     autosave(state) {
       try { pendingAutosave = stamp(state); } catch (e) { notice("Options could not be saved."); return; }
@@ -326,7 +383,7 @@ export function createStorage({
       return data.current ? clone(data.current.state) : null;
     },
 
-    /** All saved options as an application/json Blob. */
+    /** All saved options (and custom prompts, when there are any) as an application/json Blob. */
     exportAll() {
       load(false);
       const payload = {
@@ -334,6 +391,7 @@ export function createStorage({
         exportedAt: new Date().toISOString(),
         options: data.options.map(out),
       };
+      if (data.prompts.length) payload.prompts = data.prompts.map(clone);
       return new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     },
 
@@ -356,7 +414,8 @@ export function createStorage({
 
     /**
      * Appends the options of an exportAll() file. Never replaces existing options.
-     * Resolves {added, skipped}; rejects with an Error whose message is shown to the user.
+     * Custom prompts in the file are appended too (a title already in use becomes "Title (2)").
+     * Resolves {added, skipped, promptsAdded}; rejects with an Error whose message is shown to the user.
      */
     async importFile(file) {
       if (!file) throw new Error("No file was chosen.");
@@ -395,12 +454,26 @@ export function createStorage({
         taken.add(rec.name);
         incoming.push(rec);
       }
-      if (incoming.length === 0 && obj.options.length > 0) {
+      const takenTitles = new Set(data.prompts.map((p) => p.title));
+      const incomingPrompts = [];
+      if (Array.isArray(obj.prompts)) {
+        for (const p of obj.prompts) {
+          const rec = normalizePrompt({ ...(isObj(p) ? p : {}), id: undefined });
+          if (!rec) continue;
+          rec.title = uniqueName(rec.title, takenTitles);
+          takenTitles.add(rec.title);
+          incomingPrompts.push(rec);
+        }
+      }
+      if (incoming.length === 0 && incomingPrompts.length === 0 && obj.options.length > 0) {
         throw new Error("None of the options in this file could be used.");
       }
       data.options.push(...incoming);
-      if (incoming.length) persist();
-      return { added: incoming.length, skipped };
+      data.prompts.push(...incomingPrompts);
+      if (incoming.length || incomingPrompts.length) persist();
+      const res = { added: incoming.length, skipped };
+      if (incomingPrompts.length) res.promptsAdded = incomingPrompts.length;
+      return res;
     },
 
     /** True while saving to browser storage works (false after a failure; data is then memory-only). */

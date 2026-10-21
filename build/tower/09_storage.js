@@ -3,6 +3,7 @@
    src/shared/storage.js inlined unchanged (apart from the export keywords),
    plus `Options`, the tower tool's glue: save, duplicate, rename, delete, the
    option menu, export / import, autosave and restore.
+   Custom AI prompts ride in the same blob (storage.listPrompts / savePrompt / removePrompt).
    Saved options live under localStorage key `towergen.options.v1`; the
    working copy autosaves into the "__current" slot after a 1 s pause.
    ========================================================================== */
@@ -117,18 +118,22 @@ const Options = (() => {
     return true;
   }
 
+  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  const importListeners = [];
   function exportJson() {
-    const n = storage.list().length;
-    if (!n) { Toast.show('Nothing to export yet. Save an option first.', 'warn'); return false; }
+    const n = storage.list().length, np = storage.listPrompts().length;
+    if (!n && !np) { Toast.show('Nothing to export yet. Save an option first.', 'warn'); return false; }
     storage.downloadExport();
-    Toast.show(`Exported ${n} option${n === 1 ? '' : 's'}`);
+    Toast.show(`Exported ${[n ? plural(n, 'option') : '', np ? plural(np, 'custom prompt') : ''].filter(Boolean).join(' and ')}`);
     return true;
   }
   async function importFile(file) {
     try {
-      const { added, skipped } = await storage.importFile(file);
-      Toast.show(`Imported ${added} option${added === 1 ? '' : 's'}${skipped ? `, ${skipped} skipped` : ''}. Open them from the Option menu.`);
-      return { added, skipped };
+      const { added, skipped, promptsAdded } = await storage.importFile(file);
+      const parts = [added || !promptsAdded ? plural(added, 'option') : '', promptsAdded ? plural(promptsAdded, 'custom prompt') : ''].filter(Boolean);
+      Toast.show(`Imported ${parts.join(' and ')}${skipped ? `, ${skipped} skipped` : ''}.${added ? ' Open the options from the Option menu.' : ''}`);
+      importListeners.forEach((fn) => fn({ added, skipped, promptsAdded }));
+      return { added, skipped, promptsAdded };
     } catch (e) {
       Toast.show(e && e.message ? e.message : 'The file could not be imported.', 'bad', 7000);
       return { added: 0, skipped: 0, error: String(e && e.message) };
@@ -187,6 +192,7 @@ const Options = (() => {
   }
 
   return {
+    onImport: (fn) => importListeners.push(fn),
     init, save, duplicate, rename, remove, openMenu, loadOption, loadPreset, exportJson, importFile, syncDirty,
     list: () => storage.list(), get: (id) => storage.get(id), flush: () => storage.flush(),
     current: () => currentId, storage,

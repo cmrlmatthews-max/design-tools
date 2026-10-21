@@ -142,8 +142,93 @@ async function runTests() {
     return eq([res.added, a.list().map((o) => o.name).sort()], [1, ['Same', 'Same (2)']]);
   });
 
+  /* ---- AI prompts ---- */
+  const presetStates = CONFIG.presets.map((p) => fillDefaults(p.state));
+  await t('every built-in prompt fills with no "[" or "{{" left (default design and every preset)', () => {
+    const states = [fillDefaults(defaultState()), ...presetStates];
+    for (const st of states) {
+      const auto = Prompts.autoValues(st, computeDerived(st).metrics);
+      for (const p of PromptsMod.PROMPTS) {
+        const text = PromptsMod.fillPrompt(p, { ...auto, ...Object.fromEntries(Object.keys(PromptsMod.PROMPT_FIELDS).map((k) => [k, Prompts.valuesFor(p)[k]])) });
+        if (text.includes('[') || text.includes('{{')) return `${p.id} (${st.name}) left a token: ${(text.match(/\[[^\]]*\]|\{\{[^}]*\}\}/) || [''])[0]}`;
+        if (!text.startsWith(PromptsMod.FORM_LOCK.slice(0, 20))) return `${p.id} does not start with the form lock`;
+      }
+    }
+    return true;
+  });
+  await t('the panel text for every built-in prompt matches getPromptText', () => {
+    for (const p of PromptsMod.PROMPTS) { const x = Prompts.promptText(p.id); if (!x || x.includes('[') || x.includes('{{')) return `${p.id}: ${String(x).slice(0, 80)}`; }
+    return eq(Prompts.promptText('no-such-prompt'), null);
+  });
+  await t('the form phrase is non-empty for every preset', () => {
+    for (const st of presetStates) { const f = Prompts.formPhrase(st); if (!/^an? .+ tower with .+/.test(f)) return `${st.name}: "${f}"`; }
+    return true;
+  });
+  await t('form phrase rules (shape, setbacks, twist, taper, sky garden, crown)', () => {
+    const s = fillDefaults(defaultState());
+    const out = [Prompts.formPhrase(s)];
+    s.setbacks = [{ floor: 4, distance: 10, sides: ['front'] }, { floor: 7, distance: 10, sides: ['front'] }]; s.crown.type = 'stepped';
+    out.push(Prompts.formPhrase(s));
+    s.segments[0].shape.type = 'ellipse'; s.segments[0].twist.deg = 20; s.carves = [{ startFloor: 5, endFloor: 6, kind: 'full' }]; s.crown.type = 'spire';
+    out.push(Prompts.formPhrase(s));
+    s.segments[0].shape.type = 'L'; s.segments[0].twist.deg = 0; s.segments[0].taper.x = -10; s.setbacks = [s.setbacks[0]]; s.carves = []; s.crown.type = 'screen';
+    out.push(Prompts.formPhrase(s));
+    s.segments[0].shape.type = 'polygon'; s.segments[0].taper.x = 0; s.crown.type = 'sloped';
+    out.push(Prompts.formPhrase(s));
+    return eq(out, [
+      'a rectangular tower with a flat roof',
+      'a rectangular tower with two setbacks and a stepped crown',
+      'a twisting elliptical tower with two setbacks, a sky garden and a spire',
+      'a tapering L-shaped tower with one setback and a rooftop screen',
+      'a custom-shaped tower with one setback and a sloped crown',
+    ]);
+  });
+  await t('auto fields: floors, height, program of the tallest segment, podium', () => {
+    const s = fillDefaults(defaultState());
+    s.podium.on = true; s.podium.floors = 8;
+    s.segments = [{ ...s.segments[0], floors: 5, program: 'retail' }, { ...s.segments[0], floors: 20, ftf: 10, program: 'hotel' }];
+    const m = computeDerived(s).metrics, a = Prompts.autoValues(s, m);
+    s.podium.on = false;
+    return eq([a.floors, a.height, a.program, a.podium, Prompts.autoValues(s, computeDerived(s).metrics).podium],
+      [String(m.floorCount), `${Math.round(m.totalHeight)} feet`, 'hotel', 'an 8-story podium', 'no podium']);
+  });
+  await t('custom prompts: save, export, import (title collisions become "Title (2)"), remove', async () => {
+    const a = StorageMod.createStorage({ key: 'k', schema: 1, storage: memory() });
+    const rec = a.savePrompt({ title: 'Evening mood', template: 'A {{height}} tower at {{time}}.', uses: ['time'] });
+    a.savePrompt({ title: 'Second', template: 'Second prompt', uses: [] });
+    if (!rec || rec.group !== 'custom' || !rec.id) return `bad record ${JSON.stringify(rec)}`;
+    const blob = a.exportAll();
+    const payload = JSON.parse(await blob.text());
+    if (!Array.isArray(payload.prompts) || payload.prompts.length !== 2) return `export has ${JSON.stringify(payload.prompts)}`;
+    const fresh = StorageMod.createStorage({ key: 'k2', schema: 1, storage: memory() });
+    const r1 = await fresh.importFile(new File([blob], 'x.json'));
+    const back = fresh.listPrompts();
+    if (r1.promptsAdded !== 2 || back.length !== 2) return `imported ${JSON.stringify(r1)}`;
+    const same = (x, y) => x.title === y.title && x.template === y.template && JSON.stringify(x.uses) === JSON.stringify(y.uses) && x.group === 'custom';
+    if (!same(back[0], rec) || !same(back[1], a.listPrompts()[1])) return `round trip differs: ${JSON.stringify(back)}`;
+    const r2 = await fresh.importFile(new File([blob], 'x.json'));
+    const titles = fresh.listPrompts().map((x) => x.title).sort();
+    if (r2.promptsAdded !== 2 || JSON.stringify(titles) !== JSON.stringify(['Evening mood', 'Evening mood (2)', 'Second', 'Second (2)'])) return `titles ${titles}`;
+    if (!fresh.removePrompt(back[0].id) || fresh.listPrompts().length !== 3) return 'remove failed';
+    const mem = memory(), b1 = StorageMod.createStorage({ key: 'k3', schema: 1, storage: mem }); b1.savePrompt({ title: 'Kept', template: 'x', uses: ['season'] });
+    b1.flush();
+    return eq(StorageMod.createStorage({ key: 'k3', schema: 1, storage: mem }).listPrompts().map((x) => [x.title, x.uses]), [['Kept', ['season']]]);
+  });
+  await t('an export with no prompts has no "prompts" key (older files stay the same)', async () => {
+    const a = StorageMod.createStorage({ key: 'k', schema: 1, storage: memory() });
+    a.save(defaultState(), 'Only an option');
+    return eq('prompts' in JSON.parse(await a.exportAll().text()), false);
+  });
+  await t('AI-ready filename', () => eq(ShotMod.screenshotFilename('Option A-ai-ready', new Date(2026, 9, 20)), 'option-a-ai-ready-2026-10-20.png'));
+
   /* ---- screenshot ---- */
   if (Render.ready()) {
+    await t('AI-ready capture returns a PNG and puts the scene back exactly', async () => {
+      const before = JSON.stringify(Render.sceneFlags()), style = Store.get('view.style');
+      const blob = await Shots.aiReady({ deliver: false, scale: 1 });
+      const after = JSON.stringify(Render.sceneFlags());
+      return (blob.type === 'image/png' && blob.size > 2000 && before === after && style === Store.get('view.style')) || `type ${blob.type} size ${blob.size} before ${before} after ${after}`;
+    });
     await t('screenshot capture returns a PNG blob', async () => {
       const blob = await Shots.capture({ scale: 1 });
       return (blob.type === 'image/png' && blob.size > 2000) || `type ${blob.type} size ${blob.size}`;

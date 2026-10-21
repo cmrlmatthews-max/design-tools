@@ -10,6 +10,7 @@ const ICONS = {
   compare: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="8" height="14" rx="1.5"/><rect x="13" y="5" width="8" height="14" rx="1.5"/></svg>',
   camera: '<svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
   option: '<svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg>',
+  sparkle: '<svg viewBox="0 0 24 24"><path d="M10 3l1.8 5.2L17 10l-5.2 1.8L10 17l-1.8-5.2L3 10l5.2-1.8z"/><path d="M18 14l.9 2.1L21 17l-2.1.9L18 20l-.9-2.1L15 17l2.1-.9z"/></svg>',
   chev: '<svg class="chev" viewBox="0 0 14 14" fill="none" stroke="currentColor"><path d="M3 5l4 4 4-4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
 const UI_STORAGE_KEY = 'towergen.ui.v1';
@@ -482,18 +483,18 @@ const UI = (() => {
     const syncHistory = () => { undo.disabled = !Store.canUndo(); redo.disabled = !Store.canRedo(); };
     Store.subscribe(syncHistory); syncHistory();
 
-    // SLOT: ai-prompts has its hidden entry button here; it stays hidden until that panel exists.
-    const aiBtn = iconBtn('', 'AI Prompts', { id: 'btnAiPrompts', hidden: true, 'aria-hidden': 'true', title: 'AI Prompts (not built yet)' });
+    // The AI Prompts entry button sits beside the Image button (the panel itself is in 08b_prompts.js).
+    const aiBtn = iconBtn(ICONS.sparkle, 'AI Prompts', { id: 'btnAiPrompts', title: 'AI Prompts: an AI-ready image and a prompt for ChatGPT or Gemini', 'aria-haspopup': 'dialog', 'aria-expanded': 'false', 'aria-controls': 'aiPanel', onclick: () => Prompts.toggle() });
     $('tbActions').append(
       iconBtn(ICONS.save, 'Save', { id: 'btnSave', title: 'Save this option (Cmd/Ctrl+S)', onclick: () => Options.save() }),
       iconBtn(ICONS.duplicate, 'Duplicate', { id: 'btnDuplicate', title: 'Save a copy as a new option', onclick: () => Options.duplicate() }),
       iconBtn(ICONS.compare, 'Compare', { id: 'btnCompare', title: 'Compare 2 to 4 options', 'aria-pressed': 'false', onclick: () => Compare.toggle() }),
-      aiBtn,
     );
 
     const shotBtn = iconBtn(ICONS.camera, 'Image', { id: 'btnShot', title: 'Save an image of this view', onclick: () => Shots.take() });
     const shotMenu = h('button', { class: 'btn caret-only', type: 'button', id: 'btnShotMenu', 'aria-label': 'Image options', title: 'Choose what the image shows', 'aria-haspopup': 'true', 'aria-expanded': 'false', html: ICONS.chev, onclick: () => Shots.openMenu(shotMenu) });
     $('tbShot').append(shotBtn, shotMenu);
+    $('tbShot').before(aiBtn);
 
     // Model / Diagram toggle: a working material switch.
     const seg = $('styleToggle');
@@ -710,6 +711,4 @@ const UI = (() => {
 })();
 
 /* SLOT: ai-prompts */
-/* Reserved for the future "AI Prompts" panel. Nothing is built here on purpose.
-   Its entry point is the hidden #btnAiPrompts button in the top bar (UI.buildTopBar):
-   remove the `hidden` attribute and add a click handler when the panel exists. */
+/* Filled: the entry button is #btnAiPrompts (UI.buildTopBar above); the panel and its logic are in 08b_prompts.js. */

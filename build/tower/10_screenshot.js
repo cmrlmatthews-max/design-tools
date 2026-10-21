@@ -51,6 +51,19 @@ const Shots = (() => {
     try { return await capture({ deliver: true }); } catch (e) { console.error(e); Toast.show(e && e.message ? e.message : 'The image could not be made.', 'bad', 6000); return null; }
   }
 
+  /** The AI-ready picture: no overlay, grid, scale figure or wireframe; Model style; light plain sky. Filename `<option>-ai-ready-YYYY-MM-DD.png`. */
+  async function aiReady({ deliver = true, scale = 2 } = {}) {
+    const blob = await Render.captureClean(scale);
+    if (deliver) {
+      const result = await ShotMod.deliverImage(blob, ShotMod.screenshotFilename(`${Store.get('name')}-ai-ready`));
+      if (result === 'downloaded') Toast.show('AI-ready image saved to your downloads.');
+    }
+    return blob;
+  }
+  async function takeAiReady() {
+    try { return await aiReady({ deliver: true }); } catch (e) { console.error(e); Toast.show(e && e.message ? e.message : 'The image could not be made.', 'bad', 6000); return null; }
+  }
+
   function openMenu(anchor) {
     const el = h('div', { role: 'group', 'aria-label': 'Image options' });
     el.append(h('div', { class: 'label pop-label' }, 'The image shows'));
@@ -64,9 +77,12 @@ const Shots = (() => {
       });
       el.append(btn);
     }
+    el.append(h('div', { class: 'pop-sep' }));
+    el.append(h('button', { class: 'pop-item', type: 'button', role: 'menuitem', id: 'btnAiReady', onclick: () => { Pop.close(); takeAiReady(); } },
+      h('span', { class: 'grow' }, 'AI-ready image', h('small', null, 'Plain model, no overlay, grid or wireframe. For ChatGPT or Gemini.'))));
     el.append(h('div', { class: 'pop-actions' }, h('button', { class: 'btn solid', type: 'button', onclick: () => { Pop.close(); take(); } }, 'Save image')));
     Pop.open(anchor, el, { align: 'right' });
   }
 
-  return { take, capture, openMenu, buildOverlay, keyMetrics };
+  return { take, capture, aiReady, takeAiReady, openMenu, buildOverlay, keyMetrics };
 })();

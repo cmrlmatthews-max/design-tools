@@ -5,6 +5,7 @@
 const TEST_MODE = /[?&]test\b/.test(location.search);
 Options.init({ restore: !TEST_MODE });
 UI.init();
+Prompts.init();
 Compare.init();
 Options.syncDirty();
 if (!Render.init(document.getElementById('canvasHost'))) Store.subscribe(() => UI.updateHud(Derived.get()));
@@ -42,6 +43,13 @@ window.__tower = {
   exitCompare: () => Compare.exit(),
   getCompare: () => ({ active: Compare.isActive(), names: Compare.names(), chosen: Compare.chosen(), table: Compare.isActive() ? Compare.table() : '' }),
   screenshot: (opts) => Shots.capture(opts),
+  // AI prompts: the panel, the filled text of a prompt (by id; `values` overrides auto or pick fields), the AI-ready picture
+  openPrompts: () => Prompts.open(),
+  closePrompts: () => Prompts.close(),
+  getPromptText: (id, values) => Prompts.promptText(id, values),
+  getPromptAuto: () => Prompts.currentAuto(),
+  listPrompts: () => Prompts.allPrompts().map((p) => ({ id: p.id, group: p.group, title: p.title })),
+  aiReadyScreenshot: () => Shots.aiReady({ deliver: false }),
   undo: () => Store.undo(),
   redo: () => Store.redo(),
   history: () => ({ depth: Store.historyDepth(), canUndo: !!Store.canUndo(), canRedo: !!Store.canRedo() }),

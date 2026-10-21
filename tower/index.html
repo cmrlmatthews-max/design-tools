@@ -482,6 +482,99 @@ table.cmp th:first-child, table.cmp td:first-child { text-align: left; color: va
 table.cmp thead th { font-weight: 600; color: var(--ink); position: sticky; top: 0; background: var(--panel); }
 table.cmp td.best { font-weight: 700; color: var(--ink); }
 table.cmp td[title], table.cmp th[title] { cursor: help; }
+
+/* ---- AI Prompts panel -------------------------------------------------------------------------
+   Right-hand drawer on desktop and iPad landscape; full-height sheet on iPad portrait and narrow screens. */
+.ai-back { position: fixed; z-index: 70; left: 0; right: 0; bottom: 0; top: var(--topbar-h); background: transparent; }
+.ai-panel {
+  position: fixed; z-index: 71; top: var(--topbar-h); right: 0; bottom: 0; width: min(440px, 100vw);
+  display: flex; flex-direction: column; min-height: 0; outline: none;
+  background: var(--panel); border-left: 1px solid var(--line); box-shadow: var(--shadow);
+  transform: translateX(104%); visibility: hidden; transition: transform .2s ease, visibility 0s linear .2s;
+  padding-right: env(safe-area-inset-right);
+}
+.ai-panel[data-open="true"] { transform: none; visibility: visible; transition: transform .2s ease; }
+.ai-head { display: flex; align-items: center; justify-content: space-between; flex: none; padding: 6px 8px 0 16px; min-height: var(--hit); }
+.ai-head h2 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -.005em; }
+.ai-steps { flex: none; padding: 4px 16px 10px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.ai-step-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ai-step-row .step { min-width: 0; padding: 0 10px; font-size: 13px; font-weight: 500; white-space: normal; line-height: 1.2; text-align: center; border-color: var(--line-2); }
+.ai-step-row .step.solid { border-color: var(--accent); }
+.ai-steps .help { margin: 8px 0 0; }
+.ai-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 10px 16px max(28px, env(safe-area-inset-bottom)); }
+.ai-tabs { display: flex; gap: 2px; padding: 3px; margin: 0 0 10px; background: var(--surface-2); border-radius: 10px; overflow-x: auto; scrollbar-width: none; }
+.ai-tabs::-webkit-scrollbar { display: none; }
+.ai-tab {
+  flex: 1 0 auto; min-height: 40px; padding: 0 10px; border: 0; border-radius: 7px; background: transparent;
+  color: var(--ink-2); font-size: 13px; font-weight: 500; white-space: nowrap;
+}
+.ai-tab[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(16, 20, 26, .14); }
+.ai-listbar { display: flex; margin: 0 0 8px; }
+.ai-empty { margin: 4px 0 8px; }
+.ai-list { display: grid; gap: 6px; }
+.ai-item {
+  display: grid; gap: 1px; width: 100%; min-height: var(--hit); padding: 8px 12px; text-align: left;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--surface);
+}
+.ai-item:hover { background: var(--surface-2); }
+.ai-item[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: var(--accent-soft); }
+.ai-item.is-draft { border-style: dashed; }
+.ai-item-title { font-size: 13.5px; font-weight: 600; }
+.ai-item-desc { font-size: 12.5px; line-height: 1.35; color: var(--ink-3); }
+.ai-detail { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.ai-dhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.ai-dtitle { font-size: 14px; font-weight: 600; min-width: 0; }
+.ai-ddesc { margin: 0 0 8px; padding: 8px 10px; border-left: 3px solid var(--accent); border-radius: 0 6px 6px 0; background: var(--accent-soft); font-size: 13px; line-height: 1.45; color: var(--ink); }
+.ai-dacts { display: flex; gap: 6px; flex-wrap: wrap; }
+.btn.danger-text { color: var(--bad); }
+.ai-fields { margin: 2px 0 4px; }
+.ai-fields .select-row select { min-width: 0; width: min(220px, 55%); }
+.ai-fields .select-row label { min-width: 0; }
+.ai-auto { margin: 10px 0 4px; }
+.ai-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.ai-chip {
+  display: inline-flex; align-items: baseline; gap: 6px; max-width: 100%; padding: 4px 9px; border-radius: 999px;
+  background: var(--surface-2); font-size: 12px; line-height: 1.35;
+}
+.ai-chip .k { flex: none; color: var(--ink-3); font-size: 11px; }
+.ai-chip .v { min-width: 0; color: var(--ink); font-weight: 500; }
+.ai-chip.wide { border-radius: 12px; flex: 1 1 100%; }
+.ai-preview-wrap { margin-top: 12px; }
+.ai-count { font-size: 12px; color: var(--ink-3); }
+textarea.ai-preview {
+  display: block; width: 100%; height: 232px; margin-top: 4px; padding: 10px 12px; resize: vertical; overflow-y: auto;
+  border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--surface); color: var(--ink);
+  font-family: var(--font); font-size: 14px; line-height: 1.5;
+}
+.ai-editor { display: grid; gap: 4px; margin-bottom: 6px; }
+.ai-lab { margin-top: 6px; font-size: 12.5px; color: var(--ink-2); }
+.ai-editor input[type="text"], .ai-editor textarea {
+  display: block; width: 100%; padding: 8px 10px; border: 1px solid var(--line-2); border-radius: var(--radius);
+  background: var(--surface); color: var(--ink); font-family: var(--font); font-size: 16px; line-height: 1.45;
+}
+.ai-editor input[type="text"] { height: var(--hit); }
+.ai-editor textarea { min-height: 150px; resize: vertical; }
+.ai-editor input:focus, .ai-editor textarea:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+.ai-uses { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+.ai-check { display: flex; align-items: center; gap: 10px; min-height: var(--hit); font-size: 13.5px; }
+.ai-check input { width: 20px; height: 20px; flex: none; accent-color: var(--accent); }
+.ai-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.ai-toasts { position: absolute; left: 50%; bottom: max(16px, env(safe-area-inset-bottom)); transform: translateX(-50%); display: grid; gap: 8px; width: max-content; max-width: calc(100% - 32px); pointer-events: none; z-index: 3; }
+
+@media (max-width: 899px), (orientation: portrait) {
+  .ai-back { top: 0; background: rgba(10, 14, 18, .42); }
+  .ai-panel {
+    top: max(10px, env(safe-area-inset-top)); left: 0; right: 0; width: auto; padding-right: 0;
+    border-left: 0; border-top: 1px solid var(--line); border-radius: 16px 16px 0 0; box-shadow: var(--shadow-up);
+    transform: translateY(104%);
+  }
+  .ai-panel[data-open="true"] { transform: none; }
+  .ai-head { padding-left: max(16px, env(safe-area-inset-left)); }
+  .ai-head, .ai-steps, .ai-body { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+  .ai-head { padding-right: max(8px, env(safe-area-inset-right)); }
+  .ai-sheet-inner { max-width: 680px; }
+}
+@media (max-width: 420px) { .ai-uses { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -3510,6 +3603,68 @@ const Render = (() => {
     }
   }
 
+  /** AI-ready picture (main view only): Model style, no grid / scale figure / envelope wireframe / overlay, plates that are
+   *  outside the envelope drawn like the rest (white, not red), a plain light sky and ground. Context blocks stay.
+   *  Nothing in the store is touched: the live layers are hidden, a throwaway group is drawn, then everything is put back. */
+  async function captureClean(scale = 2) {
+    if (!renderer) throw new Error('The 3D view is not available.');
+    if (cmp) throw new Error('Leave Compare to save an AI-ready image.');
+    const state = Store.raw();
+    const view = { ...state.view, style: 'model' };
+    const st = { ...state, view };
+    const real = Derived.display(false);
+    const disp = {
+      key: 'ai', quality: 'full', solids: real.solids,
+      plates: real.plates.map((p) => (p.outsideEnvelopeArea > 0 ? { ...p, outsideEnvelopeArea: 0 } : p)),
+      solidsOutside: real.solids.map(() => false),
+    };
+    const shadowsOn = !!view.shadows;
+    // Opaque context blocks: see-through blocks read as glass to image AIs, and the prompts call them "light-gray blocks".
+    const ctxMat = new THREE.MeshStandardMaterial({ color: new THREE.Color('#c9cdd2'), roughness: 0.95, metalness: 0 });
+    const cap = new THREE.Group();
+    for (const o of [...buildFloorObjects(st, disp), ...buildContextObjects(st)]) {
+      if (o.isLineLoop) { if (o.geometry) o.geometry.dispose(); continue; }       // no site outline
+      if (o.isMesh) {
+        if (o.material.transparent) o.material = ctxMat;
+        o.castShadow = shadowsOn; o.receiveShadow = shadowsOn;
+      }
+      cap.add(o);
+    }
+    const prev = {
+      bg: scene.background, ground: ground.material.color.clone(), grid: gridMesh.visible, fig: figure.visible,
+      model: layers.model.group.visible, ctx: layers.context.group.visible, env: layers.envelope.group.visible, shadow: shadowPlane.visible,
+    };
+    const restore = () => {
+      scene.remove(cap);
+      clearGroup(cap);
+      ctxMat.dispose();
+      scene.background = prev.bg;
+      ground.material.color.copy(prev.ground);
+      gridMesh.visible = prev.grid; figure.visible = prev.fig; shadowPlane.visible = prev.shadow;
+      layers.model.group.visible = prev.model; layers.context.group.visible = prev.ctx; layers.envelope.group.visible = prev.env;
+      viewVersion = -1;
+    };
+    capturing = true;
+    let pending;
+    try {
+      // captureView draws and copies the frame before its first await, so the scene can be put back straight away.
+      try {
+        scene.add(cap);
+        scene.background = new THREE.Color('#f3f5f7');
+        ground.material.color.set('#e4e7ea');
+        gridMesh.visible = false; figure.visible = false; shadowPlane.visible = shadowsOn;
+        layers.model.group.visible = layers.context.group.visible = layers.envelope.group.visible = false;
+        for (const c of [persp, ortho]) c.clearViewOffset();
+        pending = ShotMod.captureView({ renderer, scene, camera: cam, scale });
+      } finally { restore(); }
+    } finally {
+      capturing = false;
+      applyViewOffset();
+      needsRender = true;
+    }
+    return await pending;
+  }
+
   function init(hostEl) {
     host = hostEl;
     try {
@@ -3559,7 +3714,8 @@ const Render = (() => {
   }
 
   return {
-    init, setView, capture, enterCompare, exitCompare,
+    init, setView, capture, captureClean, enterCompare, exitCompare,
+    sceneFlags: () => ({ grid: gridMesh.visible, figure: figure.visible, model: layers.model.group.visible, context: layers.context.group.visible, envelope: layers.envelope.group.visible, children: scene.children.length }),
     setInsetProvider: (fn) => { insetProvider = fn; },
     refreshInsets: (animate = true) => { if (!renderer) return; applyViewOffset(); if (preset) setView(preset, animate); else needsRender = true; },
     relayout: () => { needsRender = true; resizeListeners.forEach((fn) => fn()); },
@@ -3897,6 +4053,7 @@ const ICONS = {
   compare: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="8" height="14" rx="1.5"/><rect x="13" y="5" width="8" height="14" rx="1.5"/></svg>',
   camera: '<svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
   option: '<svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg>',
+  sparkle: '<svg viewBox="0 0 24 24"><path d="M10 3l1.8 5.2L17 10l-5.2 1.8L10 17l-1.8-5.2L3 10l5.2-1.8z"/><path d="M18 14l.9 2.1L21 17l-2.1.9L18 20l-.9-2.1L15 17l2.1-.9z"/></svg>',
   chev: '<svg class="chev" viewBox="0 0 14 14" fill="none" stroke="currentColor"><path d="M3 5l4 4 4-4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
 const UI_STORAGE_KEY = 'towergen.ui.v1';
@@ -4369,18 +4526,18 @@ const UI = (() => {
     const syncHistory = () => { undo.disabled = !Store.canUndo(); redo.disabled = !Store.canRedo(); };
     Store.subscribe(syncHistory); syncHistory();
 
-    // SLOT: ai-prompts has its hidden entry button here; it stays hidden until that panel exists.
-    const aiBtn = iconBtn('', 'AI Prompts', { id: 'btnAiPrompts', hidden: true, 'aria-hidden': 'true', title: 'AI Prompts (not built yet)' });
+    // The AI Prompts entry button sits beside the Image button (the panel itself is in 08b_prompts.js).
+    const aiBtn = iconBtn(ICONS.sparkle, 'AI Prompts', { id: 'btnAiPrompts', title: 'AI Prompts: an AI-ready image and a prompt for ChatGPT or Gemini', 'aria-haspopup': 'dialog', 'aria-expanded': 'false', 'aria-controls': 'aiPanel', onclick: () => Prompts.toggle() });
     $('tbActions').append(
       iconBtn(ICONS.save, 'Save', { id: 'btnSave', title: 'Save this option (Cmd/Ctrl+S)', onclick: () => Options.save() }),
       iconBtn(ICONS.duplicate, 'Duplicate', { id: 'btnDuplicate', title: 'Save a copy as a new option', onclick: () => Options.duplicate() }),
       iconBtn(ICONS.compare, 'Compare', { id: 'btnCompare', title: 'Compare 2 to 4 options', 'aria-pressed': 'false', onclick: () => Compare.toggle() }),
-      aiBtn,
     );
 
     const shotBtn = iconBtn(ICONS.camera, 'Image', { id: 'btnShot', title: 'Save an image of this view', onclick: () => Shots.take() });
     const shotMenu = h('button', { class: 'btn caret-only', type: 'button', id: 'btnShotMenu', 'aria-label': 'Image options', title: 'Choose what the image shows', 'aria-haspopup': 'true', 'aria-expanded': 'false', html: ICONS.chev, onclick: () => Shots.openMenu(shotMenu) });
     $('tbShot').append(shotBtn, shotMenu);
+    $('tbShot').before(aiBtn);
 
     // Model / Diagram toggle: a working material switch.
     const seg = $('styleToggle');
@@ -4597,15 +4754,909 @@ const UI = (() => {
 })();
 
 /* SLOT: ai-prompts */
-/* Reserved for the future "AI Prompts" panel. Nothing is built here on purpose.
-   Its entry point is the hidden #btnAiPrompts button in the top bar (UI.buildTopBar):
-   remove the `hidden` attribute and add a click handler when the panel exists. */
+/* Filled: the entry button is #btnAiPrompts (UI.buildTopBar above); the panel and its logic are in 08b_prompts.js. */
+
+/* ==========================================================================
+   AI PROMPTS
+   The prompt library (src/tower/prompts.js) is inlined
+   below. `Prompts` is the panel: a right-hand drawer on desktop and iPad
+   landscape, a full-height sheet on iPad portrait / narrow screens.
+   Step 1 saves the AI-ready picture, step 2 copies the filled prompt.
+   Custom prompts live in the options storage blob (key `prompts`).
+   ========================================================================== */
+const PromptsMod = (() => {
+// AI prompt library for the tower massing tool.
+// The architect exports a white massing screenshot, then pastes it with one of these
+// prompts into ChatGPT (image generation) or Gemini (image editing) to get a
+// photo-real rendering of that exact massing.
+// Data + fillPrompt only. No DOM access.
+//
+// Auto fields (the panel computes them from the current option):
+//   {{floors}} {{height}} {{program}} {{podium}} {{form}}
+// Pick fields (the user chooses them in the panel): see PROMPT_FIELDS.
+// Pick values are written to read naturally in the template sentences:
+//   material -> "The facade is {{material}}."
+//   location -> "The setting is {{location}}."
+//   time     -> "photographed {{time}}"   (values start with "in", "at" or "under")
+//   season   -> "..., {{season}}."        (values start with "in")
+// Templates never write "a {{program}}" (avoids "a office"); they use "this {{program}} tower".
+// {{podium}} always follows "with" ("with a 4-story podium" / "with no podium").
+
+const PROMPT_LIBRARY_VERSION = 1;
+
+const PROMPT_FIELDS = {
+  material: {
+    label: "Facade material",
+    options: [
+      { value: "a unitized glass curtain wall with slim vertical mullions and a spandrel band at each floor", label: "Glass curtain wall" },
+      { value: "light gray precast concrete panels with recessed punched windows", label: "Precast, punched windows" },
+      { value: "clear glazing behind vertical terracotta baguettes in a warm clay color", label: "Terracotta baguettes" },
+      { value: "ribbed champagne-anodized aluminum panels in horizontal bands with glass", label: "Ribbed metal panel" },
+      { value: "warm red-brown brick with tall windows set in deep reveals", label: "Brick, deep reveals" },
+      { value: "floor-to-ceiling glass revealing an exposed mass timber structure", label: "Mass timber and glass" },
+      { value: "white-fritted glass with slim horizontal aluminum sunshades at each floor", label: "Fritted glass, sunshades" },
+      { value: "dark bronze anodized metal and glass in a crisp vertical grid", label: "Dark bronze grid" },
+      { value: "pale limestone panels with narrow vertical window strips", label: "Limestone and glass" },
+    ],
+    default: "a unitized glass curtain wall with slim vertical mullions and a spandrel band at each floor",
+  },
+  location: {
+    label: "Site context",
+    options: [
+      { value: "a dense US downtown with a mix of older and newer towers", label: "Dense US downtown" },
+      { value: "a Southern US city with live oaks and Spanish moss along wide streets", label: "Southern city, live oaks" },
+      { value: "a Florida waterfront with palms and a concrete seawall", label: "Florida waterfront" },
+      { value: "a growing Sunbelt city with wide streets and young shade trees", label: "Sunbelt city" },
+      { value: "a Pacific Northwest city with tall evergreens and nearby hills", label: "Pacific Northwest city" },
+      { value: "a Midwest river city with brick warehouses and steel bridges", label: "Midwest river city" },
+      { value: "a Southwest desert city with palo verde trees and distant mountains", label: "Southwest desert city" },
+      { value: "a Northeast city neighborhood with brownstones and mature street trees", label: "Northeast neighborhood" },
+      { value: "a California coastal city with tall palms and distant hills", label: "California coastal city" },
+    ],
+    default: "a dense US downtown with a mix of older and newer towers",
+  },
+  time: {
+    label: "Time of day",
+    options: [
+      { value: "in late-afternoon golden hour light with low warm sun raking across the facade", label: "Golden hour" },
+      { value: "in clear late-morning sun under a deep blue sky", label: "Late morning, clear" },
+      { value: "in high afternoon sun with crisp short shadows", label: "Bright afternoon" },
+      { value: "under a partly cloudy sky with soft moving cloud shadows", label: "Partly cloudy" },
+      { value: "in soft even light under a bright overcast sky", label: "Overcast" },
+      { value: "in early morning light with a thin haze and cool shadows", label: "Early morning haze" },
+      { value: "in the blue hour just after sunset with interior lights coming on", label: "Blue hour" },
+      { value: "at night with warm interior lights on against a dark sky", label: "Night" },
+    ],
+    default: "in late-afternoon golden hour light with low warm sun raking across the facade",
+  },
+  season: {
+    label: "Season",
+    options: [
+      { value: "in spring with fresh light-green leaves and a few flowering trees", label: "Spring" },
+      { value: "in early summer with full green trees and lawns", label: "Summer" },
+      { value: "in late summer with deep green trees and a light heat haze", label: "Late summer" },
+      { value: "in autumn with orange, red, and gold foliage", label: "Autumn" },
+      { value: "in winter with bare trees and dry pavement, no snow", label: "Winter, no snow" },
+      { value: "in winter with a light dusting of snow on roofs, ground, and branches", label: "Winter, light snow" },
+      { value: "in a mild Southern winter with evergreen trees and green lawns", label: "Mild Southern winter" },
+    ],
+    default: "in early summer with full green trees and lawns",
+  },
+};
+
+// Fixed rule block, prepended to every prompt. Uses {{form}} and {{floors}}.
+const FORM_LOCK =
+  "Turn the attached massing model into a photo-real architectural photograph. " +
+  "Treat the image as the exact massing of {{form}}. " +
+  "Keep its silhouette, proportions, setbacks, podium or base, crown, and all {{floors}} floors with the same floor-line rhythm. " +
+  "Keep the same camera angle, perspective, and framing. " +
+  "Do not add, remove, stretch, or reshape any floor, wing, or tower of this building. " +
+  "Only add materials, glazing, lighting, sky, context, and people. " +
+  "Render each light-gray block as a neighboring building of the same size and position. " +
+  "Flat white and gray are placeholders, not materials.";
+
+const AVOID_BASE = "text, logos, watermarks";
+const AVOID_END = "fisheye distortion, cartoon or illustration look.";
+
+// Shared opening. Skyline and base close-up prompts write their own.
+const OPEN = "Architectural photograph of this {{program}} tower, about {{height}} tall with {{podium}}";
+
+const PROMPTS = [
+  // ---------------------------------------------------------------- time / weather
+  {
+    id: "time-golden-hour",
+    group: "time",
+    title: "Golden hour",
+    description: "Warm low sun from the side, long shadows, and glowing glass.",
+    template:
+      `${OPEN}, in late-afternoon golden hour light. ` +
+      "Low warm sun rakes across one face and leaves the other in cool shade, so each floor line and setback reads crisply. " +
+      "The facade is {{material}}; sunlit glass carries warm sky reflections. " +
+      "The setting is {{location}}, {{season}}. " +
+      "Long soft shadows cross the street, with people walking and parked cars for scale. " +
+      "Full-frame camera, sharp prime lens, natural color.\n" +
+      `Avoid: ${AVOID_BASE}, lens flare streaks, oversaturated orange, ${AVOID_END}`,
+    uses: ["material", "location", "season"],
+    defaults: {},
+  },
+  {
+    id: "time-overcast-midday",
+    group: "time",
+    title: "Overcast midday",
+    description: "Soft, even daylight that shows true material color and texture.",
+    template:
+      `${OPEN}, under a bright overcast midday sky. ` +
+      "Soft, nearly shadowless light shows the true color and texture of the facade, which is {{material}}. " +
+      "Glass reads pale gray with faint cloud reflections, and slab edges stay legible floor by floor. " +
+      "The setting is {{location}}, {{season}}. " +
+      "Pedestrians, cyclists, and a few cars show true scale. " +
+      "Neutral white balance, even exposure, documentary realism like a published project photo.\n" +
+      `Avoid: ${AVOID_BASE}, dramatic HDR, heavy vignetting, ${AVOID_END}`,
+    uses: ["material", "location", "season"],
+    defaults: {},
+  },
+  {
+    id: "time-blue-hour",
+    group: "time",
+    title: "Blue hour dusk",
+    description: "Deep blue sky just after sunset with warm interior lights coming on.",
+    template:
+      `${OPEN}, in the blue hour twenty minutes after sunset. ` +
+      "The sky is deep cobalt with a faint warm glow at the horizon. " +
+      "About half the rooms glow with warm 3000 K light that shows ceilings and the window rhythm; the rest stay dark. " +
+      "The facade is {{material}}. The lobby glows at street level, with soft car light trails and people on the sidewalk. " +
+      "The setting is {{location}}, {{season}}. Tripod long exposure, low noise.\n" +
+      `Avoid: ${AVOID_BASE}, starburst flares, neon colors, ${AVOID_END}`,
+    uses: ["material", "location", "season"],
+    defaults: {},
+  },
+  {
+    id: "time-night-lit",
+    group: "time",
+    title: "Night, lit interiors",
+    description: "Dark sky with most rooms lit, so each floor reads as a glowing band.",
+    template:
+      `Night ${OPEN.charAt(0).toLowerCase() + OPEN.slice(1)}, against a dark sky with a faint city glow. ` +
+      "Most rooms are lit in varied warm and neutral tones, some with blinds half drawn, so each floor reads as its own band of light. " +
+      "The facade is {{material}}; slab edges show as dark lines between lit floors. " +
+      "The crown is softly washed with light. Streetlights, lit storefronts, and headlight trails define the street. " +
+      "The setting is {{location}}, {{season}}. Tripod long exposure, clean blacks.\n" +
+      `Avoid: ${AVOID_BASE}, signs on the building, neon colors, ${AVOID_END}`,
+    uses: ["material", "location", "season"],
+    defaults: { season: "in winter with bare trees and dry pavement, no snow" },
+  },
+  {
+    id: "time-after-rain",
+    group: "time",
+    title: "After rain",
+    description: "Wet pavement with sharp reflections of the tower as the sky clears.",
+    template:
+      `${OPEN}, just after a rain shower. ` +
+      "The sky is clearing, with bright gaps behind moving gray clouds. " +
+      "Streets and plaza paving are wet and dark, with sharp reflections of the tower and lit storefronts in shallow puddles. " +
+      "The facade is {{material}}, slightly darkened and glistening. " +
+      "Pedestrians carry umbrellas, and passing cars throw a light spray. " +
+      "The setting is {{location}}. Rich contrast, true color, sharp full-frame detail.\n" +
+      `Avoid: ${AVOID_BASE}, heavy falling rain, fog hiding the building, ${AVOID_END}`,
+    uses: ["material", "location"],
+    defaults: {},
+  },
+
+  // ---------------------------------------------------------------- facade material
+  {
+    id: "material-glass-curtain-wall",
+    group: "material",
+    title: "Glass curtain wall",
+    description: "Unitized glass with slim mullions and a spandrel band at every floor.",
+    template:
+      `${OPEN}. ` +
+      "Clad it in a unitized glass curtain wall: slim aluminum mullions at 5-foot spacing, low-iron vision glass with a light neutral tint, " +
+      "and an opaque shadow-box spandrel at every slab edge, so the floor count stays exact. " +
+      "Reflections show sky and neighbors with slight panel-to-panel variation. " +
+      "The ground floor has clear storefront glazing. " +
+      "The setting is {{location}}, photographed {{time}}, {{season}}. People and street trees at true scale.\n" +
+      `Avoid: ${AVOID_BASE}, mirror-chrome glass, warped reflections, ${AVOID_END}`,
+    uses: ["location", "time", "season"],
+    defaults: {},
+  },
+  {
+    id: "material-precast-punched",
+    group: "material",
+    title: "Precast, punched windows",
+    description: "Light gray precast panels with a regular grid of recessed windows.",
+    template:
+      `${OPEN}. ` +
+      "The facade is light warm-gray acid-etched precast concrete in floor-high panels with fine, even joints. " +
+      "Punched windows sit in a regular grid, recessed 8 inches, with dark bronze frames, one row per floor. " +
+      "The concrete shows subtle tonal variation, not stains. Larger openings at street level hold storefronts and the lobby. " +
+      "The setting is {{location}}, photographed {{time}}, {{season}}. " +
+      "Pedestrians and cars for scale; the recesses cast clear shadows.\n" +
+      `Avoid: ${AVOID_BASE}, board-formed brutalist texture, grime, ${AVOID_END}`,
+    uses: ["location", "time", "season"],
+    defaults: { time: "in clear late-morning sun under a deep blue sky" },
+  },
+  {
+    id: "material-terracotta",
+    group: "material",
+    title: "Terracotta fins",
+    description: "Glass screened by vertical terracotta baguettes in a warm clay color.",
+    template:
+      `${OPEN}. ` +
+      "The facade is clear glazing screened by vertical terracotta baguettes in a warm clay color, 2 inches wide and 12 inches apart, " +
+      "with slight glaze variation from piece to piece. " +
+      "The baguettes stop at a thin metal band at every slab edge, keeping each floor line visible, and cast fine vertical shade lines. " +
+      "The setting is {{location}}, photographed {{time}}, {{season}}. " +
+      "Planting and people at street level for scale.\n" +
+      `Avoid: ${AVOID_BASE}, plastic-looking fins, brick texture, ${AVOID_END}`,
+    uses: ["location", "time", "season"],
+    defaults: {},
+  },
+  {
+    id: "material-metal-panel",
+    group: "material",
+    title: "Ribbed metal panel",
+    description: "Bands of glass and ribbed, partly perforated champagne aluminum panels.",
+    template:
+      `${OPEN}. ` +
+      "The facade alternates horizontal bands of glazing with ribbed anodized aluminum panels in a soft champagne tone. " +
+      "Fine vertical ribs catch the light differently on each face, and over the spandrels a perforated pattern turns slightly translucent. " +
+      "Each glass and panel band aligns with a floor, with tight, precise joints. " +
+      "The setting is {{location}}, photographed {{time}}, {{season}}. " +
+      "Street trees and people for scale; satin metal sheen.\n" +
+      `Avoid: ${AVOID_BASE}, corrugated industrial siding, rust, ${AVOID_END}`,
+    uses: ["location", "time", "season"],
+    defaults: {},
+  },
+  {
+    id: "material-brick",
+    group: "material",
+    title: "Brick, deep reveals",
+    description: "Warm red-brown brick with tall windows set in deep reveals.",
+    template:
+      `${OPEN}. ` +
+      "The facade is warm red-brown brick in running bond, with tight mortar joints and a natural color range. " +
+      "Tall windows sit in deep 12-inch reveals with dark metal frames, one row per floor, and a slim precast band marks each floor line. " +
+      "The ground floor has larger steel-framed storefronts. " +
+      "The setting is {{location}}, photographed {{time}}, {{season}}. " +
+      "Pedestrians, bikes, and street trees for scale; brick texture visible near the street.\n" +
+      `Avoid: ${AVOID_BASE}, painted brick, ivy on the facade, ${AVOID_END}`,
+    uses: ["location", "time", "season"],
+    defaults: { location: "a Midwest river city with brick warehouses and steel bridges" },
+  },
+  {
+    id: "material-mass-timber",
+    group: "material",
+    title: "Mass timber and glass",
+    description: "Full-height glass that shows a warm exposed timber structure inside.",
+    template:
+      `${OPEN}. ` +
+      "The facade is floor-to-ceiling glass in slim dark frames, revealing the exposed mass timber structure inside: " +
+      "glulam columns and beams and cross-laminated timber ceilings in warm honey tones on every floor. " +
+      "Thin bronze slab edges mark each floor line, and the clear glass shows the wood behind soft sky reflections. " +
+      "The setting is {{location}}, photographed {{time}}, {{season}}. " +
+      "Planters and people at the base for scale.\n" +
+      `Avoid: ${AVOID_BASE}, log-cabin look, exterior wood siding, ${AVOID_END}`,
+    uses: ["location", "time", "season"],
+    defaults: {
+      location: "a Pacific Northwest city with tall evergreens and nearby hills",
+      time: "in the blue hour just after sunset with interior lights coming on",
+    },
+  },
+
+  // ---------------------------------------------------------------- site context
+  {
+    id: "context-downtown",
+    group: "context",
+    title: "Dense downtown",
+    description: "A tight downtown block with busy streets and a deep skyline behind.",
+    template:
+      `${OPEN}, on a tight block in a large US downtown. ` +
+      "Render the light-gray blocks as existing buildings of mixed ages, older stone and brick beside newer glass. " +
+      "Far behind them, a dense skyline fades into mild haze. " +
+      "Streets have crosswalks, traffic signals, taxis, buses, and busy sidewalks with people at true scale. " +
+      "The facade is {{material}}. Photographed {{time}}, {{season}}. Sharp foreground detail.\n" +
+      `Avoid: ${AVOID_BASE}, billboards, new buildings in front of the tower, ${AVOID_END}`,
+    uses: ["material", "time", "season"],
+    defaults: {},
+  },
+  {
+    id: "context-waterfront",
+    group: "context",
+    title: "Waterfront promenade",
+    description: "A public promenade and seawall with calm water reflecting the tower.",
+    template:
+      `${OPEN}, on a city waterfront. ` +
+      "Calm water fills the open foreground where no blocks stand, with soft ripples and a broken reflection of the tower. " +
+      "A wide promenade runs along a seawall, with benches, light poles, and shade trees. " +
+      "Joggers, cyclists, and strollers set the scale, and a few small boats sit offshore. " +
+      "Render the light-gray blocks as neighboring buildings along the shore. " +
+      "The facade is {{material}}. Photographed {{time}}, {{season}}. Clean, airy atmosphere.\n" +
+      `Avoid: ${AVOID_BASE}, cruise ships, beach resort look, ${AVOID_END}`,
+    uses: ["material", "time", "season"],
+    defaults: { season: "in a mild Southern winter with evergreen trees and green lawns" },
+  },
+  {
+    id: "context-suburban-edge",
+    group: "context",
+    title: "Suburban edge",
+    description: "The tower rises alone above low-rise suburban neighbors and parking.",
+    template:
+      `${OPEN}, at the edge of a suburban town center. ` +
+      "Render the light-gray blocks, at their exact size, as suburban neighbors such as garden apartments, a small office building, and shops. " +
+      "Around them are surface parking lots, a wide arterial road, young street trees, and a stormwater pond with native planting. " +
+      "The tower clearly rises above everything nearby. " +
+      "The facade is {{material}}. Photographed {{time}}, {{season}}. Cars, cyclists, and a few people for scale.\n" +
+      `Avoid: ${AVOID_BASE}, other high-rises, billboards, ${AVOID_END}`,
+    uses: ["material", "time", "season"],
+    defaults: {},
+  },
+  {
+    id: "context-park-edge",
+    group: "context",
+    title: "Park edge",
+    description: "Mature trees and a lawn in front, framing the base of the tower.",
+    template:
+      `${OPEN}, facing a large city park. ` +
+      "Mature oaks and plane trees, 50 to 70 feet tall, stand in the open ground in front, " +
+      "and a curving path leads toward the base, with people walking, sitting on the lawn, and walking dogs. " +
+      "The trees frame the lower floors but leave the floor lines and crown clearly visible. " +
+      "Render the light-gray blocks as neighboring buildings along the park edge. " +
+      "The facade is {{material}}. Photographed {{time}}, {{season}}.\n" +
+      `Avoid: ${AVOID_BASE}, trees hiding the tower, fantasy landscaping, ${AVOID_END}`,
+    uses: ["material", "time", "season"],
+    defaults: { season: "in autumn with orange, red, and gold foliage" },
+  },
+  {
+    id: "context-main-street",
+    group: "context",
+    title: "Mixed-use main street",
+    description: "A walkable main street with cafes, shops, and outdoor tables at the base.",
+    template:
+      `${OPEN}, on a walkable mixed-use main street. ` +
+      "The ground floor holds cafes and shops with awnings, outdoor tables, and planters along a wide sidewalk with street trees. " +
+      "Render the light-gray blocks as neighboring buildings with varied storefronts. " +
+      "Parallel-parked cars, a bike lane, and people strolling and dining set the scale. " +
+      "The facade is {{material}}. Photographed {{time}}, {{season}}. Lively but uncluttered, true color.\n" +
+      `Avoid: ${AVOID_BASE}, readable store signs, crowds hiding the base, ${AVOID_END}`,
+    uses: ["material", "time", "season"],
+    defaults: { season: "in spring with fresh light-green leaves and a few flowering trees" },
+  },
+
+  // ---------------------------------------------------------------- camera
+  {
+    id: "camera-aerial-300m",
+    group: "camera",
+    title: "Aerial, 300 m",
+    description: "Drone view from about 300 m. Export the model from a high three-quarter angle first.",
+    template:
+      "Aerial drone photograph of this {{program}} tower, about {{height}} tall with {{podium}}, " +
+      "taken from about 300 m away at a high three-quarter angle that matches the image. " +
+      "Visible roofs get realistic membrane, pavers, or planting, with no new rooftop structures. " +
+      "Streets, rooftops, trees, and cars spread around the site at true scale, and the light-gray blocks get real roofs. " +
+      "The facade is {{material}}. The setting is {{location}}, photographed {{time}}, {{season}}. " +
+      "Light haze toward the horizon.\n" +
+      `Avoid: ${AVOID_BASE}, tilt-shift miniature blur, ${AVOID_END}`,
+    uses: ["material", "location", "time", "season"],
+    defaults: { time: "in clear late-morning sun under a deep blue sky" },
+  },
+  {
+    id: "camera-street-24mm",
+    group: "camera",
+    title: "Across the street",
+    description: "Street-level view from across the street with a 24 mm lens. Set a low, level view first.",
+    template:
+      "Street-level photograph of this {{program}} tower, about {{height}} tall with {{podium}}, " +
+      "taken from the far sidewalk with a 24 mm lens at eye height, as in the image. " +
+      "The base fills the lower frame and the tower rises in natural perspective to the crown, with vertical lines kept straight. " +
+      "The near street has crosswalk stripes, a passing car, and people mid-stride with slight motion blur. " +
+      "The facade is {{material}}. The setting is {{location}}, photographed {{time}}, {{season}}. Full-frame camera at f/8.\n" +
+      `Avoid: ${AVOID_BASE}, leaning or bent verticals, ${AVOID_END}`,
+    uses: ["material", "location", "time", "season"],
+    defaults: {},
+  },
+  {
+    id: "camera-base-closeup",
+    group: "camera",
+    title: "Base close-up",
+    description: "Eye-level close-up of the entry and lower floors. Zoom the model in on the base first.",
+    template:
+      "Pedestrian eye-level photograph of the base of this {{program}} tower, with {{podium}}, " +
+      "taken from about 15 m away with a 35 mm lens and cropped as in the image. " +
+      "It shows the entrance, lobby glazing, and the lower floors above in high detail: " +
+      "mullion caps, door pulls, paving joints, bollards, planters, and lobby furniture behind clean glass. " +
+      "People enter and pass by at true scale. " +
+      "The facade is {{material}}. The setting is {{location}}, photographed {{time}}, {{season}}.\n" +
+      `Avoid: ${AVOID_BASE}, readable signage, ${AVOID_END}`,
+    uses: ["material", "location", "time", "season"],
+    defaults: { time: "in clear late-morning sun under a deep blue sky" },
+  },
+  {
+    id: "camera-skyline-2km",
+    group: "camera",
+    title: "Distant skyline",
+    description: "Telephoto skyline view from about 2 km. Zoom the model far out first.",
+    template:
+      "Telephoto photograph of this {{program}} tower, about {{height}} tall, seen in the skyline from about 2 km away with a 200 mm lens, as in the image. " +
+      "It keeps its exact silhouette and crown and reads as a clear landmark. " +
+      "The light-gray blocks become neighboring buildings, and lower-contrast existing buildings fill the skyline beside and behind the tower, never in front of it. " +
+      "Light haze softens the distance. The facade is {{material}}, with floor lines still readable. " +
+      "The setting is {{location}}, photographed {{time}}, {{season}}.\n" +
+      `Avoid: ${AVOID_BASE}, buildings blocking the tower, ${AVOID_END}`,
+    uses: ["material", "location", "time", "season"],
+    defaults: { time: "in late-afternoon golden hour light with low warm sun raking across the facade" },
+  },
+];
+
+// Full prompt text: FORM_LOCK + blank line + template, with every {{token}} replaced.
+// Value order (later wins): PROMPT_FIELDS defaults < prompt.defaults < values.
+// Empty, null, or undefined entries in values do not override a default.
+// Unknown tokens stay visible as [token].
+function fillPrompt(prompt, values = {}) {
+  const merged = {};
+  for (const [key, field] of Object.entries(PROMPT_FIELDS)) merged[key] = field.default;
+  for (const [key, v] of Object.entries((prompt && prompt.defaults) || {})) {
+    if (v !== undefined && v !== null && v !== "") merged[key] = v;
+  }
+  for (const [key, v] of Object.entries(values || {})) {
+    if (v !== undefined && v !== null && v !== "") merged[key] = v;
+  }
+  const text = FORM_LOCK + "\n\n" + ((prompt && prompt.template) || "");
+  return text
+    .replace(/\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g, (_, key) =>
+      Object.prototype.hasOwnProperty.call(merged, key) ? String(merged[key]) : `[${key}]`)
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/ +\n/g, "\n")
+    .trim();
+}
+
+return { PROMPT_LIBRARY_VERSION, PROMPT_FIELDS, FORM_LOCK, PROMPTS, fillPrompt };
+})();
+
+
+const Prompts = (() => {
+  const { PROMPT_FIELDS, PROMPTS, fillPrompt } = PromptsMod;
+  const GROUPS = [['time', 'Time'], ['material', 'Material'], ['context', 'Context'], ['camera', 'Camera'], ['custom', 'My prompts']];
+  const AUTO = [['floors', 'Floors'], ['height', 'Height'], ['program', 'Program'], ['podium', 'Podium'], ['form', 'Form']];
+  const FIELD_KEYS = Object.keys(PROMPT_FIELDS);
+  const SHAPE_WORDS = { rect: 'rectangular', square: 'rectangular', circle: 'round', ellipse: 'elliptical', triangle: 'triangular', L: 'L-shaped', U: 'U-shaped', polygon: 'custom-shaped' };
+  const CROWN_WORDS = { none: 'a flat roof', flat: 'a flat roof', stepped: 'a stepped crown', sloped: 'a sloped crown', spire: 'a spire', screen: 'a rooftop screen' };
+  const PROGRAM_WORDS = { residential: 'residential', hotel: 'hotel', office: 'office' };
+  const NUMBER_WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+  const TOKEN_HELP = 'Sentence slots: "The facade is {{material}}." · "The setting is {{location}}" · "photographed {{time}}" · ", {{season}}." From your design: {{floors}} {{height}} {{program}} {{podium}} {{form}}. Tick a menu below to let the user choose that slot. The fixed form-lock text is added in front of every prompt.';
+  const STARTER = 'Make a photorealistic render of this {{height}} {{program}} tower in {{location}} at {{time}}.';
+
+  /* ---- auto fields, computed from the current option ------------------------------ */
+  const articleFor = (phrase) => (/^(?:[aeio]|L-|8|11|18)/i.test(phrase) ? 'an' : 'a');
+  const countWord = (n) => (n >= 0 && n < NUMBER_WORDS.length ? NUMBER_WORDS[n] : String(n));
+  function tallestSegment(state) {
+    let best = null, bestH = -1;
+    for (const seg of state.segments || []) {
+      const hgt = num(seg.floors, 0) * num(seg.ftf, 0);
+      if (hgt > bestH) { best = seg; bestH = hgt; }
+    }
+    return best;
+  }
+  const oxford = (list) => (list.length <= 1 ? list.join('') : `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}`);
+
+  /** "a rectangular tower with two setbacks, a sky garden and a stepped crown" */
+  function formPhrase(state) {
+    const seg = tallestSegment(state);
+    const shape = SHAPE_WORDS[seg && seg.shape && seg.shape.type] || 'custom-shaped';
+    const segs = state.segments || [];
+    const mods = [];
+    if (segs.some((s) => num(s.twist && s.twist.deg, 0) !== 0)) mods.push('twisting');
+    if (segs.some((s) => num(s.taper && s.taper.x, 0) !== 0 || num(s.taper && s.taper.y, 0) !== 0)) mods.push('tapering');
+    const lead = mods.length ? `${mods.join(' and ')} ${shape}` : shape;
+    const withs = [];
+    const nSet = (state.setbacks || []).length;
+    if (nSet) withs.push(`${countWord(nSet)} setback${nSet === 1 ? '' : 's'}`);
+    if ((state.carves || []).length) withs.push('a sky garden');
+    withs.push(CROWN_WORDS[state.crown && state.crown.type] || 'a flat roof');
+    return `${articleFor(lead)} ${lead} tower with ${oxford(withs)}`;
+  }
+  function podiumPhrase(state) {
+    if (!state.podium || !state.podium.on) return 'no podium';
+    const n = Math.max(1, Math.round(num(state.podium.floors, 1)));
+    return `${articleFor(String(n))} ${n}-story podium`;
+  }
+  /** { floors, height, program, podium, form } for a state and its metrics. */
+  function autoValues(state, metrics) {
+    const seg = tallestSegment(state);
+    return {
+      floors: String(metrics.floorCount),
+      height: `${Math.round(metrics.totalHeight)} feet`,
+      program: PROGRAM_WORDS[seg && seg.program] || 'mixed-use',
+      podium: podiumPhrase(state),
+      form: formPhrase(state),
+    };
+  }
+  const currentAuto = () => autoValues(Store.raw(), Derived.get().metrics);
+
+  /* ---- prompts and values ---------------------------------------------------------- */
+  const prefs = () => (uiPrefs.prompts = uiPrefs.prompts || {});
+  const customList = () => Options.storage.listPrompts();
+  const allPrompts = () => [...PROMPTS, ...customList()];
+  const findPrompt = (id) => allPrompts().find((p) => p.id === id) || null;
+  const groupPrompts = (g) => (g === 'custom' ? customList() : PROMPTS.filter((p) => p.group === g));
+
+  /** Menu value: field default, then the prompt's own default, then the user's last pick for THIS prompt (remembered per prompt id). */
+  function fieldValue(prompt, key) {
+    const f = PROMPT_FIELDS[key];
+    const shown = !prompt || (prompt.uses || []).includes(key);       // a choice only counts where the prompt shows that menu
+    const remembered = shown && prompt ? ((prefs().fields || {})[prompt.id] || {})[key] : null;
+    if (remembered != null && f.options.some((o) => o.value === remembered)) return remembered;
+    const d = prompt && prompt.defaults && prompt.defaults[key];
+    if (d != null && f.options.some((o) => o.value === d)) return d;
+    return f.default != null ? f.default : (f.options[0] || {}).value;
+  }
+  function rememberField(prompt, key, value) {
+    const p = prefs();
+    const all = p.fields || {};
+    p.fields = { ...all, [prompt.id]: { ...(all[prompt.id] || {}), [key]: value } };
+    saveUiPrefs(uiPrefs);
+  }
+  /** Auto fields plus every pick field (chosen where the prompt shows a menu for it, its default elsewhere). */
+  function valuesFor(prompt, overrides) {
+    const v = { ...currentAuto() };
+    for (const k of FIELD_KEYS) v[k] = fieldValue(prompt, k);
+    return { ...v, ...(overrides || {}) };
+  }
+  const textFor = (prompt, overrides) => fillPrompt(prompt, valuesFor(prompt, overrides));
+  const wordCount = (t) => (t.trim() ? t.trim().split(/\s+/).length : 0);
+
+  /* ---- view state ------------------------------------------------------------------ */
+  const ui = { open: false, group: null, editing: null, el: null, restoreFocus: null, raf: 0, busy: false, error: '' };
+  const selectedId = (g) => (prefs().selected || {})[g];
+  function currentGroup() {
+    const g = ui.group || prefs().group;
+    return GROUPS.some((x) => x[0] === g) ? g : 'time';
+  }
+  function currentPrompt() {
+    const g = currentGroup(), list = groupPrompts(g);
+    return list.find((p) => p.id === selectedId(g)) || list[0] || null;
+  }
+  function select(group, id) {
+    const p = prefs();
+    p.group = group;
+    p.selected = { ...(p.selected || {}), [group]: id };
+    ui.group = group;
+    saveUiPrefs(uiPrefs);
+  }
+  /** The prompt the preview and Copy use: the draft while editing, else the selected one. */
+  function activePrompt() {
+    if (ui.editing) return { id: ui.editing.id || 'draft', group: 'custom', title: ui.editing.title, template: ui.editing.template, uses: ui.editing.uses, defaults: {} };
+    return currentPrompt();
+  }
+  const activeText = () => { const p = activePrompt(); return p ? textFor(p) : ''; };
+
+  /* ---- notices: inside the panel while it is open (the 3D view's toasts sit beneath it) --------- */
+  function notify(message, kind = '') {
+    if (!ui.open || !ui.toasts) { Toast.show(message, kind); return; }
+    const t = h('div', { class: `toast ${kind}`.trim(), role: 'status' }, message);
+    ui.toasts.append(t);
+    setTimeout(() => t.remove(), 3200);
+  }
+
+  /* ---- clipboard ------------------------------------------------------------------------------ */
+  function selectAll(ta, text) {
+    try { ta.focus({ preventScroll: true }); ta.select(); ta.setSelectionRange(0, text.length); } catch (e) { /* ignore */ }
+  }
+  async function copyPrompt() {
+    const text = activeText();
+    if (!text) { notify('Pick a prompt first.', 'warn'); return false; }
+    try {
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        await navigator.clipboard.writeText(text);
+        notify('Prompt copied.');
+        return true;
+      }
+    } catch (e) { /* fall back to select + copy */ }
+    let ta = ui.preview;
+    let temp = false;
+    if (!ta || !ta.isConnected || !ui.open) { ta = h('textarea', { readonly: true, style: 'position:fixed;left:-9999px;top:0;opacity:0' }); document.body.append(ta); temp = true; }
+    ta.value = text;
+    selectAll(ta, text);
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    if (temp) ta.remove();
+    if (ok) { notify('Prompt copied.'); return true; }
+    if (!temp) selectAll(ta, text);
+    notify('Select and copy the text.', 'warn');
+    return false;
+  }
+
+  async function saveImage() {
+    if (ui.busy) return null;
+    ui.busy = true; syncSteps();
+    try { return await Shots.takeAiReady(); } finally { ui.busy = false; syncSteps(); }
+  }
+
+  /* ---- custom prompts -------------------------------------------------------------------------- */
+  const uniqueTitle = (title, exceptId) => StorageMod.uniqueName(title, customList().filter((p) => p.id !== exceptId).map((p) => p.title));
+  function startNew() {
+    ui.error = '';
+    ui.editing = { id: null, title: StorageMod.uniqueName('New prompt', customList().map((p) => p.title)), template: STARTER, uses: ['location', 'time'], focus: 'title' };
+    ui.group = 'custom';
+    render();
+  }
+  function startEdit(p) {
+    ui.error = '';
+    ui.editing = { id: p.id, title: p.title, template: p.template, uses: [...(p.uses || [])], focus: 'template' };
+    render();
+  }
+  function duplicateToEdit(p) {
+    ui.error = '';
+    ui.editing = { id: null, title: StorageMod.uniqueName(`${p.title} (copy)`, customList().map((x) => x.title)), template: p.template, uses: [...(p.uses || [])], focus: 'title' };
+    ui.group = 'custom';
+    render();
+    notify('Copied to My prompts. Change it and press Save.');
+  }
+  function saveEditing() {
+    const e = ui.editing;
+    if (!e) return null;
+    const title = e.title.trim();
+    if (!title) { ui.error = 'Give the prompt a title.'; render(); return null; }
+    if (!e.template.trim()) { ui.error = 'Write the prompt text.'; render(); return null; }
+    const rec = Options.storage.savePrompt({ id: e.id || undefined, title: uniqueTitle(title, e.id), template: e.template, uses: e.uses.filter((k) => FIELD_KEYS.includes(k)) });
+    if (!rec) { ui.error = 'The prompt could not be saved.'; render(); return null; }
+    ui.editing = null; ui.error = '';
+    select('custom', rec.id);
+    render();
+    notify('Prompt saved.');
+    return rec;
+  }
+  function cancelEditing() { ui.editing = null; ui.error = ''; render(); }
+  async function removePrompt(p) {
+    const ok = await confirmDialog(`Delete the prompt “${p.title}”? This cannot be undone.`, 'Delete', true);
+    if (!ok) return false;
+    Options.storage.removePrompt(p.id);
+    render();
+    notify('Prompt deleted.');
+    return true;
+  }
+
+  /* ---- DOM --------------------------------------------------------------------------------------- */
+  function build() {
+    const back = h('div', { class: 'ai-back', id: 'aiBack', hidden: true });
+    back.addEventListener('pointerdown', () => close());
+    const closeBtn = h('button', { class: 'ibtn', type: 'button', 'aria-label': 'Close AI Prompts', title: 'Close (Esc)', html: ICON_X, onclick: () => close() });
+    ui.saveBtn = h('button', { class: 'btn outline step', type: 'button', id: 'aiStepImage', onclick: () => saveImage() }, '1. Save AI-ready image');
+    ui.copyBtn = h('button', { class: 'btn solid step', type: 'button', id: 'aiStepCopy', onclick: () => copyPrompt() }, '2. Copy prompt');
+    ui.body = h('div', { class: 'ai-body', id: 'aiBody' });
+    ui.toasts = h('div', { class: 'ai-toasts', 'aria-live': 'polite' });
+    const panel = h('aside', { class: 'ai-panel', id: 'aiPanel', role: 'dialog', 'aria-label': 'AI Prompts', 'aria-modal': 'false', 'data-open': 'false', 'aria-hidden': 'true', tabindex: '-1' },
+      h('header', { class: 'ai-head' }, h('h2', null, 'AI Prompts'), closeBtn),
+      h('div', { class: 'ai-steps' },
+        h('div', { class: 'ai-step-row' }, ui.saveBtn, ui.copyBtn),
+        h('p', { class: 'help' }, 'Paste the image and the prompt into ChatGPT or Gemini.')),
+      ui.body, ui.toasts);
+    document.body.append(back, panel);
+    ui.back = back; ui.el = panel;
+  }
+  function syncSteps() { if (ui.saveBtn) { ui.saveBtn.disabled = ui.busy; ui.saveBtn.textContent = ui.busy ? 'Saving image…' : '1. Save AI-ready image'; } }
+
+  function tabsEl() {
+    const g = currentGroup();
+    const tabs = h('div', { class: 'ai-tabs', role: 'tablist', 'aria-label': 'Prompt groups' });
+    for (const [id, label] of GROUPS) {
+      tabs.append(h('button', {
+        class: 'ai-tab', type: 'button', role: 'tab', id: `aiTab-${id}`, 'aria-selected': String(id === g), 'data-group': id,
+        onclick: () => { if (ui.editing && id !== 'custom') ui.editing = null; ui.group = id; select(id, selectedId(id) || (groupPrompts(id)[0] || {}).id); render(); },
+      }, label));
+    }
+    return tabs;
+  }
+
+  function listEl() {
+    const g = currentGroup(), list = groupPrompts(g), cur = currentPrompt();
+    const wrap = h('div', { class: 'ai-listwrap' });
+    if (g === 'custom') {
+      wrap.append(h('div', { class: 'ai-listbar' }, h('button', { class: 'btn outline sm', type: 'button', id: 'aiNew', onclick: startNew }, '+ New prompt')));
+      if (!list.length && !ui.editing) wrap.append(h('p', { class: 'help ai-empty' }, 'Nothing here yet. Use New prompt, or open any other tab and press Duplicate to edit.'));
+    }
+    const ul = h('div', { class: 'ai-list', role: 'group', 'aria-label': 'Prompts' });
+    for (const p of list) {
+      ul.append(h('button', {
+        class: 'ai-item', type: 'button', 'aria-pressed': String(ui.editing ? ui.editing.id === p.id : !!cur && cur.id === p.id), 'data-id': p.id,
+        onclick: () => { ui.editing = null; select(g, p.id); render(); },
+      }, h('span', { class: 'ai-item-title' }, p.title), p.description ? h('span', { class: 'ai-item-desc' }, p.description) : null));
+    }
+    if (ui.editing && !ui.editing.id) ul.append(h('div', { class: 'ai-item is-draft', 'aria-pressed': 'true' }, h('span', { class: 'ai-item-title' }, ui.editing.title || 'New prompt'), h('span', { class: 'ai-item-desc' }, 'Not saved yet')));
+    wrap.append(ul);
+    return wrap;
+  }
+
+  function fieldsEl(prompt, uses, onPick) {
+    const wrap = h('div', { class: 'ai-fields' });
+    for (const key of uses) {
+      const f = PROMPT_FIELDS[key];
+      if (!f) continue;
+      const id = `aiField-${key}`;
+      const sel = h('select', { id }, f.options.map((o) => h('option', { value: o.value }, o.label)));
+      sel.value = fieldValue(prompt, key);
+      sel.addEventListener('change', () => { rememberField(prompt, key, sel.value); if (onPick) onPick(); updatePreview(); });
+      wrap.append(h('div', { class: 'ctl select-row' }, h('label', { for: id }, f.label), sel));
+    }
+    return wrap;
+  }
+
+  function autoEl() {
+    const wrap = h('div', { class: 'ai-auto', id: 'aiAuto' });
+    wrap.append(h('div', { class: 'label' }, 'From your design'));
+    const chips = h('div', { class: 'ai-chips' });
+    ui.chips = {};
+    for (const [k, label] of AUTO) {
+      const v = h('span', { class: 'v' });
+      ui.chips[k] = v;
+      chips.append(h('span', { class: `ai-chip${k === 'form' ? ' wide' : ''}`, 'data-auto': k }, h('span', { class: 'k' }, label), v));
+    }
+    wrap.append(chips);
+    return wrap;
+  }
+  function updateChips() {
+    if (!ui.chips) return;
+    const a = currentAuto();
+    for (const [k] of AUTO) if (ui.chips[k]) ui.chips[k].textContent = a[k];
+  }
+
+  function previewEl() {
+    const wrap = h('div', { class: 'ai-preview-wrap' });
+    ui.preview = h('textarea', { class: 'ai-preview', id: 'aiPreview', readonly: true, rows: '9', 'aria-label': 'Prompt preview', spellcheck: 'false' });
+    ui.count = h('span', { class: 'ai-count', id: 'aiCount' });
+    wrap.append(h('div', { class: 'sub-title' }, h('span', { class: 'label' }, 'Prompt preview'), ui.count), ui.preview);
+    return wrap;
+  }
+  function updatePreview() {
+    if (!ui.preview) return;
+    const text = activeText();
+    if (ui.preview.value !== text) ui.preview.value = text;
+    if (ui.count) ui.count.textContent = `${wordCount(text)} words`;
+    ui.copyBtn.disabled = !text;
+  }
+
+  function editorEl(refreshFields) {
+    const e = ui.editing;
+    const wrap = h('div', { class: 'ai-editor' });
+    const title = h('input', { type: 'text', id: 'aiEditTitle', maxlength: '60', value: e.title, autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Prompt title' });
+    title.addEventListener('input', () => { e.title = title.value; updatePreview(); });
+    const tpl = h('textarea', { id: 'aiEditTemplate', rows: '8', 'aria-label': 'Prompt text', spellcheck: 'true' });
+    tpl.value = e.template;
+    tpl.addEventListener('input', () => { e.template = tpl.value; updatePreview(); });
+    wrap.append(
+      h('div', { class: 'label' }, e.id ? 'Edit prompt' : 'New prompt'),
+      h('label', { class: 'ai-lab', for: 'aiEditTitle' }, 'Title'), title,
+      h('label', { class: 'ai-lab', for: 'aiEditTemplate' }, 'Prompt text'), tpl,
+      h('p', { class: 'points-note', id: 'aiTokenHelp' }, TOKEN_HELP),
+      h('div', { class: 'label' }, 'Menus to show'),
+    );
+    const uses = h('div', { class: 'ai-uses', role: 'group', 'aria-label': 'Menus to show' });
+    for (const k of FIELD_KEYS) {
+      const cb = h('input', { type: 'checkbox', id: `aiUse-${k}` });
+      cb.checked = e.uses.includes(k);
+      cb.addEventListener('change', () => { e.uses = FIELD_KEYS.filter((x) => (x === k ? cb.checked : e.uses.includes(x))); refreshFields(); updatePreview(); });
+      uses.append(h('label', { class: 'ai-check', for: `aiUse-${k}` }, cb, h('span', null, PROMPT_FIELDS[k].label)));
+    }
+    wrap.append(uses);
+    if (ui.error) wrap.append(h('p', { class: 'points-note bad', role: 'alert' }, ui.error));
+    wrap.append(h('div', { class: 'ai-actions' },
+      h('button', { class: 'btn outline sm', type: 'button', id: 'aiEditCancel', onclick: cancelEditing }, 'Cancel'),
+      h('button', { class: 'btn solid sm', type: 'button', id: 'aiEditSave', onclick: saveEditing }, 'Save prompt')));
+    return wrap;
+  }
+
+  function detailEl() {
+    const wrap = h('div', { class: 'ai-detail' });
+    if (ui.editing) {
+      const host = h('div', { class: 'ai-fields-host' });
+      const refreshFields = () => { host.textContent = ''; host.append(fieldsEl(activePrompt(), ui.editing.uses, null)); };
+      wrap.append(editorEl(refreshFields), host, autoEl(), previewEl());
+      refreshFields();
+      return wrap;
+    }
+    const p = currentPrompt();
+    if (!p) { wrap.append(h('p', { class: 'help' }, 'Select a prompt to see its fields.')); ui.preview = null; ui.chips = null; return wrap; }
+    const custom = p.group === 'custom';
+    const head = h('div', { class: 'ai-dhead' }, h('div', { class: 'ai-dtitle' }, p.title));
+    const desc = p.description ? h('p', { class: 'ai-ddesc', id: 'aiDesc' }, p.description) : null;
+    const acts = h('div', { class: 'ai-dacts' });
+    if (custom) {
+      acts.append(
+        h('button', { class: 'btn outline sm', type: 'button', id: 'aiEdit', onclick: () => startEdit(p) }, 'Edit'),
+        h('button', { class: 'btn outline sm danger-text', type: 'button', id: 'aiDelete', onclick: () => removePrompt(p) }, 'Delete'));
+    } else {
+      acts.append(h('button', { class: 'btn outline sm', type: 'button', id: 'aiDuplicate', onclick: () => duplicateToEdit(p) }, 'Duplicate to edit'));
+    }
+    head.append(acts);
+    wrap.append(head);
+    if (desc) wrap.append(desc);
+    const uses = (p.uses || []).filter((k) => PROMPT_FIELDS[k]);
+    if (uses.length) wrap.append(h('div', { class: 'label' }, 'Choose'), fieldsEl(p, uses, null));
+    wrap.append(autoEl(), previewEl());
+    return wrap;
+  }
+
+  function render() {
+    if (!ui.el) return;
+    const keepScroll = ui.body.scrollTop;
+    ui.body.textContent = '';
+    ui.body.append(tabsEl(), listEl(), detailEl());
+    updateChips();
+    updatePreview();
+    syncSteps();
+    ui.body.scrollTop = keepScroll;
+    if (ui.editing && ui.editing.focus) {
+      const f = ui.editing.focus; ui.editing.focus = null;
+      const el = document.getElementById(f === 'title' ? 'aiEditTitle' : 'aiEditTemplate');
+      if (el && ui.open) { try { el.focus({ preventScroll: true }); if (f === 'title') el.select(); } catch (e) { /* ignore */ } }
+    }
+  }
+
+  /* ---- open / close ------------------------------------------------------------------------------ */
+  function open() {
+    if (!ui.el) return false;
+    if (ui.open) return true;
+    Pop.close();
+    ui.open = true;
+    ui.restoreFocus = document.activeElement;
+    render();
+    ui.back.hidden = false;
+    ui.el.setAttribute('data-open', 'true');
+    ui.el.removeAttribute('aria-hidden');
+    const btn = document.getElementById('btnAiPrompts');
+    if (btn) { btn.setAttribute('aria-expanded', 'true'); btn.classList.add('is-on'); }
+    try { ui.el.focus({ preventScroll: true }); } catch (e) { /* ignore */ }
+    return true;
+  }
+  function close() {
+    if (!ui.open) return false;
+    ui.open = false;
+    ui.back.hidden = true;
+    ui.el.setAttribute('data-open', 'false');
+    ui.el.setAttribute('aria-hidden', 'true');
+    ui.toasts.textContent = '';
+    const btn = document.getElementById('btnAiPrompts');
+    if (btn) { btn.setAttribute('aria-expanded', 'false'); btn.classList.remove('is-on'); }
+    const f = ui.restoreFocus;
+    ui.restoreFocus = null;
+    if (f && f.focus && document.contains(f)) { try { f.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
+    return true;
+  }
+  const toggle = () => (ui.open ? close() : open());
+
+  function init() {
+    build();
+    window.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || !ui.open) return;
+      if (document.querySelector('.modal-back')) return;      // a confirm dialog handles its own Escape
+      e.preventDefault();
+      close();
+    });
+    // The numbers in the chips and the preview follow the design while the panel is open.
+    Store.subscribe(() => {
+      if (!ui.open || ui.raf) return;
+      ui.raf = requestAnimationFrame(() => { ui.raf = 0; updateChips(); updatePreview(); });
+    });
+    Options.onImport(({ promptsAdded }) => { if (promptsAdded && ui.el) render(); });
+  }
+
+  return {
+    init, open, close, toggle, copyPrompt, saveImage, isOpen: () => ui.open,
+    formPhrase, autoValues, podiumPhrase, currentAuto, textFor, findPrompt, allPrompts, valuesFor,
+    // the same text the preview shows for a prompt id; `values` overrides auto or pick fields
+    promptText: (id, values) => { const p = findPrompt(id); return p ? textFor(p, values) : null; },
+    startNew, startEdit, saveEditing, cancelEditing, duplicateToEdit, removePrompt,
+    editing: () => (ui.editing ? { ...ui.editing } : null),
+    setEditing: (patch) => { if (ui.editing) { Object.assign(ui.editing, patch); render(); } },
+    select, render,
+  };
+})();
 
 /* ==========================================================================
    SHARED: storage
    src/shared/storage.js inlined unchanged (apart from the export keywords),
    plus `Options`, the tower tool's glue: save, duplicate, rename, delete, the
    option menu, export / import, autosave and restore.
+   Custom AI prompts ride in the same blob (storage.listPrompts / savePrompt / removePrompt).
    Saved options live under localStorage key `towergen.options.v1`; the
    working copy autosaves into the "__current" slot after a 1 s pause.
    ========================================================================== */
@@ -4617,6 +5668,8 @@ const StorageMod = (() => {
    One localStorage key holds:
      { schema, options: [{ id, name, createdAt, updatedAt, state }], current }
    where `current` is the autosave slot: { state, updatedAt } (slot "__current").
+   An optional `prompts: [{ id, title, template, ... }]` list (custom AI prompts) rides in the same blob; it is
+   omitted while empty, travels in export / import, and import renames title collisions "Title (2)".
 
    Rules
    - Every storage access is inside try/catch. On any failure onNotice(message)
@@ -4696,7 +5749,7 @@ function createStorage({
   let persistent = true;     // false once any read/write failed
   let readOnly = false;      // data written by a newer app version: never overwrite
   let lastRaw = null;        // last string we know is in storage
-  let data = { schema, options: [], current: null };
+  let data = { schema, options: [], current: null, prompts: [] };
   let timer = null;
   let pendingAutosave = null;
 
@@ -4748,12 +5801,29 @@ function createStorage({
     };
   }
 
+  /** A custom prompt record (any extra fields are kept), or null when it has no usable title and template. */
+  function normalizePrompt(p) {
+    if (!isObj(p) || typeof p.title !== "string" || !p.title.trim() || typeof p.template !== "string") return null;
+    const now = Date.now();
+    const num = (v) => (Number.isFinite(v) ? v : now);
+    return {
+      ...clone(p),
+      id: typeof p.id === "string" && p.id ? p.id : newId(),
+      title: p.title.trim(),
+      group: "custom",
+      template: p.template,
+      uses: Array.isArray(p.uses) ? p.uses.filter((u) => typeof u === "string") : [],
+      createdAt: num(p.createdAt),
+      updatedAt: num(p.updatedAt),
+    };
+  }
+
   /** @returns {object|null} normalized data, or null when raw is unusable. */
   function parseBlob(raw) {
     let obj;
     try { obj = JSON.parse(raw); } catch (e) { return null; }
     if (!isObj(obj) || !Array.isArray(obj.options) || !Number.isFinite(obj.schema)) return null;
-    const out = { schema, options: [], current: null, newer: obj.schema > schema };
+    const out = { schema, options: [], current: null, prompts: [], newer: obj.schema > schema };
     const seen = new Set();
     for (const r of obj.options) {
       const rec = normalizeRecord(r, obj.schema);
@@ -4761,6 +5831,16 @@ function createStorage({
       if (seen.has(rec.id)) rec.id = newId();
       seen.add(rec.id);
       out.options.push(rec);
+    }
+    if (Array.isArray(obj.prompts)) {
+      const ids = new Set();
+      for (const p of obj.prompts) {
+        const rec = normalizePrompt(p);
+        if (!rec) continue;
+        if (ids.has(rec.id)) rec.id = newId();
+        ids.add(rec.id);
+        out.prompts.push(rec);
+      }
     }
     if (isObj(obj.current) && isObj(obj.current.state)) {
       out.current = {
@@ -4790,7 +5870,7 @@ function createStorage({
       lastRaw = raw;
       notice("Saved options could not be read and were reset. A backup copy of the old data was kept.");
       if (initial) {
-        data = { schema, options: [], current: null };
+        data = { schema, options: [], current: null, prompts: [] };
         try { backend().setItem(key + ".corrupt", raw); } catch (e) { /* ignore */ }
       }
       // Not initial: keep the good in-memory copy; the next write overwrites the bad value.
@@ -4809,7 +5889,9 @@ function createStorage({
     if (readOnly) return false;
     let raw;
     try {
-      raw = JSON.stringify({ schema, options: data.options, current: data.current });
+      const blob = { schema, options: data.options, current: data.current };
+      if (data.prompts.length) blob.prompts = data.prompts;
+      raw = JSON.stringify(blob);
     } catch (e) {
       notice("Options could not be saved.");
       return false;
@@ -4914,6 +5996,32 @@ function createStorage({
       return rec.id;
     },
 
+    /** Custom prompts, oldest first (copies). */
+    listPrompts() {
+      load(false);
+      return data.prompts.map(clone);
+    },
+
+    /** Adds a custom prompt, or replaces the one with the same id. Returns the saved copy, or null when it has no title / template. */
+    savePrompt(prompt) {
+      load(false);
+      const old = isObj(prompt) ? data.prompts.find((p) => p.id === prompt.id) : null;
+      const rec = normalizePrompt({ ...prompt, updatedAt: Date.now(), createdAt: old ? old.createdAt : Date.now() });
+      if (!rec) return null;
+      if (old) data.prompts[data.prompts.indexOf(old)] = rec; else data.prompts.push(rec);
+      persist();
+      return clone(rec);
+    },
+
+    removePrompt(id) {
+      load(false);
+      const i = data.prompts.findIndex((p) => p.id === id);
+      if (i < 0) return false;
+      data.prompts.splice(i, 1);
+      persist();
+      return true;
+    },
+
     /** Debounced (1 s) save of the working state into the "__current" slot. */
     autosave(state) {
       try { pendingAutosave = stamp(state); } catch (e) { notice("Options could not be saved."); return; }
@@ -4938,7 +6046,7 @@ function createStorage({
       return data.current ? clone(data.current.state) : null;
     },
 
-    /** All saved options as an application/json Blob. */
+    /** All saved options (and custom prompts, when there are any) as an application/json Blob. */
     exportAll() {
       load(false);
       const payload = {
@@ -4946,6 +6054,7 @@ function createStorage({
         exportedAt: new Date().toISOString(),
         options: data.options.map(out),
       };
+      if (data.prompts.length) payload.prompts = data.prompts.map(clone);
       return new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     },
 
@@ -4968,7 +6077,8 @@ function createStorage({
 
     /**
      * Appends the options of an exportAll() file. Never replaces existing options.
-     * Resolves {added, skipped}; rejects with an Error whose message is shown to the user.
+     * Custom prompts in the file are appended too (a title already in use becomes "Title (2)").
+     * Resolves {added, skipped, promptsAdded}; rejects with an Error whose message is shown to the user.
      */
     async importFile(file) {
       if (!file) throw new Error("No file was chosen.");
@@ -5007,12 +6117,26 @@ function createStorage({
         taken.add(rec.name);
         incoming.push(rec);
       }
-      if (incoming.length === 0 && obj.options.length > 0) {
+      const takenTitles = new Set(data.prompts.map((p) => p.title));
+      const incomingPrompts = [];
+      if (Array.isArray(obj.prompts)) {
+        for (const p of obj.prompts) {
+          const rec = normalizePrompt({ ...(isObj(p) ? p : {}), id: undefined });
+          if (!rec) continue;
+          rec.title = uniqueName(rec.title, takenTitles);
+          takenTitles.add(rec.title);
+          incomingPrompts.push(rec);
+        }
+      }
+      if (incoming.length === 0 && incomingPrompts.length === 0 && obj.options.length > 0) {
         throw new Error("None of the options in this file could be used.");
       }
       data.options.push(...incoming);
-      if (incoming.length) persist();
-      return { added: incoming.length, skipped };
+      data.prompts.push(...incomingPrompts);
+      if (incoming.length || incomingPrompts.length) persist();
+      const res = { added: incoming.length, skipped };
+      if (incomingPrompts.length) res.promptsAdded = incomingPrompts.length;
+      return res;
     },
 
     /** True while saving to browser storage works (false after a failure; data is then memory-only). */
@@ -5164,18 +6288,22 @@ const Options = (() => {
     return true;
   }
 
+  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  const importListeners = [];
   function exportJson() {
-    const n = storage.list().length;
-    if (!n) { Toast.show('Nothing to export yet. Save an option first.', 'warn'); return false; }
+    const n = storage.list().length, np = storage.listPrompts().length;
+    if (!n && !np) { Toast.show('Nothing to export yet. Save an option first.', 'warn'); return false; }
     storage.downloadExport();
-    Toast.show(`Exported ${n} option${n === 1 ? '' : 's'}`);
+    Toast.show(`Exported ${[n ? plural(n, 'option') : '', np ? plural(np, 'custom prompt') : ''].filter(Boolean).join(' and ')}`);
     return true;
   }
   async function importFile(file) {
     try {
-      const { added, skipped } = await storage.importFile(file);
-      Toast.show(`Imported ${added} option${added === 1 ? '' : 's'}${skipped ? `, ${skipped} skipped` : ''}. Open them from the Option menu.`);
-      return { added, skipped };
+      const { added, skipped, promptsAdded } = await storage.importFile(file);
+      const parts = [added || !promptsAdded ? plural(added, 'option') : '', promptsAdded ? plural(promptsAdded, 'custom prompt') : ''].filter(Boolean);
+      Toast.show(`Imported ${parts.join(' and ')}${skipped ? `, ${skipped} skipped` : ''}.${added ? ' Open the options from the Option menu.' : ''}`);
+      importListeners.forEach((fn) => fn({ added, skipped, promptsAdded }));
+      return { added, skipped, promptsAdded };
     } catch (e) {
       Toast.show(e && e.message ? e.message : 'The file could not be imported.', 'bad', 7000);
       return { added: 0, skipped: 0, error: String(e && e.message) };
@@ -5234,6 +6362,7 @@ const Options = (() => {
   }
 
   return {
+    onImport: (fn) => importListeners.push(fn),
     init, save, duplicate, rename, remove, openMenu, loadOption, loadPreset, exportJson, importFile, syncDirty,
     list: () => storage.list(), get: (id) => storage.get(id), flush: () => storage.flush(),
     current: () => currentId, storage,
@@ -5614,6 +6743,19 @@ const Shots = (() => {
     try { return await capture({ deliver: true }); } catch (e) { console.error(e); Toast.show(e && e.message ? e.message : 'The image could not be made.', 'bad', 6000); return null; }
   }
 
+  /** The AI-ready picture: no overlay, grid, scale figure or wireframe; Model style; light plain sky. Filename `<option>-ai-ready-YYYY-MM-DD.png`. */
+  async function aiReady({ deliver = true, scale = 2 } = {}) {
+    const blob = await Render.captureClean(scale);
+    if (deliver) {
+      const result = await ShotMod.deliverImage(blob, ShotMod.screenshotFilename(`${Store.get('name')}-ai-ready`));
+      if (result === 'downloaded') Toast.show('AI-ready image saved to your downloads.');
+    }
+    return blob;
+  }
+  async function takeAiReady() {
+    try { return await aiReady({ deliver: true }); } catch (e) { console.error(e); Toast.show(e && e.message ? e.message : 'The image could not be made.', 'bad', 6000); return null; }
+  }
+
   function openMenu(anchor) {
     const el = h('div', { role: 'group', 'aria-label': 'Image options' });
     el.append(h('div', { class: 'label pop-label' }, 'The image shows'));
@@ -5627,11 +6769,14 @@ const Shots = (() => {
       });
       el.append(btn);
     }
+    el.append(h('div', { class: 'pop-sep' }));
+    el.append(h('button', { class: 'pop-item', type: 'button', role: 'menuitem', id: 'btnAiReady', onclick: () => { Pop.close(); takeAiReady(); } },
+      h('span', { class: 'grow' }, 'AI-ready image', h('small', null, 'Plain model, no overlay, grid or wireframe. For ChatGPT or Gemini.'))));
     el.append(h('div', { class: 'pop-actions' }, h('button', { class: 'btn solid', type: 'button', onclick: () => { Pop.close(); take(); } }, 'Save image')));
     Pop.open(anchor, el, { align: 'right' });
   }
 
-  return { take, capture, openMenu, buildOverlay, keyMetrics };
+  return { take, capture, aiReady, takeAiReady, openMenu, buildOverlay, keyMetrics };
 })();
 
 /* ==========================================================================
@@ -6194,8 +7339,93 @@ async function runTests() {
     return eq([res.added, a.list().map((o) => o.name).sort()], [1, ['Same', 'Same (2)']]);
   });
 
+  /* ---- AI prompts ---- */
+  const presetStates = CONFIG.presets.map((p) => fillDefaults(p.state));
+  await t('every built-in prompt fills with no "[" or "{{" left (default design and every preset)', () => {
+    const states = [fillDefaults(defaultState()), ...presetStates];
+    for (const st of states) {
+      const auto = Prompts.autoValues(st, computeDerived(st).metrics);
+      for (const p of PromptsMod.PROMPTS) {
+        const text = PromptsMod.fillPrompt(p, { ...auto, ...Object.fromEntries(Object.keys(PromptsMod.PROMPT_FIELDS).map((k) => [k, Prompts.valuesFor(p)[k]])) });
+        if (text.includes('[') || text.includes('{{')) return `${p.id} (${st.name}) left a token: ${(text.match(/\[[^\]]*\]|\{\{[^}]*\}\}/) || [''])[0]}`;
+        if (!text.startsWith(PromptsMod.FORM_LOCK.slice(0, 20))) return `${p.id} does not start with the form lock`;
+      }
+    }
+    return true;
+  });
+  await t('the panel text for every built-in prompt matches getPromptText', () => {
+    for (const p of PromptsMod.PROMPTS) { const x = Prompts.promptText(p.id); if (!x || x.includes('[') || x.includes('{{')) return `${p.id}: ${String(x).slice(0, 80)}`; }
+    return eq(Prompts.promptText('no-such-prompt'), null);
+  });
+  await t('the form phrase is non-empty for every preset', () => {
+    for (const st of presetStates) { const f = Prompts.formPhrase(st); if (!/^an? .+ tower with .+/.test(f)) return `${st.name}: "${f}"`; }
+    return true;
+  });
+  await t('form phrase rules (shape, setbacks, twist, taper, sky garden, crown)', () => {
+    const s = fillDefaults(defaultState());
+    const out = [Prompts.formPhrase(s)];
+    s.setbacks = [{ floor: 4, distance: 10, sides: ['front'] }, { floor: 7, distance: 10, sides: ['front'] }]; s.crown.type = 'stepped';
+    out.push(Prompts.formPhrase(s));
+    s.segments[0].shape.type = 'ellipse'; s.segments[0].twist.deg = 20; s.carves = [{ startFloor: 5, endFloor: 6, kind: 'full' }]; s.crown.type = 'spire';
+    out.push(Prompts.formPhrase(s));
+    s.segments[0].shape.type = 'L'; s.segments[0].twist.deg = 0; s.segments[0].taper.x = -10; s.setbacks = [s.setbacks[0]]; s.carves = []; s.crown.type = 'screen';
+    out.push(Prompts.formPhrase(s));
+    s.segments[0].shape.type = 'polygon'; s.segments[0].taper.x = 0; s.crown.type = 'sloped';
+    out.push(Prompts.formPhrase(s));
+    return eq(out, [
+      'a rectangular tower with a flat roof',
+      'a rectangular tower with two setbacks and a stepped crown',
+      'a twisting elliptical tower with two setbacks, a sky garden and a spire',
+      'a tapering L-shaped tower with one setback and a rooftop screen',
+      'a custom-shaped tower with one setback and a sloped crown',
+    ]);
+  });
+  await t('auto fields: floors, height, program of the tallest segment, podium', () => {
+    const s = fillDefaults(defaultState());
+    s.podium.on = true; s.podium.floors = 8;
+    s.segments = [{ ...s.segments[0], floors: 5, program: 'retail' }, { ...s.segments[0], floors: 20, ftf: 10, program: 'hotel' }];
+    const m = computeDerived(s).metrics, a = Prompts.autoValues(s, m);
+    s.podium.on = false;
+    return eq([a.floors, a.height, a.program, a.podium, Prompts.autoValues(s, computeDerived(s).metrics).podium],
+      [String(m.floorCount), `${Math.round(m.totalHeight)} feet`, 'hotel', 'an 8-story podium', 'no podium']);
+  });
+  await t('custom prompts: save, export, import (title collisions become "Title (2)"), remove', async () => {
+    const a = StorageMod.createStorage({ key: 'k', schema: 1, storage: memory() });
+    const rec = a.savePrompt({ title: 'Evening mood', template: 'A {{height}} tower at {{time}}.', uses: ['time'] });
+    a.savePrompt({ title: 'Second', template: 'Second prompt', uses: [] });
+    if (!rec || rec.group !== 'custom' || !rec.id) return `bad record ${JSON.stringify(rec)}`;
+    const blob = a.exportAll();
+    const payload = JSON.parse(await blob.text());
+    if (!Array.isArray(payload.prompts) || payload.prompts.length !== 2) return `export has ${JSON.stringify(payload.prompts)}`;
+    const fresh = StorageMod.createStorage({ key: 'k2', schema: 1, storage: memory() });
+    const r1 = await fresh.importFile(new File([blob], 'x.json'));
+    const back = fresh.listPrompts();
+    if (r1.promptsAdded !== 2 || back.length !== 2) return `imported ${JSON.stringify(r1)}`;
+    const same = (x, y) => x.title === y.title && x.template === y.template && JSON.stringify(x.uses) === JSON.stringify(y.uses) && x.group === 'custom';
+    if (!same(back[0], rec) || !same(back[1], a.listPrompts()[1])) return `round trip differs: ${JSON.stringify(back)}`;
+    const r2 = await fresh.importFile(new File([blob], 'x.json'));
+    const titles = fresh.listPrompts().map((x) => x.title).sort();
+    if (r2.promptsAdded !== 2 || JSON.stringify(titles) !== JSON.stringify(['Evening mood', 'Evening mood (2)', 'Second', 'Second (2)'])) return `titles ${titles}`;
+    if (!fresh.removePrompt(back[0].id) || fresh.listPrompts().length !== 3) return 'remove failed';
+    const mem = memory(), b1 = StorageMod.createStorage({ key: 'k3', schema: 1, storage: mem }); b1.savePrompt({ title: 'Kept', template: 'x', uses: ['season'] });
+    b1.flush();
+    return eq(StorageMod.createStorage({ key: 'k3', schema: 1, storage: mem }).listPrompts().map((x) => [x.title, x.uses]), [['Kept', ['season']]]);
+  });
+  await t('an export with no prompts has no "prompts" key (older files stay the same)', async () => {
+    const a = StorageMod.createStorage({ key: 'k', schema: 1, storage: memory() });
+    a.save(defaultState(), 'Only an option');
+    return eq('prompts' in JSON.parse(await a.exportAll().text()), false);
+  });
+  await t('AI-ready filename', () => eq(ShotMod.screenshotFilename('Option A-ai-ready', new Date(2026, 9, 20)), 'option-a-ai-ready-2026-10-20.png'));
+
   /* ---- screenshot ---- */
   if (Render.ready()) {
+    await t('AI-ready capture returns a PNG and puts the scene back exactly', async () => {
+      const before = JSON.stringify(Render.sceneFlags()), style = Store.get('view.style');
+      const blob = await Shots.aiReady({ deliver: false, scale: 1 });
+      const after = JSON.stringify(Render.sceneFlags());
+      return (blob.type === 'image/png' && blob.size > 2000 && before === after && style === Store.get('view.style')) || `type ${blob.type} size ${blob.size} before ${before} after ${after}`;
+    });
     await t('screenshot capture returns a PNG blob', async () => {
       const blob = await Shots.capture({ scale: 1 });
       return (blob.type === 'image/png' && blob.size > 2000) || `type ${blob.type} size ${blob.size}`;
@@ -6215,6 +7445,7 @@ async function runTests() {
 const TEST_MODE = /[?&]test\b/.test(location.search);
 Options.init({ restore: !TEST_MODE });
 UI.init();
+Prompts.init();
 Compare.init();
 Options.syncDirty();
 if (!Render.init(document.getElementById('canvasHost'))) Store.subscribe(() => UI.updateHud(Derived.get()));
@@ -6252,6 +7483,13 @@ window.__tower = {
   exitCompare: () => Compare.exit(),
   getCompare: () => ({ active: Compare.isActive(), names: Compare.names(), chosen: Compare.chosen(), table: Compare.isActive() ? Compare.table() : '' }),
   screenshot: (opts) => Shots.capture(opts),
+  // AI prompts: the panel, the filled text of a prompt (by id; `values` overrides auto or pick fields), the AI-ready picture
+  openPrompts: () => Prompts.open(),
+  closePrompts: () => Prompts.close(),
+  getPromptText: (id, values) => Prompts.promptText(id, values),
+  getPromptAuto: () => Prompts.currentAuto(),
+  listPrompts: () => Prompts.allPrompts().map((p) => ({ id: p.id, group: p.group, title: p.title })),
+  aiReadyScreenshot: () => Shots.aiReady({ deliver: false }),
   undo: () => Store.undo(),
   redo: () => Store.redo(),
   history: () => ({ depth: Store.historyDepth(), canUndo: !!Store.canUndo(), canRedo: !!Store.canRedo() }),

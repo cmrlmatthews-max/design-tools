@@ -3,6 +3,11 @@ import re, os, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.normpath(os.path.join(HERE, '..', '..', 'src'))
+# The AI prompt library (data only), inlined like the other src modules.
+PROMPTS_SRC = os.path.join(SRC, 'tower', 'prompts.js')
+if not os.path.isfile(PROMPTS_SRC):
+    raise SystemExit('missing ' + PROMPTS_SRC)
+print('prompts source: src/tower/prompts.js')
 OUT = os.path.normpath(os.path.join(HERE, '..', '..', 'tower', 'index.html'))
 
 def rd(p):
@@ -37,6 +42,7 @@ MODS = {
     'envelope': ('Env', f'{SRC}/tower/envelope.js', ['SCALE', 'allowedFootprint', 'envelopeWireframe', 'describeFloors', 'checkEnvelope'], None),
     'storage': ('StorageMod', f'{SRC}/shared/storage.js', ['createStorage', 'exportFilename', 'uniqueName'], None),
     'screenshot': ('ShotMod', f'{SRC}/shared/screenshot.js', ['DEFAULT_MAX_PIXELS', 'captureView', 'deliverImage', 'screenshotFilename'], None),
+    'prompts': ('PromptsMod', PROMPTS_SRC, ['PROMPT_LIBRARY_VERSION', 'PROMPT_FIELDS', 'FORM_LOCK', 'PROMPTS', 'fillPrompt'], None),
     'testcases': ('TestCasesMod', f'{SRC}/tower/testcases.js', ['TEST_CASES'],
                   ("import { PROGRAM_DEFAULTS } from './presets.js';", 'const { PROGRAM_DEFAULTS } = PresetsMod;')),
 }
@@ -83,6 +89,7 @@ js = ''.join([
     part('06_render.js'), '\n',
     part('07_controls.js'), '\n',
     part('08_ui.js'), '\n',
+    part('08b_prompts.js'), '\n',
     part('09_storage.js'), '\n',
     part('10_screenshot.js'), '\n',
     part('11_compare.js'), '\n',

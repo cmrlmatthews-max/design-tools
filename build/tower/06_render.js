@@ -740,6 +740,68 @@ const Render = (() => {
     }
   }
 
+  /** AI-ready picture (main view only): Model style, no grid / scale figure / envelope wireframe / overlay, plates that are
+   *  outside the envelope drawn like the rest (white, not red), a plain light sky and ground. Context blocks stay.
+   *  Nothing in the store is touched: the live layers are hidden, a throwaway group is drawn, then everything is put back. */
+  async function captureClean(scale = 2) {
+    if (!renderer) throw new Error('The 3D view is not available.');
+    if (cmp) throw new Error('Leave Compare to save an AI-ready image.');
+    const state = Store.raw();
+    const view = { ...state.view, style: 'model' };
+    const st = { ...state, view };
+    const real = Derived.display(false);
+    const disp = {
+      key: 'ai', quality: 'full', solids: real.solids,
+      plates: real.plates.map((p) => (p.outsideEnvelopeArea > 0 ? { ...p, outsideEnvelopeArea: 0 } : p)),
+      solidsOutside: real.solids.map(() => false),
+    };
+    const shadowsOn = !!view.shadows;
+    // Opaque context blocks: see-through blocks read as glass to image AIs, and the prompts call them "light-gray blocks".
+    const ctxMat = new THREE.MeshStandardMaterial({ color: new THREE.Color('#c9cdd2'), roughness: 0.95, metalness: 0 });
+    const cap = new THREE.Group();
+    for (const o of [...buildFloorObjects(st, disp), ...buildContextObjects(st)]) {
+      if (o.isLineLoop) { if (o.geometry) o.geometry.dispose(); continue; }       // no site outline
+      if (o.isMesh) {
+        if (o.material.transparent) o.material = ctxMat;
+        o.castShadow = shadowsOn; o.receiveShadow = shadowsOn;
+      }
+      cap.add(o);
+    }
+    const prev = {
+      bg: scene.background, ground: ground.material.color.clone(), grid: gridMesh.visible, fig: figure.visible,
+      model: layers.model.group.visible, ctx: layers.context.group.visible, env: layers.envelope.group.visible, shadow: shadowPlane.visible,
+    };
+    const restore = () => {
+      scene.remove(cap);
+      clearGroup(cap);
+      ctxMat.dispose();
+      scene.background = prev.bg;
+      ground.material.color.copy(prev.ground);
+      gridMesh.visible = prev.grid; figure.visible = prev.fig; shadowPlane.visible = prev.shadow;
+      layers.model.group.visible = prev.model; layers.context.group.visible = prev.ctx; layers.envelope.group.visible = prev.env;
+      viewVersion = -1;
+    };
+    capturing = true;
+    let pending;
+    try {
+      // captureView draws and copies the frame before its first await, so the scene can be put back straight away.
+      try {
+        scene.add(cap);
+        scene.background = new THREE.Color('#f3f5f7');
+        ground.material.color.set('#e4e7ea');
+        gridMesh.visible = false; figure.visible = false; shadowPlane.visible = shadowsOn;
+        layers.model.group.visible = layers.context.group.visible = layers.envelope.group.visible = false;
+        for (const c of [persp, ortho]) c.clearViewOffset();
+        pending = ShotMod.captureView({ renderer, scene, camera: cam, scale });
+      } finally { restore(); }
+    } finally {
+      capturing = false;
+      applyViewOffset();
+      needsRender = true;
+    }
+    return await pending;
+  }
+
   function init(hostEl) {
     host = hostEl;
     try {
@@ -789,7 +851,8 @@ const Render = (() => {
   }
 
   return {
-    init, setView, capture, enterCompare, exitCompare,
+    init, setView, capture, captureClean, enterCompare, exitCompare,
+    sceneFlags: () => ({ grid: gridMesh.visible, figure: figure.visible, model: layers.model.group.visible, context: layers.context.group.visible, envelope: layers.envelope.group.visible, children: scene.children.length }),
     setInsetProvider: (fn) => { insetProvider = fn; },
     refreshInsets: (animate = true) => { if (!renderer) return; applyViewOffset(); if (preset) setView(preset, animate); else needsRender = true; },
     relayout: () => { needsRender = true; resizeListeners.forEach((fn) => fn()); },
