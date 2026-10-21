@@ -59,6 +59,27 @@
 .pop-item .grow { flex: 1 1 auto; min-width: 0; }
 .pop-item small { display: block; margin-top: 1px; color: var(--ink-3); font-size: 11.5px; line-height: 1.3; }
 
+.pop .pop-label { padding: 8px 10px 4px; }
+.pop-sep { height: 1px; margin: 6px 4px; background: var(--line); }
+.pop-note { padding: 6px 10px 8px; color: var(--ink-3); font-size: 12.5px; }
+.pop-actions { display: flex; gap: 8px; padding: 6px; justify-content: flex-end; }
+.pop-name {
+  display: block; width: 100%; height: var(--hit); padding: 0 10px; border: 1px solid var(--line-2); border-radius: var(--radius);
+  background: var(--surface); color: var(--ink); font-size: 16px;
+}
+.pop-name:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+.proj-new { padding: 4px 6px 2px; }
+
+/* project: the name in the top bar, the group divider, the Send buttons */
+.proj-pill {
+  flex: 0 1 auto; min-width: 0; max-width: 200px; padding: 4px 10px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 600; line-height: 1.2;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tb-sep { flex: none; width: 1px; height: 16px; margin: 0 6px; background: var(--line-2); }
+@media (max-width: 1379px) { .btn.send .btn-text { display: none; } .btn.send.has-text { padding: 0; } }
+@media (max-width: 599px) { .proj-pill { max-width: 130px; } }
+
 /* toasts */
 .toasts {
   position: absolute; z-index: 20; left: 50%; transform: translateX(-50%);

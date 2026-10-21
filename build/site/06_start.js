@@ -5,6 +5,7 @@ const TEST_MODE = /[?&]test\b/.test(location.search);
 App.init();
 Scene.init($('canvasHost'));
 App.buildCompass();
+App.startProject();                                  // with ?project=<id>: open that project and load its saved site
 
 window.__site = {
   go: (text, size) => { if (text != null) $('addr').value = text; if (size) App.setSize(size); return App.go(); },
@@ -14,6 +15,8 @@ window.__site = {
   /** The SketchUp document (cmrlm-design-tools/sketchup) for the current site, or null before a site is loaded. */
   sketchupDoc: () => (App.state.result ? App.sketchupDoc() : null),
   summary: () => (App.state.result ? ModelMod.summarize(App.state.result.model) : null),
+  /** The open project (a document in memory), or null. */
+  project: () => App.project.doc,
   timings: () => (App.state.result ? { ...App.state.result.timings, ui: App.state.result.uiMs } : null),
   steps: () => [...document.querySelectorAll('#steps li')].map((li) => ({ step: li.dataset.step, status: li.dataset.s, message: li.querySelector('.ms').textContent })),
   screenshot: () => App.screenshot({ deliver: false }),

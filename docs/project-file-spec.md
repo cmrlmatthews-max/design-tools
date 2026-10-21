@@ -297,6 +297,7 @@ export function validate(doc)                                 // → { ok, error
 export function migrate(doc)                                  // → doc at VERSION (envelope only; section state is the tool's business)
 export function getSection(doc, key)                          // → section or null; never throws
 export function writeSection(doc, key, { tool, schema, placement, state, derived, note })
+  // Returns a NEW document. The input document is unchanged; callers write `doc = writeSection(doc, …)`.
   // Replaces only the fields given. Keeps unknown keys of the section. Sets section.updatedAt and doc.updatedAt. Appends one log entry { action: "write" }.
   // Throws when key is not in SECTIONS, or when the stored schema is newer than `schema` (read-only).
 export function toProject(section, [x, y, z])                 // → [xp, yp, zp] by section 4; z optional
@@ -314,7 +315,7 @@ export function deleteProject(storage, id)
 export function exportProject(doc)                            // → { filename, blob }
 export async function importProject(file, storage)            // → { doc, renamed }; copies on id collision
 export function projectIdFromUrl(location)                    // → id or null (`?project=`)
-export function sendTo(storage, doc, toolId, fromToolId)      // saves, logs "send", returns the URL `../<toolId>/?project=<id>`
+export function sendTo(storage, doc, toolId, fromToolId)      // saves a copy with a "send" log entry (the input is unchanged), returns the URL `../<toolId>/?project=<id>`
 ```
 
 - `storage` is a Storage-like object (`getItem`, `setItem`, `removeItem`), default `window.localStorage`, injectable for tests, as in storage.js.

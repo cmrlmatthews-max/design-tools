@@ -12,6 +12,8 @@
 //@@MODULE exports@@
 //@@MODULE sketchupFormat@@
 //@@MODULE sketchup@@
+//@@MODULE project@@
+//@@MODULE derived@@
 //@@MODULE screenshot@@
 
 const CONFIG = {
@@ -21,6 +23,9 @@ const CONFIG = {
   contours: [0, 2, 5],            // ft; 0 = off
   recentKey: 'sitemodel.recent.v1',
   recentMax: 8,
+  projectSchema: 1,               // schema of the "site" section in a project file (docs/project-file-spec.md)
+  projectSaveMs: 1000,            // autosave delay, the same as storage.js
+  projectListMax: 8,              // projects in the Open list
   demFtPerPixel: 3,               // about 1 pixel per 3 ft
   demMaxPixels: 1024,
   demMargin: 50,                  // ft around the site square
@@ -59,6 +64,9 @@ const ICONS = {
   download: '<svg viewBox="0 0 24 24"><path d="M12 4v11"/><path d="M8 11l4 4 4-4"/><path d="M5 19h14"/></svg>',
   camera: '<svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
   chev: '<svg class="chev" viewBox="0 0 14 14" fill="none" stroke="currentColor"><path d="M3 5l4 4 4-4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  folder: '<svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
+  tower: '<svg viewBox="0 0 24 24"><path d="M8 21V4h8v17"/><path d="M5 21h14"/><path d="M11 8h2M11 12h2M11 16h2"/></svg>',
+  midrise: '<svg viewBox="0 0 24 24"><path d="M4 21V9h16v12"/><path d="M2 21h20"/><path d="M8 13h2M14 13h2M8 17h2M14 17h2"/></svg>',
 };
 
 /** Reads and writes that never throw (private mode, blocked storage). */
