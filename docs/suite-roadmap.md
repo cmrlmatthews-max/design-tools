@@ -21,8 +21,8 @@ This file is the one place that lists every tool in the suite, who builds it, an
 | `plate` | Plate Planner | `plate/` | In work | Work |
 | — | Project file (`src/shared/project.js`), Workspace page, Site Model handoff | `index.html`, `src/shared/`, `site/` | Version 1 live | Home |
 | `midrise` | Mid-Rise Generator | `midrise/` | Version 1 live | Home |
-| `parking` | Parking Deck Generator | `parking/` | Version 1 built, in review | Home |
-| `facade` | Facade Studio | `facade/` | Next | Home |
+| `parking` | Parking Deck Generator | `parking/` | Version 1 live | Home |
+| `facade` | Facade Studio | `facade/` | Concept written, waiting on Cade | Home |
 | `grading` | Grading Sketch | `grading/` | Queued after Facade | Home |
 | `view` | View Study | `view/` | Later | — |
 | `egress` | Egress Sketch | `egress/` | Later | — |
