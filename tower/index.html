@@ -6462,6 +6462,7 @@ const UI = (() => {
         item('miAiPrompts', 'AI Prompts', 'A prompt to pair with the AI-ready image', () => Prompts.toggle()),
         item('miOverlay', 'Image overlay', 'Choose what the Image shows', () => overlay(), { keep: true, chev: true }),
         h('div', { class: 'pop-sep' }), h('div', { class: 'label pop-label' }, 'Files'),
+        item('miSketchup', 'SketchUp (.json)', 'Import with the CMRLM SketchUp extension', () => SketchupExport.download()),
         item('miExportJson', 'Export JSON', 'Download all saved options', () => Options.exportJson()),
         item('miImportJson', 'Import JSON', 'Add the options from a file', () => $('importFile').click()));
     };
@@ -6507,7 +6508,7 @@ const UI = (() => {
     };
     Store.subscribe(syncSnap); syncSnap();
 
-    const exp = h('button', { class: 'btn has-text menu-btn', type: 'button', id: 'btnExport', 'aria-haspopup': 'true', 'aria-expanded': 'false', title: 'Export: image, AI-ready image, AI prompts, JSON', 'aria-label': 'Export menu', onclick: () => openExportMenu(exp) },
+    const exp = h('button', { class: 'btn has-text menu-btn', type: 'button', id: 'btnExport', 'aria-haspopup': 'true', 'aria-expanded': 'false', title: 'Export: image, AI-ready image, AI prompts, SketchUp, JSON', 'aria-label': 'Export menu', onclick: () => openExportMenu(exp) },
       h('span', { html: ICONS.export, style: 'display:contents' }), h('span', { class: 'btn-text' }, 'Export'), h('span', { html: ICONS.chev, style: 'display:contents' }));
     $('tbExport').append(exp);
   }
@@ -7664,6 +7665,417 @@ const Prompts = (() => {
     setEditing: (patch) => { if (ui.editing) { Object.assign(ui.editing, patch); render(); } },
     select, render,
   };
+})();
+
+/* ==========================================================================
+   SketchUp export (docs/sketchup-spec.md section 4)
+   Export menu > "SketchUp (.json)" downloads <option>-<date>.sketchup.json, which the
+   CMRLM SketchUp extension imports. The document is built by src/tower/sketchup.js from
+   the same plates the screen shows; the file format helpers are src/shared/sketchup-format.js.
+   ========================================================================== */
+const SkFmt = (() => {
+/* ==========================================================================
+   SHARED: sketchup-format
+   The ".sketchup.json" file that the CMRLM SketchUp extension imports.
+   Spec: docs/sketchup-spec.md. Pure functions, no DOM except docToBlob.
+   Units: feet. Plan (x, y): x = east, y = north. z up.
+   ========================================================================== */
+
+const FORMAT = "cmrlm-design-tools/sketchup";
+const VERSION = 1;
+
+const MIN_STEP = 0.01;      // ft: drop points closer than this to the previous point
+const MIN_AREA = 0.25;      // sf: drop smaller rings
+const r3 = (v) => Math.round(v * 1000) / 1000;
+
+/** Signed plan area (positive = counter-clockwise seen from above). Works on [x,y] or [x,y,z]. */
+function ringArea2(ring) {
+  let a = 0;
+  for (let i = 0, n = ring.length; i < n; i++) {
+    const p = ring[i], q = ring[(i + 1) % n];
+    a += p[0] * q[1] - q[0] * p[1];
+  }
+  return a / 2;
+}
+
+function clean(ring, dims, hole) {
+  if (!Array.isArray(ring)) return null;
+  let pts = ring
+    .filter((p) => Array.isArray(p) && p.length >= dims && p.slice(0, dims).every(Number.isFinite))
+    .map((p) => p.slice(0, dims).map(r3));
+  // drop closing duplicate and near-duplicate neighbours
+  const out = [];
+  for (const p of pts) {
+    const last = out[out.length - 1];
+    if (last && Math.hypot(...p.map((v, k) => v - last[k])) < MIN_STEP) continue;
+    out.push(p);
+  }
+  while (out.length > 1 && Math.hypot(...out[0].map((v, k) => v - out[out.length - 1][k])) < MIN_STEP) out.pop();
+  // drop collinear points (repeat until stable)
+  let changed = true;
+  while (changed && out.length > 3) {
+    changed = false;
+    for (let i = 0; i < out.length && out.length > 3; i++) {
+      const a = out[(i - 1 + out.length) % out.length], b = out[i], c = out[(i + 1) % out.length];
+      const u = b.map((v, k) => v - a[k]), w = c.map((v, k) => v - b[k]);
+      const lu = Math.hypot(...u), lw = Math.hypot(...w);
+      if (!lu || !lw) { out.splice(i, 1); changed = true; i--; continue; }
+      let cross;
+      if (dims === 2) cross = Math.abs(u[0] * w[1] - u[1] * w[0]);
+      else cross = Math.hypot(u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]);
+      const dot = u.reduce((s, v, k) => s + v * w[k], 0);
+      if (cross / (lu * lw) < 1e-9 && dot > 0) { out.splice(i, 1); changed = true; i--; }
+    }
+  }
+  if (out.length < 3) return null;
+  const area = ringArea2(out);
+  if (Math.abs(area) < MIN_AREA) return null;
+  if ((area > 0) === !!hole) out.reverse();     // outer CCW, hole CW
+  return out;
+}
+
+/** Clean a plan ring [[x,y],…]. Returns null when the ring is degenerate. */
+const cleanRing2 = (ring, { hole = false } = {}) => clean(ring, 2, hole);
+/** Clean a 3D ring [[x,y,z],…] (orientation judged in plan). Returns null when degenerate. */
+const cleanRing3 = (ring, { hole = false } = {}) => clean(ring, 3, hole);
+
+function makeDoc({ source, name, location = null, zShift = 0, notes = [], tags = [], materials = [], root, createdAt }) {
+  return {
+    format: FORMAT,
+    version: VERSION,
+    source,
+    name: String(name || "Untitled"),
+    createdAt: createdAt || new Date().toISOString(),
+    units: "feet",
+    location: location && Number.isFinite(location.lat) && Number.isFinite(location.lon) ? { lat: location.lat, lon: location.lon } : null,
+    zShift: Math.round((zShift || 0) * 100) / 100,
+    notes,
+    tags,
+    materials,
+    root,
+  };
+}
+
+const HEX = /^#[0-9a-fA-F]{6}$/;
+const isPt = (p, d) => Array.isArray(p) && p.length === d && p.every(Number.isFinite);
+
+/** Check a document against the spec. → { ok, errors, counts } */
+function validateDoc(doc) {
+  const errors = [];
+  const counts = { group: 0, solid: 0, mesh: 0, faces: 0, lines: 0 };
+  const err = (path, msg) => { if (errors.length < 50) errors.push(`${path}: ${msg}`); };
+  if (!doc || typeof doc !== "object") return { ok: false, errors: ["document: not an object"], counts };
+  if (doc.format !== FORMAT) err("format", `must be "${FORMAT}"`);
+  if (doc.version !== VERSION) err("version", `must be ${VERSION}`);
+  if (!["tower", "site"].includes(doc.source)) err("source", "must be tower or site");
+  if (doc.units !== "feet") err("units", "must be feet");
+  if (!Number.isFinite(doc.zShift)) err("zShift", "must be a number");
+  const tagNames = new Set(), matNames = new Set();
+  for (const [i, t] of (doc.tags || []).entries()) {
+    if (!t.name) err(`tags[${i}]`, "needs a name");
+    if (!HEX.test(t.color || "")) err(`tags[${i}]`, "color must be #rrggbb");
+    tagNames.add(t.name);
+  }
+  for (const [i, m] of (doc.materials || []).entries()) {
+    if (!m.name) err(`materials[${i}]`, "needs a name");
+    if (!HEX.test(m.color || "")) err(`materials[${i}]`, "color must be #rrggbb");
+    if (!(m.alpha > 0 && m.alpha <= 1)) err(`materials[${i}]`, "alpha must be in (0, 1]");
+    matNames.add(m.name);
+  }
+  const ringOk = (ring, d, path, hole) => {
+    if (!Array.isArray(ring) || ring.length < 3 || !ring.every((p) => isPt(p, d))) return err(path, `ring needs 3+ points of ${d} numbers`);
+    const a = ringArea2(ring);
+    if (Math.abs(a) < MIN_AREA) err(path, "ring area too small");
+    else if ((a > 0) === hole) err(path, hole ? "hole must be clockwise" : "outer ring must be counter-clockwise");
+  };
+  const walk = (n, path) => {
+    if (!n || typeof n !== "object") return err(path, "node is not an object");
+    if (!(n.type in counts)) return err(path, `unknown type ${n.type}`);
+    counts[n.type]++;
+    if (typeof n.name !== "string" || !n.name) err(path, "needs a name");
+    if (n.tag != null && !tagNames.has(n.tag)) err(path, `tag "${n.tag}" is not in tags`);
+    if (n.material != null && !matNames.has(n.material)) err(path, `material "${n.material}" is not in materials`);
+    switch (n.type) {
+      case "group":
+        if (!Array.isArray(n.children)) err(path, "group needs children");
+        else n.children.forEach((c, i) => walk(c, `${path}/${c && c.name ? c.name : i}`));
+        break;
+      case "solid":
+        ringOk(n.outer, 2, `${path}.outer`, false);
+        (n.holes || []).forEach((h, i) => ringOk(h, 2, `${path}.holes[${i}]`, true));
+        if (!(Number.isFinite(n.z0) && Number.isFinite(n.z1) && n.z1 - n.z0 > 0.001)) err(path, "needs z1 > z0");
+        break;
+      case "mesh": {
+        const nv = (n.vertices || []).length;
+        if (!nv || !n.vertices.every((p) => isPt(p, 3))) err(path, "vertices must be [x,y,z]");
+        if (!Array.isArray(n.triangles) || !n.triangles.length) err(path, "needs triangles");
+        else for (const t of n.triangles) if (!(Array.isArray(t) && t.length === 3 && t.every((k) => Number.isInteger(k) && k >= 0 && k < nv) && new Set(t).size === 3)) { err(path, "bad triangle index"); break; }
+        break;
+      }
+      case "faces":
+        if (!Array.isArray(n.polygons) || !n.polygons.length) err(path, "needs polygons");
+        else n.polygons.forEach((p, i) => { ringOk(p.outer, 3, `${path}.polygons[${i}].outer`, false); (p.holes || []).forEach((h, j) => ringOk(h, 3, `${path}.polygons[${i}].holes[${j}]`, true)); });
+        break;
+      case "lines":
+        if (!Array.isArray(n.lines) || !n.lines.length) err(path, "needs lines");
+        else for (const l of n.lines) if (!(Array.isArray(l) && l.length >= 2 && l.every((p) => isPt(p, 3)))) { err(path, "each line needs 2+ [x,y,z] points"); break; }
+        break;
+    }
+  };
+  if (!doc.root || doc.root.type !== "group") err("root", "must be a group");
+  else walk(doc.root, doc.root.name || "root");
+  return { ok: errors.length === 0, errors, counts };
+}
+
+/** "Option A" → "option-a-2026-10-21.sketchup.json" */
+function sketchupFilename(name, date = new Date()) {
+  const slug = String(name || "design").toLowerCase().normalize("NFKD").replace(/[^\w\s-]/g, "").trim().replace(/[\s_]+/g, "-").replace(/-+/g, "-").slice(0, 60) || "design";
+  const d = date instanceof Date ? date : new Date(date);
+  const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return `${slug}-${ymd}.sketchup.json`;
+}
+
+/** Compact JSON as a Blob for download. */
+function docToBlob(doc) {
+  return new Blob([JSON.stringify(doc)], { type: "application/json" });
+}
+
+return { FORMAT, VERSION, cleanRing2, cleanRing3, ringArea2, makeDoc, validateDoc, sketchupFilename, docToBlob };
+})();
+
+const SkTower = (() => {
+/* ==========================================================================
+   tower/sketchup.js — Tower Generator → ".sketchup.json" (docs/sketchup-spec.md section 4)
+
+   towerToSketchup(state, built) → a document made with makeDoc (passes validateDoc).
+     state  the tower state (names, programs and colors, context blocks)
+     built  buildPlates(state) → { plates, solids }
+
+   Pure: no DOM, no Clipper. Units: feet. Plan (x, y): x = east, y = north. z up.
+
+   Rule choices (where the spec leaves room):
+   - Group order: Podium, Segment 1 · Program, …, Crown, Context. A group with nothing in it
+     is left out. A mechanical floor goes in the group of the zone it sits in (the segment
+     below it, or the podium) and carries the "Mechanical" tag and material.
+   - Tags and materials: one per program used (named like the program, "Residential"), plus
+     "Crown" and "Context" only when something uses them. Tag color = program color.
+   - A floor with one piece is a solid named "Floor n". A floor with several pieces is a
+     group "Floor n" holding one solid per piece ("Floor n · piece k"). Tag and material go
+     on both the group and its solids. Attributes (floor, program, area_sf) sit on the
+     "Floor n" node.
+   - Crown meshes are welded (equal points share a vertex) and triangles that collapse are
+     dropped. Prisms become solids, one per polygon piece.
+   - Context blocks come from state.context.blocks; none when state.context.show is false.
+   ========================================================================== */
+
+const { cleanRing2, makeDoc } = SkFmt;
+
+const PROGRAM_COLORS = {
+  residential: "#4f7fd1", hotel: "#8a63c9", office: "#2f9e9a", retail: "#d9a22b",
+  amenity: "#58a65c", parking: "#8b929a", mechanical: "#e0762f",
+};
+const CROWN_COLOR = "#d9a22b";
+const CONTEXT_COLOR = "#c3c8ce";
+const FALLBACK_COLOR = "#8b929a";
+const HEX = /^#[0-9a-fA-F]{6}$/;
+
+const r3 = (v) => Math.round(v * 1000) / 1000;
+const r2 = (v) => Math.round(v * 100) / 100;
+const num = (v, d) => (typeof v === "number" && Number.isFinite(v) ? v : d);
+const cap = (s) => { s = String(s || ""); return s.charAt(0).toUpperCase() + s.slice(1); };
+
+/** Tag and material name for a program key: "residential" → "Residential". */
+const programLabel = (key) => cap(key) || "Program";
+
+function programColor(state, key) {
+  const c = state && state.programs && state.programs[key] && state.programs[key].color;
+  return HEX.test(c || "") ? c : PROGRAM_COLORS[key] || FALLBACK_COLOR;
+}
+
+/** One multipolygon piece {outer, holes} → { outer, holes } cleaned, or null when the outer ring is degenerate. */
+function cleanPiece(poly) {
+  const outer = cleanRing2(poly && poly.outer);
+  if (!outer) return null;
+  const holes = [];
+  for (const h of (poly && poly.holes) || []) {
+    const c = cleanRing2(h, { hole: true });
+    if (c) holes.push(c);
+  }
+  return { outer, holes };
+}
+
+const piecesOf = (mp) => (Array.isArray(mp) ? mp : []).map(cleanPiece).filter(Boolean);
+
+/** Weld equal points of a flat-position mesh and drop triangles that collapse. → { vertices, triangles } */
+function weldMesh(positions, indices) {
+  const keyToIdx = new Map(), vertices = [], remap = [];
+  for (let i = 0; i + 2 < positions.length; i += 3) {
+    const p = [r3(positions[i]), r3(positions[i + 1]), r3(positions[i + 2])];
+    const key = p.join(",");
+    let k = keyToIdx.get(key);
+    if (k === undefined) { k = vertices.length; vertices.push(p); keyToIdx.set(key, k); }
+    remap.push(k);
+  }
+  const triangles = [];
+  for (let i = 0; i + 2 < indices.length; i += 3) {
+    const a = remap[indices[i]], b = remap[indices[i + 1]], c = remap[indices[i + 2]];
+    if (a === undefined || b === undefined || c === undefined) continue;
+    if (a === b || b === c || a === c) continue;
+    triangles.push([a, b, c]);
+  }
+  return { vertices, triangles };
+}
+
+function towerToSketchup(state, built) {
+  state = state || {};
+  const plates = (built && built.plates) || [];
+  const crownSolids = (built && built.solids) || [];
+
+  const tagList = [], matList = [];
+  const declared = new Set();
+  const declare = (name, color) => {
+    if (declared.has(name)) return;
+    declared.add(name);
+    tagList.push({ name, color, visible: true });
+    matList.push({ name, color, alpha: 1 });
+  };
+
+  // ---- floors, grouped by zone ------------------------------------------------
+  const groups = new Map();                       // key → { name, children, order }
+  const groupFor = (plate) => {
+    if (plate.zone === "podium" || plate.segmentIndex < 0) return ["podium", "Podium", -1];
+    const si = plate.segmentIndex;
+    const seg = (state.segments || [])[si];
+    const prog = (seg && seg.program) || plate.program;
+    return [`seg${si}`, `Segment ${si + 1} · ${programLabel(prog)}`, si];
+  };
+
+  let floorSolids = 0;
+  for (const p of plates) {
+    if (p.void || !(p.area > 0)) continue;
+    const pieces = piecesOf(p.polygons);
+    if (!pieces.length) continue;
+    const prog = p.program || "residential";
+    const label = programLabel(prog);
+    declare(label, programColor(state, prog));
+    const z0 = r3(p.z), z1 = r3(p.z + p.ftf);
+    const name = `Floor ${p.n}`;
+    const attributes = { floor: p.n, program: prog, area_sf: r2(p.area) };
+    const solid = (nm, piece, extra = {}) => ({ type: "solid", name: nm, tag: label, material: label, outer: piece.outer, holes: piece.holes, z0, z1, ...extra });
+    let node;
+    if (pieces.length === 1) {
+      node = solid(name, pieces[0], { attributes });
+    } else {
+      node = { type: "group", name, tag: label, material: label, attributes, children: pieces.map((pc, i) => solid(`${name} · piece ${i + 1}`, pc)) };
+    }
+    floorSolids += pieces.length;
+    const [key, gname, order] = groupFor(p);
+    let g = groups.get(key);
+    if (!g) { g = { name: gname, children: [], order }; groups.set(key, g); }
+    g.children.push(node);
+  }
+
+  const children = [];
+  const ordered = [...groups.values()].sort((a, b) => a.order - b.order);
+  for (const g of ordered) children.push({ type: "group", name: g.name, children: g.children });
+
+  // ---- crown ---------------------------------------------------------------------
+  const crownType = String((state.crown && state.crown.type) || "flat").toLowerCase();
+  const crownKids = [];
+  let prismN = 0;
+  for (const s of crownSolids) {
+    if (s.kind === "prism") {
+      const base = s.role === "parapet" ? "Parapet" : s.role === "screen" ? "Screen" : "Crown step";
+      const pieces = piecesOf(s.polygons);
+      const z0 = r3(s.z0), z1 = r3(s.z1);
+      if (!(z1 - z0 > 0.001)) continue;
+      prismN++;
+      pieces.forEach((pc, i) => {
+        const nm = base === "Crown step" ? `${base} ${prismN}` : base;
+        crownKids.push({ type: "solid", name: pieces.length > 1 ? `${nm} · piece ${i + 1}` : nm, tag: "Crown", material: "Crown", outer: pc.outer, holes: pc.holes, z0, z1 });
+      });
+    } else if (s.kind === "mesh") {
+      const { vertices, triangles } = weldMesh(s.positions || [], s.indices || []);
+      if (!vertices.length || !triangles.length) continue;
+      crownKids.push({
+        type: "mesh", name: crownType === "spire" ? "Spire" : crownType === "sloped" ? "Sloped roof" : "Crown",
+        tag: "Crown", material: "Crown", vertices, triangles, soft: false, closed: true,
+      });
+    }
+  }
+  if (crownKids.length) {
+    declare("Crown", CROWN_COLOR);
+    children.push({ type: "group", name: "Crown", tag: "Crown", children: crownKids });
+  }
+
+  // ---- context -------------------------------------------------------------------
+  const ctx = state.context;
+  const blockKids = [];
+  if (ctx && ctx.show !== false) {
+    for (const b of ctx.blocks || []) {
+      const w = num(b && b.w, 0), d = num(b && b.d, 0), h = num(b && b.h, 0);
+      if (!(w > 0 && d > 0 && h > 0)) continue;
+      const x = num(b.x, 0), y = num(b.y, 0);
+      const outer = cleanRing2([[x - w / 2, y - d / 2], [x + w / 2, y - d / 2], [x + w / 2, y + d / 2], [x - w / 2, y + d / 2]]);
+      if (!outer) continue;
+      blockKids.push({ type: "solid", name: `Block ${blockKids.length + 1}`, tag: "Context", material: "Context", outer, holes: [], z0: 0, z1: r3(h) });
+    }
+  }
+  if (blockKids.length) {
+    declare("Context", CONTEXT_COLOR);
+    children.push({ type: "group", name: "Context", tag: "Context", material: "Context", children: blockKids });
+  }
+
+  const name = String(state.name || "Tower");
+  const gfa = plates.reduce((s, p) => s + (p.void ? 0 : num(p.area, 0)), 0);
+  const top = plates.reduce((m, p) => Math.max(m, p.z + p.ftf), 0);
+  const notes = [
+    "Plan origin = the tool's plan origin (0, 0). x = east, y = north. Lengths in feet.",
+    `Tower Generator: ${floorSolids} floor solids, gross floor area ${Math.round(gfa).toLocaleString("en-US")} sf, top of floors ${r2(top)} ft.`,
+    "Each floor is one solid at full floor-to-floor height. Void floors are skipped.",
+  ];
+
+  const doc = makeDoc({
+    source: "tower", name, location: null, zShift: 0, notes,
+    tags: tagList, materials: matList,
+    root: { type: "group", name, children },
+  });
+  return doc;
+}
+
+return { towerToSketchup, programLabel };
+})();
+
+
+const SketchupExport = (() => {
+  /** The document for the design on screen (or for `state`/`built` when given). */
+  function doc(state, built) {
+    const s = state || Store.raw();
+    const d = built || Derived.get();
+    return SkTower.towerToSketchup(s, { plates: d.plates, solids: d.solids });
+  }
+  function filename(state) { return SkFmt.sketchupFilename((state || Store.raw()).name); }
+  function save(blob, name) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name; a.style.display = 'none';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);   // revoking sooner can break some downloads
+  }
+  /** Build, check and download. `deliver(blob, filename)` replaces the browser download (tests). → { ok, filename, blob, errors } */
+  function download({ deliver } = {}) {
+    let d;
+    try { d = doc(); } catch (e) { console.error(e); Toast.show('The SketchUp file could not be built for these settings.', 'bad'); return { ok: false, errors: [String(e && e.message)] }; }
+    const v = SkFmt.validateDoc(d);
+    if (!v.ok) { console.error(v.errors); Toast.show('The SketchUp file did not pass its own check, so it was not saved.', 'bad'); return { ok: false, errors: v.errors }; }
+    if (!v.counts.solid && !v.counts.mesh) { Toast.show('Nothing to export yet: the design has no floors.', 'warn'); return { ok: false, errors: ['empty'] }; }
+    const name = filename();
+    const blob = SkFmt.docToBlob(d);
+    (deliver || save)(blob, name);
+    if (!deliver) Toast.show(`Saved ${name}. In SketchUp: Extensions > CMRLM > Import Design Tools file.`);
+    return { ok: true, filename: name, blob, counts: v.counts };
+  }
+  return { doc, filename, download };
 })();
 
 /* ==========================================================================
@@ -9707,11 +10119,13 @@ async function runAllTests() {
   const layout = await runLayoutTests();
   const select = await runSelectTests();
   const fresh = await runNewDesignTests();
-  const all = [...(base.results || []), ...layout, ...select, ...fresh];
+  const sketchup = await runSketchupTests();
+  const all = [...(base.results || []), ...layout, ...select, ...fresh, ...sketchup];
   const failed = all.filter((r) => !r.ok);
   console.log(`[tests] layout ${layout.length - layout.filter((r) => !r.ok).length}/${layout.length} passed`, layout.filter((r) => !r.ok).length ? JSON.stringify(layout.filter((r) => !r.ok)) : '');
   console.log(`[tests] select ${select.length - select.filter((r) => !r.ok).length}/${select.length} passed`, select.filter((r) => !r.ok).length ? JSON.stringify(select.filter((r) => !r.ok)) : '');
   console.log(`[tests] new design ${fresh.length - fresh.filter((r) => !r.ok).length}/${fresh.length} passed`, fresh.filter((r) => !r.ok).length ? JSON.stringify(fresh.filter((r) => !r.ok)) : '');
+  console.log(`[tests] sketchup ${sketchup.length - sketchup.filter((r) => !r.ok).length}/${sketchup.length} passed`, sketchup.filter((r) => !r.ok).length ? JSON.stringify(sketchup.filter((r) => !r.ok)) : '');
   window.__towerTestResults = { total: all.length, passed: all.length - failed.length, failed, results: all };
   return window.__towerTestResults;
 }
@@ -10410,6 +10824,56 @@ async function runNewDesignTests() {
   return results;
 }
 
+/* ==========================================================================
+   TESTS: SketchUp export (runAllTests in 12b merges the results)
+   ========================================================================== */
+async function runSketchupTests() {
+  const results = [];
+  const t = async (name, fn) => {
+    let r;
+    try { r = await fn(); } catch (e) { r = `threw ${e && e.message}`; }
+    results.push({ name, ok: r === true, detail: r === true ? '' : String(r) });
+  };
+  const savedState = Store.snapshot();
+  Options.holdAutosave(true);
+  try {
+    await t('the Export menu has "SketchUp (.json)" with the extension hint', async () => {
+      const btn = document.getElementById('btnExport');
+      btn.click();
+      await new Promise((r) => setTimeout(r, 60));
+      const mi = document.getElementById('miSketchup');
+      const text = mi ? mi.textContent : '';
+      Pop.close();
+      return mi && /SketchUp \(\.json\)/.test(text) && /Import with the CMRLM SketchUp extension/.test(text) ? true : `got ${JSON.stringify(text)}`;
+    });
+    await t('__tower.sketchupDoc() validates, is a tower document, and its floors match the plates', async () => {
+      Store.replace(defaultState());
+      const d = window.__tower.sketchupDoc();
+      const v = SkFmt.validateDoc(d);
+      if (!v.ok) return v.errors.join('; ');
+      const plates = Derived.get().plates.filter((p) => !p.void).length;
+      const floors = [];
+      (function walk(n) { if (n.attributes && n.attributes.floor != null) floors.push(n); (n.children || []).forEach(walk); })(d.root);
+      return d.source === 'tower' && d.zShift === 0 && floors.length === plates ? true : `source ${d.source}, floors ${floors.length}, plates ${plates}`;
+    });
+    await t('Export downloads <option>-<date>.sketchup.json as JSON that validates', async () => {
+      Store.replace({ ...defaultState(), name: 'Option A' });
+      let got = null;
+      const r = SketchupExport.download({ deliver: (blob, name) => { got = { blob, name }; } });
+      if (!r.ok || !got) return `download failed ${JSON.stringify(r.errors)}`;
+      const text = await got.blob.text();
+      const back = JSON.parse(text);
+      const ok = /^option-a-\d{4}-\d{2}-\d{2}\.sketchup\.json$/.test(got.name) && got.name === SkFmt.sketchupFilename('Option A') && got.blob.type === 'application/json' && SkFmt.validateDoc(back).ok;
+      return ok ? true : `name ${got.name}, type ${got.blob.type}`;
+    });
+  } finally {
+    Select.clear();
+    Store.replace(savedState);
+    Options.holdAutosave(false);
+  }
+  return results;
+}
+
 
 /* ==========================================================================
    Start-up and test hook
@@ -10472,6 +10936,7 @@ window.__tower = {
   getView: () => Render.info(),
   units: Units,
   runTests: runAllTests,
+  sketchupDoc: () => SketchupExport.doc(),                   // the SketchUp export document for the design on screen
   // v1.1 layout hooks (the same functions the selection card calls)
   openItem: (item) => UI.openItem(item),
   setProgramForItems: (items, program) => UI.setProgramForItems(items, program),

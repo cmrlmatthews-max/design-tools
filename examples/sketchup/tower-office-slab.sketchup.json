@@ -1,0 +1,1173 @@
+{
+  "format": "cmrlm-design-tools/sketchup",
+  "version": 1,
+  "source": "tower",
+  "name": "Office slab",
+  "createdAt": "2026-10-21T16:11:17.817Z",
+  "units": "feet",
+  "location": null,
+  "zShift": 0,
+  "notes": [
+    "Plan origin = the tool's plan origin (0, 0). x = east, y = north. Lengths in feet.",
+    "Tower Generator: 32 floor solids, gross floor area 482,800 sf, top of floors 432 ft.",
+    "Each floor is one solid at full floor-to-floor height. Void floors are skipped."
+  ],
+  "tags": [
+    {
+      "name": "Office",
+      "color": "#2f9e9a",
+      "visible": true
+    },
+    {
+      "name": "Crown",
+      "color": "#d9a22b",
+      "visible": true
+    },
+    {
+      "name": "Context",
+      "color": "#c3c8ce",
+      "visible": true
+    }
+  ],
+  "materials": [
+    {
+      "name": "Office",
+      "color": "#2f9e9a",
+      "alpha": 1
+    },
+    {
+      "name": "Crown",
+      "color": "#d9a22b",
+      "alpha": 1
+    },
+    {
+      "name": "Context",
+      "color": "#c3c8ce",
+      "alpha": 1
+    }
+  ],
+  "root": {
+    "type": "group",
+    "name": "Office slab",
+    "children": [
+      {
+        "type": "group",
+        "name": "Segment 1 · Office",
+        "children": [
+          {
+            "type": "solid",
+            "name": "Floor 1",
+            "tag": "Office",
+            "material": "Office",
+            "outer": [
+              [
+                -100,
+                -45
+              ],
+              [
+                100,
+                -45
+              ],
+              [
+                100,
+                45
+              ],
+              [
+                -100,
+                45
+              ]
+            ],
+            "holes": [],
+            "z0": 0,
+            "z1": 13.5,
+            "attributes": {
+              "floor": 1,
+              "program": "office",
+              "area_sf": 18000
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 2",
+            "tag": "Office",
+            "material": "Office",
+            "outer": [
+              [
+                -100,
+                -45
+              ],
+              [
+                100,
+                -45
+              ],
+              [
+                100,
+                45
+              ],
+              [
+                -100,
+                45
+              ]
+            ],
+            "holes": [],
+            "z0": 13.5,
+            "z1": 27,
+            "attributes": {
+              "floor": 2,
+              "program": "office",
+              "area_sf": 18000
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 3",
+            "tag": "Office",
+            "material": "Office",
+            "outer": [
+              [
+                -100,
+                -45
+              ],
+              [
+                100,
+                -45
+              ],
+              [
+                100,
+                45
+              ],
+              [
+                -100,
+                45
+              ]
+            ],
+            "holes": [],
+            "z0": 27,
+            "z1": 40.5,
+            "attributes": {
+              "floor": 3,
+              "program": "office",
+              "area_sf": 18000
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 4",
+            "tag": "Office",
+            "material": "Office",
+            "outer": [
+              [
+                -100,
+                -45
+              ],
+              [
+                100,
+                -45
+              ],
+              [
+                100,
+                45
+              ],
+              [
+                -100,
+                45
+              ]
+            ],
+            "holes": [],
+            "z0": 40.5,
+            "z1": 54,
+            "attributes": {
+              "floor": 4,
+              "program": "office",
+              "area_sf": 18000
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 5",
+            "tag": "Office",
+            "material": "Office",
+            "outer": [
+              [
+                -100,
+                -45
+              ],
+              [
+                100,
+                -45
+              ],
+              [
+                100,
+                45
+              ],
+              [
+                -100,
+                45
+              ]
+            ],
+            "holes": [],
+            "z0": 54,
+            "z1": 67.5,
+            "attributes": {
+              "floor": 5,
+              "program": "office",
+              "area_sf": 18000
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 6",
+            "tag": "Office",
+            "material": "Office",
+            "outer": [
+              [
+                -100,
+                -45
+              ],
+              [
+                100,
+                -45
+              ],
+              [
+                100,
+                45
+              ],
+              [
+                -100,
+                45
+              ]
+            ],
+            "holes": [],
+            "z0": 67.5,
+            "z1": 81,
+            "attributes": {
+              "floor": 6,
+              "program": "office",
+              "area_sf": 18000
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 7",
+            "tag": "Office",
+            "material": "Office",
+            "outer": [
+              [
+                -100,
+                -45
+              ],
+              [
+                100,
+                -45
+              ],
+              [
+                100,
+                45
+              ],
+              [
+                -100,
+                45
+              ]
+            ],
+            "holes": [],
+            "z0": 81,
+            "z1": 94.5,
+            "attributes": {
+              "floor": 7,
+              "program": "office",
+              "area_sf": 18000
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 8",
+            "tag": "Office",
+            "material": "Office",
+            "outer": [
+              [
+                -100,
+                -45
+              ],
+              [
+                100,
+                -45
+              ],
+              [
+                100,
+                45
+              ],
+              [
+                -100,
+                45
+              ]
+            ],
+            "holes": [],
+            "z0": 94.5,
+            "z1": 108,
+            "attributes": {
+              "floor": 8,
+              "program": "office",
+              "area_sf": 18000
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 9",
+            "tag": "Office",
+            "material": "Office",
+            "outer": [
+              [
+                -100,
+                -45
+              ],
+              [
+                100,
+                -45
+              ],
+              [
+                100,
+                45
+              ],
+              [
+                -100,
+                45
+              ]
+            ],
+            "holes": [],
+            "z0": 108,
+            "z1": 121.5,
+            "attributes": {
+              "floor": 9,
+              "program": "office",
+              "area_sf": 18000
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 10",
+            "tag": "Office",
+            "material": "Office",
+            "outer": [
+              [
+                -100,
+                -45
+              ],
+              [
+                100,
+                -45
+              ],
+              [
+                100,
+                45
+              ],
+              [
+                -100,
+                45
+              ]
+            ],
+            "holes": [],
+            "z0": 121.5,
+            "z1": 135,
+            "attributes": {
+              "floor": 10,
+              "program": "office",
+              "area_sf": 18000
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 11",
+            "tag": "Office",
+            "material": "Office",
+            "outer": [
+              [
+                -100,
+                -45
+              ],
+              [
+                100,
+                -45
+              ],
+              [
+                100,
+                45
+              ],
+              [
+                -100,
+                45
+              ]
+            ],
+            "holes": [],
+            "z0": 135,
+            "z1": 148.5,
+            "attributes": {
+              "floor": 11,
+              "program": "office",
+              "area_sf": 18000
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 12",
+            "tag": "Office",
+            "material": "Office",
+            "outer": [
+              [
+                -100,
+                -45
+              ],
+              [
+                100,
+                -45
+              ],
+              [
+                100,
+                45
+              ],
+              [
+                -100,
+                45
+              ]
+            ],
+            "holes": [],
+            "z0": 148.5,
+            "z1": 162,
+            "attributes": {
+              "floor": 12,
+              "program": "office",
+              "area_sf": 18000
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 13",
+            "tag": "Office",
+            "material": "Office",
+            "outer": [
+              [
+                -100,
+                -45
+              ],
+              [
+                100,
+                -45
+              ],
+              [
+                100,
+                45
+              ],
+              [
+                -100,
+                45
+              ]
+            ],
+            "holes": [],
+            "z0": 162,
+            "z1": 175.5,
+            "attributes": {
+              "floor": 13,
+              "program": "office",
+              "area_sf": 18000
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 14",
+            "tag": "Office",
+            "material": "Office",
+            "outer": [
+              [
+                -100,
+                -45
+              ],
+              [
+                100,
+                -45
+              ],
+              [
+                100,
+                45
+              ],
+              [
+                -100,
+                45
+              ]
+            ],
+            "holes": [],
+            "z0": 175.5,
+            "z1": 189,
+            "attributes": {
+              "floor": 14,
+              "program": "office",
+              "area_sf": 18000
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 15",
+            "tag": "Office",
+            "material": "Office",
+            "outer": [
+              [
+                -100,
+                -45
+              ],
+              [
+                100,
+                -45
+              ],
+              [
+                100,
+                45
+              ],
+              [
+                -100,
+                45
+              ]
+            ],
+            "holes": [],
+            "z0": 189,
+            "z1": 202.5,
+            "attributes": {
+              "floor": 15,
+              "program": "office",
+              "area_sf": 18000
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 16",
+            "tag": "Office",
+            "material": "Office",
+            "outer": [
+              [
+                -100,
+                -45
+              ],
+              [
+                100,
+                -45
+              ],
+              [
+                100,
+                45
+              ],
+              [
+                -100,
+                45
+              ]
+            ],
+            "holes": [],
+            "z0": 202.5,
+            "z1": 216,
+            "attributes": {
+              "floor": 16,
+              "program": "office",
+              "area_sf": 18000
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 17",
+            "tag": "Office",
+            "material": "Office",
+            "outer": [
+              [
+                -100,
+                -45
+              ],
+              [
+                100,
+                -45
+              ],
+              [
+                100,
+                45
+              ],
+              [
+                -100,
+                45
+              ]
+            ],
+            "holes": [],
+            "z0": 216,
+            "z1": 229.5,
+            "attributes": {
+              "floor": 17,
+              "program": "office",
+              "area_sf": 18000
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 18",
+            "tag": "Office",
+            "material": "Office",
+            "outer": [
+              [
+                -100,
+                -45
+              ],
+              [
+                100,
+                -45
+              ],
+              [
+                100,
+                45
+              ],
+              [
+                -100,
+                45
+              ]
+            ],
+            "holes": [],
+            "z0": 229.5,
+            "z1": 243,
+            "attributes": {
+              "floor": 18,
+              "program": "office",
+              "area_sf": 18000
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 19",
+            "tag": "Office",
+            "material": "Office",
+            "outer": [
+              [
+                -100,
+                -45
+              ],
+              [
+                100,
+                -45
+              ],
+              [
+                100,
+                45
+              ],
+              [
+                -100,
+                45
+              ]
+            ],
+            "holes": [],
+            "z0": 243,
+            "z1": 256.5,
+            "attributes": {
+              "floor": 19,
+              "program": "office",
+              "area_sf": 18000
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 20",
+            "tag": "Office",
+            "material": "Office",
+            "outer": [
+              [
+                -90,
+                -35
+              ],
+              [
+                90,
+                -35
+              ],
+              [
+                90,
+                35
+              ],
+              [
+                -90,
+                35
+              ]
+            ],
+            "holes": [],
+            "z0": 256.5,
+            "z1": 270,
+            "attributes": {
+              "floor": 20,
+              "program": "office",
+              "area_sf": 12600
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 21",
+            "tag": "Office",
+            "material": "Office",
+            "outer": [
+              [
+                -90,
+                -35
+              ],
+              [
+                90,
+                -35
+              ],
+              [
+                90,
+                35
+              ],
+              [
+                -90,
+                35
+              ]
+            ],
+            "holes": [],
+            "z0": 270,
+            "z1": 283.5,
+            "attributes": {
+              "floor": 21,
+              "program": "office",
+              "area_sf": 12600
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 22",
+            "tag": "Office",
+            "material": "Office",
+            "outer": [
+              [
+                -90,
+                -35
+              ],
+              [
+                90,
+                -35
+              ],
+              [
+                90,
+                35
+              ],
+              [
+                -90,
+                35
+              ]
+            ],
+            "holes": [],
+            "z0": 283.5,
+            "z1": 297,
+            "attributes": {
+              "floor": 22,
+              "program": "office",
+              "area_sf": 12600
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 23",
+            "tag": "Office",
+            "material": "Office",
+            "outer": [
+              [
+                -90,
+                -35
+              ],
+              [
+                90,
+                -35
+              ],
+              [
+                90,
+                35
+              ],
+              [
+                -90,
+                35
+              ]
+            ],
+            "holes": [],
+            "z0": 297,
+            "z1": 310.5,
+            "attributes": {
+              "floor": 23,
+              "program": "office",
+              "area_sf": 12600
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 24",
+            "tag": "Office",
+            "material": "Office",
+            "outer": [
+              [
+                -90,
+                -35
+              ],
+              [
+                90,
+                -35
+              ],
+              [
+                90,
+                35
+              ],
+              [
+                -90,
+                35
+              ]
+            ],
+            "holes": [],
+            "z0": 310.5,
+            "z1": 324,
+            "attributes": {
+              "floor": 24,
+              "program": "office",
+              "area_sf": 12600
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 25",
+            "tag": "Office",
+            "material": "Office",
+            "outer": [
+              [
+                -90,
+                -35
+              ],
+              [
+                90,
+                -35
+              ],
+              [
+                90,
+                35
+              ],
+              [
+                -90,
+                35
+              ]
+            ],
+            "holes": [],
+            "z0": 324,
+            "z1": 337.5,
+            "attributes": {
+              "floor": 25,
+              "program": "office",
+              "area_sf": 12600
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 26",
+            "tag": "Office",
+            "material": "Office",
+            "outer": [
+              [
+                -90,
+                -35
+              ],
+              [
+                90,
+                -35
+              ],
+              [
+                90,
+                35
+              ],
+              [
+                -90,
+                35
+              ]
+            ],
+            "holes": [],
+            "z0": 337.5,
+            "z1": 351,
+            "attributes": {
+              "floor": 26,
+              "program": "office",
+              "area_sf": 12600
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 27",
+            "tag": "Office",
+            "material": "Office",
+            "outer": [
+              [
+                -90,
+                -35
+              ],
+              [
+                90,
+                -35
+              ],
+              [
+                90,
+                35
+              ],
+              [
+                -90,
+                35
+              ]
+            ],
+            "holes": [],
+            "z0": 351,
+            "z1": 364.5,
+            "attributes": {
+              "floor": 27,
+              "program": "office",
+              "area_sf": 12600
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 28",
+            "tag": "Office",
+            "material": "Office",
+            "outer": [
+              [
+                -80,
+                -25
+              ],
+              [
+                80,
+                -25
+              ],
+              [
+                80,
+                25
+              ],
+              [
+                -80,
+                25
+              ]
+            ],
+            "holes": [],
+            "z0": 364.5,
+            "z1": 378,
+            "attributes": {
+              "floor": 28,
+              "program": "office",
+              "area_sf": 8000
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 29",
+            "tag": "Office",
+            "material": "Office",
+            "outer": [
+              [
+                -80,
+                -25
+              ],
+              [
+                80,
+                -25
+              ],
+              [
+                80,
+                25
+              ],
+              [
+                -80,
+                25
+              ]
+            ],
+            "holes": [],
+            "z0": 378,
+            "z1": 391.5,
+            "attributes": {
+              "floor": 29,
+              "program": "office",
+              "area_sf": 8000
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 30",
+            "tag": "Office",
+            "material": "Office",
+            "outer": [
+              [
+                -80,
+                -25
+              ],
+              [
+                80,
+                -25
+              ],
+              [
+                80,
+                25
+              ],
+              [
+                -80,
+                25
+              ]
+            ],
+            "holes": [],
+            "z0": 391.5,
+            "z1": 405,
+            "attributes": {
+              "floor": 30,
+              "program": "office",
+              "area_sf": 8000
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 31",
+            "tag": "Office",
+            "material": "Office",
+            "outer": [
+              [
+                -80,
+                -25
+              ],
+              [
+                80,
+                -25
+              ],
+              [
+                80,
+                25
+              ],
+              [
+                -80,
+                25
+              ]
+            ],
+            "holes": [],
+            "z0": 405,
+            "z1": 418.5,
+            "attributes": {
+              "floor": 31,
+              "program": "office",
+              "area_sf": 8000
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 32",
+            "tag": "Office",
+            "material": "Office",
+            "outer": [
+              [
+                -80,
+                -25
+              ],
+              [
+                80,
+                -25
+              ],
+              [
+                80,
+                25
+              ],
+              [
+                -80,
+                25
+              ]
+            ],
+            "holes": [],
+            "z0": 418.5,
+            "z1": 432,
+            "attributes": {
+              "floor": 32,
+              "program": "office",
+              "area_sf": 8000
+            }
+          }
+        ]
+      },
+      {
+        "type": "group",
+        "name": "Crown",
+        "tag": "Crown",
+        "children": [
+          {
+            "type": "solid",
+            "name": "Parapet",
+            "tag": "Crown",
+            "material": "Crown",
+            "outer": [
+              [
+                -80,
+                -25
+              ],
+              [
+                80,
+                -25
+              ],
+              [
+                80,
+                25
+              ],
+              [
+                -80,
+                25
+              ]
+            ],
+            "holes": [
+              [
+                [
+                  -79,
+                  24
+                ],
+                [
+                  79,
+                  24
+                ],
+                [
+                  79,
+                  -24
+                ],
+                [
+                  -79,
+                  -24
+                ]
+              ]
+            ],
+            "z0": 432,
+            "z1": 436
+          }
+        ]
+      },
+      {
+        "type": "group",
+        "name": "Context",
+        "tag": "Context",
+        "material": "Context",
+        "children": [
+          {
+            "type": "solid",
+            "name": "Block 1",
+            "tag": "Context",
+            "material": "Context",
+            "outer": [
+              [
+                -100,
+                -240
+              ],
+              [
+                100,
+                -240
+              ],
+              [
+                100,
+                -120
+              ],
+              [
+                -100,
+                -120
+              ]
+            ],
+            "holes": [],
+            "z0": 0,
+            "z1": 60
+          }
+        ]
+      }
+    ]
+  }
+}

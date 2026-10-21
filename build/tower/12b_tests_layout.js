@@ -196,11 +196,13 @@ async function runAllTests() {
   const layout = await runLayoutTests();
   const select = await runSelectTests();
   const fresh = await runNewDesignTests();
-  const all = [...(base.results || []), ...layout, ...select, ...fresh];
+  const sketchup = await runSketchupTests();
+  const all = [...(base.results || []), ...layout, ...select, ...fresh, ...sketchup];
   const failed = all.filter((r) => !r.ok);
   console.log(`[tests] layout ${layout.length - layout.filter((r) => !r.ok).length}/${layout.length} passed`, layout.filter((r) => !r.ok).length ? JSON.stringify(layout.filter((r) => !r.ok)) : '');
   console.log(`[tests] select ${select.length - select.filter((r) => !r.ok).length}/${select.length} passed`, select.filter((r) => !r.ok).length ? JSON.stringify(select.filter((r) => !r.ok)) : '');
   console.log(`[tests] new design ${fresh.length - fresh.filter((r) => !r.ok).length}/${fresh.length} passed`, fresh.filter((r) => !r.ok).length ? JSON.stringify(fresh.filter((r) => !r.ok)) : '');
+  console.log(`[tests] sketchup ${sketchup.length - sketchup.filter((r) => !r.ok).length}/${sketchup.length} passed`, sketchup.filter((r) => !r.ok).length ? JSON.stringify(sketchup.filter((r) => !r.ok)) : '');
   window.__towerTestResults = { total: all.length, passed: all.length - failed.length, failed, results: all };
   return window.__towerTestResults;
 }

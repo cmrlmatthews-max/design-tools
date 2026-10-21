@@ -3,7 +3,7 @@
   "private": true,
   "description": "Browser design tools for early-stage architecture. No build step for the pages; Node is only for the module tests.",
   "scripts": {
-    "test": "node test/geometry.test.mjs && node test/envelope.test.mjs && node test/snap.test.mjs && node test/sketchup-format.test.mjs",
+    "test": "node test/geometry.test.mjs && node test/envelope.test.mjs && node test/snap.test.mjs && node test/sketchup-format.test.mjs && node test/tower.sketchup.test.mjs",
     "build:tower": "python3 build/tower/build.py",
     "build:site": "python3 build/site/build.py",
     "test:site": "node test/site.readers.test.mjs",

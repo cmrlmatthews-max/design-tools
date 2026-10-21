@@ -669,6 +669,7 @@ const UI = (() => {
         item('miAiPrompts', 'AI Prompts', 'A prompt to pair with the AI-ready image', () => Prompts.toggle()),
         item('miOverlay', 'Image overlay', 'Choose what the Image shows', () => overlay(), { keep: true, chev: true }),
         h('div', { class: 'pop-sep' }), h('div', { class: 'label pop-label' }, 'Files'),
+        item('miSketchup', 'SketchUp (.json)', 'Import with the CMRLM SketchUp extension', () => SketchupExport.download()),
         item('miExportJson', 'Export JSON', 'Download all saved options', () => Options.exportJson()),
         item('miImportJson', 'Import JSON', 'Add the options from a file', () => $('importFile').click()));
     };
@@ -714,7 +715,7 @@ const UI = (() => {
     };
     Store.subscribe(syncSnap); syncSnap();
 
-    const exp = h('button', { class: 'btn has-text menu-btn', type: 'button', id: 'btnExport', 'aria-haspopup': 'true', 'aria-expanded': 'false', title: 'Export: image, AI-ready image, AI prompts, JSON', 'aria-label': 'Export menu', onclick: () => openExportMenu(exp) },
+    const exp = h('button', { class: 'btn has-text menu-btn', type: 'button', id: 'btnExport', 'aria-haspopup': 'true', 'aria-expanded': 'false', title: 'Export: image, AI-ready image, AI prompts, SketchUp, JSON', 'aria-label': 'Export menu', onclick: () => openExportMenu(exp) },
       h('span', { html: ICONS.export, style: 'display:contents' }), h('span', { class: 'btn-text' }, 'Export'), h('span', { html: ICONS.chev, style: 'display:contents' }));
     $('tbExport').append(exp);
   }

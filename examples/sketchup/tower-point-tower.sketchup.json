@@ -1,0 +1,1679 @@
+{
+  "format": "cmrlm-design-tools/sketchup",
+  "version": 1,
+  "source": "tower",
+  "name": "Slim residential point tower",
+  "createdAt": "2026-10-21T16:11:17.814Z",
+  "units": "feet",
+  "location": null,
+  "zShift": 0,
+  "notes": [
+    "Plan origin = the tool's plan origin (0, 0). x = east, y = north. Lengths in feet.",
+    "Tower Generator: 47 floor solids, gross floor area 349,279 sf, top of floors 483 ft.",
+    "Each floor is one solid at full floor-to-floor height. Void floors are skipped."
+  ],
+  "tags": [
+    {
+      "name": "Retail",
+      "color": "#d9a22b",
+      "visible": true
+    },
+    {
+      "name": "Amenity",
+      "color": "#58a65c",
+      "visible": true
+    },
+    {
+      "name": "Residential",
+      "color": "#4f7fd1",
+      "visible": true
+    },
+    {
+      "name": "Crown",
+      "color": "#d9a22b",
+      "visible": true
+    },
+    {
+      "name": "Context",
+      "color": "#c3c8ce",
+      "visible": true
+    }
+  ],
+  "materials": [
+    {
+      "name": "Retail",
+      "color": "#d9a22b",
+      "alpha": 1
+    },
+    {
+      "name": "Amenity",
+      "color": "#58a65c",
+      "alpha": 1
+    },
+    {
+      "name": "Residential",
+      "color": "#4f7fd1",
+      "alpha": 1
+    },
+    {
+      "name": "Crown",
+      "color": "#d9a22b",
+      "alpha": 1
+    },
+    {
+      "name": "Context",
+      "color": "#c3c8ce",
+      "alpha": 1
+    }
+  ],
+  "root": {
+    "type": "group",
+    "name": "Slim residential point tower",
+    "children": [
+      {
+        "type": "group",
+        "name": "Podium",
+        "children": [
+          {
+            "type": "solid",
+            "name": "Floor 1",
+            "tag": "Retail",
+            "material": "Retail",
+            "outer": [
+              [
+                -50,
+                -50
+              ],
+              [
+                50,
+                -50
+              ],
+              [
+                50,
+                50
+              ],
+              [
+                -50,
+                50
+              ]
+            ],
+            "holes": [],
+            "z0": 0,
+            "z1": 18,
+            "attributes": {
+              "floor": 1,
+              "program": "retail",
+              "area_sf": 10000
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 2",
+            "tag": "Amenity",
+            "material": "Amenity",
+            "outer": [
+              [
+                -50,
+                -50
+              ],
+              [
+                50,
+                -50
+              ],
+              [
+                50,
+                50
+              ],
+              [
+                -50,
+                50
+              ]
+            ],
+            "holes": [],
+            "z0": 18,
+            "z1": 33,
+            "attributes": {
+              "floor": 2,
+              "program": "amenity",
+              "area_sf": 10000
+            }
+          }
+        ]
+      },
+      {
+        "type": "group",
+        "name": "Segment 1 · Residential",
+        "children": [
+          {
+            "type": "solid",
+            "name": "Floor 3",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -45,
+                -45
+              ],
+              [
+                45,
+                -45
+              ],
+              [
+                45,
+                45
+              ],
+              [
+                -45,
+                45
+              ]
+            ],
+            "holes": [],
+            "z0": 33,
+            "z1": 43,
+            "attributes": {
+              "floor": 3,
+              "program": "residential",
+              "area_sf": 8100
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 4",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -44.898,
+                -44.898
+              ],
+              [
+                44.898,
+                -44.898
+              ],
+              [
+                44.898,
+                44.898
+              ],
+              [
+                -44.898,
+                44.898
+              ]
+            ],
+            "holes": [],
+            "z0": 43,
+            "z1": 53,
+            "attributes": {
+              "floor": 4,
+              "program": "residential",
+              "area_sf": 8063.22
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 5",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -44.795,
+                -44.795
+              ],
+              [
+                44.795,
+                -44.795
+              ],
+              [
+                44.795,
+                44.795
+              ],
+              [
+                -44.795,
+                44.795
+              ]
+            ],
+            "holes": [],
+            "z0": 53,
+            "z1": 63,
+            "attributes": {
+              "floor": 5,
+              "program": "residential",
+              "area_sf": 8026.53
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 6",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -44.693,
+                -44.693
+              ],
+              [
+                44.693,
+                -44.693
+              ],
+              [
+                44.693,
+                44.693
+              ],
+              [
+                -44.693,
+                44.693
+              ]
+            ],
+            "holes": [],
+            "z0": 63,
+            "z1": 73,
+            "attributes": {
+              "floor": 6,
+              "program": "residential",
+              "area_sf": 7989.92
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 7",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -44.591,
+                -44.591
+              ],
+              [
+                44.591,
+                -44.591
+              ],
+              [
+                44.591,
+                44.591
+              ],
+              [
+                -44.591,
+                44.591
+              ]
+            ],
+            "holes": [],
+            "z0": 73,
+            "z1": 83,
+            "attributes": {
+              "floor": 7,
+              "program": "residential",
+              "area_sf": 7953.4
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 8",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -44.489,
+                -44.489
+              ],
+              [
+                44.489,
+                -44.489
+              ],
+              [
+                44.489,
+                44.489
+              ],
+              [
+                -44.489,
+                44.489
+              ]
+            ],
+            "holes": [],
+            "z0": 83,
+            "z1": 93,
+            "attributes": {
+              "floor": 8,
+              "program": "residential",
+              "area_sf": 7916.96
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 9",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -44.386,
+                -44.386
+              ],
+              [
+                44.386,
+                -44.386
+              ],
+              [
+                44.386,
+                44.386
+              ],
+              [
+                -44.386,
+                44.386
+              ]
+            ],
+            "holes": [],
+            "z0": 93,
+            "z1": 103,
+            "attributes": {
+              "floor": 9,
+              "program": "residential",
+              "area_sf": 7880.6
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 10",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -44.284,
+                -44.284
+              ],
+              [
+                44.284,
+                -44.284
+              ],
+              [
+                44.284,
+                44.284
+              ],
+              [
+                -44.284,
+                44.284
+              ]
+            ],
+            "holes": [],
+            "z0": 103,
+            "z1": 113,
+            "attributes": {
+              "floor": 10,
+              "program": "residential",
+              "area_sf": 7844.32
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 11",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -44.182,
+                -44.182
+              ],
+              [
+                44.182,
+                -44.182
+              ],
+              [
+                44.182,
+                44.182
+              ],
+              [
+                -44.182,
+                44.182
+              ]
+            ],
+            "holes": [],
+            "z0": 113,
+            "z1": 123,
+            "attributes": {
+              "floor": 11,
+              "program": "residential",
+              "area_sf": 7808.13
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 12",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -44.08,
+                -44.08
+              ],
+              [
+                44.08,
+                -44.08
+              ],
+              [
+                44.08,
+                44.08
+              ],
+              [
+                -44.08,
+                44.08
+              ]
+            ],
+            "holes": [],
+            "z0": 123,
+            "z1": 133,
+            "attributes": {
+              "floor": 12,
+              "program": "residential",
+              "area_sf": 7772.03
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 13",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -43.977,
+                -43.977
+              ],
+              [
+                43.977,
+                -43.977
+              ],
+              [
+                43.977,
+                43.977
+              ],
+              [
+                -43.977,
+                43.977
+              ]
+            ],
+            "holes": [],
+            "z0": 133,
+            "z1": 143,
+            "attributes": {
+              "floor": 13,
+              "program": "residential",
+              "area_sf": 7736
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 14",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -43.875,
+                -43.875
+              ],
+              [
+                43.875,
+                -43.875
+              ],
+              [
+                43.875,
+                43.875
+              ],
+              [
+                -43.875,
+                43.875
+              ]
+            ],
+            "holes": [],
+            "z0": 143,
+            "z1": 153,
+            "attributes": {
+              "floor": 14,
+              "program": "residential",
+              "area_sf": 7700.06
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 15",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -43.773,
+                -43.773
+              ],
+              [
+                43.773,
+                -43.773
+              ],
+              [
+                43.773,
+                43.773
+              ],
+              [
+                -43.773,
+                43.773
+              ]
+            ],
+            "holes": [],
+            "z0": 153,
+            "z1": 163,
+            "attributes": {
+              "floor": 15,
+              "program": "residential",
+              "area_sf": 7664.21
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 16",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -43.67,
+                -43.67
+              ],
+              [
+                43.67,
+                -43.67
+              ],
+              [
+                43.67,
+                43.67
+              ],
+              [
+                -43.67,
+                43.67
+              ]
+            ],
+            "holes": [],
+            "z0": 163,
+            "z1": 173,
+            "attributes": {
+              "floor": 16,
+              "program": "residential",
+              "area_sf": 7628.43
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 17",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -43.568,
+                -43.568
+              ],
+              [
+                43.568,
+                -43.568
+              ],
+              [
+                43.568,
+                43.568
+              ],
+              [
+                -43.568,
+                43.568
+              ]
+            ],
+            "holes": [],
+            "z0": 173,
+            "z1": 183,
+            "attributes": {
+              "floor": 17,
+              "program": "residential",
+              "area_sf": 7592.75
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 18",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -43.466,
+                -43.466
+              ],
+              [
+                43.466,
+                -43.466
+              ],
+              [
+                43.466,
+                43.466
+              ],
+              [
+                -43.466,
+                43.466
+              ]
+            ],
+            "holes": [],
+            "z0": 183,
+            "z1": 193,
+            "attributes": {
+              "floor": 18,
+              "program": "residential",
+              "area_sf": 7557.14
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 19",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -43.364,
+                -43.364
+              ],
+              [
+                43.364,
+                -43.364
+              ],
+              [
+                43.364,
+                43.364
+              ],
+              [
+                -43.364,
+                43.364
+              ]
+            ],
+            "holes": [],
+            "z0": 193,
+            "z1": 203,
+            "attributes": {
+              "floor": 19,
+              "program": "residential",
+              "area_sf": 7521.62
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 20",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -43.261,
+                -43.261
+              ],
+              [
+                43.261,
+                -43.261
+              ],
+              [
+                43.261,
+                43.261
+              ],
+              [
+                -43.261,
+                43.261
+              ]
+            ],
+            "holes": [],
+            "z0": 203,
+            "z1": 213,
+            "attributes": {
+              "floor": 20,
+              "program": "residential",
+              "area_sf": 7486.18
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 21",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -43.159,
+                -43.159
+              ],
+              [
+                43.159,
+                -43.159
+              ],
+              [
+                43.159,
+                43.159
+              ],
+              [
+                -43.159,
+                43.159
+              ]
+            ],
+            "holes": [],
+            "z0": 213,
+            "z1": 223,
+            "attributes": {
+              "floor": 21,
+              "program": "residential",
+              "area_sf": 7450.83
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 22",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -43.057,
+                -43.057
+              ],
+              [
+                43.057,
+                -43.057
+              ],
+              [
+                43.057,
+                43.057
+              ],
+              [
+                -43.057,
+                43.057
+              ]
+            ],
+            "holes": [],
+            "z0": 223,
+            "z1": 233,
+            "attributes": {
+              "floor": 22,
+              "program": "residential",
+              "area_sf": 7415.56
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 23",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -42.955,
+                -42.955
+              ],
+              [
+                42.955,
+                -42.955
+              ],
+              [
+                42.955,
+                42.955
+              ],
+              [
+                -42.955,
+                42.955
+              ]
+            ],
+            "holes": [],
+            "z0": 233,
+            "z1": 243,
+            "attributes": {
+              "floor": 23,
+              "program": "residential",
+              "area_sf": 7380.37
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 24",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -42.852,
+                -42.852
+              ],
+              [
+                42.852,
+                -42.852
+              ],
+              [
+                42.852,
+                42.852
+              ],
+              [
+                -42.852,
+                42.852
+              ]
+            ],
+            "holes": [],
+            "z0": 243,
+            "z1": 253,
+            "attributes": {
+              "floor": 24,
+              "program": "residential",
+              "area_sf": 7345.27
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 25",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -42.75,
+                -42.75
+              ],
+              [
+                42.75,
+                -42.75
+              ],
+              [
+                42.75,
+                42.75
+              ],
+              [
+                -42.75,
+                42.75
+              ]
+            ],
+            "holes": [],
+            "z0": 253,
+            "z1": 263,
+            "attributes": {
+              "floor": 25,
+              "program": "residential",
+              "area_sf": 7310.25
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 26",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -42.648,
+                -42.648
+              ],
+              [
+                42.648,
+                -42.648
+              ],
+              [
+                42.648,
+                42.648
+              ],
+              [
+                -42.648,
+                42.648
+              ]
+            ],
+            "holes": [],
+            "z0": 263,
+            "z1": 273,
+            "attributes": {
+              "floor": 26,
+              "program": "residential",
+              "area_sf": 7275.31
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 27",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -42.545,
+                -42.545
+              ],
+              [
+                42.545,
+                -42.545
+              ],
+              [
+                42.545,
+                42.545
+              ],
+              [
+                -42.545,
+                42.545
+              ]
+            ],
+            "holes": [],
+            "z0": 273,
+            "z1": 283,
+            "attributes": {
+              "floor": 27,
+              "program": "residential",
+              "area_sf": 7240.46
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 28",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -42.443,
+                -42.443
+              ],
+              [
+                42.443,
+                -42.443
+              ],
+              [
+                42.443,
+                42.443
+              ],
+              [
+                -42.443,
+                42.443
+              ]
+            ],
+            "holes": [],
+            "z0": 283,
+            "z1": 293,
+            "attributes": {
+              "floor": 28,
+              "program": "residential",
+              "area_sf": 7205.69
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 29",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -42.341,
+                -42.341
+              ],
+              [
+                42.341,
+                -42.341
+              ],
+              [
+                42.341,
+                42.341
+              ],
+              [
+                -42.341,
+                42.341
+              ]
+            ],
+            "holes": [],
+            "z0": 293,
+            "z1": 303,
+            "attributes": {
+              "floor": 29,
+              "program": "residential",
+              "area_sf": 7171.01
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 30",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -42.239,
+                -42.239
+              ],
+              [
+                42.239,
+                -42.239
+              ],
+              [
+                42.239,
+                42.239
+              ],
+              [
+                -42.239,
+                42.239
+              ]
+            ],
+            "holes": [],
+            "z0": 303,
+            "z1": 313,
+            "attributes": {
+              "floor": 30,
+              "program": "residential",
+              "area_sf": 7136.41
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 31",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -42.136,
+                -42.136
+              ],
+              [
+                42.136,
+                -42.136
+              ],
+              [
+                42.136,
+                42.136
+              ],
+              [
+                -42.136,
+                42.136
+              ]
+            ],
+            "holes": [],
+            "z0": 313,
+            "z1": 323,
+            "attributes": {
+              "floor": 31,
+              "program": "residential",
+              "area_sf": 7101.89
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 32",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -42.034,
+                -42.034
+              ],
+              [
+                42.034,
+                -42.034
+              ],
+              [
+                42.034,
+                42.034
+              ],
+              [
+                -42.034,
+                42.034
+              ]
+            ],
+            "holes": [],
+            "z0": 323,
+            "z1": 333,
+            "attributes": {
+              "floor": 32,
+              "program": "residential",
+              "area_sf": 7067.46
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 33",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -41.932,
+                -41.932
+              ],
+              [
+                41.932,
+                -41.932
+              ],
+              [
+                41.932,
+                41.932
+              ],
+              [
+                -41.932,
+                41.932
+              ]
+            ],
+            "holes": [],
+            "z0": 333,
+            "z1": 343,
+            "attributes": {
+              "floor": 33,
+              "program": "residential",
+              "area_sf": 7033.11
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 34",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -41.83,
+                -41.83
+              ],
+              [
+                41.83,
+                -41.83
+              ],
+              [
+                41.83,
+                41.83
+              ],
+              [
+                -41.83,
+                41.83
+              ]
+            ],
+            "holes": [],
+            "z0": 343,
+            "z1": 353,
+            "attributes": {
+              "floor": 34,
+              "program": "residential",
+              "area_sf": 6998.84
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 35",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -41.727,
+                -41.727
+              ],
+              [
+                41.727,
+                -41.727
+              ],
+              [
+                41.727,
+                41.727
+              ],
+              [
+                -41.727,
+                41.727
+              ]
+            ],
+            "holes": [],
+            "z0": 353,
+            "z1": 363,
+            "attributes": {
+              "floor": 35,
+              "program": "residential",
+              "area_sf": 6964.66
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 36",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -41.625,
+                -41.625
+              ],
+              [
+                41.625,
+                -41.625
+              ],
+              [
+                41.625,
+                41.625
+              ],
+              [
+                -41.625,
+                41.625
+              ]
+            ],
+            "holes": [],
+            "z0": 363,
+            "z1": 373,
+            "attributes": {
+              "floor": 36,
+              "program": "residential",
+              "area_sf": 6930.56
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 37",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -41.523,
+                -41.523
+              ],
+              [
+                41.523,
+                -41.523
+              ],
+              [
+                41.523,
+                41.523
+              ],
+              [
+                -41.523,
+                41.523
+              ]
+            ],
+            "holes": [],
+            "z0": 373,
+            "z1": 383,
+            "attributes": {
+              "floor": 37,
+              "program": "residential",
+              "area_sf": 6896.55
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 38",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -41.42,
+                -41.42
+              ],
+              [
+                41.42,
+                -41.42
+              ],
+              [
+                41.42,
+                41.42
+              ],
+              [
+                -41.42,
+                41.42
+              ]
+            ],
+            "holes": [],
+            "z0": 383,
+            "z1": 393,
+            "attributes": {
+              "floor": 38,
+              "program": "residential",
+              "area_sf": 6862.62
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 39",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -41.318,
+                -41.318
+              ],
+              [
+                41.318,
+                -41.318
+              ],
+              [
+                41.318,
+                41.318
+              ],
+              [
+                -41.318,
+                41.318
+              ]
+            ],
+            "holes": [],
+            "z0": 393,
+            "z1": 403,
+            "attributes": {
+              "floor": 39,
+              "program": "residential",
+              "area_sf": 6828.77
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 40",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -41.216,
+                -41.216
+              ],
+              [
+                41.216,
+                -41.216
+              ],
+              [
+                41.216,
+                41.216
+              ],
+              [
+                -41.216,
+                41.216
+              ]
+            ],
+            "holes": [],
+            "z0": 403,
+            "z1": 413,
+            "attributes": {
+              "floor": 40,
+              "program": "residential",
+              "area_sf": 6795
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 41",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -41.114,
+                -41.114
+              ],
+              [
+                41.114,
+                -41.114
+              ],
+              [
+                41.114,
+                41.114
+              ],
+              [
+                -41.114,
+                41.114
+              ]
+            ],
+            "holes": [],
+            "z0": 413,
+            "z1": 423,
+            "attributes": {
+              "floor": 41,
+              "program": "residential",
+              "area_sf": 6761.32
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 42",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -41.011,
+                -41.011
+              ],
+              [
+                41.011,
+                -41.011
+              ],
+              [
+                41.011,
+                41.011
+              ],
+              [
+                -41.011,
+                41.011
+              ]
+            ],
+            "holes": [],
+            "z0": 423,
+            "z1": 433,
+            "attributes": {
+              "floor": 42,
+              "program": "residential",
+              "area_sf": 6727.73
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 43",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -40.909,
+                -40.909
+              ],
+              [
+                40.909,
+                -40.909
+              ],
+              [
+                40.909,
+                40.909
+              ],
+              [
+                -40.909,
+                40.909
+              ]
+            ],
+            "holes": [],
+            "z0": 433,
+            "z1": 443,
+            "attributes": {
+              "floor": 43,
+              "program": "residential",
+              "area_sf": 6694.21
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 44",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -40.807,
+                -40.807
+              ],
+              [
+                40.807,
+                -40.807
+              ],
+              [
+                40.807,
+                40.807
+              ],
+              [
+                -40.807,
+                40.807
+              ]
+            ],
+            "holes": [],
+            "z0": 443,
+            "z1": 453,
+            "attributes": {
+              "floor": 44,
+              "program": "residential",
+              "area_sf": 6660.79
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 45",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -40.705,
+                -40.705
+              ],
+              [
+                40.705,
+                -40.705
+              ],
+              [
+                40.705,
+                40.705
+              ],
+              [
+                -40.705,
+                40.705
+              ]
+            ],
+            "holes": [],
+            "z0": 453,
+            "z1": 463,
+            "attributes": {
+              "floor": 45,
+              "program": "residential",
+              "area_sf": 6627.44
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 46",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -40.602,
+                -40.602
+              ],
+              [
+                40.602,
+                -40.602
+              ],
+              [
+                40.602,
+                40.602
+              ],
+              [
+                -40.602,
+                40.602
+              ]
+            ],
+            "holes": [],
+            "z0": 463,
+            "z1": 473,
+            "attributes": {
+              "floor": 46,
+              "program": "residential",
+              "area_sf": 6594.18
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 47",
+            "tag": "Residential",
+            "material": "Residential",
+            "outer": [
+              [
+                -40.5,
+                -40.5
+              ],
+              [
+                40.5,
+                -40.5
+              ],
+              [
+                40.5,
+                40.5
+              ],
+              [
+                -40.5,
+                40.5
+              ]
+            ],
+            "holes": [],
+            "z0": 473,
+            "z1": 483,
+            "attributes": {
+              "floor": 47,
+              "program": "residential",
+              "area_sf": 6561
+            }
+          }
+        ]
+      },
+      {
+        "type": "group",
+        "name": "Crown",
+        "tag": "Crown",
+        "children": [
+          {
+            "type": "solid",
+            "name": "Screen",
+            "tag": "Crown",
+            "material": "Crown",
+            "outer": [
+              [
+                -40.5,
+                -40.5
+              ],
+              [
+                40.5,
+                -40.5
+              ],
+              [
+                40.5,
+                40.5
+              ],
+              [
+                -40.5,
+                40.5
+              ]
+            ],
+            "holes": [
+              [
+                [
+                  -39.5,
+                  39.5
+                ],
+                [
+                  39.5,
+                  39.5
+                ],
+                [
+                  39.5,
+                  -39.5
+                ],
+                [
+                  -39.5,
+                  -39.5
+                ]
+              ]
+            ],
+            "z0": 483,
+            "z1": 503
+          }
+        ]
+      },
+      {
+        "type": "group",
+        "name": "Context",
+        "tag": "Context",
+        "material": "Context",
+        "children": [
+          {
+            "type": "solid",
+            "name": "Block 1",
+            "tag": "Context",
+            "material": "Context",
+            "outer": [
+              [
+                -100,
+                -240
+              ],
+              [
+                100,
+                -240
+              ],
+              [
+                100,
+                -120
+              ],
+              [
+                -100,
+                -120
+              ]
+            ],
+            "holes": [],
+            "z0": 0,
+            "z1": 60
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -49,6 +49,11 @@ MODS = {
     'snap': ('SnapMod', f'{SRC}/tower/snap.js', ['collectSnapTargets', 'snapMove', 'snapEdge', 'snapLength', 'itemBox'],
              [('import { allowedFootprint } from "./envelope.js";', 'const { allowedFootprint } = Env;'),
               ('import { shapeToRing } from "./geometry.js";', 'const { shapeToRing } = Geo;')]),
+    # SketchUp export. sketchupFormat must come before sketchupTower in 08c_sketchup.js (the tower module reads SkFmt).
+    'sketchupFormat': ('SkFmt', f'{SRC}/shared/sketchup-format.js',
+                       ['FORMAT', 'VERSION', 'cleanRing2', 'cleanRing3', 'ringArea2', 'makeDoc', 'validateDoc', 'sketchupFilename', 'docToBlob'], None),
+    'sketchupTower': ('SkTower', f'{SRC}/tower/sketchup.js', ['towerToSketchup', 'programLabel'],
+                      ('import { cleanRing2, makeDoc } from "../shared/sketchup-format.js";', 'const { cleanRing2, makeDoc } = SkFmt;')),
 }
 
 def wrap(key):
@@ -96,6 +101,7 @@ js = ''.join([
     part('07_controls.js'), '\n',
     part('08_ui.js'), '\n',
     part('08b_prompts.js'), '\n',
+    part('08c_sketchup.js'), '\n',
     part('09_storage.js'), '\n',
     part('10_screenshot.js'), '\n',
     part('11_compare.js'), '\n',
@@ -103,6 +109,7 @@ js = ''.join([
     part('12b_tests_layout.js'), '\n',
     part('12c_tests_select.js'), '\n',
     part('12d_tests_new.js'), '\n',
+    part('12e_tests_sketchup.js'), '\n',
     part('13_start.js'),
 ])
 

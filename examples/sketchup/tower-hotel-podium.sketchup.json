@@ -1,0 +1,1106 @@
+{
+  "format": "cmrlm-design-tools/sketchup",
+  "version": 1,
+  "source": "tower",
+  "name": "Hotel on a podium",
+  "createdAt": "2026-10-21T16:11:17.819Z",
+  "units": "feet",
+  "location": null,
+  "zShift": 0,
+  "notes": [
+    "Plan origin = the tool's plan origin (0, 0). x = east, y = north. Lengths in feet.",
+    "Tower Generator: 28 floor solids, gross floor area 399,200 sf, top of floors 303 ft.",
+    "Each floor is one solid at full floor-to-floor height. Void floors are skipped."
+  ],
+  "tags": [
+    {
+      "name": "Retail",
+      "color": "#d9a22b",
+      "visible": true
+    },
+    {
+      "name": "Amenity",
+      "color": "#58a65c",
+      "visible": true
+    },
+    {
+      "name": "Hotel",
+      "color": "#8a63c9",
+      "visible": true
+    },
+    {
+      "name": "Crown",
+      "color": "#d9a22b",
+      "visible": true
+    },
+    {
+      "name": "Context",
+      "color": "#c3c8ce",
+      "visible": true
+    }
+  ],
+  "materials": [
+    {
+      "name": "Retail",
+      "color": "#d9a22b",
+      "alpha": 1
+    },
+    {
+      "name": "Amenity",
+      "color": "#58a65c",
+      "alpha": 1
+    },
+    {
+      "name": "Hotel",
+      "color": "#8a63c9",
+      "alpha": 1
+    },
+    {
+      "name": "Crown",
+      "color": "#d9a22b",
+      "alpha": 1
+    },
+    {
+      "name": "Context",
+      "color": "#c3c8ce",
+      "alpha": 1
+    }
+  ],
+  "root": {
+    "type": "group",
+    "name": "Hotel on a podium",
+    "children": [
+      {
+        "type": "group",
+        "name": "Podium",
+        "children": [
+          {
+            "type": "solid",
+            "name": "Floor 1",
+            "tag": "Retail",
+            "material": "Retail",
+            "outer": [
+              [
+                -110,
+                -85
+              ],
+              [
+                110,
+                -85
+              ],
+              [
+                110,
+                85
+              ],
+              [
+                -110,
+                85
+              ]
+            ],
+            "holes": [],
+            "z0": 0,
+            "z1": 18,
+            "attributes": {
+              "floor": 1,
+              "program": "retail",
+              "area_sf": 37400
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 2",
+            "tag": "Amenity",
+            "material": "Amenity",
+            "outer": [
+              [
+                -110,
+                -85
+              ],
+              [
+                110,
+                -85
+              ],
+              [
+                110,
+                85
+              ],
+              [
+                -110,
+                85
+              ]
+            ],
+            "holes": [],
+            "z0": 18,
+            "z1": 33,
+            "attributes": {
+              "floor": 2,
+              "program": "amenity",
+              "area_sf": 37400
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 3",
+            "tag": "Amenity",
+            "material": "Amenity",
+            "outer": [
+              [
+                -110,
+                -85
+              ],
+              [
+                110,
+                -85
+              ],
+              [
+                110,
+                85
+              ],
+              [
+                -110,
+                85
+              ]
+            ],
+            "holes": [],
+            "z0": 33,
+            "z1": 48,
+            "attributes": {
+              "floor": 3,
+              "program": "amenity",
+              "area_sf": 37400
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 4",
+            "tag": "Amenity",
+            "material": "Amenity",
+            "outer": [
+              [
+                -110,
+                -85
+              ],
+              [
+                110,
+                -85
+              ],
+              [
+                110,
+                85
+              ],
+              [
+                -110,
+                85
+              ]
+            ],
+            "holes": [],
+            "z0": 48,
+            "z1": 63,
+            "attributes": {
+              "floor": 4,
+              "program": "amenity",
+              "area_sf": 37400
+            }
+          }
+        ]
+      },
+      {
+        "type": "group",
+        "name": "Segment 1 · Hotel",
+        "children": [
+          {
+            "type": "solid",
+            "name": "Floor 5",
+            "tag": "Hotel",
+            "material": "Hotel",
+            "outer": [
+              [
+                -80,
+                -32.5
+              ],
+              [
+                80,
+                -32.5
+              ],
+              [
+                80,
+                32.5
+              ],
+              [
+                -80,
+                32.5
+              ]
+            ],
+            "holes": [],
+            "z0": 63,
+            "z1": 73,
+            "attributes": {
+              "floor": 5,
+              "program": "hotel",
+              "area_sf": 10400
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 6",
+            "tag": "Hotel",
+            "material": "Hotel",
+            "outer": [
+              [
+                -80,
+                -32.5
+              ],
+              [
+                80,
+                -32.5
+              ],
+              [
+                80,
+                32.5
+              ],
+              [
+                -80,
+                32.5
+              ]
+            ],
+            "holes": [],
+            "z0": 73,
+            "z1": 83,
+            "attributes": {
+              "floor": 6,
+              "program": "hotel",
+              "area_sf": 10400
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 7",
+            "tag": "Hotel",
+            "material": "Hotel",
+            "outer": [
+              [
+                -80,
+                -32.5
+              ],
+              [
+                80,
+                -32.5
+              ],
+              [
+                80,
+                32.5
+              ],
+              [
+                -80,
+                32.5
+              ]
+            ],
+            "holes": [],
+            "z0": 83,
+            "z1": 93,
+            "attributes": {
+              "floor": 7,
+              "program": "hotel",
+              "area_sf": 10400
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 8",
+            "tag": "Hotel",
+            "material": "Hotel",
+            "outer": [
+              [
+                -80,
+                -32.5
+              ],
+              [
+                80,
+                -32.5
+              ],
+              [
+                80,
+                32.5
+              ],
+              [
+                -80,
+                32.5
+              ]
+            ],
+            "holes": [],
+            "z0": 93,
+            "z1": 103,
+            "attributes": {
+              "floor": 8,
+              "program": "hotel",
+              "area_sf": 10400
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 9",
+            "tag": "Hotel",
+            "material": "Hotel",
+            "outer": [
+              [
+                -80,
+                -32.5
+              ],
+              [
+                80,
+                -32.5
+              ],
+              [
+                80,
+                32.5
+              ],
+              [
+                -80,
+                32.5
+              ]
+            ],
+            "holes": [],
+            "z0": 103,
+            "z1": 113,
+            "attributes": {
+              "floor": 9,
+              "program": "hotel",
+              "area_sf": 10400
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 10",
+            "tag": "Hotel",
+            "material": "Hotel",
+            "outer": [
+              [
+                -80,
+                -32.5
+              ],
+              [
+                80,
+                -32.5
+              ],
+              [
+                80,
+                32.5
+              ],
+              [
+                -80,
+                32.5
+              ]
+            ],
+            "holes": [],
+            "z0": 113,
+            "z1": 123,
+            "attributes": {
+              "floor": 10,
+              "program": "hotel",
+              "area_sf": 10400
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 11",
+            "tag": "Hotel",
+            "material": "Hotel",
+            "outer": [
+              [
+                -80,
+                -32.5
+              ],
+              [
+                80,
+                -32.5
+              ],
+              [
+                80,
+                32.5
+              ],
+              [
+                -80,
+                32.5
+              ]
+            ],
+            "holes": [],
+            "z0": 123,
+            "z1": 133,
+            "attributes": {
+              "floor": 11,
+              "program": "hotel",
+              "area_sf": 10400
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 12",
+            "tag": "Hotel",
+            "material": "Hotel",
+            "outer": [
+              [
+                -80,
+                -32.5
+              ],
+              [
+                80,
+                -32.5
+              ],
+              [
+                80,
+                32.5
+              ],
+              [
+                -80,
+                32.5
+              ]
+            ],
+            "holes": [],
+            "z0": 133,
+            "z1": 143,
+            "attributes": {
+              "floor": 12,
+              "program": "hotel",
+              "area_sf": 10400
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 13",
+            "tag": "Hotel",
+            "material": "Hotel",
+            "outer": [
+              [
+                -80,
+                -32.5
+              ],
+              [
+                80,
+                -32.5
+              ],
+              [
+                80,
+                32.5
+              ],
+              [
+                -80,
+                32.5
+              ]
+            ],
+            "holes": [],
+            "z0": 143,
+            "z1": 153,
+            "attributes": {
+              "floor": 13,
+              "program": "hotel",
+              "area_sf": 10400
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 14",
+            "tag": "Hotel",
+            "material": "Hotel",
+            "outer": [
+              [
+                -80,
+                -32.5
+              ],
+              [
+                80,
+                -32.5
+              ],
+              [
+                80,
+                32.5
+              ],
+              [
+                -80,
+                32.5
+              ]
+            ],
+            "holes": [],
+            "z0": 153,
+            "z1": 163,
+            "attributes": {
+              "floor": 14,
+              "program": "hotel",
+              "area_sf": 10400
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 15",
+            "tag": "Hotel",
+            "material": "Hotel",
+            "outer": [
+              [
+                -80,
+                -32.5
+              ],
+              [
+                80,
+                -32.5
+              ],
+              [
+                80,
+                32.5
+              ],
+              [
+                -80,
+                32.5
+              ]
+            ],
+            "holes": [],
+            "z0": 163,
+            "z1": 173,
+            "attributes": {
+              "floor": 15,
+              "program": "hotel",
+              "area_sf": 10400
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 16",
+            "tag": "Hotel",
+            "material": "Hotel",
+            "outer": [
+              [
+                -80,
+                -32.5
+              ],
+              [
+                80,
+                -32.5
+              ],
+              [
+                80,
+                32.5
+              ],
+              [
+                -80,
+                32.5
+              ]
+            ],
+            "holes": [],
+            "z0": 173,
+            "z1": 183,
+            "attributes": {
+              "floor": 16,
+              "program": "hotel",
+              "area_sf": 10400
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 17",
+            "tag": "Hotel",
+            "material": "Hotel",
+            "outer": [
+              [
+                -80,
+                -32.5
+              ],
+              [
+                80,
+                -32.5
+              ],
+              [
+                80,
+                32.5
+              ],
+              [
+                -80,
+                32.5
+              ]
+            ],
+            "holes": [],
+            "z0": 183,
+            "z1": 193,
+            "attributes": {
+              "floor": 17,
+              "program": "hotel",
+              "area_sf": 10400
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 18",
+            "tag": "Hotel",
+            "material": "Hotel",
+            "outer": [
+              [
+                -80,
+                -32.5
+              ],
+              [
+                80,
+                -32.5
+              ],
+              [
+                80,
+                32.5
+              ],
+              [
+                -80,
+                32.5
+              ]
+            ],
+            "holes": [],
+            "z0": 193,
+            "z1": 203,
+            "attributes": {
+              "floor": 18,
+              "program": "hotel",
+              "area_sf": 10400
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 19",
+            "tag": "Hotel",
+            "material": "Hotel",
+            "outer": [
+              [
+                -80,
+                -32.5
+              ],
+              [
+                80,
+                -32.5
+              ],
+              [
+                80,
+                32.5
+              ],
+              [
+                -80,
+                32.5
+              ]
+            ],
+            "holes": [],
+            "z0": 203,
+            "z1": 213,
+            "attributes": {
+              "floor": 19,
+              "program": "hotel",
+              "area_sf": 10400
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 20",
+            "tag": "Hotel",
+            "material": "Hotel",
+            "outer": [
+              [
+                -80,
+                -32.5
+              ],
+              [
+                80,
+                -32.5
+              ],
+              [
+                80,
+                32.5
+              ],
+              [
+                -80,
+                32.5
+              ]
+            ],
+            "holes": [],
+            "z0": 213,
+            "z1": 223,
+            "attributes": {
+              "floor": 20,
+              "program": "hotel",
+              "area_sf": 10400
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 21",
+            "tag": "Hotel",
+            "material": "Hotel",
+            "outer": [
+              [
+                -80,
+                -32.5
+              ],
+              [
+                80,
+                -32.5
+              ],
+              [
+                80,
+                32.5
+              ],
+              [
+                -80,
+                32.5
+              ]
+            ],
+            "holes": [],
+            "z0": 223,
+            "z1": 233,
+            "attributes": {
+              "floor": 21,
+              "program": "hotel",
+              "area_sf": 10400
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 22",
+            "tag": "Hotel",
+            "material": "Hotel",
+            "outer": [
+              [
+                -80,
+                -32.5
+              ],
+              [
+                80,
+                -32.5
+              ],
+              [
+                80,
+                32.5
+              ],
+              [
+                -80,
+                32.5
+              ]
+            ],
+            "holes": [],
+            "z0": 233,
+            "z1": 243,
+            "attributes": {
+              "floor": 22,
+              "program": "hotel",
+              "area_sf": 10400
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 23",
+            "tag": "Hotel",
+            "material": "Hotel",
+            "outer": [
+              [
+                -80,
+                -32.5
+              ],
+              [
+                80,
+                -32.5
+              ],
+              [
+                80,
+                32.5
+              ],
+              [
+                -80,
+                32.5
+              ]
+            ],
+            "holes": [],
+            "z0": 243,
+            "z1": 253,
+            "attributes": {
+              "floor": 23,
+              "program": "hotel",
+              "area_sf": 10400
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 24",
+            "tag": "Hotel",
+            "material": "Hotel",
+            "outer": [
+              [
+                -80,
+                -32.5
+              ],
+              [
+                80,
+                -32.5
+              ],
+              [
+                80,
+                32.5
+              ],
+              [
+                -80,
+                32.5
+              ]
+            ],
+            "holes": [],
+            "z0": 253,
+            "z1": 263,
+            "attributes": {
+              "floor": 24,
+              "program": "hotel",
+              "area_sf": 10400
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 25",
+            "tag": "Hotel",
+            "material": "Hotel",
+            "outer": [
+              [
+                -80,
+                -32.5
+              ],
+              [
+                80,
+                -32.5
+              ],
+              [
+                80,
+                32.5
+              ],
+              [
+                -80,
+                32.5
+              ]
+            ],
+            "holes": [],
+            "z0": 263,
+            "z1": 273,
+            "attributes": {
+              "floor": 25,
+              "program": "hotel",
+              "area_sf": 10400
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 26",
+            "tag": "Hotel",
+            "material": "Hotel",
+            "outer": [
+              [
+                -80,
+                -32.5
+              ],
+              [
+                80,
+                -32.5
+              ],
+              [
+                80,
+                32.5
+              ],
+              [
+                -80,
+                32.5
+              ]
+            ],
+            "holes": [],
+            "z0": 273,
+            "z1": 283,
+            "attributes": {
+              "floor": 26,
+              "program": "hotel",
+              "area_sf": 10400
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 27",
+            "tag": "Hotel",
+            "material": "Hotel",
+            "outer": [
+              [
+                -80,
+                -32.5
+              ],
+              [
+                80,
+                -32.5
+              ],
+              [
+                80,
+                32.5
+              ],
+              [
+                -80,
+                32.5
+              ]
+            ],
+            "holes": [],
+            "z0": 283,
+            "z1": 293,
+            "attributes": {
+              "floor": 27,
+              "program": "hotel",
+              "area_sf": 10400
+            }
+          },
+          {
+            "type": "solid",
+            "name": "Floor 28",
+            "tag": "Hotel",
+            "material": "Hotel",
+            "outer": [
+              [
+                -80,
+                -32.5
+              ],
+              [
+                80,
+                -32.5
+              ],
+              [
+                80,
+                32.5
+              ],
+              [
+                -80,
+                32.5
+              ]
+            ],
+            "holes": [],
+            "z0": 293,
+            "z1": 303,
+            "attributes": {
+              "floor": 28,
+              "program": "hotel",
+              "area_sf": 10400
+            }
+          }
+        ]
+      },
+      {
+        "type": "group",
+        "name": "Crown",
+        "tag": "Crown",
+        "children": [
+          {
+            "type": "solid",
+            "name": "Crown step 1",
+            "tag": "Crown",
+            "material": "Crown",
+            "outer": [
+              [
+                -74.8,
+                -27.3
+              ],
+              [
+                74.8,
+                -27.3
+              ],
+              [
+                74.8,
+                27.3
+              ],
+              [
+                -74.8,
+                27.3
+              ]
+            ],
+            "holes": [],
+            "z0": 303,
+            "z1": 308
+          },
+          {
+            "type": "solid",
+            "name": "Crown step 2",
+            "tag": "Crown",
+            "material": "Crown",
+            "outer": [
+              [
+                -69.6,
+                -22.1
+              ],
+              [
+                69.6,
+                -22.1
+              ],
+              [
+                69.6,
+                22.1
+              ],
+              [
+                -69.6,
+                22.1
+              ]
+            ],
+            "holes": [],
+            "z0": 308,
+            "z1": 313
+          },
+          {
+            "type": "solid",
+            "name": "Crown step 3",
+            "tag": "Crown",
+            "material": "Crown",
+            "outer": [
+              [
+                -64.4,
+                -16.9
+              ],
+              [
+                64.4,
+                -16.9
+              ],
+              [
+                64.4,
+                16.9
+              ],
+              [
+                -64.4,
+                16.9
+              ]
+            ],
+            "holes": [],
+            "z0": 313,
+            "z1": 318
+          }
+        ]
+      },
+      {
+        "type": "group",
+        "name": "Context",
+        "tag": "Context",
+        "material": "Context",
+        "children": [
+          {
+            "type": "solid",
+            "name": "Block 1",
+            "tag": "Context",
+            "material": "Context",
+            "outer": [
+              [
+                -100,
+                -240
+              ],
+              [
+                100,
+                -240
+              ],
+              [
+                100,
+                -120
+              ],
+              [
+                -100,
+                -120
+              ]
+            ],
+            "holes": [],
+            "z0": 0,
+            "z1": 60
+          }
+        ]
+      }
+    ]
+  }
+}

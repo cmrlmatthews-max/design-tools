@@ -60,6 +60,7 @@ window.__tower = {
   getView: () => Render.info(),
   units: Units,
   runTests: runAllTests,
+  sketchupDoc: () => SketchupExport.doc(),                   // the SketchUp export document for the design on screen
   // v1.1 layout hooks (the same functions the selection card calls)
   openItem: (item) => UI.openItem(item),
   setProgramForItems: (items, program) => UI.setProgramForItems(items, program),
