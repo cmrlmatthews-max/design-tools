@@ -238,3 +238,54 @@ export function placeAccessible(state, built) {
   }
   return result(rowIds, entry.index, placedStalls);
 }
+
+/* ---------- EV tags (plan section 3.7) ---------- */
+
+/**
+ * Tags EV stalls. Returns NEW stall objects (inputs unchanged).
+ * - EV installed: round(total × ev.installedShare) standard stalls become kind "ev".
+ * - EV ready: round(total × ev.readyShare) other standard stalls get evReady: true (kind unchanged).
+ * Order: level 1 first, then the distance from the stall center to the first entry (layout frame).
+ * Without an entry, the distance runs from the southwest corner of the stalls.
+ * Compact rows (compactShare > 0) are not built in version 1; the default share is 0.
+ * @param {object} state  parking state (reads state.ev, state.entries)
+ * @param {Array} stalls  every stall on every level, after placeAccessible
+ * @returns {Array}
+ */
+export function tagEv(state, stalls) {
+  if (!Array.isArray(stalls)) throw new Error("tagEv: stalls must be an array.");
+  const ev = (state && state.ev) || {};
+  const total = stalls.length;
+  const nInstalled = Math.round(total * (Number(ev.installedShare) || 0));
+  const nReady = Math.round(total * (Number(ev.readyShare) || 0));
+  const center = (s) => {
+    const r = s.outer || [];
+    let x = 0, y = 0;
+    for (const p of r) { x += p[0]; y += p[1]; }
+    return r.length ? [x / r.length, y / r.length] : [0, 0];
+  };
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const s of stalls) for (const p of s.outer || []) {
+    minX = Math.min(minX, p[0]); minY = Math.min(minY, p[1]); maxX = Math.max(maxX, p[0]); maxY = Math.max(maxY, p[1]);
+  }
+  if (!Number.isFinite(minX)) { minX = minY = maxX = maxY = 0; }
+  const e = Array.isArray(state && state.entries) && state.entries[0];
+  let ref = [minX, minY];
+  if (e) {
+    const at = Number(e.at) || 0, w = Number(e.width) || 0, mid = at + w / 2;
+    if (e.side === "west") ref = [minX, minY + mid];
+    else if (e.side === "east") ref = [maxX, minY + mid];
+    else if (e.side === "south") ref = [minX + mid, minY];
+    else if (e.side === "north") ref = [minX + mid, maxY];
+  }
+  const order = stalls
+    .map((s, i) => ({ i, level: Number(s.level) || 0, d: Math.hypot(center(s)[0] - ref[0], center(s)[1] - ref[1]) }))
+    .filter((o) => stalls[o.i].kind === "standard")
+    .sort((a, b) => a.level - b.level || a.d - b.d || a.i - b.i);
+  const out = stalls.map((s) => ({ ...s, outer: (s.outer || []).map((p) => p.slice()) }));
+  order.forEach((o, n) => {
+    if (n < nInstalled) out[o.i].kind = "ev";
+    else if (n < nInstalled + nReady) out[o.i].evReady = true;
+  });
+  return out;
+}

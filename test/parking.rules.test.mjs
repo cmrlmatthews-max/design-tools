@@ -785,4 +785,22 @@ if (L && G && typeof G.columnsFor === "function") {
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
+// ---------- integrator: EV tags (plan 3.7) ----------
+{
+  const { createRequire } = await import("node:module");
+  globalThis.ClipperLib = globalThis.ClipperLib || createRequire(import.meta.url)("clipper-lib");
+  const P = await import("../src/parking/presets.js");
+  const L = await import("../src/parking/layout.js");
+  const A = await import("../src/parking/accessible.js");
+  const s = P.PRESETS[0].state, acc = A.placeAccessible(s, L.layout(s));
+  const before = JSON.stringify(acc.stalls);
+  const t = A.tagEv(s, acc.stalls);
+  const ev = t.filter((x) => x.kind === "ev"), ready = t.filter((x) => x.evReady);
+  const okEv = t.length === 496 && ev.length === 25 && ready.length === 99 && ev.every((x) => x.level === 1)
+    && !ready.some((x) => x.kind !== "standard") && JSON.stringify(acc.stalls) === before
+    && t.filter((x) => x.kind === "accessible" || x.kind === "van").length === acc.stalls.filter((x) => x.kind === "accessible" || x.kind === "van").length;
+  console.log(`  ${okEv ? "ok  " : "FAIL"} tagEv: preset 8.1 gives 25 EV on level 1 and 99 EV ready; accessible kept; input unchanged`);
+  if (!okEv) fail++;
+}
+
 process.exit(fail ? 1 : 0);
