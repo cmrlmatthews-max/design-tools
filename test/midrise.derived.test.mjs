@@ -146,7 +146,14 @@ t("footprint is the union of all levels: bar ring with a hole, deck inside it as
 t("height, metrics, spines, context", () => {
   eq(derived.height, 52);
   eq(derived.metrics, { gfa: 574250, far: 2.93, siteCoverage: 0.586, floors: 5, height: 52, units: 480 });
-  eq(bySide("bar")[0].spines.length, 4);
+  {
+    // Spines are two-point pieces between nodes (spec 6.2). The real assemble splits each bar spine at its joints;
+    // a hand fixture may give one piece per bar. Either way every piece has two points and the total is 2 x 450 + 2 x 275.
+    const sp = bySide("bar")[0].spines;
+    ok(sp.length >= 4 && sp.every((x) => x.length === 2), "two-point spine pieces: " + sp.map((x) => x.length).join(","));
+    const total = sp.reduce((a, x) => a + Math.hypot(x[1][0] - x[0][0], x[1][1] - x[0][1]), 0);
+    ok(Math.abs(total - 1450) < 0.5, "spine total " + total);
+  }
   eq(bySide("deck")[0].spines, []);
   eq(derived.context.blocks, [{ x: 0, y: -261.5, w: 200, d: 120, h: 40 }]);
 });
