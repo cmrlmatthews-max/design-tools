@@ -1,0 +1,447 @@
+{
+ "format": "cmrlm-design-tools/sketchup",
+ "version": 1,
+ "source": "site",
+ "name": "Site at 1 Test Way",
+ "createdAt": "2026-10-21T17:00:00Z",
+ "units": "feet",
+ "location": {
+  "lat": 33.92,
+  "lon": -84.34
+ },
+ "zShift": -12.5,
+ "notes": [
+  "Plan origin = SW corner of the site.",
+  "SketchUp: add 12.5 ft to return to NAVD88"
+ ],
+ "tags": [
+  {
+   "name": "Ground",
+   "color": "#8a9a6a",
+   "visible": true
+  },
+  {
+   "name": "Buildings",
+   "color": "#9aa3ad",
+   "visible": true
+  },
+  {
+   "name": "Roads",
+   "color": "#555555",
+   "visible": true
+  },
+  {
+   "name": "Road centerlines",
+   "color": "#ffd400",
+   "visible": false
+  },
+  {
+   "name": "Water",
+   "color": "#3a7bd5",
+   "visible": true
+  },
+  {
+   "name": "Site boundary",
+   "color": "#ff0000",
+   "visible": true
+  }
+ ],
+ "materials": [
+  {
+   "name": "Ground",
+   "color": "#7d8f5c",
+   "alpha": 1
+  },
+  {
+   "name": "Building",
+   "color": "#c8c8c8",
+   "alpha": 1
+  },
+  {
+   "name": "Pavement",
+   "color": "#444444",
+   "alpha": 1
+  },
+  {
+   "name": "Water",
+   "color": "#3a7bd5",
+   "alpha": 0.85
+  }
+ ],
+ "root": {
+  "type": "group",
+  "name": "Site at 1 Test Way",
+  "children": [
+   {
+    "type": "mesh",
+    "name": "Ground",
+    "tag": "Ground",
+    "material": "Ground",
+    "soft": true,
+    "closed": false,
+    "vertices": [
+     [
+      0,
+      0,
+      10
+     ],
+     [
+      50,
+      0,
+      12
+     ],
+     [
+      100,
+      0,
+      14
+     ],
+     [
+      150,
+      0,
+      16
+     ],
+     [
+      0,
+      50,
+      11
+     ],
+     [
+      50,
+      50,
+      13
+     ],
+     [
+      100,
+      50,
+      15
+     ],
+     [
+      150,
+      50,
+      17
+     ],
+     [
+      0,
+      100,
+      12
+     ],
+     [
+      50,
+      100,
+      14
+     ],
+     [
+      100,
+      100,
+      16
+     ],
+     [
+      150,
+      100,
+      18
+     ],
+     [
+      0,
+      150,
+      13
+     ],
+     [
+      50,
+      150,
+      15
+     ],
+     [
+      100,
+      150,
+      17
+     ],
+     [
+      150,
+      150,
+      19
+     ]
+    ],
+    "triangles": [
+     [
+      0,
+      4,
+      1
+     ],
+     [
+      1,
+      4,
+      5
+     ],
+     [
+      1,
+      2,
+      6
+     ],
+     [
+      1,
+      6,
+      5
+     ],
+     [
+      2,
+      3,
+      7
+     ],
+     [
+      2,
+      7,
+      6
+     ],
+     [
+      4,
+      5,
+      9
+     ],
+     [
+      4,
+      9,
+      8
+     ],
+     [
+      5,
+      6,
+      10
+     ],
+     [
+      5,
+      10,
+      9
+     ],
+     [
+      6,
+      7,
+      11
+     ],
+     [
+      6,
+      11,
+      10
+     ],
+     [
+      8,
+      9,
+      13
+     ],
+     [
+      8,
+      13,
+      12
+     ],
+     [
+      9,
+      10,
+      14
+     ],
+     [
+      9,
+      14,
+      13
+     ],
+     [
+      10,
+      11,
+      15
+     ],
+     [
+      10,
+      15,
+      14
+     ]
+    ]
+   },
+   {
+    "type": "group",
+    "name": "Buildings",
+    "tag": "Buildings",
+    "material": "Building",
+    "children": [
+     {
+      "type": "solid",
+      "name": "Building 0001 (estimated)",
+      "outer": [
+       [
+        20,
+        20
+       ],
+       [
+        50,
+        20
+       ],
+       [
+        50,
+        50
+       ],
+       [
+        20,
+        50
+       ]
+      ],
+      "holes": [
+       [
+        [
+         30,
+         40
+        ],
+        [
+         40,
+         40
+        ],
+        [
+         40,
+         30
+        ],
+        [
+         30,
+         30
+        ]
+       ]
+      ],
+      "z0": 14,
+      "z1": 44,
+      "attributes": {
+       "height_ft": 30,
+       "height_source": "estimated",
+       "overture_id": "abc-123"
+      }
+     }
+    ]
+   },
+   {
+    "type": "group",
+    "name": "Roads",
+    "tag": "Roads",
+    "material": "Pavement",
+    "children": [
+     {
+      "type": "faces",
+      "name": "Main St",
+      "polygons": [
+       {
+        "outer": [
+         [
+          10,
+          70,
+          11.9
+         ],
+         [
+          60,
+          70,
+          13.9
+         ],
+         [
+          60,
+          80,
+          14.1
+         ],
+         [
+          10,
+          80,
+          12.1
+         ]
+        ],
+        "holes": []
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "type": "lines",
+    "name": "Road centerlines",
+    "tag": "Road centerlines",
+    "lines": [
+     [
+      [
+       10,
+       75,
+       12.05
+      ],
+      [
+       60,
+       75,
+       14.05
+      ]
+     ]
+    ]
+   },
+   {
+    "type": "group",
+    "name": "Water",
+    "tag": "Water",
+    "material": "Water",
+    "children": [
+     {
+      "type": "faces",
+      "name": "Pond",
+      "polygons": [
+       {
+        "outer": [
+         [
+          100,
+          100,
+          20
+         ],
+         [
+          130,
+          100,
+          20
+         ],
+         [
+          130,
+          130,
+          20
+         ],
+         [
+          100,
+          130,
+          20
+         ]
+        ],
+        "holes": []
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "type": "lines",
+    "name": "Site boundary",
+    "tag": "Site boundary",
+    "lines": [
+     [
+      [
+       0,
+       0,
+       10.2
+      ],
+      [
+       150,
+       0,
+       10.2
+      ],
+      [
+       150,
+       150,
+       10.2
+      ],
+      [
+       0,
+       150,
+       10.2
+      ],
+      [
+       0,
+       0,
+       10.2
+      ]
+     ]
+    ]
+   }
+  ]
+ }
+}
