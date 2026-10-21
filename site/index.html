@@ -1,0 +1,3852 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Site Model">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>Site Model</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2323508f'/%3E%3Cpath d='M5 23l8-9 5 5 9-10v14z' fill='%23fff'/%3E%3C/svg%3E">
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/clipper-lib@6.4.2/clipper.js"></script>
+
+<style>
+/* ==========================================================================
+   SHARED: styles
+   Color tokens, fonts, panel and control styles.
+   All colors are CSS custom properties on :root; dark theme redefines them.
+   ========================================================================== */
+:root {
+  --font: -apple-system, "SF Pro Text", "Inter", system-ui, "Segoe UI", Roboto, sans-serif;
+
+  --bg: #f3f4f6;
+  --panel: #fbfbfc;
+  --surface: #ffffff;
+  --surface-2: #eef0f2;
+  --line: #dde0e4;
+  --line-2: #c6cbd1;
+  --ink: #1b1f24;
+  --ink-2: #4e5763;
+  --ink-3: #848d98;
+  --accent: #23508f;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(35, 80, 143, .10);
+  --warn: #a85a12;
+  --warn-soft: rgba(168, 90, 18, .10);
+  --hud-bg: rgba(255, 255, 255, .90);
+  --shadow: 0 1px 2px rgba(16, 20, 26, .06), 0 8px 24px rgba(16, 20, 26, .10);
+  --shadow-up: 0 -6px 24px rgba(16, 20, 26, .12);
+
+  --hit: 44px;           /* minimum touch target */
+  --radius: 8px;
+  --topbar-h: 52px;
+  --panel-w: 340px;
+
+  /* 3D scene colors (read by the renderer) */
+  --scene-sky: #eceff2;
+  --scene-ground: #d9dde1;
+  --scene-sky-diagram: #f1f2f4;
+  --scene-ground-diagram: #ffffff;
+  --scene-grid-minor: #b4bbc2;
+  --scene-grid-major: #878f98;
+  --scene-edge: #20262d;
+  --scene-figure: #69727c;
+  --scene-model: #f6f6f3;
+  --scene-site: #23508f;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #101316;
+    --panel: #171b1f;
+    --surface: #1f2429;
+    --surface-2: #272d33;
+    --line: #2b3138;
+    --line-2: #3a424a;
+    --ink: #e7eaee;
+    --ink-2: #a5adb7;
+    --ink-3: #747d88;
+    --accent: #6aa2ea;
+    --accent-ink: #0d1722;
+    --accent-soft: rgba(106, 162, 234, .16);
+    --warn: #e0953f;
+    --warn-soft: rgba(224, 149, 63, .14);
+    --hud-bg: rgba(27, 32, 37, .90);
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .35);
+    --shadow-up: 0 -6px 24px rgba(0, 0, 0, .4);
+
+    --scene-sky: #23282e;
+    --scene-ground: #30363d;
+    --scene-sky-diagram: #1a1d21;
+    --scene-ground-diagram: #22262b;
+    --scene-grid-minor: #4b535c;
+    --scene-grid-major: #6e7781;
+    --scene-edge: #e7eaee;
+    --scene-figure: #aab2bb;
+    --scene-model: #efefec;
+    --scene-site: #6aa2ea;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.label {
+  font-size: 11px; font-weight: 600; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---- shell layout ------------------------------------------------------- */
+.shell { height: 100vh; height: 100dvh; display: grid; grid-template-rows: var(--topbar-h) minmax(0, 1fr); }
+.app {
+  position: relative; min-height: 0;
+  display: grid;
+  grid-template-columns: var(--panel-w) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: "panel viewport";
+}
+.viewport { grid-area: viewport; position: relative; min-width: 0; min-height: 0; overflow: hidden; background: var(--scene-sky); }
+.panel { grid-area: panel; min-height: 0; display: flex; flex-direction: column; background: var(--panel); border-right: 1px solid var(--line); }
+
+/* ---- top bar ------------------------------------------------------------ */
+.topbar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 12px; padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right));
+  background: var(--panel); border-bottom: 1px solid var(--line);
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
+}
+.topbar::-webkit-scrollbar { display: none; }
+.brand { display: flex; align-items: center; gap: 10px; flex: none; margin-right: 4px; }
+.wordmark { font-size: 12px; font-weight: 700; letter-spacing: .24em; color: var(--ink); }
+.brand-sep { width: 1px; height: 16px; background: var(--line-2); }
+.app-title { margin: 0; font-size: 15px; font-weight: 500; letter-spacing: -.005em; white-space: nowrap; }
+.tb-group { display: flex; align-items: center; gap: 2px; flex: none; }
+.tb-spacer { flex: 1 1 0; min-width: 0; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: var(--hit); min-width: var(--hit); padding: 0 12px;
+  border: 1px solid transparent; border-radius: var(--radius);
+  background: transparent; color: var(--ink); white-space: nowrap; flex: none;
+}
+.btn:hover { background: var(--surface-2); }
+.btn:active { background: var(--line); }
+.btn svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.btn[disabled], .btn.is-disabled { color: var(--ink-3); opacity: .55; cursor: default; background: transparent; }
+.btn.icon { padding: 0; }
+
+.seg { display: inline-flex; flex: none; padding: 3px; gap: 2px; background: var(--surface-2); border-radius: 10px; }
+.seg button {
+  min-height: var(--hit); min-width: var(--hit); padding: 0 14px;
+  border: 0; border-radius: 7px; background: transparent; color: var(--ink-2); font-size: 13px; font-weight: 500;
+}
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(16, 20, 26, .14); }
+
+@media (max-width: 1049px) {
+  .btn .btn-text { display: none; }
+  .btn.has-text { padding: 0; }
+}
+
+/* ---- viewport overlays ---------------------------------------------------- */
+.canvas-host { position: absolute; inset: 0; }
+.canvas-host canvas { display: block; width: 100%; height: 100%; touch-action: none; outline: none; }
+.gl-fail { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--ink-2); }
+
+.views {
+  position: absolute; left: 12px; bottom: 12px; bottom: max(12px, env(safe-area-inset-bottom));
+  display: flex; gap: 2px; padding: 3px;
+  background: var(--hud-bg); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: var(--shadow); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+}
+.views button {
+  min-width: var(--hit); min-height: var(--hit); padding: 0 12px;
+  border: 0; border-radius: 9px; background: transparent; color: var(--ink-2); font-size: 13px; font-weight: 500;
+}
+.views button:hover { background: var(--surface-2); }
+.views button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+
+/* ---- control panel -------------------------------------------------------- */
+.grabber {
+  display: none; flex: none; height: var(--hit); align-items: center; justify-content: center;
+  touch-action: none; cursor: grab; -webkit-user-select: none; user-select: none;
+}
+.grabber span { width: 40px; height: 5px; border-radius: 3px; background: var(--line-2); }
+.panel-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-bottom: max(24px, env(safe-area-inset-bottom)); -webkit-overflow-scrolling: touch; }
+.panel-title { padding: 14px 16px 6px; }
+
+/* ---- controls ------------------------------------------------------------- */
+.ctl { padding: 4px 0; }
+.ctl-label { display: block; font-size: 12.5px; color: var(--ink-2); padding-top: 4px; }
+.ctl-row { display: flex; align-items: center; gap: 10px; }
+.numfield {
+  flex: none; width: 116px; height: var(--hit); padding: 0 10px; text-align: right;
+  border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--surface);
+  font-size: 16px; font-variant-numeric: tabular-nums;
+}
+.numfield:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+
+.toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: var(--hit); padding: 0; border: 0; background: transparent; text-align: left; font-size: 13.5px; }
+.switch { position: relative; flex: none; width: 40px; height: 24px; border-radius: 12px; background: var(--line-2); transition: background .15s; }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .3); transition: transform .15s; }
+.toggle-row[aria-checked="true"] .switch { background: var(--accent); }
+.toggle-row[aria-checked="true"] .switch::after { transform: translateX(16px); }
+
+.select-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: var(--hit); }
+.select-row label { font-size: 13.5px; }
+.select-row select {
+  -webkit-appearance: none; appearance: none; height: var(--hit); min-width: 150px; padding: 0 30px 0 12px;
+  border: 1px solid var(--line-2); border-radius: var(--radius); background-color: var(--surface); font-size: 16px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%23848d98' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 4l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center;
+}
+
+/* ---- responsive: iPad portrait / narrow = bottom sheet ---------------------- */
+@media (max-width: 899px), (orientation: portrait) {
+  .app {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) var(--sheet-h, 42%);
+    grid-template-areas: "viewport" "panel";
+  }
+  .panel { border-right: 0; border-top: 1px solid var(--line); border-radius: 16px 16px 0 0; box-shadow: var(--shadow-up); z-index: 5; }
+  .grabber { display: flex; }
+  .panel-title { padding-top: 0; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+/* ---- Site Model additions ---------------------------------------------------------------------- */
+:root {
+  --bad: #c4382f;
+  --bad-soft: rgba(196, 56, 47, .10);
+  --good: #2e7d4f;
+  --good-soft: rgba(46, 125, 79, .12);
+
+  --scene-terrain-lo: #d6dadd;
+  --scene-terrain-hi: #eceeef;
+  --scene-skirt: #bcc2c8;
+  --scene-est: #efe2cf;
+  --scene-road: #9ba1a8;
+  --scene-walk: #c6cacd;
+  --scene-water: #8dbbe3;
+  --scene-tree: #8fa88b;
+  --scene-trunk: #8a8378;
+  --scene-contour: #3a424a;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bad: #ee6f66;
+    --bad-soft: rgba(238, 111, 102, .14);
+    --good: #66c28c;
+    --good-soft: rgba(102, 194, 140, .16);
+
+    --scene-terrain-lo: #3a4047;
+    --scene-terrain-hi: #4a5159;
+    --scene-skirt: #2a2f35;
+    --scene-est: #dccaa9;
+    --scene-road: #656c74;
+    --scene-walk: #858d95;
+    --scene-water: #3f72a6;
+    --scene-tree: #6e8d6c;
+    --scene-trunk: #8a8378;
+    --scene-contour: #b6bec7;
+  }
+}
+[hidden] { display: none !important; }
+
+.btn.solid { background: var(--accent); color: var(--accent-ink); }
+.btn.solid:hover { background: var(--accent); filter: brightness(1.08); }
+.btn.solid[disabled] { background: var(--surface-2); color: var(--ink-3); filter: none; opacity: 1; }
+.btn.outline { border-color: var(--line-2); }
+.btn .chev { width: 12px; height: 12px; stroke-width: 2; }
+.btn.is-on { background: var(--accent-soft); color: var(--accent); }
+
+/* popover menu (Downloads) */
+.pop {
+  position: fixed; z-index: 60; min-width: 250px; max-width: min(380px, calc(100vw - 16px));
+  max-height: calc(100vh - 80px); max-height: calc(100dvh - 80px); overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 6px;
+}
+.pop-item {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: var(--hit); padding: 6px 10px;
+  border: 0; border-radius: 8px; background: transparent; text-align: left; font-size: 13.5px;
+}
+.pop-item:hover { background: var(--surface-2); }
+.pop-item[disabled] { opacity: .45; cursor: default; background: transparent; }
+.pop-item .grow { flex: 1 1 auto; min-width: 0; }
+.pop-item small { display: block; margin-top: 1px; color: var(--ink-3); font-size: 11.5px; line-height: 1.3; }
+
+/* toasts */
+.toasts {
+  position: absolute; z-index: 20; left: 50%; transform: translateX(-50%);
+  bottom: calc(max(12px, env(safe-area-inset-bottom)) + var(--hit) + 8px + 10px);
+  display: grid; gap: 8px; width: max-content; max-width: calc(100% - 24px); pointer-events: none;
+}
+.toast {
+  padding: 10px 14px; border-radius: 10px; background: var(--ink); color: var(--bg); font-size: 13px;
+  box-shadow: var(--shadow); pointer-events: auto; max-width: 560px; line-height: 1.35;
+}
+.toast.warn { background: var(--warn); color: #fff; }
+.toast.bad { background: var(--bad); color: #fff; }
+.toast.test-pass { background: var(--good); color: #fff; }
+
+/* viewport overlays */
+.empty { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; pointer-events: none; color: var(--ink-3); }
+.empty strong { display: block; margin-bottom: 4px; font-size: 15px; font-weight: 600; color: var(--ink-2); }
+.empty span { font-size: 13px; }
+.status-chip {
+  position: absolute; z-index: 3; left: 12px; top: 12px; max-width: calc(100% - 96px); padding: 6px 12px;
+  background: var(--hud-bg); border: 1px solid var(--line); border-radius: 999px; box-shadow: var(--shadow);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  font-size: 12.5px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none;
+}
+.status-chip.bad { color: var(--bad); }
+.compass {
+  position: absolute; z-index: 3; right: 12px; top: 12px; width: 56px; height: 56px; pointer-events: none;
+  background: var(--hud-bg); border: 1px solid var(--line); border-radius: 50%; box-shadow: var(--shadow);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+}
+.compass svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.compass .c-ring { fill: none; stroke: var(--line-2); stroke-width: 1; }
+.compass .c-n { fill: var(--accent); }
+.compass .c-s { fill: var(--line-2); }
+.compass .c-t { fill: var(--ink); font-size: 7px; font-weight: 700; font-family: var(--font); }
+.views { z-index: 3; }
+.viewport[data-busy="true"] .canvas-host { opacity: .55; transition: opacity .2s; }
+
+/* panel */
+.panel { overflow: hidden; }
+.sec { padding: 4px 16px 12px; border-bottom: 1px solid var(--line); }
+.sec > .label { display: flex; align-items: center; justify-content: space-between; padding: 12px 0 4px; }
+.sec > .label .aside { font-size: 11.5px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--ink-3); }
+.help { margin: 4px 0 6px; color: var(--ink-3); font-size: 12px; line-height: 1.4; }
+.addr-row { display: flex; gap: 8px; }
+.field {
+  flex: 1 1 auto; min-width: 0; height: var(--hit); padding: 0 12px;
+  border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--surface); font-size: 16px;
+}
+.field:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+.addr-row .btn { padding: 0 20px; font-weight: 600; }
+.recents { display: grid; gap: 2px; margin: 2px 0 0; }
+.recent {
+  display: flex; align-items: baseline; gap: 8px; width: 100%; min-height: 40px; padding: 4px 8px; margin: 0 -8px; width: calc(100% + 16px);
+  border: 0; border-radius: 8px; background: transparent; text-align: left; font-size: 13px;
+}
+.recent:hover { background: var(--surface-2); }
+.recent .t { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recent .s { flex: none; color: var(--ink-3); font-size: 12px; }
+.toggles { display: grid; grid-template-columns: 1fr 1fr; gap: 0 20px; }
+.ctl-block { padding: 4px 0 2px; }
+.ctl-block > .ctl-label { padding: 6px 0 4px; }
+.ctl-block .seg { display: flex; width: 100%; }
+.ctl-block .seg button { flex: 1 1 0; padding: 0 6px; }
+
+/* progress */
+.sec > .label.sec-head { width: 100%; min-height: 40px; padding: 0; margin-top: 4px; border: 0; background: transparent; text-align: left; cursor: pointer; }
+.sec-head .sec-title { display: inline-flex; align-items: center; gap: 6px; }
+.sec-head .chev { width: 12px; height: 12px; fill: none; stroke: var(--ink-3); stroke-width: 2; transition: transform .15s; }
+.sec-head[aria-expanded="false"] .chev { transform: rotate(-90deg); }
+.steps { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 0; }
+.steps li { display: grid; grid-template-columns: 22px minmax(0, 1fr); column-gap: 8px; align-items: start; padding: 5px 0; font-size: 13px; }
+.steps .ic { width: 18px; height: 18px; margin-top: 1px; border-radius: 50%; border: 2px solid var(--line-2); display: grid; place-items: center; }
+.steps li[data-s="working"] .ic { border-color: var(--line-2); border-top-color: var(--accent); animation: spin .8s linear infinite; }
+.steps li[data-s="done"] .ic { border-color: var(--good); background: var(--good); }
+.steps li[data-s="done"] .ic::after { content: ""; width: 4px; height: 8px; margin-top: -2px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.steps li[data-s="error"] .ic { border-color: var(--bad); background: var(--bad); }
+.steps li[data-s="error"] .ic::after { content: "!"; color: #fff; font-size: 11px; font-weight: 800; line-height: 1; }
+.steps .nm { font-weight: 500; }
+.steps .ms { display: block; color: var(--ink-3); font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
+.steps li[data-s="error"] .ms { color: var(--bad); }
+.steps li[data-s="pending"] .nm { color: var(--ink-3); }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* metrics */
+.kv { display: grid; grid-template-columns: 1fr auto; gap: 5px 12px; margin: 6px 0 0; font-size: 13px; }
+.kv dt { color: var(--ink-2); }
+.kv dd { margin: 0; text-align: right; font-weight: 500; }
+.kv dd small { color: var(--ink-3); font-weight: 400; font-size: 11.5px; }
+.credits { padding: 12px 16px 4px; color: var(--ink-3); font-size: 11.5px; line-height: 1.5; }
+
+/* in-page tests */
+.test-panel {
+  position: absolute; z-index: 30; left: 12px; right: 12px; top: 12px; max-height: calc(100% - 24px); overflow: auto;
+  padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow);
+  font-size: 12.5px; line-height: 1.45;
+}
+.test-panel h2 { margin: 0 0 6px; font-size: 14px; }
+.test-panel h2.pass { color: var(--good); }
+.test-panel h2.fail { color: var(--bad); }
+.test-panel .row { display: grid; grid-template-columns: 54px minmax(0, 1fr); gap: 8px; padding: 1px 0; }
+.test-panel .ok { color: var(--good); font-weight: 600; }
+.test-panel .no { color: var(--bad); font-weight: 700; }
+.test-panel .det { display: block; color: var(--ink-3); }
+
+@media (max-width: 899px), (orientation: portrait) {
+  .sec { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+  .compass { width: 44px; height: 44px; }
+}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header class="topbar" id="topbar">
+    <div class="brand">
+      <span class="wordmark">CMRLM</span>
+      <span class="brand-sep"></span>
+      <h1 class="app-title">Site Model</h1>
+    </div>
+    <div class="tb-spacer"></div>
+    <div class="tb-group" id="tbActions"></div>
+  </header>
+
+  <main class="app" id="app">
+    <section class="viewport" id="viewport" aria-label="3D view">
+      <div class="canvas-host" id="canvasHost"></div>
+      <div class="empty" id="emptyState"><div><strong>No site yet</strong><span>Type an address in the panel, then tap Go.</span></div></div>
+      <div class="status-chip" id="statusChip" hidden></div>
+      <div class="compass" id="compass" aria-label="North arrow" role="img"><svg viewBox="0 0 48 48" aria-hidden="true"><g id="compassRose"><circle cx="24" cy="24" r="21.5" class="c-ring"/><path d="M24 10.5l3.6 13.5h-7.2z" class="c-n"/><path d="M24 37.5l-3.6-13.5h7.2z" class="c-s"/></g><text id="compassN" x="24" y="10.2" text-anchor="middle" class="c-t">N</text></svg></div>
+      <nav class="views" id="views" aria-label="Camera views"></nav>
+      <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+      <div class="test-panel" id="testPanel" hidden></div>
+    </section>
+
+    <aside class="panel" id="panel" aria-label="Controls">
+      <div class="grabber" id="grabber" role="separator" aria-orientation="horizontal" aria-label="Drag to resize the controls sheet" tabindex="0"><span></span></div>
+      <div class="panel-scroll" id="panelScroll">
+        <div id="sections"></div>
+      </div>
+    </aside>
+  </main>
+</div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
+
+/* ==========================================================================
+   CONFIG, MODULES, HELPERS
+   The src/site and src/shared modules are inlined here (see build.py), wrapped
+   so their names do not collide. Then small helpers, icons, toast and popover.
+   ========================================================================== */
+const GeoMod = (() => {
+/* ==========================================================================
+   SITE: geo
+   Local tangent-plane projection, site square, ground grid spacing and
+   Web Mercator tile math. Pure functions, no DOM, no imports.
+
+   Units: feet. Local (x, y): x = east, y = north (true north), origin = the
+   southwest corner of the site square. See docs/site-tool-spec.md sections 3
+   and 4.1.
+   ========================================================================== */
+
+/** Feet to meters. */
+const FT = 0.3048;
+
+const RAD = Math.PI / 180;
+
+/**
+ * Build the projection frame for a site square centered on (lat, lon).
+ * @param {number} lat  center latitude, degrees
+ * @param {number} lon  center longitude, degrees
+ * @param {number} sizeFt  side of the square, ft
+ * @returns {{lat0:number, lon0:number, size:number, half:number, mPerDegLat:number, mPerDegLon:number,
+ *   toLocal:(lon:number, lat:number)=>[number,number], toLonLat:(x:number, y:number)=>[number,number],
+ *   bbox:(marginFt?:number)=>{west:number, south:number, east:number, north:number}}}
+ */
+function makeFrame(lat, lon, sizeFt) {
+  const p = lat * RAD;
+  const mPerDegLat = 111132.954 - 559.822 * Math.cos(2 * p) + 1.175 * Math.cos(4 * p);
+  const mPerDegLon = 111412.84 * Math.cos(p) - 93.5 * Math.cos(3 * p);
+  const half = sizeFt / 2;
+  const ftPerDegLat = mPerDegLat / FT, ftPerDegLon = mPerDegLon / FT;
+  return {
+    lat0: lat, lon0: lon, size: sizeFt, half, mPerDegLat, mPerDegLon,
+    toLocal: (lo, la) => [half + (lo - lon) * ftPerDegLon, half + (la - lat) * ftPerDegLat],
+    toLonLat: (x, y) => [lon + (x - half) / ftPerDegLon, lat + (y - half) / ftPerDegLat],
+    bbox: (marginFt = 0) => {
+      const h = half + marginFt;
+      return { west: lon - h / ftPerDegLon, south: lat - h / ftPerDegLat, east: lon + h / ftPerDegLon, north: lat + h / ftPerDegLat };
+    },
+  };
+}
+
+/**
+ * Ground grid spacing (section 4.1): d = max(10, ceil(S/99*2)/2) ft, n = floor(S/d) + 1 points per side.
+ * @param {number} sizeFt
+ * @returns {{spacing:number, n:number}}
+ */
+function gridSpacing(sizeFt) {
+  const spacing = Math.max(10, Math.ceil(sizeFt / 99 * 2) / 2);
+  return { spacing, n: Math.floor(sizeFt / spacing) + 1 };
+}
+
+/** Web Mercator tile containing (lon, lat) at zoom z (clamped to the valid range). */
+function tileForLonLat(lon, lat, z) {
+  const n = Math.pow(2, z);
+  const s = Math.sin(Math.max(-85.0511287798, Math.min(85.0511287798, lat)) * RAD);
+  const fx = (lon + 180) / 360 * n;
+  const fy = (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * n;
+  const clamp = v => Math.max(0, Math.min(n - 1, Math.floor(v)));
+  return { x: clamp(fx), y: clamp(fy) };
+}
+
+/** All tiles at zoom z that touch the bbox {west, south, east, north}. */
+function tilesForBBox(bbox, z) {
+  const a = tileForLonLat(bbox.west, bbox.north, z);   // top-left
+  const b = tileForLonLat(bbox.east, bbox.south, z);   // bottom-right
+  const out = [];
+  for (let y = a.y; y <= b.y; y++) for (let x = a.x; x <= b.x; x++) out.push({ z, x, y });
+  return out;
+}
+
+/**
+ * Convert a point inside tile (z, x, y) to [lon, lat].
+ * @param {number} px  tile unit x (0..extent, left to right)
+ * @param {number} py  tile unit y (0..extent, top to bottom)
+ * @param {number} extent  tile units across the tile (4096 typical)
+ */
+function tileToLonLat(z, x, y, px, py, extent) {
+  const n = Math.pow(2, z);
+  const wx = (x + px / extent) / n, wy = (y + py / extent) / n;
+  return [wx * 360 - 180, Math.atan(Math.sinh(Math.PI * (1 - 2 * wy))) / RAD];
+}
+
+return { FT, makeFrame, gridSpacing, tileForLonLat, tilesForBBox, tileToLonLat };
+})();
+
+const GeocodeMod = (() => {
+/* ==========================================================================
+   SITE: geocode
+   Turn the text in the address box into a point. Accepts "lat, lon" text,
+   Google Maps URLs (read as text only; Google data is never fetched), or an
+   address (one Nominatim request per call, per the usage policy).
+
+   Network: pass `fetchFn` (default globalThis.fetch). No DOM.
+   ========================================================================== */
+
+const inUS = (lat, lon) => Number.isFinite(lat) && Number.isFinite(lon) && lat >= 18 && lat <= 72 && lon >= -180 && lon <= -60;
+const NUM = "(-?\\d+(?:\\.\\d+)?)";
+
+/**
+ * Read a coordinate pair out of text.
+ * Forms, in priority order (place coordinates beat the map camera):
+ *   "!3dLAT!4dLON" (Google place), "@LAT,LON[,17z]", "q=LAT,LON" / "query=" / "ll=" / "center=", "LAT, LON".
+ * @param {string} text
+ * @returns {{lat:number, lon:number}|null}  null when nothing matches or the point is outside the US box
+ *   (lat 18..72, lon -180..-60).
+ */
+function parseCoordinates(text) {
+  if (typeof text !== "string") return null;
+  let s = text.trim();
+  try { s = decodeURIComponent(s.replace(/\+/g, "%20")); } catch { /* keep raw */ }
+  const patterns = [
+    new RegExp("!3d" + NUM + "!4d" + NUM),
+    new RegExp("@" + NUM + "\\s*,\\s*" + NUM),
+    new RegExp("[?&](?:q|query|ll|center|destination)=\\s*" + NUM + "\\s*,\\s*" + NUM),
+    new RegExp("^\\(?\\s*" + NUM + "\\s*(?:,|\\s)\\s*" + NUM + "\\s*\\)?$"),
+  ];
+  for (const re of patterns) {
+    const m = re.exec(s);
+    if (!m) continue;
+    const lat = parseFloat(m[1]), lon = parseFloat(m[2]);
+    return inUS(lat, lon) ? { lat, lon } : null;
+  }
+  return null;
+}
+
+/**
+ * Resolve the address box text to a point.
+ * @param {string} text
+ * @param {{fetchFn?: typeof fetch}} [opts]
+ * @returns {Promise<{lat:number, lon:number, label:string}>}
+ * @throws {Error} "Address not found" when Nominatim returns nothing.
+ */
+async function geocode(text, { fetchFn = globalThis.fetch } = {}) {
+  const pt = parseCoordinates(text);
+  if (pt) return { lat: pt.lat, lon: pt.lon, label: `${pt.lat.toFixed(5)}, ${pt.lon.toFixed(5)}` };
+  const q = String(text || "").trim();
+  if (!q) throw new Error("Address not found");
+  const url = "https://nominatim.openstreetmap.org/search?q=" + encodeURIComponent(q) + "&format=jsonv2&limit=1&countrycodes=us";
+  const res = await fetchFn(url, { headers: { Accept: "application/json" } });
+  if (!res.ok) throw new Error("Address lookup failed (HTTP " + res.status + ")");
+  const list = await res.json();
+  if (!Array.isArray(list) || !list.length) throw new Error("Address not found");
+  const r = list[0], lat = parseFloat(r.lat), lon = parseFloat(r.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) throw new Error("Address not found");
+  return { lat, lon, label: r.display_name || q };
+}
+
+/** Google Maps satellite link to the same place (visual reference only). */
+function googleMapsUrl(lat, lon) {
+  return `https://www.google.com/maps/@?api=1&map_action=map&center=${lat},${lon}&zoom=18&basemap=satellite`;
+}
+
+return { parseCoordinates, geocode, googleMapsUrl };
+})();
+
+const PMTilesMod = (() => {
+/* ==========================================================================
+   SITE: pmtiles
+   PMTiles v3 reader over HTTP range requests, plus the Overture release
+   lookup. No DOM, no imports. Runs in Safari 16.4+ and Node 22.
+
+   Layout: 127-byte header, root directory (gzip), metadata, leaf directories,
+   tile data. The first 16384 bytes of the file hold the header and the root
+   directory, so one request opens an archive. Directories are cached.
+
+   Network: every function takes an injected `fetchFn` (default globalThis.fetch).
+   ========================================================================== */
+
+const OVERTURE_BUCKET = "https://overturemaps-extras-us-west-2.s3.us-west-2.amazonaws.com";
+const OVERTURE_FALLBACK_RELEASE = "2026-09-23.1";
+
+const HEADER_BYTES = 127;
+const FIRST_READ = 16384;
+const MAX_DEPTH = 4;
+
+/**
+ * Newest Overture release name, e.g. "2026-09-23.1". Any failure returns OVERTURE_FALLBACK_RELEASE.
+ * @param {{fetchFn?: typeof fetch}} [opts]
+ * @returns {Promise<string>}
+ */
+async function latestOvertureRelease({ fetchFn = globalThis.fetch } = {}) {
+  try {
+    const res = await fetchFn(`${OVERTURE_BUCKET}/?list-type=2&prefix=tiles/&delimiter=/`);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const xml = await res.text();
+    const found = [...xml.matchAll(/<Prefix>tiles\/([^<\/]+)\/<\/Prefix>/g)].map(m => m[1]).sort();
+    return found.length ? found[found.length - 1] : OVERTURE_FALLBACK_RELEASE;
+  } catch {
+    return OVERTURE_FALLBACK_RELEASE;
+  }
+}
+
+/**
+ * PMTiles v3 Hilbert tile id for (z, x, y). Exact port of the reference algorithm;
+ * valid for z <= 30 (uses 32-bit bit tests, Number arithmetic for the sum).
+ */
+function zxyToTileId(z, x, y) {
+  if (!Number.isInteger(z) || z < 0 || z > 30) throw new Error("Tile zoom out of range");
+  const n = Math.pow(2, z);
+  if (x < 0 || y < 0 || x >= n || y >= n) throw new Error("Tile x/y out of range");
+  let acc = (Math.pow(4, z) - 1) / 3;
+  for (let a = z - 1; a >= 0; a--) {
+    const s = Math.pow(2, a);                 // 1 << a
+    const rx = (x & s) ? s : 0, ry = (y & s) ? s : 0;
+    // ((3*rx) ^ ry) << a  ==  quadrant * 4^a
+    acc += (rx ? (ry ? 2 : 3) : (ry ? 1 : 0)) * s * s;
+    if (ry === 0) {                            // rotate
+      if (rx !== 0) { x = s - 1 - x; y = s - 1 - y; }
+      const t = x; x = y; y = t;
+    }
+  }
+  return acc;
+}
+
+/** Default decompressor: gzip via DecompressionStream. */
+async function defaultDecompress(bytes, kind) {
+  if (kind !== "gzip") throw new Error("Unsupported decompression: " + kind);
+  const buf = await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer();
+  return new Uint8Array(buf);
+}
+
+/** Read a varint as a Number (exact below 2^53). Returns the value and advances `st.pos`. */
+function varint(buf, st) {
+  let val = 0, mul = 1, b;
+  do {
+    b = buf[st.pos++];
+    if (b === undefined) throw new Error("PMTiles directory is truncated");
+    val += (b & 0x7f) * mul;
+    mul *= 128;
+  } while (b & 0x80);
+  return val;
+}
+
+/** Parse an already decompressed directory into entry arrays (sorted by tile id). */
+function parseDirectory(buf) {
+  const st = { pos: 0 };
+  const count = varint(buf, st);
+  const tileId = new Array(count), runLength = new Array(count), length = new Array(count), offset = new Array(count);
+  let last = 0;
+  for (let i = 0; i < count; i++) { last += varint(buf, st); tileId[i] = last; }
+  for (let i = 0; i < count; i++) runLength[i] = varint(buf, st);
+  for (let i = 0; i < count; i++) length[i] = varint(buf, st);
+  for (let i = 0; i < count; i++) {
+    const v = varint(buf, st);
+    offset[i] = (v === 0 && i > 0) ? offset[i - 1] + length[i - 1] : v - 1;
+  }
+  return { count, tileId, runLength, length, offset };
+}
+
+/** Entry with the largest tile id <= target that covers it (or a leaf pointer), else null. */
+function findEntry(dir, target) {
+  let lo = 0, hi = dir.count - 1, best = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (dir.tileId[mid] <= target) { best = mid; lo = mid + 1; } else hi = mid - 1;
+  }
+  if (best < 0) return null;
+  const run = dir.runLength[best];
+  if (run === 0) return { leaf: true, offset: dir.offset[best], length: dir.length[best] };
+  if (target < dir.tileId[best] + run) return { leaf: false, offset: dir.offset[best], length: dir.length[best] };
+  return null;
+}
+
+function parseHeader(dv) {
+  const magic = String.fromCharCode(...new Uint8Array(dv.buffer, dv.byteOffset, 7));
+  if (magic !== "PMTiles") throw new Error("Not a PMTiles file");
+  if (dv.getUint8(7) !== 3) throw new Error("Unsupported PMTiles version " + dv.getUint8(7));
+  const u64 = o => Number(dv.getBigUint64(o, true));
+  const e7 = o => dv.getInt32(o, true) / 1e7;
+  return {
+    version: 3,
+    rootDirOffset: u64(8), rootDirLength: u64(16),
+    metadataOffset: u64(24), metadataLength: u64(32),
+    leafDirsOffset: u64(40), leafDirsLength: u64(48),
+    tileDataOffset: u64(56), tileDataLength: u64(64),
+    numAddressedTiles: u64(72), numTileEntries: u64(80), numTileContents: u64(88),
+    clustered: dv.getUint8(96) === 1,
+    internalCompression: dv.getUint8(97), tileCompression: dv.getUint8(98), tileType: dv.getUint8(99),
+    minZoom: dv.getUint8(100), maxZoom: dv.getUint8(101),
+    minLon: e7(102), minLat: e7(106), maxLon: e7(110), maxLat: e7(114),
+  };
+}
+
+/**
+ * Open a PMTiles v3 archive.
+ * @param {string} url
+ * @param {{fetchFn?: typeof fetch, decompress?: (bytes:Uint8Array, kind:"gzip")=>Promise<Uint8Array>}} [opts]
+ * @returns {{header: ()=>Promise<object>, getTile: (z:number,x:number,y:number)=>Promise<Uint8Array|null>}}
+ *   getTile returns decompressed tile bytes (MVT) or null when the archive has no such tile.
+ */
+function openPMTiles(url, { fetchFn = globalThis.fetch, decompress = defaultDecompress } = {}) {
+  let opening = null;          // Promise<{header, first: Uint8Array}>
+  const dirCache = new Map();  // "offset:length" -> Promise<dir>
+
+  async function range(offset, length) {
+    const res = await fetchFn(url, { headers: { Range: `bytes=${offset}-${offset + length - 1}` } });
+    if (!res.ok && res.status !== 206) throw new Error(`PMTiles request failed (HTTP ${res.status})`);
+    let bytes = new Uint8Array(await res.arrayBuffer());
+    if (res.status === 200 && bytes.length > length) bytes = bytes.subarray(offset, offset + length);   // server ignored Range
+    return bytes;
+  }
+
+  async function unpack(bytes, code) {
+    if (code === 1) return bytes;
+    if (code === 2) return decompress(bytes, "gzip");
+    throw new Error("Unsupported PMTiles compression code " + code);
+  }
+
+  function open() {
+    if (!opening) {
+      opening = range(0, FIRST_READ).then(first => {
+        if (first.length < HEADER_BYTES) throw new Error("PMTiles header is truncated");
+        const header = parseHeader(new DataView(first.buffer, first.byteOffset, HEADER_BYTES));
+        return { header, first };
+      });
+      opening.catch(() => { opening = null; });   // allow a retry after a network error
+    }
+    return opening;
+  }
+
+  function directory(h, first, offset, length, isRoot) {
+    const key = offset + ":" + length;
+    if (!dirCache.has(key)) {
+      const p = (async () => {
+        const bytes = (isRoot && offset + length <= first.length) ? first.subarray(offset, offset + length) : await range(offset, length);
+        return parseDirectory(await unpack(bytes, h.internalCompression));
+      })();
+      dirCache.set(key, p);
+      p.catch(() => dirCache.delete(key));
+    }
+    return dirCache.get(key);
+  }
+
+  return {
+    header: async () => (await open()).header,
+    async getTile(z, x, y) {
+      const { header: h, first } = await open();
+      if (z < h.minZoom || z > h.maxZoom) return null;
+      const target = zxyToTileId(z, x, y);
+      let dir = await directory(h, first, h.rootDirOffset, h.rootDirLength, true);
+      for (let depth = 0; depth <= MAX_DEPTH; depth++) {
+        const e = findEntry(dir, target);
+        if (!e) return null;
+        if (!e.leaf) {
+          const bytes = await range(h.tileDataOffset + e.offset, e.length);
+          return unpack(bytes, h.tileCompression);
+        }
+        dir = await directory(h, first, h.leafDirsOffset + e.offset, e.length, false);
+      }
+      throw new Error("PMTiles directory nesting is too deep");
+    },
+  };
+}
+
+return { OVERTURE_BUCKET, OVERTURE_FALLBACK_RELEASE, latestOvertureRelease, zxyToTileId, openPMTiles };
+})();
+
+const MvtMod = (() => {
+/* ==========================================================================
+   SITE: mvt
+   Mapbox Vector Tile (protobuf) decoder with its own minimal protobuf reader.
+   No DOM, no imports. Geometry stays in integer tile units (y down); use
+   geo.tileToLonLat to convert.
+
+   Rings: decodeTile returns polygon rings exactly as encoded, but WITHOUT the
+   repeated closing point (ClosePath is implied).
+   ========================================================================== */
+
+const TWO32 = 4294967296;
+const utf8 = new TextDecoder();
+
+/** Minimal protobuf reader over a Uint8Array. */
+class Reader {
+  constructor(buf, pos = 0, end = buf.length) {
+    this.buf = buf; this.pos = pos; this.end = end;
+    this.dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+    this.lo = 0; this.hi = 0;
+  }
+  /** Unsigned varint up to 64 bits. Returns lo + hi * 2^32 (exact below 2^53); parts kept in this.lo / this.hi. */
+  varint() {
+    let lo = 0, hi = 0, shift = 0, b;
+    do {
+      if (this.pos >= this.end) throw new Error("MVT: unexpected end of data");
+      b = this.buf[this.pos++];
+      const v = b & 0x7f;
+      if (shift < 28) lo |= v << shift;
+      else if (shift === 28) { lo |= (v & 0x0f) << 28; hi |= v >> 4; }
+      else hi |= v << (shift - 32);
+      shift += 7;
+    } while (b & 0x80 && shift < 70);
+    this.lo = lo >>> 0; this.hi = hi >>> 0;
+    return this.hi * TWO32 + this.lo;
+  }
+  /** Signed two's complement int64 (after a varint() call). */
+  signed() {
+    if (this.hi < 0x80000000) return this.hi * TWO32 + this.lo;
+    return -(((~this.hi) >>> 0) * TWO32 + ((~this.lo) >>> 0) + 1);
+  }
+  /** Zigzag-decoded value of the last varint(). */
+  zigzag() {
+    const n = this.hi * TWO32 + this.lo;
+    return n % 2 === 0 ? n / 2 : -(n + 1) / 2;
+  }
+  /** Length-delimited field: returns [start, end] and advances past it. */
+  bytes() {
+    const len = this.varint(), start = this.pos;
+    if (start + len > this.end) throw new Error("MVT: length-delimited field overruns the buffer");
+    this.pos = start + len;
+    return [start, start + len];
+  }
+  string() { const [s, e] = this.bytes(); return utf8.decode(this.buf.subarray(s, e)); }
+  skip(wire) {
+    if (wire === 0) this.varint();
+    else if (wire === 1) this.pos += 8;
+    else if (wire === 2) this.bytes();
+    else if (wire === 5) this.pos += 4;
+    else throw new Error("MVT: unsupported protobuf wire type " + wire);
+  }
+}
+
+/** Read a packed (or single unpacked) repeated uint32 field into `out`. */
+function readPacked(r, wire, out) {
+  if (wire === 2) {
+    const [s, e] = r.bytes(), p = r.pos, oldEnd = r.end;
+    r.pos = s; r.end = e;
+    while (r.pos < e) out.push(r.varint());
+    r.pos = p; r.end = oldEnd;
+  } else out.push(r.varint());
+}
+
+function decodeValue(buf, start, end) {
+  const r = new Reader(buf, start, end);
+  let v = null;
+  while (r.pos < end) {
+    const tag = r.varint(), f = tag >>> 3, w = tag & 7;
+    if (f === 1 && w === 2) v = r.string();
+    else if (f === 2 && w === 5) { v = r.dv.getFloat32(r.pos, true); r.pos += 4; }
+    else if (f === 3 && w === 1) { v = r.dv.getFloat64(r.pos, true); r.pos += 8; }
+    else if (f === 4 && w === 0) { r.varint(); v = r.signed(); }
+    else if (f === 5 && w === 0) v = r.varint();
+    else if (f === 6 && w === 0) { r.varint(); v = r.zigzag(); }
+    else if (f === 7 && w === 0) v = r.varint() !== 0;
+    else r.skip(w);
+  }
+  return v;
+}
+
+/** Decode geometry commands into point / line / ring arrays (cursor persists across the feature). */
+function decodeGeometry(cmds, type) {
+  const out = [];
+  let x = 0, y = 0, cur = null, i = 0;
+  const zz = n => (n % 2 === 0 ? n / 2 : -(n + 1) / 2);
+  while (i < cmds.length) {
+    const head = cmds[i++], cmd = head & 7, count = head >>> 3;
+    if (cmd === 1 || cmd === 2) {
+      for (let k = 0; k < count; k++) {
+        x += zz(cmds[i++]); y += zz(cmds[i++]);
+        if (type === 1) out.push([x, y]);
+        else if (cmd === 1) { cur = [[x, y]]; out.push(cur); }
+        else if (cur) cur.push([x, y]);
+      }
+    } else if (cmd === 7) {
+      // ClosePath: ring is implicitly closed; the next MoveTo starts a new ring.
+    } else throw new Error("MVT: unknown geometry command " + cmd);
+  }
+  return out;
+}
+
+function decodeFeature(buf, start, end, keys, values) {
+  const r = new Reader(buf, start, end);
+  let id = null, type = 0;
+  const tags = [], cmds = [];
+  while (r.pos < end) {
+    const tag = r.varint(), f = tag >>> 3, w = tag & 7;
+    if (f === 1 && w === 0) id = r.varint();
+    else if (f === 2) readPacked(r, w, tags);
+    else if (f === 3 && w === 0) type = r.varint();
+    else if (f === 4) readPacked(r, w, cmds);
+    else r.skip(w);
+  }
+  const properties = {};
+  for (let i = 0; i + 1 < tags.length; i += 2) properties[keys[tags[i]]] = values[tags[i + 1]];
+  return { id: properties.id !== undefined ? properties.id : id, type, properties, geometry: decodeGeometry(cmds, type) };
+}
+
+function decodeLayer(buf, start, end) {
+  const r = new Reader(buf, start, end);
+  let name = "", extent = 4096;
+  const keys = [], values = [], feats = [];
+  while (r.pos < end) {
+    const tag = r.varint(), f = tag >>> 3, w = tag & 7;
+    if (f === 1 && w === 2) name = r.string();
+    else if (f === 2 && w === 2) feats.push(r.bytes());
+    else if (f === 3 && w === 2) keys.push(r.string());
+    else if (f === 4 && w === 2) { const [s, e] = r.bytes(); values.push(decodeValue(buf, s, e)); }
+    else if (f === 5 && w === 0) extent = r.varint();
+    else r.skip(w);
+  }
+  return { name, extent, features: feats.map(([s, e]) => decodeFeature(buf, s, e, keys, values)) };
+}
+
+/**
+ * Decode a (decompressed) vector tile.
+ * @param {Uint8Array} bytes
+ * @returns {Object<string, {extent:number, features:Array<{id:(string|number|null), type:(1|2|3), properties:object, geometry:Array}>}>}
+ *   Feature id = properties.id when present, else the numeric feature id.
+ *   type 1: geometry = [[x,y], ...]; type 2: [[[x,y], ...], ...]; type 3: rings [[[x,y], ...], ...] in MVT winding,
+ *   no repeated closing point. Layers with the same name are merged.
+ */
+function decodeTile(bytes) {
+  const r = new Reader(bytes);
+  const layers = {};
+  while (r.pos < r.end) {
+    const tag = r.varint(), f = tag >>> 3, w = tag & 7;
+    if (f === 3 && w === 2) {
+      const [s, e] = r.bytes(), layer = decodeLayer(bytes, s, e);
+      if (layers[layer.name]) layers[layer.name].features.push(...layer.features);
+      else layers[layer.name] = { extent: layer.extent, features: layer.features };
+    } else r.skip(w);
+  }
+  return layers;
+}
+
+/** Signed shoelace area of a ring (tile units, y down). Positive = MVT exterior ring. */
+function ringArea(ring) {
+  let s = 0;
+  for (let i = 0, n = ring.length; i < n; i++) {
+    const a = ring[i], b = ring[(i + 1) % n];
+    s += a[0] * b[1] - b[0] * a[1];
+  }
+  return s / 2;
+}
+
+/**
+ * Group polygon rings into polygons using winding (MVT spec): a ring with positive shoelace area
+ * (in y-down tile units) is an exterior ring; each following negative-area ring is a hole of the latest exterior.
+ * Zero-area rings are dropped. A leading negative ring (malformed) is kept as an exterior, reversed.
+ * @param {Array<Array<[number,number]>>} rings
+ * @returns {Array<{outer:Array<[number,number]>, holes:Array<Array<[number,number]>>}>}
+ */
+function classifyRings(rings) {
+  const polys = [];
+  for (const ring of rings) {
+    const a = ringArea(ring);
+    if (a === 0 || ring.length < 3) continue;
+    if (a > 0) polys.push({ outer: ring, holes: [] });
+    else if (polys.length) polys[polys.length - 1].holes.push(ring);
+    else polys.push({ outer: ring.slice().reverse(), holes: [] });
+  }
+  return polys;
+}
+
+return { decodeTile, ringArea, classifyRings };
+})();
+
+const TiffMod = (() => {
+/* ==========================================================================
+   SITE: tiff
+   Float32 GeoTIFF reader for the USGS 3DEP export (uncompressed, tiled or
+   stripped, little or big endian) and the export request URL. No DOM, no imports.
+
+   Georeferencing: ModelTiepoint (33922) + ModelPixelScale (33550), pixel-is-area.
+   west = X - i*scaleX, north = Y + j*scaleY; pixel (col,row) center is at
+   (west + (col+0.5)*pixelW, north - (row+0.5)*pixelH). Row 0 = north.
+   ========================================================================== */
+
+const TYPE_SIZE = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 6: 1, 7: 1, 8: 2, 9: 4, 10: 8, 11: 4, 12: 8, 16: 8 };
+
+/**
+ * USGS 3DEP ImageServer export URL (float32 TIFF, meters, NAVD88).
+ * @param {{west:number, south:number, east:number, north:number}} bbox
+ * @param {number} cols  requested width in pixels
+ * @param {number} rows  requested height in pixels
+ */
+function demRequestUrl(bbox, cols, rows) {
+  const f = v => String(+v.toFixed(8));
+  return "https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer/exportImage" +
+    `?bbox=${f(bbox.west)},${f(bbox.south)},${f(bbox.east)},${f(bbox.north)}&bboxSR=4326&imageSR=4326` +
+    `&size=${Math.round(cols)},${Math.round(rows)}&format=tiff&pixelType=F32&compression=None` +
+    "&interpolation=RSP_BilinearInterpolation&f=image";
+}
+
+/**
+ * Read a single-band float32 GeoTIFF.
+ * @param {ArrayBuffer} arrayBuffer
+ * @returns {{width:number, height:number, data:Float32Array, west:number, north:number, pixelW:number, pixelH:number,
+ *   east:number, south:number}}  data is row-major, row 0 = north; pixelW/pixelH in degrees (positive).
+ * @throws {Error} with a clear message for unsupported files (compression, bit depth, BigTIFF, planar, multi-band, no georeference).
+ */
+function readFloatTiff(arrayBuffer) {
+  const dv = new DataView(arrayBuffer);
+  if (dv.byteLength < 8) throw new Error("TIFF is too small");
+  const b0 = dv.getUint8(0), b1 = dv.getUint8(1);
+  const le = b0 === 0x49 && b1 === 0x49;
+  if (!le && !(b0 === 0x4d && b1 === 0x4d)) throw new Error("Not a TIFF file (the elevation service may have returned an error page)");
+  const magic = dv.getUint16(2, le);
+  if (magic === 43) throw new Error("BigTIFF is not supported");
+  if (magic !== 42) throw new Error("Not a TIFF file");
+
+  const ifd = dv.getUint32(4, le), count = dv.getUint16(ifd, le);
+  const tags = {};
+  for (let i = 0; i < count; i++) {
+    const e = ifd + 2 + i * 12, tag = dv.getUint16(e, le), type = dv.getUint16(e + 2, le), n = dv.getUint32(e + 4, le);
+    const size = TYPE_SIZE[type];
+    if (!size) continue;
+    const at = size * n <= 4 ? e + 8 : dv.getUint32(e + 8, le);
+    const vals = new Array(n);
+    for (let k = 0; k < n; k++) {
+      const o = at + k * size;
+      vals[k] = type === 3 ? dv.getUint16(o, le) : type === 4 ? dv.getUint32(o, le) : type === 12 ? dv.getFloat64(o, le)
+        : type === 11 ? dv.getFloat32(o, le) : type === 1 || type === 7 ? dv.getUint8(o) : type === 8 ? dv.getInt16(o, le) : type === 9 ? dv.getInt32(o, le) : 0;
+    }
+    tags[tag] = vals;
+  }
+  const one = (tag, dflt) => (tags[tag] ? tags[tag][0] : dflt);
+
+  const width = one(256), height = one(257);
+  if (!width || !height) throw new Error("TIFF has no image size");
+  if (one(259, 1) !== 1) throw new Error("Compressed TIFF is not supported (compression " + one(259) + ")");
+  if (one(258, 1) !== 32 || one(339, 1) !== 3) throw new Error("TIFF is not 32-bit float elevation data");
+  if (one(277, 1) !== 1) throw new Error("TIFF must have one band");
+  if (one(284, 1) !== 1) throw new Error("Planar TIFF is not supported");
+  if (one(317, 1) !== 1) throw new Error("TIFF predictor is not supported");
+  const scale = tags[33550], tie = tags[33922];
+  if (!scale || !tie || scale.length < 2 || tie.length < 6) throw new Error("TIFF has no georeference tags");
+
+  const data = new Float32Array(width * height);
+  if (tags[324]) {                                     // tiles
+    const tw = one(322), th = one(323), offs = tags[324], lens = tags[325] || [];
+    const across = Math.ceil(width / tw);
+    for (let t = 0; t < offs.length; t++) {
+      const x0 = (t % across) * tw, y0 = Math.floor(t / across) * th;
+      if (y0 >= height) break;
+      const w = Math.min(tw, width - x0), h = Math.min(th, height - y0);
+      if (lens[t] !== undefined && lens[t] < w * 4) throw new Error("TIFF tile is truncated");
+      for (let r = 0; r < h; r++) {
+        let src = offs[t] + r * tw * 4, dst = (y0 + r) * width + x0;
+        if (src + w * 4 > dv.byteLength) throw new Error("TIFF data is truncated");
+        for (let c = 0; c < w; c++, src += 4) data[dst + c] = dv.getFloat32(src, le);
+      }
+    }
+  } else if (tags[273]) {                              // strips
+    const offs = tags[273], rps = one(278, height);
+    for (let s = 0; s < offs.length; s++) {
+      const y0 = s * rps, h = Math.min(rps, height - y0);
+      if (h <= 0) break;
+      let src = offs[s];
+      if (src + h * width * 4 > dv.byteLength) throw new Error("TIFF data is truncated");
+      for (let i = y0 * width, end = (y0 + h) * width; i < end; i++, src += 4) data[i] = dv.getFloat32(src, le);
+    }
+  } else throw new Error("TIFF has neither tiles nor strips");
+
+  const pixelW = scale[0], pixelH = Math.abs(scale[1]);
+  const west = tie[3] - tie[0] * pixelW, north = tie[4] + tie[1] * pixelH;
+  return { width, height, data, west, north, pixelW, pixelH, east: west + width * pixelW, south: north - height * pixelH };
+}
+
+/**
+ * Bilinear sample of the DEM at (lon, lat) using pixel centers.
+ * Points outside the image give NaN; points within half a pixel of the outer edge use the edge row/column.
+ * @returns {number} meters, or NaN when outside the image or any of the 4 pixels is no data (NaN or < -1000).
+ */
+function sampleBilinear(dem, lon, lat) {
+  const { width: w, height: h, data } = dem;
+  const px = (lon - dem.west) / dem.pixelW, py = (dem.north - lat) / dem.pixelH;   // pixel-edge coordinates
+  if (!(px >= 0 && px <= w && py >= 0 && py <= h)) return NaN;
+  const fx = Math.min(Math.max(px - 0.5, 0), w - 1), fy = Math.min(Math.max(py - 0.5, 0), h - 1);
+  const x0 = Math.min(Math.floor(fx), w - 1), y0 = Math.min(Math.floor(fy), h - 1);
+  const x1 = Math.min(x0 + 1, w - 1), y1 = Math.min(y0 + 1, h - 1);
+  const tx = fx - x0, ty = fy - y0;
+  const a = data[y0 * w + x0], b = data[y0 * w + x1], c = data[y1 * w + x0], d = data[y1 * w + x1];
+  for (const v of [a, b, c, d]) if (!(v >= -1000)) return NaN;   // catches NaN too
+  return (a * (1 - tx) + b * tx) * (1 - ty) + (c * (1 - tx) + d * tx) * ty;
+}
+
+return { demRequestUrl, readFloatTiff, sampleBilinear };
+})();
+
+const ModelMod = (() => {
+/* ==========================================================================
+   SITE: model
+   Ground grid, buildings, roads, trees and water from already-decoded data.
+   Pure functions, no DOM, no network. Uses globalThis.ClipperLib (6.4.2).
+   Spec: docs/site-tool-spec.md sections 4 and 5.6.
+
+   Units: feet, square feet. Local (x, y): x = east, y = north, origin = SW
+   corner of the site square. Rings: CCW outers, CW holes (no repeated last
+   point). Clipper works in integers: SCALE = 1000 (0.001 ft) in local feet;
+   tile geometry is clipped at TILE_K = 16 sub-units per tile unit.
+
+   "Model" bundle used by summarize() and exports.js:
+     { frame, ground, buildings, roads, trees, water }
+   buildModel() assembles it (each layer in its own try/catch, errors listed).
+
+   Choices where the spec is silent:
+   - Features whose raw bbox is more than 200 ft outside the site are dropped
+     before any clipping (speed).
+   - One building is made for each polygon piece of a feature after the union.
+   - Pavement is clipped to the site square after the union.
+   - Unknown road classes use the "service" width (14 ft).
+   - Point features keep only tile positions in [0, extent) (no duplicates).
+   - Tree cap: explicit trees first, then forest trees evenly thinned.
+   ========================================================================== */
+
+const { gridSpacing, tileToLonLat, FT } = GeoMod;
+
+const SCALE = 1000;
+const TILE_K = 16;
+const M2FT = 1 / FT;               // 3.28084
+const PREFILTER_MARGIN = 200;      // ft
+const MAX_TREES = 3000;
+
+const C = () => globalThis.ClipperLib;
+
+/* ---------------- small helpers ---------------- */
+
+const num = (v, d = NaN) => { const n = typeof v === "number" ? v : parseFloat(v); return Number.isFinite(n) ? n : d; };
+
+/** Signed shoelace area (positive = CCW when y is up). */
+function ringArea(r) {
+  let a = 0;
+  for (let i = 0, n = r.length; i < n; i++) { const p = r[i], q = r[(i + 1) % n]; a += p[0] * q[1] - q[0] * p[1]; }
+  return a / 2;
+}
+const orient = (r, ccw) => ((ringArea(r) > 0) === ccw ? r : r.slice().reverse());
+const lineLen = (l) => { let s = 0; for (let i = 1; i < l.length; i++) s += Math.hypot(l[i][0] - l[i - 1][0], l[i][1] - l[i - 1][1]); return s; };
+
+function parseJson(v) {
+  if (v == null) return null;
+  if (typeof v !== "string") return v;
+  try { return JSON.parse(v); } catch { return null; }
+}
+
+function dedupeRing(r) {
+  const out = [];
+  for (const p of r) { const q = out[out.length - 1]; if (!q || q[0] !== p[0] || q[1] !== p[1]) out.push(p); }
+  while (out.length > 1 && out[0][0] === out[out.length - 1][0] && out[0][1] === out[out.length - 1][1]) out.pop();
+  return out;
+}
+
+function centroid(ring) {
+  let a = 0, cx = 0, cy = 0;
+  for (let i = 0, n = ring.length; i < n; i++) {
+    const p = ring[i], q = ring[(i + 1) % n], c = p[0] * q[1] - q[0] * p[1];
+    a += c; cx += (p[0] + q[0]) * c; cy += (p[1] + q[1]) * c;
+  }
+  if (Math.abs(a) < 1e-9) { const n = ring.length; return [ring.reduce((s, p) => s + p[0], 0) / n, ring.reduce((s, p) => s + p[1], 0) / n]; }
+  return [cx / (3 * a), cy / (3 * a)];
+}
+
+function pointInRing(x, y, r) {
+  let inside = false;
+  for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+    const a = r[i], b = r[j];
+    if ((a[1] > y) !== (b[1] > y) && x < (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]) + a[0]) inside = !inside;
+  }
+  return inside;
+}
+const pointInPoly = (x, y, poly) => pointInRing(x, y, poly.outer) && !poly.holes.some((h) => pointInRing(x, y, h));
+
+/* ---------------- Clipper plumbing ---------------- */
+
+const toPath = (pts, k) => pts.map((p) => ({ X: Math.round(p[0] * k), Y: Math.round(p[1] * k) }));
+const fromPath = (path, k) => path.map((p) => [p.X / k, p.Y / k]);
+const rectPath = (x0, y0, x1, y1, k) => toPath([[x0, y0], [x1, y0], [x1, y1], [x0, y1]], k);
+
+/** PolyTree (closed paths) → [{outer, holes}] in input units. Orientation not normalized. */
+function treeToPolys(tree, k) {
+  const out = [];
+  const visit = (node) => {
+    for (const ch of node.Childs()) {
+      if (!ch.IsHole()) {
+        const poly = { outer: fromPath(ch.Contour(), k), holes: [] };
+        for (const h of ch.Childs()) { poly.holes.push(fromPath(h.Contour(), k)); visit(h); }
+        out.push(poly);
+      } else visit(ch);
+    }
+  };
+  visit(tree);
+  return out;
+}
+
+/** Clip a set of rings (even-odd) to a rectangle. */
+function clipRingsToRect(rings, rect, k) {
+  const cl = new (C().Clipper)();
+  cl.AddPaths(rings.map((r) => toPath(r, k)), C().PolyType.ptSubject, true);
+  cl.AddPath(rectPath(rect[0], rect[1], rect[2], rect[3], k), C().PolyType.ptClip, true);
+  const tree = new (C().PolyTree)();
+  cl.Execute(C().ClipType.ctIntersection, tree, C().PolyFillType.pftEvenOdd, C().PolyFillType.pftNonZero);
+  return treeToPolys(tree, k);
+}
+
+/** Clip open lines to a rectangle. Returns lines (arrays of [x,y]). */
+function clipLinesToRect(lines, rect, k) {
+  const cl = new (C().Clipper)();
+  let any = false;
+  for (const l of lines) if (l.length > 1) { cl.AddPath(toPath(l, k), C().PolyType.ptSubject, false); any = true; }
+  if (!any) return [];
+  cl.AddPath(rectPath(rect[0], rect[1], rect[2], rect[3], k), C().PolyType.ptClip, true);
+  const tree = new (C().PolyTree)();
+  cl.Execute(C().ClipType.ctIntersection, tree, C().PolyFillType.pftNonZero, C().PolyFillType.pftNonZero);
+  return C().Clipper.OpenPathsFromPolyTree(tree).map((p) => fromPath(p, k)).filter((l) => l.length > 1);
+}
+
+/** Union (or intersection with a rect) of MultiPoly parts in local ft. Orientation is normalized first. */
+function unionPolys(polys, clipRect) {
+  const cl = new (C().Clipper)();
+  for (const p of polys) {
+    cl.AddPath(toPath(orient(p.outer, true), SCALE), C().PolyType.ptSubject, true);
+    for (const h of p.holes) cl.AddPath(toPath(orient(h, false), SCALE), C().PolyType.ptSubject, true);
+  }
+  if (clipRect) cl.AddPath(rectPath(...clipRect, SCALE), C().PolyType.ptClip, true);
+  const tree = new (C().PolyTree)();
+  const nz = C().PolyFillType.pftNonZero;
+  cl.Execute(clipRect ? C().ClipType.ctIntersection : C().ClipType.ctUnion, tree, nz, nz);
+  return cleanPolys(treeToPolys(tree, SCALE));
+}
+
+/** Normalize orientation and drop slivers (< 0.5 sf polygons, < 0.5 sf holes). */
+function cleanPolys(polys) {
+  const out = [];
+  for (const p of polys) {
+    const outer = dedupeRing(p.outer);
+    if (outer.length < 3 || Math.abs(ringArea(outer)) < 0.5) continue;
+    out.push({
+      outer: orient(outer, true),
+      holes: p.holes.map(dedupeRing).filter((h) => h.length >= 3 && Math.abs(ringArea(h)) >= 0.5).map((h) => orient(h, false)),
+    });
+  }
+  return out;
+}
+
+/** MVT rings → [{outer, holes}] (positive y-down area = outer; negative = hole of the last outer). */
+function groupRings(rings) {
+  const polys = [];
+  for (const r of rings) {
+    const a = ringArea(r);
+    if (a === 0) continue;
+    if (a > 0 || !polys.length) polys.push({ outer: r, holes: [] });
+    else polys[polys.length - 1].holes.push(r);
+  }
+  return polys;
+}
+
+/* ==========================================================================
+   Ground
+   ========================================================================== */
+
+/** Bilinear DEM sample, meters; NaN for no data. Pixel centers at west+(col+.5)*pixelW, north-(row+.5)*pixelH. */
+function sampleDem(dem, lon, lat) {
+  const { width: w, height: h, data } = dem;
+  let fx = (lon - dem.west) / dem.pixelW - 0.5, fy = (dem.north - lat) / dem.pixelH - 0.5;
+  if (fx < -1 || fy < -1 || fx > w || fy > h) return NaN;
+  fx = Math.min(Math.max(fx, 0), w - 1); fy = Math.min(Math.max(fy, 0), h - 1);
+  const x0 = Math.min(Math.floor(fx), Math.max(w - 2, 0)), y0 = Math.min(Math.floor(fy), Math.max(h - 2, 0));
+  const tx = fx - x0, ty = fy - y0;
+  let s = 0, ws = 0;
+  for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
+    const xx = Math.min(x0 + dx, w - 1), yy = Math.min(y0 + dy, h - 1), v = data[yy * w + xx];
+    if (!(v > -1000)) continue;                       // NaN and no-data
+    const wt = (dx ? tx : 1 - tx) * (dy ? ty : 1 - ty);
+    s += v * wt; ws += wt;
+  }
+  return ws > 1e-9 ? s / ws : NaN;
+}
+
+/**
+ * Ground grid (section 4.1).
+ * @param frame  from geo.makeFrame
+ * @param dem  { width, height, data: Float32Array (row 0 = north), west, north, pixelW, pixelH } degrees, values meters
+ * @returns {{spacing:number, n:number, xs:Float64Array, ys:Float64Array, z:Float64Array, min:number, max:number,
+ *   filled:number, at:(x:number,y:number)=>number}}  xs/ys = the n node coordinates on each axis;
+ *   z = n*n elevations in ft, row-major from south: index j*n+i is node (xs[i], ys[j]).
+ */
+function buildGround(frame, dem) {
+  const { spacing: d, n } = gridSpacing(frame.size);
+  const z = new Float64Array(n * n).fill(NaN);
+  const xs = new Float64Array(n), ys = new Float64Array(n);
+  for (let i = 0; i < n; i++) xs[i] = ys[i] = i * d;
+  let valid = 0;
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+    const [lon, lat] = frame.toLonLat(xs[i], ys[j]);
+    const m = sampleDem(dem, lon, lat);
+    if (Number.isFinite(m)) { z[j * n + i] = m / FT; valid++; }
+  }
+  if (!valid) throw new Error("No ground data for this site");
+  const filled = n * n - valid;
+  for (let guard = 0; guard < n * n; guard++) {
+    const upd = [];
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+      if (!Number.isNaN(z[j * n + i])) continue;
+      let s = 0, c = 0;
+      for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+        const ii = i + di, jj = j + dj;
+        if (ii < 0 || jj < 0 || ii >= n || jj >= n) continue;
+        const v = z[jj * n + ii];
+        if (!Number.isNaN(v)) { s += v; c++; }
+      }
+      if (c) upd.push([j * n + i, s / c]);
+    }
+    if (!upd.length) break;
+    for (const [k, v] of upd) z[k] = v;
+  }
+  let min = Infinity, max = -Infinity;
+  for (const v of z) { if (v < min) min = v; if (v > max) max = v; }
+  const L = (n - 1) * d;
+  const at = (x, y) => {
+    const cx = Math.min(Math.max(x, 0), L) / d, cy = Math.min(Math.max(y, 0), L) / d;
+    const i = Math.min(Math.floor(cx), n - 2), j = Math.min(Math.floor(cy), n - 2);
+    const tx = cx - i, ty = cy - j, o = j * n + i;
+    return (z[o] * (1 - tx) + z[o + 1] * tx) * (1 - ty) + (z[o + n] * (1 - tx) + z[o + n + 1] * tx) * ty;
+  };
+  return { spacing: d, n, xs, ys, z, min, max, filled, at };
+}
+
+/* ==========================================================================
+   Tiles → local features (section 4.2)
+   ========================================================================== */
+
+/**
+ * @param tiles  [{ z, x, y, layers }] with layers = mvt.decodeTile output
+ * @param frame  from geo.makeFrame
+ * @returns {{[layer:string]: Array<{id:string, type:1|2|3, properties:object, parts:any}>}}
+ *   parts: type 1 → [[x,y],…]; type 2 → lines [[[x,y],…],…] (clipped to the tile only); type 3 → MultiPoly.
+ */
+function featuresFromTiles(tiles, frame) {
+  const S = frame.size, lo = -PREFILTER_MARGIN, hi = S + PREFILTER_MARGIN;
+  const groups = new Map();                           // key → { layer, id, type, properties, pieces }
+  let anon = 0;
+
+  for (const tile of tiles) {
+    for (const [layer, L] of Object.entries(tile.layers || {})) {
+      const ext = L.extent || 4096;
+      const loc = (px, py) => { const [lon, lat] = tileToLonLat(tile.z, tile.x, tile.y, px, py, ext); return frame.toLocal(lon, lat); };
+      // tile box outside the site → skip all
+      const c1 = loc(0, 0), c2 = loc(ext, ext);
+      if (Math.max(c1[0], c2[0]) < lo || Math.min(c1[0], c2[0]) > hi || Math.max(c1[1], c2[1]) < lo || Math.min(c1[1], c2[1]) > hi) continue;
+      const box = [0, 0, ext, ext];
+
+      for (const f of L.features) {
+        const geom = f.geometry;
+        if (!geom || !geom.length) continue;
+        const flat = f.type === 1 ? geom : f.type === 2 ? geom.flat() : geom.flat();
+        if (!flat.length) continue;
+        let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+        for (const p of flat) { if (p[0] < x0) x0 = p[0]; if (p[0] > x1) x1 = p[0]; if (p[1] < y0) y0 = p[1]; if (p[1] > y1) y1 = p[1]; }
+        const a = loc(x0, y0), b = loc(x1, y1);
+        if (Math.max(a[0], b[0]) < lo || Math.min(a[0], b[0]) > hi || Math.max(a[1], b[1]) < lo || Math.min(a[1], b[1]) > hi) continue;
+        const inside = x0 >= 0 && y0 >= 0 && x1 <= ext && y1 <= ext;
+        const toLocal = (pts) => pts.map((p) => loc(p[0], p[1]));
+
+        let piece;
+        if (f.type === 1) {
+          const pts = geom.filter((p) => p[0] >= 0 && p[0] < ext && p[1] >= 0 && p[1] < ext);
+          if (!pts.length) continue;
+          piece = toLocal(pts);
+        } else if (f.type === 2) {
+          const lines = inside ? geom : clipLinesToRect(geom, box, TILE_K);
+          if (!lines.length) continue;
+          piece = lines.map(toLocal);
+        } else {
+          const polys = inside ? groupRings(geom) : clipRingsToRect(geom, box, TILE_K);
+          const mp = cleanPolys(polys.map((p) => ({ outer: toLocal(p.outer), holes: p.holes.map(toLocal) })));
+          if (!mp.length) continue;
+          piece = mp;
+        }
+        const id = f.id != null ? String(f.id) : f.properties && f.properties.id != null ? String(f.properties.id) : `#${anon++}`;
+        const key = layer + "|" + f.type + "|" + id;
+        let g = groups.get(key);
+        if (!g) groups.set(key, g = { layer, id, type: f.type, properties: f.properties || {}, pieces: [] });
+        g.pieces.push(piece);
+      }
+    }
+  }
+
+  const out = {};
+  for (const g of groups.values()) {
+    let parts;
+    if (g.type === 1) {
+      parts = [];
+      for (const p of g.pieces) for (const q of p) if (!parts.some((r) => Math.abs(r[0] - q[0]) < 0.5 && Math.abs(r[1] - q[1]) < 0.5)) parts.push(q);
+    } else if (g.type === 2) parts = g.pieces.flat();
+    else if (g.pieces.length === 1) parts = g.pieces[0];
+    else parts = unionPolys(g.pieces.flat());
+    if (g.type === 3 && !parts.length) continue;
+    (out[g.layer] ||= []).push({ id: g.id, type: g.type, properties: g.properties, parts });
+  }
+  return out;
+}
+
+/* ==========================================================================
+   Buildings (4.3)
+   ========================================================================== */
+
+/**
+ * @returns {Array<{id:string, ring:number[][], holes:number[][][], base:number, height:number, top:number,
+ *   floors:number, rule:"data"|"floors"|"estimate", source:string, name:string}>}
+ *   rule/height per section 4.3. source = @height_source (or @geometry_source).
+ */
+function buildBuildings(features, frame, ground) {
+  const S = frame.size, out = [];
+  for (const f of (features.building || [])) {
+    if (f.type !== 3) continue;
+    const p = f.properties || {};
+    if (p.is_underground === true || p.is_underground === "true") continue;
+    for (const poly of f.parts) {
+      const [cx, cy] = centroid(poly.outer);
+      if (cx < 0 || cy < 0 || cx > S || cy > S) continue;
+      const h = num(p.height), nf = num(p.num_floors);
+      let height, rule;
+      if (h > 0) { height = h * M2FT; rule = "data"; }
+      else if (nf > 0) { height = nf * 12; rule = "floors"; }
+      else { height = 24; rule = "estimate"; }
+      let base = ground.at(cx, cy);
+      for (const q of poly.outer) base = Math.min(base, ground.at(q[0], q[1]));
+      out.push({
+        id: f.id, ring: poly.outer, holes: poly.holes, base, height, top: base + height,
+        floors: Math.max(1, Math.round(height / 12)), rule,
+        source: String(p["@height_source"] ?? p["@geometry_source"] ?? ""), name: String(p["@name"] ?? p.name ?? ""),
+      });
+    }
+  }
+  return out;
+}
+
+/* ==========================================================================
+   Roads (4.4)
+   ========================================================================== */
+
+const ROAD_W = { motorway: 48, trunk: 48, primary: 44, secondary: 36, tertiary: 30, residential: 26, living_street: 26, unclassified: 22, unknown: 22, service: 14 };
+const WALK_W = { footway: 5, pedestrian: 5, path: 5, steps: 5, cycleway: 8 };
+const SERVICE_SUB = { alley: 12, parking_aisle: 20, driveway: 10 };
+
+function roadFlags(p) {
+  const arr = parseJson(p.road_flags);
+  return Array.isArray(arr) ? arr : [];
+}
+/** Fraction (0..1) of the segment covered by flag `name`. */
+function flagCoverage(flags, name) {
+  const iv = [];
+  for (const e of flags) {
+    if (!e || !Array.isArray(e.values) || !e.values.includes(name)) continue;
+    const b = Array.isArray(e.between) ? e.between : [0, 1];
+    iv.push([Math.max(0, Math.min(b[0], b[1])), Math.min(1, Math.max(b[0], b[1]))]);
+  }
+  iv.sort((a, b) => a[0] - b[0]);
+  let tot = 0, end = 0;
+  for (const [a, b] of iv) { const s = Math.max(a, end); if (b > s) { tot += b - s; end = b; } }
+  return tot;
+}
+
+/** Width (ft) for a road/walk segment from properties, or table. */
+function segmentWidth(p, cls, walk) {
+  const wr = parseJson(p.width_rules);
+  if (Array.isArray(wr) && wr.length) {
+    const m = num(wr[0] && wr[0].value);
+    if (m > 0 && m * M2FT >= 3 && m * M2FT <= 200) return m * M2FT;
+  }
+  if (walk) return WALK_W[cls];
+  const sub = p.subclass;
+  if (sub === "link" || flagCoverage(roadFlags(p), "is_link") > 0) return 16;
+  if (cls === "service" || !(cls in ROAD_W)) return SERVICE_SUB[sub] ?? ROAD_W.service;
+  return ROAD_W[cls];
+}
+
+function densify(line, step, zOf) {
+  const out = [];
+  for (let i = 0; i < line.length; i++) {
+    const a = line[i];
+    if (i > 0) {
+      const b = line[i - 1], L = Math.hypot(a[0] - b[0], a[1] - b[1]), k = Math.ceil(L / step);
+      for (let s = 1; s < k; s++) { const t = s / k, x = b[0] + (a[0] - b[0]) * t, y = b[1] + (a[1] - b[1]) * t; out.push([x, y, zOf(x, y)]); }
+    }
+    out.push([a[0], a[1], zOf(a[0], a[1])]);
+  }
+  return out;
+}
+
+/** Buffer open lines by width/2 (flat ends, round joins), union, clip to the square. */
+function pavement(items, S) {
+  if (!items.length) return [];
+  const byW = new Map();
+  for (const it of items) {
+    const key = Math.round(it.width * 10);
+    if (!byW.has(key)) byW.set(key, { w: key / 10, paths: [] });
+    byW.get(key).paths.push(toPath(it.line, SCALE));
+  }
+  const cl = new (C().Clipper)();
+  for (const { w, paths } of byW.values()) {
+    const co = new (C().ClipperOffset)(2, 0.25 * SCALE);
+    co.AddPaths(paths, C().JoinType.jtRound, C().EndType.etOpenButt);
+    const sol = [];
+    co.Execute(sol, (w / 2) * SCALE);
+    for (const path of sol) cl.AddPath(C().Clipper.Orientation(path) ? path : path.slice().reverse(), C().PolyType.ptSubject, true);
+  }
+  cl.AddPath(rectPath(0, 0, S, S, SCALE), C().PolyType.ptClip, true);
+  const tree = new (C().PolyTree)();
+  cl.Execute(C().ClipType.ctIntersection, tree, C().PolyFillType.pftNonZero, C().PolyFillType.pftNonZero);
+  return cleanPolys(treeToPolys(tree, SCALE));
+}
+
+/**
+ * @returns {{segments: Array<{id:string, cls:string, name:string, width:number, line:number[][], subclass:string, bridge:boolean}>,
+ *   pavement: Array<{outer,holes}>, walks: Array<{outer,holes}>|null}}
+ *   segments hold road centerlines only (draped, z = ground + 0.3); walks is null unless { walks: true }.
+ */
+function buildRoads(features, frame, ground, { walks = false } = {}) {
+  const S = frame.size, rect = [0, 0, S, S];
+  const segments = [], roadItems = [], walkItems = [];
+  for (const f of (features.segment || [])) {
+    if (f.type !== 2) continue;
+    const p = f.properties || {};
+    if (p.subtype && p.subtype !== "road") continue;
+    const cls = String(p.class || "unknown");
+    const walk = cls in WALK_W;
+    if (walk && !walks) continue;
+    if (flagCoverage(roadFlags(p), "is_tunnel") > 0.5) continue;
+    const width = segmentWidth(p, cls, walk);
+    const bridge = flagCoverage(roadFlags(p), "is_bridge") > 0;
+    for (const line of clipLinesToRect(f.parts, rect, SCALE)) {
+      if (walk) { walkItems.push({ line, width }); continue; }
+      roadItems.push({ line, width });
+      segments.push({ id: f.id, cls, name: String(p["@name"] ?? p.name ?? ""), width, subclass: String(p.subclass || ""), bridge,
+        line: densify(line, 10, (x, y) => ground.at(x, y) + 0.3) });
+    }
+  }
+  return { segments, pavement: pavement(roadItems, S), walks: walks ? pavement(walkItems, S) : null };
+}
+
+/* ==========================================================================
+   Trees (4.5) and water (4.6)
+   ========================================================================== */
+
+const hash2 = (i, j) => { let h = Math.imul(i | 0, 73856093) ^ Math.imul(j | 0, 19349663); h = Math.imul(h ^ (h >>> 15), 2246822519); h ^= h >>> 13; return h >>> 0; };
+
+/** @returns {Array<{x:number,y:number,z:number,canopy:20,height:30}>} at most 3000 trees. */
+function buildTrees(features, frame, ground) {
+  const S = frame.size, trees = [], forest = [];
+  const mk = (x, y) => ({ x, y, z: ground.at(x, y), canopy: 20, height: 30 });
+  for (const f of (features.land || [])) {
+    const p = f.properties || {};
+    if (f.type === 1 && p.class === "tree") {
+      for (const q of f.parts) if (q[0] >= 0 && q[0] <= S && q[1] >= 0 && q[1] <= S) trees.push(mk(q[0], q[1]));
+    } else if (f.type === 3 && (p.subtype === "forest" || p.class === "wood" || p.class === "forest")) {
+      for (const poly of unionPolys(f.parts, [0, 0, S, S])) {
+        let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
+        for (const q of poly.outer) { bx0 = Math.min(bx0, q[0]); bx1 = Math.max(bx1, q[0]); by0 = Math.min(by0, q[1]); by1 = Math.max(by1, q[1]); }
+        for (let gi = Math.floor(bx0 / 30); gi <= Math.ceil(bx1 / 30); gi++) for (let gj = Math.floor(by0 / 30); gj <= Math.ceil(by1 / 30); gj++) {
+          const h = hash2(gi, gj);
+          const x = gi * 30 + ((h & 0xffff) / 65535 * 2 - 1) * 6, y = gj * 30 + ((h >>> 16) / 65535 * 2 - 1) * 6;
+          if (x >= 0 && x <= S && y >= 0 && y <= S && pointInPoly(x, y, poly)) forest.push([x, y]);
+        }
+      }
+    }
+  }
+  const room = Math.max(0, MAX_TREES - trees.length);
+  if (forest.length <= room) for (const q of forest) trees.push(mk(q[0], q[1]));
+  else for (let k = 0; k < room; k++) { const q = forest[Math.floor(k * forest.length / room)]; trees.push(mk(q[0], q[1])); }
+  return trees.slice(0, MAX_TREES);
+}
+
+const WATER_LINES = new Set(["stream", "ditch", "canal", "drain", "river"]);
+
+/** @returns {{areas: Array<{ring,holes,level:number,cls:string}>, lines: number[][][]}} lines are draped at ground + 0.2 ft. */
+function buildWater(features, frame, ground) {
+  const S = frame.size, areas = [], lines = [];
+  for (const f of (features.water || [])) {
+    const p = f.properties || {};
+    if (f.type === 3) {
+      for (const poly of unionPolys(f.parts, [0, 0, S, S])) {
+        let lv = Infinity;
+        for (const r of [poly.outer, ...poly.holes]) for (const q of r) lv = Math.min(lv, ground.at(q[0], q[1]));
+        areas.push({ ring: poly.outer, holes: poly.holes, level: lv + 0.2, cls: String(p.class || p.subtype || "water") });
+      }
+    } else if (f.type === 2 && WATER_LINES.has(p.class)) {
+      for (const l of clipLinesToRect(f.parts, [0, 0, S, S], SCALE)) lines.push(densify(l, 10, (x, y) => ground.at(x, y) + 0.2));
+    }
+  }
+  return { areas, lines };
+}
+
+/* ==========================================================================
+   Summary and assembly
+   ========================================================================== */
+
+/** @param model  { ground, buildings, roads, trees, water } */
+function summarize(model) {
+  return {
+    buildings: model.buildings.length,
+    estimated: model.buildings.filter((b) => b.rule === "estimate").length,
+    roadsFt: model.roads.segments.reduce((s, g) => s + lineLen(g.line), 0),
+    trees: model.trees.length,
+    waterAreas: model.water.areas.length,
+    groundMin: model.ground.min,
+    groundMax: model.ground.max,
+  };
+}
+
+/**
+ * Convenience: build every layer. Ground errors throw; other layers catch their own error
+ * (listed in `errors`, the layer is empty).
+ * @returns {{frame, ground, buildings, roads, trees, water, errors: {[layer:string]: string}}}
+ */
+function buildModel(frame, { dem, tiles = [], walks = false } = {}) {
+  const ground = buildGround(frame, dem);
+  const errors = {};
+  let features = {};
+  try { features = featuresFromTiles(tiles, frame); } catch (e) { errors.features = e.message; }
+  const run = (name, fn, empty) => { try { return fn(); } catch (e) { errors[name] = e.message; return empty; } };
+  return {
+    frame, ground, errors,
+    buildings: run("buildings", () => buildBuildings(features, frame, ground), []),
+    roads: run("roads", () => buildRoads(features, frame, ground, { walks }), { segments: [], pavement: [], walks: null }),
+    trees: run("trees", () => buildTrees(features, frame, ground), []),
+    water: run("water", () => buildWater(features, frame, ground), { areas: [], lines: [] }),
+  };
+}
+
+return { SCALE, ringArea, buildGround, featuresFromTiles, buildBuildings, buildRoads, buildTrees, buildWater, summarize, buildModel };
+})();
+
+const ExportsMod = (() => {
+/* ==========================================================================
+   SITE: exports
+   Revit CSV (ground points), DXF R12 (all other layers) and the notes file.
+   Pure functions, no DOM. Input is the model bundle from model.js:
+     { frame, ground, buildings, roads, trees, water }
+   Spec: docs/site-tool-spec.md section 5.7.
+
+   Choices where the spec is silent:
+   - DXF is hand-written R12 (AC1009): HEADER, TABLES (LTYPE + LAYER), ENTITIES.
+     Lines end with "\n". Group codes are right-aligned to 3 characters.
+   - Building roofs and floors are triangulated by ear clipping. Holes are
+     supported: each hole is joined to the outer ring by a bridge (a visible
+     vertex pair). Walls are made for the outer ring and every hole.
+     Triangles are written with 3 face indices (no 4th index).
+   - Building layers: rule "estimate" goes to BLDG-ESTIMATE; "data" and
+     "floors" go to BLDG-DATA.
+   - Pavement, walk and water polylines are 2D closed polylines (flag 1) with
+     the elevation in group 30: 0 for pavement and walks, the water level for
+     water. Holes are separate closed polylines.
+   - The topo mesh is one polyface mesh unless n*n > 32,000 vertices; then it
+     is cut into bands of rows that share one boundary row.
+   ========================================================================== */
+
+const { summarize } = ModelMod;
+
+const DXF_LAYERS = [
+  ["SITE-BOUNDARY", 1], ["TOPO-MESH", 8], ["BLDG-DATA", 7], ["BLDG-ESTIMATE", 30], ["ROAD-PAVEMENT", 8],
+  ["WALK-PAVEMENT", 9], ["ROAD-CL", 2], ["WATER", 5], ["WATER-LINE", 4], ["TREE", 3],
+];
+
+const CREDITS = "Elevation: USGS 3D Elevation Program. Buildings, roads, trees, water: Overture Maps Foundation, © OpenStreetMap contributors (ODbL), Microsoft ML Buildings. Geocoding: Nominatim / OpenStreetMap.";
+
+/* ---------------- CSV ---------------- */
+
+/** "x,y,z\n" for every ground node (row-major from the south), 3 decimals, no header. */
+function revitCsv(ground) {
+  const { n, xs, ys, z } = ground;
+  const rows = [];
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) rows.push(`${xs[i].toFixed(3)},${ys[j].toFixed(3)},${z[j * n + i].toFixed(3)}`);
+  return rows.join("\n") + "\n";
+}
+
+/* ---------------- triangulation (ear clipping with hole bridging) ---------------- */
+
+const cross = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+function ringArea(r) { let a = 0; for (let i = 0; i < r.length; i++) { const p = r[i], q = r[(i + 1) % r.length]; a += p[0] * q[1] - q[0] * p[1]; } return a / 2; }
+
+function segsCross(a, b, c, d) {      // proper intersection
+  const d1 = cross(a, b, c), d2 = cross(a, b, d), d3 = cross(c, d, a), d4 = cross(c, d, b);
+  return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+}
+const same = (p, q) => p[0] === q[0] && p[1] === q[1];
+
+/**
+ * Triangulate a polygon with holes. outer CCW, holes CW.
+ * @returns {{pts:number[][], tris:number[][]}} pts = outer then holes; tris = index triples, CCW.
+ */
+function triangulate(outer, holes = []) {
+  const pts = outer.slice();
+  const holeIdx = holes.map((h) => h.map((p) => { pts.push(p); return pts.length - 1; }));
+  let loop = outer.map((_, i) => i);
+  const inLoopSegs = (skipHoleIdx) => {
+    const segs = [];
+    for (let i = 0; i < loop.length; i++) segs.push([pts[loop[i]], pts[loop[(i + 1) % loop.length]]]);
+    holeIdx.forEach((h, k) => { if (!skipHoleIdx.has(k)) for (let i = 0; i < h.length; i++) segs.push([pts[h[i]], pts[h[(i + 1) % h.length]]]); });
+    return segs;
+  };
+  const used = new Set();
+  const order = holeIdx.map((h, k) => k).sort((a, b) => Math.max(...holes[b].map((p) => p[0])) - Math.max(...holes[a].map((p) => p[0])));
+  for (const k of order) {
+    const h = holeIdx[k];
+    let hi = 0;
+    for (let i = 1; i < h.length; i++) if (pts[h[i]][0] > pts[h[hi]][0]) hi = i;
+    const hp = pts[h[hi]];
+    const segs = inLoopSegs(used);                       // merged loop + holes not merged yet (this one included)
+    const cand = loop.map((vi, pos) => ({ pos, d: Math.hypot(pts[vi][0] - hp[0], pts[vi][1] - hp[1]) })).sort((a, b) => a.d - b.d);
+    let best = cand[0].pos;
+    for (const c of cand) {
+      const vp = pts[loop[c.pos]];
+      let ok = true;
+      for (const [s, e] of segs) { if (!same(s, vp) && !same(e, vp) && !same(s, hp) && !same(e, hp) && segsCross(hp, vp, s, e)) { ok = false; break; } }
+      if (ok) { const mid = [(hp[0] + vp[0]) / 2, (hp[1] + vp[1]) / 2]; if (!pointInLoop(mid, loop.map((i) => pts[i]))) ok = false; }
+      if (ok) { best = c.pos; break; }
+    }
+    const seq = [];
+    for (let i = 0; i <= h.length; i++) seq.push(h[(hi + i) % h.length]);       // hole starting and ending at the bridge vertex
+    loop = loop.slice(0, best + 1).concat(seq, [loop[best]], loop.slice(best + 1));
+    used.add(k);
+  }
+
+  const tris = [];
+  const P = (i) => pts[i];
+  let guard = loop.length * loop.length + 10;
+  while (loop.length > 3 && guard-- > 0) {
+    const m = loop.length;
+    let earAt = -1, flatAt = -1;
+    for (let i = 0; i < m; i++) {
+      const a = P(loop[(i + m - 1) % m]), b = P(loop[i]), c = P(loop[(i + 1) % m]);
+      const cr = cross(a, b, c);
+      if (Math.abs(cr) < 1e-9) { if (flatAt < 0) flatAt = i; continue; }
+      if (cr < 0) continue;
+      let ok = true;
+      for (let j = 0; j < m && ok; j++) {
+        const q = P(loop[j]);
+        if (same(q, a) || same(q, b) || same(q, c)) continue;
+        if (cross(a, b, q) >= 0 && cross(b, c, q) >= 0 && cross(c, a, q) >= 0) ok = false;
+      }
+      if (ok) { earAt = i; break; }
+    }
+    if (earAt < 0) {
+      if (flatAt >= 0) { loop.splice(flatAt, 1); continue; }
+      earAt = 0;                                                    // give up on exactness: clip any vertex
+    }
+    tris.push([loop[(earAt + m - 1) % m], loop[earAt], loop[(earAt + 1) % m]]);
+    loop.splice(earAt, 1);
+  }
+  if (loop.length === 3 && Math.abs(cross(P(loop[0]), P(loop[1]), P(loop[2]))) > 1e-9) tris.push(loop.slice());
+  return { pts, tris: tris.filter((t) => cross(P(t[0]), P(t[1]), P(t[2])) > 1e-9) };
+}
+
+function pointInLoop(p, r) {
+  let inside = false;
+  for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+    const a = r[i], b = r[j];
+    if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]) inside = !inside;
+  }
+  return inside;
+}
+
+/* ---------------- DXF writer ---------------- */
+
+class Dxf {
+  constructor() { this.out = []; this.min = [Infinity, Infinity, Infinity]; this.max = [-Infinity, -Infinity, -Infinity]; this.counts = {}; }
+  g(code, v) { this.out.push(String(code).padStart(3, " "), typeof v === "number" && code >= 10 && code <= 59 ? fmt(v) : String(v)); }
+  pt(x, y, z, c = 10) {
+    this.g(c, x); this.g(c + 10, y); this.g(c + 20, z);
+    const v = [x, y, z];
+    for (let i = 0; i < 3; i++) { if (v[i] < this.min[i]) this.min[i] = v[i]; if (v[i] > this.max[i]) this.max[i] = v[i]; }
+  }
+  count(layer) { this.counts[layer] = (this.counts[layer] || 0) + 1; }
+  /** Closed 2D polyline (flag 1) at elevation z. */
+  closed2d(layer, ring, z) {
+    this.count(layer);
+    this.g(0, "POLYLINE"); this.g(8, layer); this.g(66, 1); this.g(10, 0); this.g(20, 0); this.g(30, z); this.g(70, 1);
+    for (const p of ring) { this.g(0, "VERTEX"); this.g(8, layer); this.pt(p[0], p[1], z); }
+    this.g(0, "SEQEND"); this.g(8, layer);
+  }
+  /** Open 3D polyline (flag 8), vertices flag 32. */
+  line3d(layer, line) {
+    this.count(layer);
+    this.g(0, "POLYLINE"); this.g(8, layer); this.g(66, 1); this.g(10, 0); this.g(20, 0); this.g(30, 0); this.g(70, 8);
+    for (const p of line) { this.g(0, "VERTEX"); this.g(8, layer); this.pt(p[0], p[1], p[2]); this.g(70, 32); }
+    this.g(0, "SEQEND"); this.g(8, layer);
+  }
+  /** Polyface mesh. faces: arrays of 3 or 4 one-based vertex indices (negative = invisible edge). */
+  polyface(layer, verts, faces) {
+    this.count(layer);
+    this.g(0, "POLYLINE"); this.g(8, layer); this.g(66, 1); this.g(10, 0); this.g(20, 0); this.g(30, 0);
+    this.g(70, 64); this.g(71, verts.length); this.g(72, faces.length);
+    for (const v of verts) { this.g(0, "VERTEX"); this.g(8, layer); this.pt(v[0], v[1], v[2]); this.g(70, 192); }
+    for (const f of faces) {
+      this.g(0, "VERTEX"); this.g(8, layer); this.g(10, 0); this.g(20, 0); this.g(30, 0); this.g(70, 128);
+      f.forEach((idx, k) => this.g(71 + k, idx));
+    }
+    this.g(0, "SEQEND"); this.g(8, layer);
+  }
+  circle(layer, x, y, z, r) { this.count(layer); this.g(0, "CIRCLE"); this.g(8, layer); this.pt(x, y, z); this.g(40, r); }
+}
+
+function fmt(v) {
+  let s = (Math.round(v * 1e4) / 1e4).toFixed(4).replace(/0+$/, "");
+  if (s.endsWith(".")) s += "0";
+  return s === "-0.0" ? "0.0" : s;
+}
+
+function buildingMesh(b) {
+  const rings = [b.ring, ...b.holes];
+  const { pts, tris } = triangulate(b.ring, b.holes);
+  const m = pts.length, z0 = b.base - 1, z1 = b.base + b.height;
+  const verts = pts.map((p) => [p[0], p[1], z0]).concat(pts.map((p) => [p[0], p[1], z1]));
+  const faces = [];
+  for (const t of tris) { faces.push([t[0] + m + 1, t[1] + m + 1, t[2] + m + 1]); faces.push([t[0] + 1, t[2] + 1, t[1] + 1]); }
+  let off = 0;
+  for (const r of rings) {
+    for (let i = 0; i < r.length; i++) {
+      const a = off + i, c = off + (i + 1) % r.length;
+      faces.push([a + 1, c + 1, c + m + 1, a + m + 1]);
+    }
+    off += r.length;
+  }
+  return { verts, faces };
+}
+
+/**
+ * DXF R12 text for every layer except the ground CSV points; the topo is also written as a polyface mesh.
+ * @param model  { frame, ground, buildings, roads, trees, water }
+ */
+function siteDxf(model) {
+  const { frame, ground, buildings, roads, trees, water } = model;
+  const D = new Dxf();
+  const S = frame.size;
+
+  D.closed2d("SITE-BOUNDARY", [[0, 0], [S, 0], [S, S], [0, S]], 0);
+
+  // topo mesh in bands
+  const n = ground.n;
+  const rowsMax = Math.max(2, Math.floor(32000 / n));
+  for (let j0 = 0; j0 < n - 1; j0 += rowsMax - 1) {
+    const j1 = Math.min(j0 + rowsMax - 1, n - 1), rows = j1 - j0 + 1;
+    const verts = [], faces = [];
+    for (let j = j0; j <= j1; j++) for (let i = 0; i < n; i++) verts.push([ground.xs[i], ground.ys[j], ground.z[j * n + i]]);
+    for (let j = 0; j < rows - 1; j++) for (let i = 0; i < n - 1; i++) {
+      const a = j * n + i + 1;
+      faces.push([a, a + 1, a + n + 1, a + n]);
+    }
+    D.polyface("TOPO-MESH", verts, faces);
+  }
+
+  for (const b of buildings) {
+    if (b.ring.length < 3) continue;
+    const { verts, faces } = buildingMesh(b);
+    D.polyface(b.rule === "estimate" ? "BLDG-ESTIMATE" : "BLDG-DATA", verts, faces);
+  }
+
+  for (const p of roads.pavement) { D.closed2d("ROAD-PAVEMENT", p.outer, 0); for (const h of p.holes) D.closed2d("ROAD-PAVEMENT", h, 0); }
+  for (const p of roads.walks || []) { D.closed2d("WALK-PAVEMENT", p.outer, 0); for (const h of p.holes) D.closed2d("WALK-PAVEMENT", h, 0); }
+  for (const s of roads.segments) if (s.line.length > 1) D.line3d("ROAD-CL", s.line);
+  for (const a of water.areas) { D.closed2d("WATER", a.ring, a.level); for (const h of a.holes) D.closed2d("WATER", h, a.level); }
+  for (const l of water.lines) if (l.length > 1) D.line3d("WATER-LINE", l);
+  for (const t of trees) D.circle("TREE", t.x, t.y, t.z, t.canopy / 2);
+
+  // assemble
+  const head = new Dxf();
+  head.g(0, "SECTION"); head.g(2, "HEADER");
+  head.g(9, "$ACADVER"); head.g(1, "AC1009");
+  head.g(9, "$EXTMIN"); head.g(10, D.min[0]); head.g(20, D.min[1]); head.g(30, D.min[2]);
+  head.g(9, "$EXTMAX"); head.g(10, D.max[0]); head.g(20, D.max[1]); head.g(30, D.max[2]);
+  head.g(0, "ENDSEC");
+  head.g(0, "SECTION"); head.g(2, "TABLES");
+  head.g(0, "TABLE"); head.g(2, "LTYPE"); head.g(70, 1);
+  head.g(0, "LTYPE"); head.g(2, "CONTINUOUS"); head.g(70, 0); head.g(3, "Solid line"); head.g(72, 65); head.g(73, 0); head.g(40, 0);
+  head.g(0, "ENDTAB");
+  head.g(0, "TABLE"); head.g(2, "LAYER"); head.g(70, DXF_LAYERS.length + 1);
+  head.g(0, "LAYER"); head.g(2, "0"); head.g(70, 0); head.g(62, 7); head.g(6, "CONTINUOUS");
+  for (const [name, color] of DXF_LAYERS) { head.g(0, "LAYER"); head.g(2, name); head.g(70, 0); head.g(62, color); head.g(6, "CONTINUOUS"); }
+  head.g(0, "ENDTAB");
+  head.g(0, "ENDSEC");
+  head.g(0, "SECTION"); head.g(2, "ENTITIES");
+  const tail = ["  0", "ENDSEC", "  0", "EOF"];
+  return head.out.concat(D.out, tail).join("\n") + "\n";
+}
+
+/* ---------------- notes ---------------- */
+
+const n0 = (v) => Math.round(v).toLocaleString("en-US");
+const n1 = (v) => (Math.round(v * 10) / 10).toFixed(1);
+
+/**
+ * Notes file in Markdown (ASD-STE100 style: short sentences, active voice).
+ * @param model  { frame, ground, buildings, roads, trees, water }
+ * @param meta  { address, lat, lon, size, release, date }
+ */
+function notesMarkdown(model, meta) {
+  const s = summarize(model), g = model.ground, fr = model.frame;
+  const lat = meta.lat ?? fr.lat0, lon = meta.lon ?? fr.lon0, size = meta.size ?? fr.size;
+  const [oLon, oLat] = fr.toLonLat(0, 0);
+  const date = meta.date || new Date().toISOString().slice(0, 10);
+  const rules = { data: 0, floors: 0, estimate: 0 };
+  for (const b of model.buildings) rules[b.rule]++;
+  const lines = [
+    `# Site Model: ${meta.address || "Site"}`,
+    "",
+    `- Address: ${meta.address || "(none)"}`,
+    `- Center: ${lat.toFixed(6)}, ${lon.toFixed(6)} (latitude, longitude)`,
+    `- Origin (0, 0) at the southwest corner: ${oLat.toFixed(6)}, ${oLon.toFixed(6)}`,
+    `- Size: ${size} ft by ${size} ft`,
+    `- Ground grid: ${g.n} by ${g.n} points, ${n0(g.n * g.n)} points in total, spacing ${g.spacing} ft`,
+    `- Overture release: ${meta.release || "unknown"}`,
+    `- Date: ${date}`,
+    "",
+    "## What the model holds",
+    "",
+    `- Buildings: ${s.buildings}`,
+    `- Road centerlines: ${n0(s.roadsFt)} ft in ${model.roads.segments.length} segments`,
+    `- Pavement areas: ${model.roads.pavement.length}`,
+    `- Walk areas: ${model.roads.walks ? model.roads.walks.length : "not included"}`,
+    `- Trees: ${s.trees}`,
+    `- Water areas: ${s.waterAreas}`,
+    `- Water lines: ${model.water.lines.length}`,
+    `- Ground elevation: ${n1(s.groundMin)} ft to ${n1(s.groundMax)} ft (NAVD88)`,
+    g.filled ? `- Ground points without data: ${g.filled}. The tool filled them from the points near them.` : "- Ground points without data: 0",
+    "",
+    "## How building heights were set",
+    "",
+    `- Height from the data (measured or from the map source): ${rules.data} buildings`,
+    `- Height from the floor count (12 ft for each floor): ${rules.floors} buildings`,
+    `- Height estimated (24 ft): ${rules.estimate} buildings. The DXF puts these on layer BLDG-ESTIMATE.`,
+    "- The base of each building is the lowest ground point at its corners and center. The solid starts 1 ft below the base.",
+    "",
+    "## Accuracy",
+    "",
+    "This model has about 75% of the accuracy of the full site3d tool. Use it for conceptual design only. Do not use it for survey, permit, or construction work.",
+    "",
+    "- Ground elevation: within 3 ft.",
+    "- Building height: within 1 floor (12 ft).",
+    "- Building position: within 10 ft.",
+    "",
+    "## North",
+    "",
+    "The model uses true north. Revit grid north is true north. State plane grid north is a little different from true north. The difference is small at this site size.",
+    "",
+    "## Data credits",
+    "",
+    CREDITS,
+    "",
+    "## Revit import",
+    "",
+    "Both files use the same origin. They align when you import them as follows.",
+    "",
+    "1. Ground: Massing & Site > Toposolid > Create from Import > Create from CSV. Select the CSV file. Choose Decimal feet.",
+    "2. Other layers: Insert > Import CAD. Select the DXF file. Set Positioning to Auto - Origin to Internal Origin. Set Units to Foot.",
+    "",
+  ];
+  return lines.join("\n");
+}
+
+return { DXF_LAYERS, CREDITS, revitCsv, triangulate, siteDxf, notesMarkdown };
+})();
+
+const ShotMod = (() => {
+/* ==========================================================================
+   SHARED: screenshot
+   Capture a three.js view at higher resolution, annotate it on a 2D canvas,
+   and deliver the PNG (share sheet on iPad, download elsewhere).
+
+   No dependency on three: the renderer is only used through its public API.
+   Does not need preserveDrawingBuffer (the frame is copied in the same task
+   it is rendered in).
+   ========================================================================== */
+
+const FONT_STACK = '-apple-system, "SF Pro Text", "Inter", system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+
+/** Total pixel budget. iOS Safari limits a canvas to 16,777,216 px (4096 x 4096). */
+const DEFAULT_MAX_PIXELS = 16000000;
+
+/* Duck-typed targets so we do not need THREE.Vector2 / Vector4. */
+function vec2() { return { x: 0, y: 0, set(x, y) { this.x = x; this.y = y; return this; } }; }
+function vec4() {
+  return {
+    x: 0, y: 0, z: 0, w: 0,
+    set(x, y, z, w) { this.x = x; this.y = y; this.z = z; this.w = w; return this; },
+    copy(v) { this.x = v.x; this.y = v.y; this.z = v.z; this.w = v.w; return this; },
+  };
+}
+
+/** Largest scale <= requested that fits the GPU and canvas limits. */
+function fitScale(renderer, baseW, baseH, scale, maxPixels) {
+  let s = scale;
+  let maxDim = Infinity;
+  try {
+    const gl = renderer.getContext();
+    maxDim = Math.min(
+      gl.getParameter(gl.MAX_RENDERBUFFER_SIZE) || Infinity,
+      gl.getParameter(gl.MAX_TEXTURE_SIZE) || Infinity
+    );
+    const vp = gl.getParameter(gl.MAX_VIEWPORT_DIMS);
+    if (vp) maxDim = Math.min(maxDim, vp[0], vp[1]);
+  } catch (e) { /* ignore */ }
+  maxDim = Math.min(maxDim, 16384);
+  s = Math.min(s, maxDim / baseW, maxDim / baseH);
+  const px = baseW * baseH;
+  if (px * s * s > maxPixels) s = Math.sqrt(maxPixels / px);
+  return Math.max(s, 1 / Math.max(baseW, baseH));     // never zero
+}
+
+/**
+ * Renders the scene at `scale` x the renderer's current drawing-buffer size and
+ * returns a PNG Blob with the overlay drawn on top.
+ *
+ * @param {object}   o
+ * @param {object}   o.renderer  THREE.WebGLRenderer
+ * @param {object}   o.scene
+ * @param {object}   o.camera
+ * @param {number}   [o.scale=2]
+ * @param {object}   [o.overlay]  { title?, date?, metrics?: Array<[label,value]>, mark?: "CMRLM", theme?: "light"|"dark" }
+ *                                 date: string | Date | true (today)
+ * @param {Function} [o.render]  optional (renderer, scene, camera) => void replacing renderer.render
+ *                               (for custom viewports); called at the capture size and again after restore
+ * @param {number}   [o.maxPixels=16000000]  scale is reduced to stay within this budget and GPU limits
+ * @returns {Promise<Blob>} image/png. blob.captureInfo = { width, height, scale, requestedScale }
+ */
+async function captureView({ renderer, scene, camera, scale = 2, overlay, render, maxPixels = DEFAULT_MAX_PIXELS } = {}) {
+  if (!renderer || !scene || !camera) throw new Error("captureView needs renderer, scene and camera.");
+
+  const canvas3d = renderer.domElement;
+  const draw = typeof render === "function"
+    ? () => render(renderer, scene, camera)
+    : () => renderer.render(scene, camera);
+
+  /* ---- remember everything we will change ---- */
+  const size = renderer.getSize(vec2());
+  const cssW = size.x, cssH = size.y;
+  const pr = renderer.getPixelRatio();
+  const baseW = canvas3d.width, baseH = canvas3d.height;        // current drawing-buffer size
+  const viewport = renderer.getViewport(vec4());
+  const scissor = renderer.getScissor(vec4());
+  const scissorTest = renderer.getScissorTest();
+  const aspect = camera.isPerspectiveCamera ? camera.aspect : null;
+
+  const eff = fitScale(renderer, baseW, baseH, scale, maxPixels);
+  const W = Math.max(1, Math.round(baseW * eff));
+  const H = Math.max(1, Math.round(baseH * eff));
+
+  const out = document.createElement("canvas");
+  out.width = W;
+  out.height = H;
+  const ctx = out.getContext("2d");
+  if (!ctx) throw new Error("Could not create a 2D canvas for the screenshot.");
+
+  const setBuffer = (w, h, ratio) => {
+    // pixel ratio 1 with an explicit size gives an exact W x H buffer; style is never touched
+    if (typeof renderer.setDrawingBufferSize === "function") renderer.setDrawingBufferSize(w, h, ratio);
+    else { renderer.setPixelRatio(ratio); renderer.setSize(w, h, false); }
+  };
+
+  try {
+    setBuffer(W, H, 1);
+    renderer.setScissorTest(false);
+    renderer.setViewport(0, 0, W, H);
+    if (aspect !== null) { camera.aspect = W / H; camera.updateProjectionMatrix(); }
+
+    draw();
+    // Copy NOW, in the same task as the render (works without preserveDrawingBuffer).
+    ctx.drawImage(canvas3d, 0, 0, W, H);
+  } finally {
+    /* ---- restore everything, then repaint the live view ---- */
+    setBuffer(cssW, cssH, pr);
+    renderer.setViewport(viewport.x, viewport.y, viewport.z, viewport.w);
+    renderer.setScissor(scissor.x, scissor.y, scissor.z, scissor.w);
+    renderer.setScissorTest(scissorTest);
+    if (aspect !== null) { camera.aspect = aspect; camera.updateProjectionMatrix(); }
+    try { draw(); } catch (e) { /* the app's own loop will repaint */ }
+  }
+
+  /* ---- overlay, sized in "CSS pixels of the original view" so it matches the app's look ---- */
+  if (overlay) drawOverlay(ctx, W, H, W / Math.max(1, cssW), overlay);
+
+  const blob = await canvasToBlob(out);
+  try { blob.captureInfo = { width: W, height: H, scale: eff, requestedScale: scale }; } catch (e) { /* ignore */ }
+  return blob;
+}
+
+/* ---------- overlay ---------- */
+
+function roundRect(ctx, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function formatDate(d) {
+  if (d === true) d = new Date();
+  if (d instanceof Date) {
+    try { return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }); }
+    catch (e) { return d.toISOString().slice(0, 10); }
+  }
+  return String(d);
+}
+
+/** Draw text with manual letter spacing (canvas letterSpacing is not in every Safari). */
+function spacedWidth(ctx, text, tracking) {
+  let w = 0;
+  for (const ch of text) w += ctx.measureText(ch).width + tracking;
+  return w - tracking;
+}
+function drawSpaced(ctx, text, x, y, tracking) {
+  let cx = x;
+  for (const ch of text) { ctx.fillText(ch, cx, y); cx += ctx.measureText(ch).width + tracking; }
+}
+
+function drawOverlay(ctx, W, H, u, overlay) {
+  const dark = overlay.theme === "dark";
+  const panel = dark ? "rgba(23, 27, 31, 0.86)" : "rgba(255, 255, 255, 0.88)";
+  const edge = dark ? "rgba(255, 255, 255, 0.14)" : "rgba(16, 20, 26, 0.14)";
+  const ink = dark ? "#e7eaee" : "#1b1f24";
+  const ink2 = dark ? "#a5adb7" : "#4e5763";
+  const m = 16 * u;           // outer margin
+  const pad = 10 * u;         // panel padding
+  const radius = 8 * u;
+
+  ctx.save();
+  ctx.textBaseline = "alphabetic";
+  ctx.lineWidth = Math.max(1, u);
+
+  const box = (x, y, w, h) => {
+    roundRect(ctx, x, y, w, h, radius);
+    ctx.fillStyle = panel; ctx.fill();
+    ctx.strokeStyle = edge; ctx.stroke();
+  };
+
+  /* title + date, top-left */
+  const title = overlay.title ? String(overlay.title) : "";
+  const date = overlay.date ? formatDate(overlay.date) : "";
+  if (title || date) {
+    const tSize = 17 * u, dSize = 12 * u;
+    ctx.font = `600 ${tSize}px ${FONT_STACK}`;
+    const tw = title ? ctx.measureText(title).width : 0;
+    ctx.font = `400 ${dSize}px ${FONT_STACK}`;
+    const dw = date ? ctx.measureText(date).width : 0;
+    const w = Math.max(tw, dw) + pad * 2;
+    const h = pad * 2 + (title ? tSize : 0) + (title && date ? 5 * u : 0) + (date ? dSize : 0);
+    box(m, m, w, h);
+    let y = m + pad;
+    if (title) {
+      y += tSize * 0.82;
+      ctx.font = `600 ${tSize}px ${FONT_STACK}`;
+      ctx.fillStyle = ink; ctx.fillText(title, m + pad, y);
+      y += tSize * 0.18 + 5 * u;
+    }
+    if (date) {
+      y += dSize * 0.82;
+      ctx.font = `400 ${dSize}px ${FONT_STACK}`;
+      ctx.fillStyle = ink2; ctx.fillText(date, m + pad, y);
+    }
+  }
+
+  /* metrics, bottom-left */
+  const rows = Array.isArray(overlay.metrics) ? overlay.metrics.filter((r) => Array.isArray(r) && r.length >= 2) : [];
+  if (rows.length) {
+    const size = 12.5 * u, rowH = 19 * u, gap = 18 * u;
+    ctx.font = `400 ${size}px ${FONT_STACK}`;
+    let lw = 0;
+    for (const [l] of rows) lw = Math.max(lw, ctx.measureText(String(l)).width);
+    ctx.font = `600 ${size}px ${FONT_STACK}`;
+    let vw = 0;
+    for (const [, v] of rows) vw = Math.max(vw, ctx.measureText(String(v)).width);
+    const w = pad * 2 + lw + gap + vw;
+    const h = pad * 2 + rowH * rows.length - (rowH - size);
+    const x = m, y = H - m - h;
+    box(x, y, w, h);
+    rows.forEach(([l, v], i) => {
+      const by = y + pad + size * 0.9 + i * rowH;
+      ctx.textAlign = "left";
+      ctx.font = `400 ${size}px ${FONT_STACK}`;
+      ctx.fillStyle = ink2; ctx.fillText(String(l), x + pad, by);
+      ctx.textAlign = "right";
+      ctx.font = `600 ${size}px ${FONT_STACK}`;
+      ctx.fillStyle = ink; ctx.fillText(String(v), x + w - pad, by);
+    });
+    ctx.textAlign = "left";
+  }
+
+  /* mark, bottom-right */
+  if (overlay.mark) {
+    const text = String(overlay.mark).toUpperCase();
+    const size = 11 * u, tracking = 3 * u, padX = 10 * u, padY = 7 * u;
+    ctx.font = `600 ${size}px ${FONT_STACK}`;
+    const tw = spacedWidth(ctx, text, tracking);
+    const w = tw + padX * 2, h = size + padY * 2;
+    const x = W - m - w, y = H - m - h;
+    box(x, y, w, h);
+    ctx.fillStyle = ink2;
+    drawSpaced(ctx, text, x + padX, y + padY + size * 0.82, tracking);
+  }
+
+  ctx.restore();
+}
+
+/* ---------- output ---------- */
+
+function canvasToBlob(canvas) {
+  return new Promise((resolve, reject) => {
+    const fallback = () => {
+      try {
+        const url = canvas.toDataURL("image/png");
+        const bin = atob(url.split(",")[1]);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        resolve(new Blob([bytes], { type: "image/png" }));
+      } catch (e) {
+        reject(new Error("The screenshot could not be created (image too large for this device)."));
+      }
+    };
+    try {
+      canvas.toBlob((b) => (b ? resolve(b) : fallback()), "image/png");
+    } catch (e) { fallback(); }
+  });
+}
+
+function isTouchApple() {
+  const ua = navigator.userAgent || "";
+  if (/iPad|iPhone|iPod/.test(ua)) return true;
+  // iPadOS reports a Mac user agent; it is the only "Mac" with a touch screen
+  return /Mac/.test(navigator.platform || ua) && (navigator.maxTouchPoints || 0) > 1;
+}
+
+function download(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);   // revoking sooner can break iOS downloads
+}
+
+/**
+ * iPad (touch Apple device): share sheet with the PNG file. Everything else, or
+ * if sharing is unavailable/fails: download through a temporary <a download>.
+ * A cancelled share sheet (AbortError) does nothing.
+ *
+ * @param {Blob}   blob
+ * @param {string} filename
+ * @param {object} [opts]  { share: "auto" | "always" | "never" }  "auto" = only on iPad/iPhone
+ * @returns {Promise<"shared"|"cancelled"|"downloaded">}
+ */
+async function deliverImage(blob, filename, { share = "auto" } = {}) {
+  const useShare = share === "always" || (share === "auto" && isTouchApple());
+  if (useShare && typeof navigator.share === "function" && typeof navigator.canShare === "function") {
+    try {
+      const file = new File([blob], filename, { type: blob.type || "image/png" });
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: filename });
+        return "shared";
+      }
+    } catch (e) {
+      if (e && e.name === "AbortError") return "cancelled";
+      // NotAllowedError (user activation expired) or anything else: fall through to download
+    }
+  }
+  download(blob, filename);
+  return "downloaded";
+}
+
+/** `title-YYYY-MM-DD.png`, safe for file systems. */
+function screenshotFilename(name = "tower", date = new Date()) {
+  const p = (n) => String(n).padStart(2, "0");
+  const slug = String(name).trim().replace(/[^\w\-]+/g, "-").replace(/^-+|-+$/g, "").toLowerCase() || "view";
+  return `${slug}-${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}.png`;
+}
+
+return { DEFAULT_MAX_PIXELS, captureView, deliverImage, screenshotFilename };
+})();
+
+
+const CONFIG = {
+  sizes: [500, 1000, 1500, 2000, 3000],
+  defaultSize: 1000,
+  scales: [1, 2, 3, 5],
+  contours: [0, 2, 5],            // ft; 0 = off
+  recentKey: 'sitemodel.recent.v1',
+  recentMax: 8,
+  demFtPerPixel: 3,               // about 1 pixel per 3 ft
+  demMaxPixels: 1024,
+  demMargin: 50,                  // ft around the site square
+  zoomCap: { buildings: 14, transportation: 14, base: 13 },
+  layers: [
+    ['ground', 'Ground'], ['buildings', 'Buildings'], ['roads', 'Roads'],
+    ['walks', 'Walks'], ['trees', 'Trees'], ['water', 'Water'],
+  ],
+  steps: [
+    ['address', 'Address'], ['release', 'Overture release'], ['ground', 'Ground'],
+    ['buildings', 'Buildings'], ['roads', 'Roads'], ['base', 'Trees and water'],
+  ],
+};
+
+const $ = (id) => document.getElementById(id);
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const rad = THREE.MathUtils.degToRad;
+const grouped = (n, digits = 0) => Number(n).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+const fmtFt = (v, d = 1) => (Number.isFinite(v) ? `${grouped(v, d)} ft` : '-');
+
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k === 'class') el.className = v;
+    else if (k === 'html') el.innerHTML = v;
+    else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2).toLowerCase(), v);
+    else el.setAttribute(k, v === true ? '' : v);
+  }
+  for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid.nodeType ? kid : document.createTextNode(kid));
+  return el;
+}
+
+const ICONS = {
+  map: '<svg viewBox="0 0 24 24"><path d="M9 4L3 6.5v13L9 17l6 3 6-2.5v-13L15 7z"/><path d="M9 4v13M15 7v13"/></svg>',
+  download: '<svg viewBox="0 0 24 24"><path d="M12 4v11"/><path d="M8 11l4 4 4-4"/><path d="M5 19h14"/></svg>',
+  camera: '<svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
+  chev: '<svg class="chev" viewBox="0 0 14 14" fill="none" stroke="currentColor"><path d="M3 5l4 4 4-4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+};
+
+/** Reads and writes that never throw (private mode, blocked storage). */
+const Local = {
+  get(key, fallback) { try { const v = localStorage.getItem(key); return v == null ? fallback : JSON.parse(v); } catch (e) { return fallback; } },
+  set(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch (e) { return false; } },
+};
+
+const Toast = (() => {
+  function show(message, kind = '', ms = 3600) {
+    const host = $('toasts');
+    const t = h('div', { class: `toast ${kind}`.trim() }, message);
+    t.addEventListener('click', () => t.remove());
+    host.append(t);
+    while (host.children.length > 4) host.firstChild.remove();
+    if (ms > 0) setTimeout(() => t.remove(), ms);
+    return t;
+  }
+  return { show };
+})();
+
+const Pop = (() => {
+  let cur = null;
+  function close() {
+    if (!cur) return;
+    const c = cur; cur = null;
+    c.el.remove();
+    document.removeEventListener('pointerdown', c.onDown, true);
+    document.removeEventListener('keydown', c.onKey, true);
+    c.anchor.setAttribute('aria-expanded', 'false');
+  }
+  /** Opens `el` under `anchor`. A second call for the same anchor closes it. */
+  function open(anchor, el, { align = 'right' } = {}) {
+    const same = cur && cur.anchor === anchor;
+    close();
+    if (same) return false;
+    el.classList.add('pop');
+    el.style.visibility = 'hidden';
+    document.body.append(el);
+    const r = anchor.getBoundingClientRect(), w = el.offsetWidth;
+    let left = align === 'right' ? r.right - w : r.left;
+    left = clamp(left, 8, Math.max(8, window.innerWidth - w - 8));
+    const top = Math.min(r.bottom + 6, window.innerHeight - 120);
+    el.style.left = `${left}px`; el.style.top = `${top}px`;
+    el.style.visibility = '';
+    anchor.setAttribute('aria-expanded', 'true');
+    const onDown = (e) => { if (!el.contains(e.target) && !anchor.contains(e.target)) close(); };
+    const onKey = (e) => { if (e.key === 'Escape') { close(); anchor.focus(); } };
+    document.addEventListener('pointerdown', onDown, true);
+    document.addEventListener('keydown', onKey, true);
+    cur = { el, anchor, onDown, onKey };
+    return true;
+  }
+  return { open, close };
+})();
+
+/* ==========================================================================
+   PIPELINE
+   Address -> frame -> (ground DEM | Overture release -> three PMTiles themes) -> model.
+   Network functions take a fetch function so the in-page tests can inject fakes.
+   A failure in one Overture theme marks that step and the rest still renders.
+   A ground failure stops the run with a clear message.
+   ========================================================================== */
+const Pipeline = (() => {
+  const { geocode, parseCoordinates } = GeocodeMod;
+  const { makeFrame, tilesForBBox } = GeoMod;
+  const { demRequestUrl, readFloatTiff } = TiffMod;
+  const { latestOvertureRelease, openPMTiles, OVERTURE_BUCKET } = PMTilesMod;
+  const { decodeTile } = MvtMod;
+  const { buildModel, buildRoads, featuresFromTiles, summarize } = ModelMod;
+
+  const errText = (e) => (e && e.message ? e.message : String(e));
+  const netText = (e, what) => (e instanceof TypeError ? `Could not reach the ${what}. Check the connection and try again.` : errText(e));
+  const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+
+  /** DEM for the site box plus margin; about 1 pixel per 3 ft, at most 1024 per side. */
+  async function fetchDem(frame, fetchFn) {
+    const px = clamp(Math.ceil((frame.size + 2 * CONFIG.demMargin) / CONFIG.demFtPerPixel), 32, CONFIG.demMaxPixels);
+    const url = demRequestUrl(frame.bbox(CONFIG.demMargin), px, px);
+    let res;
+    try { res = await fetchFn(url); } catch (e) { throw new Error(netText(e, 'USGS elevation service')); }
+    if (!res.ok) throw new Error(`The USGS elevation service answered HTTP ${res.status}.`);
+    const buf = await res.arrayBuffer();
+    try { return readFloatTiff(buf); } catch (e) { throw new Error(`The elevation data could not be read (${errText(e)}).`); }
+  }
+
+  /** Every tile of one Overture theme that touches the site square, decoded. */
+  async function fetchTheme(release, theme, frame, fetchFn) {
+    const pm = openPMTiles(`${OVERTURE_BUCKET}/tiles/${release}/${theme}.pmtiles`, { fetchFn });
+    let header;
+    try { header = await pm.header(); } catch (e) { throw new Error(netText(e, 'Overture map data')); }
+    const z = Math.min(header.maxZoom, CONFIG.zoomCap[theme]);
+    const list = tilesForBBox(frame.bbox(0), z);
+    const out = [];
+    await Promise.all(list.map(async (t) => {
+      let bytes;
+      try { bytes = await pm.getTile(t.z, t.x, t.y); } catch (e) { throw new Error(netText(e, 'Overture map data')); }
+      if (bytes) out.push({ z: t.z, x: t.x, y: t.y, layers: decodeTile(bytes) });
+    }));
+    out.sort((a, b) => a.y - b.y || a.x - b.x);
+    return out;
+  }
+
+  const THEMES = [['buildings', 'buildings'], ['roads', 'transportation'], ['base', 'base']];   // [step, theme]
+
+  /**
+   * @param {{text:string, size:number, loc?:{lat:number,lon:number,label:string}}} req
+   *   `loc` skips the address lookup (used by the recent-sites list).
+   * @param {(step:string, status:'pending'|'working'|'done'|'error', message?:string)=>void} report
+   * @param {{fetchFn?:Function, walks?:boolean}} [opts]
+   * @returns {Promise<{loc, frame, dem, tiles, release, model, timings}>}
+   */
+  async function run(req, report, { fetchFn = (u, o) => fetch(u, o), walks = false } = {}) {
+    const t0 = now(), timings = {};
+    const mark = (k) => { timings[k] = Math.round(now() - t0); };
+    for (const [k] of CONFIG.steps) report(k, 'pending');
+
+    // 1. address
+    report('address', 'working', req.loc ? 'Saved site' : 'Looking up the address');
+    let loc;
+    try { loc = req.loc || await geocode(req.text, { fetchFn }); } catch (e) {
+      const msg = e instanceof TypeError ? 'Could not reach the address service. Check the connection.' : errText(e);
+      report('address', 'error', msg);
+      throw new Error(msg);
+    }
+    mark('address');
+    report('address', 'done', `${loc.lat.toFixed(5)}, ${loc.lon.toFixed(5)}`);
+    const frame = makeFrame(loc.lat, loc.lon, req.size);
+
+    // 2. in parallel: ground, release then three themes
+    report('ground', 'working', 'Loading elevation');
+    const demP = fetchDem(frame, fetchFn).then((dem) => { mark('dem'); return { ok: true, dem }; }, (e) => ({ ok: false, error: errText(e) }));
+
+    report('release', 'working', 'Finding the newest release');
+    const relP = latestOvertureRelease({ fetchFn }).then((r) => { mark('release'); report('release', 'done', r); return r; });
+
+    const themeP = THEMES.map(([step, theme]) => {
+      report(step, 'working', 'Waiting for the release');
+      return relP.then(async (release) => {
+        report(step, 'working', 'Loading map tiles');
+        const tiles = await fetchTheme(release, theme, frame, fetchFn);
+        mark(theme);
+        report(step, 'working', `${tiles.length} ${tiles.length === 1 ? 'tile' : 'tiles'} loaded`);
+        return { ok: true, tiles };
+      }).catch((e) => { report(step, 'error', errText(e)); return { ok: false, tiles: [], error: errText(e) }; });
+    });
+
+    const [demR, release, ...themeR] = await Promise.all([demP, relP, ...themeP]);
+    if (!demR.ok) {
+      report('ground', 'error', demR.error);
+      THEMES.forEach(([step], i) => report(step, themeR[i].ok ? 'pending' : 'error', themeR[i].ok ? 'Not built, no ground data' : themeR[i].error));
+      throw new Error(`Ground elevation could not be loaded. ${demR.error}`);
+    }
+    const tiles = themeR.flatMap((r) => r.tiles);
+
+    // 3. model
+    THEMES.forEach(([step], i) => { if (themeR[i].ok) report(step, 'working', 'Building the model'); });
+    report('ground', 'working', 'Building the ground');
+    await new Promise((r) => setTimeout(r, 0));          // let the progress list paint before the model blocks the thread
+    const tm = now();
+    let model;
+    try { model = buildModel(frame, { dem: demR.dem, tiles, walks }); } catch (e) {
+      report('ground', 'error', errText(e));
+      throw new Error(`Ground elevation could not be used. ${errText(e)}`);
+    }
+    timings.model = Math.round(now() - tm);
+    mark('total');
+
+    const g = model.ground, s = summarize(model), E = model.errors || {};
+    report('ground', 'done', `${g.n} by ${g.n} points, ${grouped(s.groundMin, 1)} to ${grouped(s.groundMax, 1)} ft`);
+    const fin = (step, ok, err, msg) => {
+      if (!ok) return;                                 // already marked as an error
+      if (err) report(step, 'error', err); else report(step, 'done', msg);
+    };
+    fin('buildings', themeR[0].ok, E.features || E.buildings, `${s.buildings} buildings${s.estimated ? `, ${s.estimated} with an estimated height` : ''}`);
+    fin('roads', themeR[1].ok, E.features || E.roads, `${model.roads.segments.length} road segments, ${grouped(s.roadsFt)} ft`);
+    fin('base', themeR[2].ok, E.features || E.trees || E.water, `${s.trees} trees, ${s.waterAreas} water ${s.waterAreas === 1 ? 'area' : 'areas'}`);
+
+    return { loc, frame, dem: demR.dem, tiles, release, model, timings, failed: THEMES.filter((t, i) => !themeR[i].ok).map((t) => t[0]) };
+  }
+
+  /** Rebuild roads with walks from the cached tiles (no refetch). Returns the new roads object. */
+  function buildWalks(result) {
+    const features = result.features || (result.features = featuresFromTiles(result.tiles, result.frame));
+    return buildRoads(features, result.frame, result.model.ground, { walks: true });
+  }
+
+  return { run, buildWalks, fetchDem, fetchTheme, parseCoordinates };
+})();
+
+/* ==========================================================================
+   SCENE
+   Three.js view of the site model. Same render style as the Tower Generator:
+   white model, dark edges, soft hemisphere + sun light, colors read from the CSS tokens.
+   Plan coordinates (x east, y north, elevation up) map to world [x, elevation, -y]
+   (north is world -z). planToWorld() and planMatrix() are the only places that write the mapping.
+   Vertical scale is the root group's y scale about the ground minimum, so buildings stay on the ground.
+   Everything draped on the ground (roads, walks, water lines, trees, outline) samples the ground MESH
+   (same triangles as the drawn surface), so nothing floats or sinks.
+   ========================================================================== */
+function planToWorld(x, y, elev = 0) { return [x, elev, -y]; }
+const worldVec = (x, y, e = 0) => new THREE.Vector3(...planToWorld(x, y, e));
+/** Matrix for geometry authored in plan space (shape x, y; extrusion up = elevation), lifted by `elev`. */
+function planMatrix(elev = 0) {
+  return new THREE.Matrix4().set(
+    1, 0, 0, 0,
+    0, 0, 1, elev,
+    0, -1, 0, 0,
+    0, 0, 0, 1);
+}
+
+const Scene = (() => {
+  const FOV = 30;
+  const tanHalfFov = Math.tan(rad(FOV) / 2);
+  const FIT_MARGIN = 0.04;
+  const EDGE_ANGLE = 30;
+  const reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  let host, renderer, scene, cam, controls, root, sun, hemi;
+  let needsRender = true, capturing = false, tween = null, sceneRadius = 500;
+  let site = null;                          // { model, S, gmin, gmax, top, meshAt }
+  let vscale = 1, contour = 0;
+  const cameraListeners = [];
+  const layerVisible = { ground: true, buildings: true, roads: true, walks: false, trees: true, water: true };
+  const G = {};                             // layer groups
+  const M = {};                             // materials
+  const info = { buildings: 0, buildingMeshes: 0, trees: 0, waterAreas: 0, roadTriangles: 0, walkTriangles: 0, triangles: 0 };
+  const contourU = { uInterval: { value: 2 }, uOn: { value: 0 }, uContourColor: { value: new THREE.Color('#3a424a') } };
+
+  const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const cssColor = (name, fallback = '#888') => new THREE.Color(css(name) || fallback);
+
+  /* ---- materials ----------------------------------------------------------- */
+  function makeMaterials() {
+    const std = (extra = {}) => new THREE.MeshStandardMaterial({ roughness: 0.94, metalness: 0, ...extra });
+    M.ground = std({ vertexColors: true, roughness: 1, polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 2 });
+    M.ground.onBeforeCompile = (shader) => {
+      Object.assign(shader.uniforms, contourU);
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying float vElev;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvElev = position.y;');
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying float vElev; uniform float uInterval; uniform float uOn; uniform vec3 uContourColor;')
+        .replace('#include <color_fragment>', `#include <color_fragment>
+          {
+            float c1 = vElev / uInterval;
+            float w1 = max(fwidth(c1), 1e-5);
+            float d1 = abs(fract(c1 - 0.5) - 0.5) / w1;
+            float m1 = (1.0 - smoothstep(0.3, 0.95, d1)) * (1.0 - smoothstep(0.22, 0.5, w1));
+            float c5 = c1 / 5.0;
+            float w5 = max(fwidth(c5), 1e-5);
+            float d5 = abs(fract(c5 - 0.5) - 0.5) / w5;
+            float m5 = (1.0 - smoothstep(0.85, 1.6, d5)) * (1.0 - smoothstep(0.22, 0.5, w5));
+            float a = max(m1 * 0.5, m5 * 0.9) * uOn;
+            diffuseColor.rgb = mix(diffuseColor.rgb, uContourColor, a);
+          }`);
+    };
+    M.ground.customProgramCacheKey = () => 'site-ground-contour';
+    M.skirt = std({ roughness: 1 });
+    M.building = std();
+    M.estimate = std();
+    M.edge = new THREE.LineBasicMaterial();
+    M.road = std({ roughness: 1, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    M.walk = std({ roughness: 1, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+    M.water = std({ roughness: 0.35, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+    M.waterLine = new THREE.LineBasicMaterial();
+    M.canopy = std({ flatShading: true });
+    M.trunk = std();
+    M.site = new THREE.LineBasicMaterial();
+  }
+  function applyTheme() {
+    if (!scene) return;
+    scene.background = cssColor('--scene-sky');
+    M.skirt.color.copy(cssColor('--scene-skirt'));
+    M.building.color.copy(cssColor('--scene-model'));
+    M.estimate.color.copy(cssColor('--scene-est'));
+    M.edge.color.copy(cssColor('--scene-edge'));
+    M.road.color.copy(cssColor('--scene-road'));
+    M.walk.color.copy(cssColor('--scene-walk'));
+    M.water.color.copy(cssColor('--scene-water'));
+    M.waterLine.color.copy(cssColor('--scene-water'));
+    M.canopy.color.copy(cssColor('--scene-tree'));
+    M.trunk.color.copy(cssColor('--scene-trunk'));
+    M.site.color.copy(cssColor('--scene-site'));
+    contourU.uContourColor.value.copy(cssColor('--scene-contour'));
+    M.ground.color.set(0xffffff);
+    paintGround();
+    needsRender = true;
+  }
+
+  /* ---- scene ------------------------------------------------------------------ */
+  function buildScene() {
+    scene = new THREE.Scene();
+    hemi = new THREE.HemisphereLight(0xffffff, 0xb4bac2, 2.0);
+    sun = new THREE.DirectionalLight(0xffffff, 1.8);
+    scene.add(hemi, sun, sun.target);
+    root = new THREE.Group();
+    scene.add(root);
+    for (const k of ['ground', 'site', 'buildings', 'roads', 'walks', 'trees', 'water']) {
+      G[k] = new THREE.Group();
+      G[k].visible = k === 'site' ? true : !!layerVisible[k];
+      root.add(G[k]);
+    }
+  }
+
+  function clearGroup(g) {
+    for (const o of [...g.children]) {
+      g.remove(o);
+      if (o.geometry) o.geometry.dispose();
+      if (o.isInstancedMesh) o.dispose();
+    }
+  }
+
+  /* ---- ground mesh -------------------------------------------------------------- */
+  let groundGeo = null, skirtGeo = null, skirtBottom = [];
+
+  /** Elevation of the drawn ground surface at (x, y): same two triangles per cell as buildGroundMesh. */
+  function makeMeshAt(ground) {
+    const { n, spacing: d, z } = ground, L = (n - 1) * d;
+    return (x, y) => {
+      const cx = clamp(x, 0, L) / d, cy = clamp(y, 0, L) / d;
+      const i = Math.min(Math.floor(cx), n - 2), j = Math.min(Math.floor(cy), n - 2);
+      const u = cx - i, v = cy - j, o = j * n + i;
+      const za = z[o], zb = z[o + 1], zc = z[o + n + 1], zd = z[o + n];
+      return u >= v ? za + u * (zb - za) + v * (zc - zb) : za + u * (zc - zd) + v * (zd - za);
+    };
+  }
+
+  function buildGroundMesh(ground) {
+    const { n, xs, ys, z } = ground;
+    const pos = new Float32Array(n * n * 3);
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+      const k = (j * n + i) * 3;
+      pos[k] = xs[i]; pos[k + 1] = z[j * n + i]; pos[k + 2] = -ys[j];
+    }
+    const idx = new Uint32Array((n - 1) * (n - 1) * 6);
+    let q = 0;
+    for (let j = 0; j < n - 1; j++) for (let i = 0; i < n - 1; i++) {
+      const a = j * n + i, b = a + 1, c = a + n + 1, d = a + n;
+      idx[q++] = a; idx[q++] = b; idx[q++] = c;
+      idx[q++] = a; idx[q++] = c; idx[q++] = d;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * n * 3), 3));
+    geo.setIndex(new THREE.BufferAttribute(idx, 1));
+    geo.computeVertexNormals();
+    groundGeo = geo;
+    const mesh = new THREE.Mesh(geo, M.ground);
+    mesh.userData.kind = 'ground';
+    return mesh;
+  }
+
+  function paintGround() {
+    if (!groundGeo || !site) return;
+    const lo = cssColor('--scene-terrain-lo'), hi = cssColor('--scene-terrain-hi');
+    const { z } = site.model.ground, col = groundGeo.getAttribute('color');
+    const range = site.gmax - site.gmin, c = new THREE.Color();
+    for (let k = 0; k < z.length; k++) {
+      c.copy(lo).lerp(hi, range > 0.5 ? (z[k] - site.gmin) / range : 0.5);
+      col.setXYZ(k, c.r, c.g, c.b);
+    }
+    col.needsUpdate = true;
+  }
+
+  /** Thin plate under the ground so the site reads as a physical model. Bottom depth stays constant on screen. */
+  function buildSkirt(ground) {
+    const { n, xs, ys, z } = ground;
+    const sides = [
+      (k) => [xs[k], ys[0], z[k], 0, -1],                         // south, travelling east
+      (k) => [xs[n - 1], ys[k], z[k * n + n - 1], 1, 0],          // east, travelling north
+      (k) => [xs[n - 1 - k], ys[n - 1], z[(n - 1) * n + n - 1 - k], 0, 1],   // north, travelling west
+      (k) => [xs[0], ys[n - 1 - k], z[(n - 1 - k) * n], -1, 0],   // west, travelling south
+    ];
+    const pos = [], nor = [], idx = [];
+    skirtBottom = [];
+    for (const side of sides) {
+      const base = pos.length / 3;
+      for (let k = 0; k < n; k++) {
+        const [x, y, e, nx, ny] = side(k);
+        pos.push(x, e, -y, x, e, -y);                 // top, bottom (bottom is set by setSkirtBottom)
+        nor.push(nx, 0, -ny, nx, 0, -ny);
+        skirtBottom.push(pos.length / 3 - 1);
+      }
+      for (let k = 0; k < n - 1; k++) {
+        const t0 = base + 2 * k, b0 = t0 + 1, t1 = t0 + 2, b1 = t0 + 3;
+        idx.push(t0, b0, t1, t1, b0, b1);
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+    geo.setIndex(idx);
+    skirtGeo = geo;
+    setSkirtBottom();
+    return new THREE.Mesh(geo, M.skirt);
+  }
+  function setSkirtBottom() {
+    if (!skirtGeo || !site) return;
+    const yb = site.gmin - Math.max(8, site.S * 0.03) / vscale;
+    const p = skirtGeo.getAttribute('position');
+    for (const k of skirtBottom) p.setY(k, yb);
+    p.needsUpdate = true;
+    skirtGeo.computeBoundingSphere();
+  }
+
+  function buildOutline(ground, meshAt) {
+    const { n, xs, ys } = ground, pts = [];
+    const add = (x, y) => pts.push(worldVec(x, y, meshAt(x, y) + 0.6));
+    for (let k = 0; k < n - 1; k++) add(xs[k], ys[0]);
+    for (let k = 0; k < n - 1; k++) add(xs[n - 1], ys[k]);
+    for (let k = n - 1; k > 0; k--) add(xs[k], ys[n - 1]);
+    for (let k = n - 1; k > 0; k--) add(xs[0], ys[k]);
+    return new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts), M.site);
+  }
+
+  /* ---- buildings ------------------------------------------------------------------ */
+  function buildBuildings(buildings) {
+    const data = [], est = [];
+    let count = 0;
+    for (const b of buildings) {
+      try {
+        if (!b.ring || b.ring.length < 3) continue;
+        const shape = new THREE.Shape(b.ring.map((q) => new THREE.Vector2(q[0], q[1])));
+        for (const hole of b.holes || []) if (hole.length >= 3) shape.holes.push(new THREE.Path(hole.map((q) => new THREE.Vector2(q[0], q[1]))));
+        const geo = new THREE.ExtrudeGeometry(shape, { depth: b.height + 1, bevelEnabled: false, steps: 1, curveSegments: 1 });
+        geo.deleteAttribute('uv');
+        geo.applyMatrix4(planMatrix(b.base - 1));
+        (b.rule === 'estimate' ? est : data).push(geo);
+        count++;
+      } catch (e) { console.warn('building skipped', b && b.id, e); }
+    }
+    const out = [];
+    for (const [list, mat] of [[data, M.building], [est, M.estimate]]) {
+      if (!list.length) continue;
+      const merged = list.length === 1 ? list[0] : BufferGeometryUtils.mergeGeometries(list, false);
+      if (list.length > 1) list.forEach((g) => g.dispose());
+      const mesh = new THREE.Mesh(merged, mat);
+      mesh.userData.kind = 'buildings';
+      out.push(mesh, new THREE.LineSegments(new THREE.EdgesGeometry(merged, EDGE_ANGLE), M.edge));
+    }
+    info.buildings = count;
+    info.buildingMeshes = out.filter((o) => o.isMesh).length;
+    return out;
+  }
+
+  /* ---- draped polygons (roads, walks) and flat polygons (water) ------------------------ */
+  function densifyRing(ring, step) {
+    const out = [];
+    for (let i = 0; i < ring.length; i++) {
+      const a = ring[i], b = ring[(i + 1) % ring.length];
+      out.push(a);
+      const L = Math.hypot(b[0] - a[0], b[1] - a[1]), k = Math.ceil(L / step);
+      for (let s = 1; s < k; s++) out.push([a[0] + (b[0] - a[0]) * s / k, a[1] + (b[1] - a[1]) * s / k]);
+    }
+    return out;
+  }
+  /** Drops a repeated closing point (ShapeUtils would drop it and shift the hole indices). */
+  function trimRing(r) {
+    const o = r.slice();
+    while (o.length > 1 && o[0][0] === o[o.length - 1][0] && o[0][1] === o[o.length - 1][1]) o.pop();
+    return o;
+  }
+  /** polys: [{outer, holes}]. zOf(x, y) gives the elevation. Returns a BufferGeometry (or null). */
+  function polyGeometry(polys, zOf, step) {
+    const pos = [], idx = [];
+    for (const p of polys) {
+      try {
+        const outer = step ? densifyRing(trimRing(p.outer), step) : trimRing(p.outer);
+        const holes = (p.holes || []).map((hh) => (step ? densifyRing(trimRing(hh), step) : trimRing(hh)));
+        const tris = THREE.ShapeUtils.triangulateShape(outer.map((q) => new THREE.Vector2(q[0], q[1])), holes.map((hh) => hh.map((q) => new THREE.Vector2(q[0], q[1]))));
+        const all = outer.concat(...holes), base = pos.length / 3;
+        for (const q of all) pos.push(q[0], zOf(q[0], q[1]), -q[1]);
+        for (const [a, b, c] of tris) {
+          // world winding must face up
+          const ax = all[a][0], ay = all[a][1], bx = all[b][0], by = all[b][1], cx = all[c][0], cy = all[c][1];
+          const ccw = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax) > 0;      // plan CCW = facing up
+          if (ccw) idx.push(base + a, base + b, base + c); else idx.push(base + a, base + c, base + b);
+        }
+      } catch (e) { console.warn('polygon skipped', e); }
+    }
+    if (!idx.length) return null;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setIndex(idx);
+    geo.computeVertexNormals();
+    return geo;
+  }
+
+  function buildPavement(polys, mat, lift, key) {
+    if (!polys || !polys.length) { info[key] = 0; return []; }
+    const geo = polyGeometry(polys, (x, y) => site.meshAt(x, y) + lift, 10);
+    if (!geo) { info[key] = 0; return []; }
+    info[key] = geo.index.count / 3;
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.userData.kind = key;
+    return [mesh];
+  }
+
+  function buildWater(water) {
+    const out = [];
+    const areas = (water.areas || []).map((a) => ({ outer: a.ring, holes: a.holes, level: a.level }));
+    info.waterAreas = areas.length;
+    // one geometry per area: each has its own flat level
+    const geos = [];
+    for (const a of areas) {
+      const g = polyGeometry([a], () => a.level, 0);
+      if (g) geos.push(g);
+    }
+    if (geos.length) {
+      const merged = geos.length === 1 ? geos[0] : BufferGeometryUtils.mergeGeometries(geos, false);
+      if (geos.length > 1) geos.forEach((g) => g.dispose());
+      out.push(new THREE.Mesh(merged, M.water));
+    }
+    const seg = [];
+    for (const line of water.lines || []) {
+      for (let i = 1; i < line.length; i++) {
+        const a = line[i - 1], b = line[i];
+        seg.push(a[0], site.meshAt(a[0], a[1]) + 0.4, -a[1], b[0], site.meshAt(b[0], b[1]) + 0.4, -b[1]);
+      }
+    }
+    if (seg.length) {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(seg, 3));
+      out.push(new THREE.LineSegments(g, M.waterLine));
+    }
+    return out;
+  }
+
+  /* ---- trees: instanced low-poly canopy + thin trunk -------------------------------------- */
+  function buildTrees(trees) {
+    info.trees = trees.length;
+    if (!trees.length) return [];
+    const canopyGeo = new THREE.IcosahedronGeometry(1, 1);
+    const trunkGeo = new THREE.CylinderGeometry(0.55, 0.8, 1, 6);
+    trunkGeo.translate(0, 0.5, 0);
+    const canopy = new THREE.InstancedMesh(canopyGeo, M.canopy, trees.length);
+    const trunk = new THREE.InstancedMesh(trunkGeo, M.trunk, trees.length);
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
+    trees.forEach((t, i) => {
+      const e = site.meshAt(t.x, t.y), r = t.canopy / 2;
+      p.set(t.x, e + t.height - r, -t.y); s.set(r, r * 0.9, r);
+      canopy.setMatrixAt(i, m.compose(p, q, s));
+      p.set(t.x, e, -t.y); s.set(1, t.height - r, 1);
+      trunk.setMatrixAt(i, m.compose(p, q, s));
+    });
+    canopy.instanceMatrix.needsUpdate = trunk.instanceMatrix.needsUpdate = true;
+    canopy.computeBoundingSphere(); trunk.computeBoundingSphere();
+    return [trunk, canopy];
+  }
+
+  /* ---- model in, scene out --------------------------------------------------------------------- */
+  function countTriangles() {
+    let t = 0;
+    root.traverse((o) => {
+      if (!o.visible || !o.geometry) return;
+      const g = o.geometry, n = g.index ? g.index.count : g.getAttribute('position').count;
+      if (o.isInstancedMesh) t += (n / 3) * o.count; else if (o.isMesh) t += n / 3;
+    });
+    return Math.round(t);
+  }
+
+  function setModel(model) {
+    for (const k of Object.keys(G)) clearGroup(G[k]);
+    const ground = model.ground;
+    let top = ground.max;
+    for (const b of model.buildings) top = Math.max(top, b.top);
+    for (const t of model.trees) top = Math.max(top, t.z + t.height);
+    site = { model, S: model.frame.size, gmin: ground.min, gmax: ground.max, top, meshAt: makeMeshAt(ground) };
+    for (const k of ['buildings', 'trees', 'waterAreas', 'roadTriangles', 'walkTriangles']) info[k] = 0;
+    G.ground.add(buildGroundMesh(ground), buildSkirt(ground));
+    G.site.add(buildOutline(ground, site.meshAt));
+    for (const o of buildBuildings(model.buildings)) G.buildings.add(o);
+    for (const o of buildPavement(model.roads.pavement, M.road, 0.3, 'roadTriangles')) G.roads.add(o);
+    for (const o of buildPavement(model.roads.walks, M.walk, 0.4, 'walkTriangles')) G.walks.add(o);
+    for (const o of buildTrees(model.trees)) G.trees.add(o);
+    for (const o of buildWater(model.water)) G.water.add(o);
+    paintGround();
+    applyScale();
+    applyLayers();
+    info.triangles = countTriangles();
+    sceneRadius = Math.hypot(site.S, site.S, site.top - site.gmin) / 2;
+    updateSun();
+    fit(false);
+    needsRender = true;
+  }
+
+  /** Replace the walks layer after a rebuild with walks:true (the roads object comes from Pipeline.buildWalks). */
+  function setWalks(roads) {
+    if (!site) return;
+    site.model.roads = roads;
+    clearGroup(G.walks);
+    for (const o of buildPavement(roads.walks, M.walk, 0.4, 'walkTriangles')) G.walks.add(o);
+    info.triangles = countTriangles();
+    needsRender = true;
+  }
+
+  function applyLayers() {
+    for (const k of Object.keys(layerVisible)) if (G[k]) G[k].visible = !!layerVisible[k];
+    if (site) info.triangles = countTriangles();
+    needsRender = true;
+  }
+  function setLayer(name, on) { layerVisible[name] = !!on; applyLayers(); }
+
+  function applyScale() {
+    if (!site) { root.scale.y = vscale; root.position.y = 0; return; }
+    root.scale.y = vscale;
+    root.position.y = site.gmin * (1 - vscale);
+    setSkirtBottom();
+    needsRender = true;
+  }
+  function setVScale(v) {
+    const was = vscale;
+    vscale = v;
+    applyScale();
+    if (site && was !== v) refit();
+  }
+  function setContour(ft) {
+    contour = ft;
+    contourU.uOn.value = ft > 0 ? 1 : 0;
+    if (ft > 0) contourU.uInterval.value = ft;
+    needsRender = true;
+  }
+
+  function updateSun() {
+    const az = rad(150), alt = rad(46), R = Math.max(200, sceneRadius);
+    const dir = new THREE.Vector3(...planToWorld(Math.sin(az) * Math.cos(alt), Math.cos(az) * Math.cos(alt), Math.sin(alt)));
+    const c = site ? worldVec(site.S / 2, site.S / 2, site.gmin) : new THREE.Vector3();
+    sun.target.position.copy(c);
+    sun.position.copy(c).addScaledVector(dir, R * 3);
+    sun.target.updateMatrixWorld();
+  }
+
+  /* ---- camera & framing ------------------------------------------------------------------------- */
+  const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+  const hostAspect = () => Math.max(0.1, host.clientWidth) / Math.max(1, host.clientHeight);
+
+  /** Corners of what a view must show, in world space (vertical scale applied). */
+  function fitCorners() {
+    const S = site ? site.S : 1000, lo = site ? site.gmin : 0;
+    const hi = site ? lo + (site.top - lo) * vscale : 50;
+    const pts = [];
+    for (const x of [0, S]) for (const y of [0, S]) for (const e of [lo, Math.max(hi, lo + S * 0.02)]) pts.push(worldVec(x, y, e));
+    return pts;
+  }
+  /** Nearest distance (and look-at point) that puts all corners inside the view with a margin. */
+  function fitPersp(corners, dir, aspect) {
+    const fwd = dir.clone().negate();
+    const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0)).normalize();
+    const up = new THREE.Vector3().crossVectors(right, fwd).normalize();
+    const fit = 1 - 2 * FIT_MARGIN;
+    const tY = tanHalfFov, tX = tanHalfFov * aspect;
+    const target = corners.reduce((a, p) => a.add(p), new THREE.Vector3()).multiplyScalar(1 / corners.length);
+    const solve = () => {
+      let dist = 1;
+      for (const p of corners) {
+        const v = p.clone().sub(target), dd = v.dot(dir);
+        dist = Math.max(dist, dd + Math.abs(v.dot(right)) / (tX * fit), dd + Math.abs(v.dot(up)) / (tY * fit));
+      }
+      return dist;
+    };
+    let dist = solve();
+    for (let i = 0; i < 6; i++) {               // centre the projected box, then re-solve the distance
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      for (const p of corners) {
+        const v = p.clone().sub(target), z = dist - v.dot(dir);
+        const nx = v.dot(right) / (z * tX), ny = v.dot(up) / (z * tY);
+        x0 = Math.min(x0, nx); x1 = Math.max(x1, nx); y0 = Math.min(y0, ny); y1 = Math.max(y1, ny);
+      }
+      target.addScaledVector(right, ((x0 + x1) / 2) * tX * dist).addScaledVector(up, ((y0 + y1) / 2) * tY * dist);
+      dist = solve();
+    }
+    return { dist, target };
+  }
+
+  let preset = 'fit';
+  const presetListeners = [];
+  const setPreset = (p) => { preset = p; presetListeners.forEach((fn) => fn(p)); };
+  const VIEW_DIRS = {
+    fit: () => new THREE.Vector3(...planToWorld(Math.sin(rad(225)) * Math.cos(rad(32)), Math.cos(rad(225)) * Math.cos(rad(32)), Math.sin(rad(32)))).normalize(),   // 3/4 view from the southwest
+    plan: () => new THREE.Vector3(...planToWorld(0, -Math.sin(0.012), Math.cos(0.012))).normalize(),
+  };
+  function goTo(id, animate) {
+    if (!renderer) return;
+    setPreset(id);
+    const dir = VIEW_DIRS[id]();
+    const goal = fitPersp(fitCorners(), dir, hostAspect());
+    setCamera(goal.target, dir, goal.dist, animate);
+  }
+  function setCamera(target, dir, dist, animate) {
+    const apply = (t, d, r) => {
+      controls.target.copy(t);
+      cam.position.copy(t).addScaledVector(d, r);
+      controls.update();
+      needsRender = true;
+    };
+    tween = null;
+    if (!animate || reduceMotion) { apply(target, dir, dist); return; }
+    const curOffset = cam.position.clone().sub(controls.target);
+    const fromDir = curOffset.clone().normalize(), fromDist = Math.max(1, curOffset.length());
+    tween = {
+      t0: performance.now(), dur: 450, fromTarget: controls.target.clone(), toTarget: target.clone(),
+      fromDir, toDir: dir.clone(), fromDist, toDist: dist, apply,
+      q: new THREE.Quaternion().setFromUnitVectors(fromDir, dir),
+    };
+    needsRender = true;
+  }
+  function stepTween(now) {
+    const k = tween, p = clamp((now - k.t0) / k.dur, 0, 1), e = easeInOut(p);
+    const dir = k.fromDir.clone().applyQuaternion(new THREE.Quaternion().slerp(k.q, e)).normalize();
+    k.apply(k.fromTarget.clone().lerp(k.toTarget, e), dir, k.fromDist + (k.toDist - k.fromDist) * e);
+    if (p >= 1) tween = null;
+  }
+  const fit = (animate = true) => goTo('fit', animate);
+  const planView = (animate = true) => goTo('plan', animate);
+  function refit() { if (preset) goTo(preset, true); }
+
+  function updateClip() {
+    const dist = cam.position.distanceTo(controls.target);
+    cam.near = Math.max(0.5, dist * 0.01);
+    cam.far = dist * 20 + sceneRadius * 4 + 2000;
+    cam.updateProjectionMatrix();
+  }
+
+  function resize() {
+    if (!renderer) return;
+    const w = Math.max(1, host.clientWidth), hh = Math.max(1, host.clientHeight);
+    renderer.setSize(w, hh, false);
+    cam.aspect = w / hh;
+    cam.updateProjectionMatrix();
+    if (site && preset) goTo(preset, false);
+    needsRender = true;
+    renderer.render(scene, cam);
+  }
+
+  function frame(now) {
+    requestAnimationFrame(frame);
+    if (capturing) return;
+    if (tween) stepTween(now);
+    const moved = controls.update();
+    if (moved || needsRender) {
+      updateClip();
+      renderer.render(scene, cam);
+      needsRender = false;
+      cameraListeners.forEach((fn) => fn(cam));
+    }
+  }
+
+  /** Screenshot of what is on screen with the shared overlay. */
+  async function capture(overlay, scale = 2) {
+    if (!renderer) throw new Error('The 3D view is not available.');
+    capturing = true;
+    try { return await ShotMod.captureView({ renderer, scene, camera: cam, scale, overlay }); }
+    finally { capturing = false; needsRender = true; }
+  }
+
+  function init(hostEl) {
+    host = hostEl;
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    } catch (e) {
+      host.innerHTML = '<div class="gl-fail">WebGL is not available in this browser, so the 3D view cannot start.</div>';
+      renderer = null;
+      return false;
+    }
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    host.appendChild(renderer.domElement);
+    makeMaterials();
+    buildScene();
+    cam = new THREE.PerspectiveCamera(FOV, 1, 1, 100000);
+    cam.position.set(-900, 700, 900);
+    controls = new OrbitControls(cam, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.12;
+    controls.maxPolarAngle = Math.PI / 2 - 0.02;      // never below the ground
+    controls.minDistance = 15;
+    controls.maxDistance = 40000;
+    controls.screenSpacePanning = true;
+    controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+    controls.addEventListener('start', () => { tween = null; if (preset) setPreset(null); });
+    controls.addEventListener('change', () => { needsRender = true; });
+    new ResizeObserver(resize).observe(host);
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    if (mq.addEventListener) mq.addEventListener('change', applyTheme); else if (mq.addListener) mq.addListener(applyTheme);
+    renderer.domElement.addEventListener('webglcontextlost', (e) => e.preventDefault());
+    applyTheme();
+    updateSun();
+    resize();
+    requestAnimationFrame(frame);
+    return true;
+  }
+
+  return {
+    init, setModel, setWalks, setLayer, setVScale, setContour, fit, planView, capture,
+    onCamera: (fn) => cameraListeners.push(fn),
+    onPreset: (fn) => presetListeners.push(fn),
+    camera: () => cam,
+    ready: () => !!renderer,
+    hasSite: () => !!site,
+    info: () => ({ ...info, triangles: site ? countTriangles() : 0, vscale, contour, layers: { ...layerVisible }, preset, camDistance: cam ? cam.position.distanceTo(controls.target) : 0 }),
+    /** For tests: render now and read a pixel row to prove something was drawn. */
+    renderNow: () => { if (renderer) { updateClip(); renderer.render(scene, cam); } },
+    meshAt: (x, y) => (site ? site.meshAt(x, y) : 0),
+    groups: () => G,
+    drawCalls: () => (renderer ? renderer.info.render.calls : 0),
+  };
+})();
+
+/* ==========================================================================
+   UI
+   Top bar, control panel, progress list, metrics, downloads, screenshot,
+   recent sites and the bottom sheet (iPad portrait and phone).
+   ========================================================================== */
+const App = (() => {
+  const { googleMapsUrl, parseCoordinates } = GeocodeMod;
+  const { summarize } = ModelMod;
+  const { revitCsv, siteDxf, notesMarkdown, CREDITS } = ExportsMod;
+
+  const state = {
+    size: CONFIG.defaultSize,
+    layers: { ground: true, buildings: true, roads: true, walks: false, trees: true, water: true },
+    vscale: 1, contour: 0,
+    busy: false, runId: 0, t0: 0, timer: 0,
+    result: null, typed: '', elapsed: null,
+  };
+  const els = {};
+  const prefersDark = () => !!(window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+  const sheetQuery = window.matchMedia('(max-width: 899px), (orientation: portrait)');
+
+  /* ---- naming ------------------------------------------------------------------ */
+  function slugOf(r = state.result) {
+    const base = (state.typed || (r && r.loc.label) || 'site').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48).replace(/-+$/, '') || 'site';
+    return `${base}-${r ? r.frame.size : state.size}ft`;
+  }
+  const todayIso = () => { const d = new Date(), p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; };
+  function metaOf(r = state.result) {
+    return { address: state.typed || r.loc.label, lat: r.loc.lat, lon: r.loc.lon, size: r.frame.size, release: r.release, date: todayIso() };
+  }
+
+  /* ---- progress list ----------------------------------------------------------------- */
+  function setStep(step, status, msg) {
+    const li = els.steps && els.steps.querySelector(`[data-step="${step}"]`);
+    if (!li) return;
+    li.dataset.s = status;
+    li.querySelector('.ms').textContent = msg || (status === 'pending' ? 'Waiting' : '');
+  }
+  function setProgressOpen(open) {
+    els.progressHead.setAttribute('aria-expanded', String(open));
+    els.steps.hidden = !open;
+  }
+  function resetSteps() { for (const [k] of CONFIG.steps) setStep(k, 'pending'); }
+  const secs = (ms) => `${(ms / 1000).toFixed(1)} s`;
+  function chip(text, kind = '') {
+    els.chip.hidden = !text;
+    els.chip.textContent = text || '';
+    els.chip.className = `status-chip ${kind}`.trim();
+  }
+  function tick() { const t = secs(performance.now() - state.t0); els.elapsed.textContent = t; chip(`Loading the site, ${t}`); }
+
+  /* ---- metrics ------------------------------------------------------------------------- */
+  function renderMetrics() {
+    const r = state.result, box = els.metrics;
+    box.textContent = '';
+    if (!r) { box.append(h('p', { class: 'help' }, 'Metrics appear after the site loads.')); return; }
+    const m = r.model, s = summarize(m), g = m.ground;
+    const row = (k, v, small) => [h('dt', null, k), h('dd', null, v, small ? h('small', null, ` ${small}`) : null)];
+    box.append(h('dl', { class: 'kv' },
+      row('Buildings', grouped(s.buildings), s.estimated ? `${grouped(s.estimated)} estimated` : ''),
+      row('Road length', fmtFt(s.roadsFt, 0)),
+      row('Trees', grouped(s.trees)),
+      row('Water areas', grouped(s.waterAreas)),
+      row('Ground', `${grouped(s.groundMin, 1)} to ${grouped(s.groundMax, 1)} ft`),
+      row('Grid spacing', fmtFt(g.spacing, 1)),
+      row('Grid points', grouped(g.n * g.n), `${g.n} by ${g.n}`),
+    ));
+  }
+
+  /* ---- recent sites ----------------------------------------------------------------------- */
+  const loadRecents = () => { const v = Local.get(CONFIG.recentKey, []); return Array.isArray(v) ? v.filter((e) => e && e.text && e.size && Number.isFinite(e.lat) && Number.isFinite(e.lon)) : []; };
+  function saveRecent(r) {
+    const entry = { text: state.typed || r.loc.label, label: r.loc.label, lat: r.loc.lat, lon: r.loc.lon, size: r.frame.size, t: Date.now() };
+    const list = loadRecents().filter((e) => !(e.text === entry.text && e.size === entry.size));
+    list.unshift(entry);
+    Local.set(CONFIG.recentKey, list.slice(0, CONFIG.recentMax));
+    renderRecents();
+  }
+  function renderRecents() {
+    const list = loadRecents(), box = els.recents;
+    box.textContent = '';
+    els.recentsWrap.hidden = !list.length;
+    for (const e of list) {
+      box.append(h('button', { class: 'recent', type: 'button', title: e.label, onclick: () => { els.addr.value = e.text; setSize(e.size); go({ text: e.text, size: e.size, loc: { lat: e.lat, lon: e.lon, label: e.label } }); } },
+        h('span', { class: 't' }, e.text), h('span', { class: 's' }, `${grouped(e.size)} ft`)));
+    }
+  }
+
+  /* ---- the Go action ------------------------------------------------------------------------- */
+  function setBusy(b) {
+    state.busy = b;
+    els.go.disabled = b;
+    els.go.textContent = b ? 'Working' : 'Go';
+    els.viewport.dataset.busy = String(b && !!state.result);
+    syncActions();
+  }
+  function setSize(v) { state.size = v; els.size.value = String(v); }
+
+  async function go(req = {}) {
+    if (state.busy) return;
+    const text = (req.text != null ? req.text : els.addr.value).trim();
+    if (!text) { Toast.show('Type an address, coordinates, or a Google Maps link first.', 'warn'); els.addr.focus(); return; }
+    const size = req.size || state.size;
+    const id = ++state.runId;
+    els.progressSec.hidden = false;
+    setProgressOpen(true);
+    resetSteps();
+    setBusy(true);
+    state.t0 = performance.now();
+    clearInterval(state.timer);
+    state.timer = setInterval(tick, 200);
+    tick();
+    let r = null, failure = null;
+    try {
+      r = await Pipeline.run({ text, size, loc: req.loc }, (step, st, msg) => { if (id === state.runId) setStep(step, st, msg); }, { walks: !!state.layers.walks, fetchFn: req.fetchFn });
+    } catch (e) { failure = e; }
+    clearInterval(state.timer);
+    const dt = performance.now() - state.t0;
+    els.elapsed.textContent = secs(dt);
+    setBusy(false);
+    if (id !== state.runId) return;
+    if (failure) {
+      console.error(failure);
+      chip(failure.message, 'bad');
+      Toast.show(failure.message, 'bad', 8000);
+      return;
+    }
+    state.typed = text;
+    state.result = r;
+    state.elapsed = dt;
+    r.uiMs = Math.round(dt);
+    if (!r.failed.length) setProgressOpen(false);          // all done: fold the list, one tap opens it
+    const t1 = performance.now();
+    Scene.setModel(r.model);
+    r.timings.scene = Math.round(performance.now() - t1);
+    els.empty.hidden = true;
+    renderMetrics();
+    syncActions();
+    saveRecent(r);
+    const bad = r.failed.map((k) => CONFIG.steps.find((s) => s[0] === k)[1]);
+    chip(bad.length ? `Loaded in ${secs(dt)}. Not loaded: ${bad.join(', ')}` : `Loaded in ${secs(dt)}`, bad.length ? 'bad' : '');
+    if (bad.length) Toast.show(`${bad.join(' and ')} could not be loaded. The rest of the site is shown.`, 'warn', 7000);
+    else setTimeout(() => { if (!state.busy) chip(''); }, 5000);
+  }
+
+  /* ---- layers, scale, contours ------------------------------------------------------------------ */
+  function toggleLayer(key, on) {
+    state.layers[key] = on;
+    for (const b of els.toggles.querySelectorAll('[data-layer]')) if (b.dataset.layer === key) b.setAttribute('aria-checked', String(on));
+    if (key === 'walks' && on && state.result && !state.result.model.roads.walks) {
+      chip('Building walks');
+      setTimeout(() => {
+        try {
+          const roads = Pipeline.buildWalks(state.result);
+          Scene.setWalks(roads);
+          Scene.setLayer('walks', state.layers.walks);
+          chip(`${roads.walks ? roads.walks.length : 0} walk areas added`);
+          setTimeout(() => { if (!state.busy) chip(''); }, 2500);
+        } catch (e) { console.error(e); chip(''); Toast.show(`Walks could not be built. ${e.message}`, 'bad', 6000); }
+      }, 20);
+    }
+    Scene.setLayer(key, on);
+  }
+  function setSegPressed(group, attr, val) {
+    for (const b of group.querySelectorAll('button')) b.setAttribute('aria-pressed', String(Number(b.dataset[attr]) === val));
+  }
+  function setVScale(v) { state.vscale = v; setSegPressed(els.scaleSeg, 'scale', v); Scene.setVScale(v); }
+  function setContour(v) { state.contour = v; setSegPressed(els.contourSeg, 'contour', v); Scene.setContour(v); }
+
+  /* ---- downloads and screenshot -------------------------------------------------------------------- */
+  const FILES = {
+    csv: { suffix: 'topo.csv', type: 'text/csv', make: (r) => revitCsv(r.model.ground) },
+    dxf: { suffix: 'site.dxf', type: 'application/dxf', make: (r) => siteDxf(r.model) },
+    notes: { suffix: 'notes.md', type: 'text/markdown', make: (r) => notesMarkdown(r.model, metaOf(r)) },
+  };
+  function fileFor(kind, r = state.result) {
+    const f = FILES[kind];
+    return { name: `${slugOf(r)}-${f.suffix}`, text: f.make(r), type: f.type };
+  }
+  async function download(kind) {
+    Pop.close();
+    if (!state.result) return;
+    try {
+      const f = fileFor(kind);
+      const res = await ShotMod.deliverImage(new Blob([f.text], { type: f.type }), f.name);
+      if (res === 'downloaded') Toast.show(`Saved ${f.name}`);
+    } catch (e) { console.error(e); Toast.show(`The file could not be made. ${e.message}`, 'bad', 6000); }
+  }
+  function openDownloads() {
+    const item = (kind, title, sub) => h('button', { class: 'pop-item', type: 'button', 'data-dl': kind, onclick: () => download(kind) }, h('span', { class: 'grow' }, title, h('small', null, sub)));
+    Pop.open(els.btnDl, h('div', { role: 'menu' },
+      item('csv', 'Revit CSV', 'Ground points for a Revit toposolid'),
+      item('dxf', 'DXF', 'Topo mesh, buildings, roads, trees, water'),
+      item('notes', 'Notes', 'Origin, counts, and Revit import steps')));
+  }
+  function overlayMetrics(r) {
+    const s = summarize(r.model);
+    return [
+      ['Site', `${grouped(r.frame.size)} ft square`],
+      ['Buildings', `${grouped(s.buildings)}${s.estimated ? ` (${grouped(s.estimated)} est.)` : ''}`],
+      ['Roads', fmtFt(s.roadsFt, 0)],
+      ['Trees', grouped(s.trees)],
+      ['Ground', `${grouped(s.groundMin, 1)} to ${grouped(s.groundMax, 1)} ft`],
+    ];
+  }
+  async function screenshot({ deliver = true } = {}) {
+    const r = state.result;
+    if (!r) return null;
+    try {
+      const blob = await Scene.capture({ title: state.typed || r.loc.label, date: true, metrics: overlayMetrics(r), mark: 'CMRLM', theme: prefersDark() ? 'dark' : 'light' }, 2);
+      if (deliver) {
+        const res = await ShotMod.deliverImage(blob, ShotMod.screenshotFilename(slugOf(r)));
+        if (res === 'downloaded') Toast.show('Image saved to your downloads.');
+      }
+      return blob;
+    } catch (e) { console.error(e); Toast.show(e && e.message ? e.message : 'The image could not be made.', 'bad', 6000); return null; }
+  }
+
+  /* ---- Google Maps ------------------------------------------------------------------------------------ */
+  function currentPoint() {
+    const typed = parseCoordinates(els.addr.value);
+    if (typed) return typed;
+    return state.result ? { lat: state.result.loc.lat, lon: state.result.loc.lon } : null;
+  }
+  function openMaps() {
+    const p = currentPoint();
+    if (!p) return;
+    window.open(googleMapsUrl(p.lat, p.lon), '_blank', 'noopener');
+  }
+  function syncActions() {
+    const has = !!state.result;
+    els.btnMaps.disabled = !currentPoint();
+    els.btnDl.disabled = !has || state.busy;
+    els.btnShot.disabled = !has || state.busy;
+    els.btnFit.disabled = els.btnPlan.disabled = !has;
+  }
+
+  /* ---- DOM ---------------------------------------------------------------------------------------------- */
+  const tbBtn = (id, icon, text, title, onclick, extra) => h('button', { class: 'btn has-text', type: 'button', id, title, 'aria-label': title, onclick, ...extra },
+    h('span', { html: icon, style: 'display:contents' }), h('span', { class: 'btn-text' }, text));
+
+  function buildTopbar() {
+    els.btnMaps = tbBtn('btnMaps', ICONS.map, 'Google Maps', 'Open this place in Google Maps (a visual reference)', openMaps);
+    els.btnDl = tbBtn('btnDownloads', ICONS.download, 'Downloads', 'Downloads: Revit CSV, DXF, Notes', openDownloads, { 'aria-haspopup': 'true', 'aria-expanded': 'false' });
+    els.btnDl.append(h('span', { html: ICONS.chev, style: 'display:contents' }));
+    els.btnShot = tbBtn('btnShot', ICONS.camera, 'Screenshot', 'Save a picture of the 3D view', () => screenshot());
+    $('tbActions').append(els.btnMaps, els.btnDl, els.btnShot);
+  }
+
+  function toggleRow(key, label) {
+    const b = h('button', { class: 'toggle-row', type: 'button', role: 'switch', 'aria-checked': String(!!state.layers[key]), 'data-layer': key, onclick: () => toggleLayer(key, !state.layers[key]) },
+      h('span', null, label), h('span', { class: 'switch', 'aria-hidden': 'true' }));
+    return b;
+  }
+  function seg(values, attr, label, current, onPick, labels) {
+    const g = h('div', { class: 'seg', role: 'group', 'aria-label': label });
+    for (const v of values) g.append(h('button', { type: 'button', [`data-${attr}`]: v, 'aria-pressed': String(v === current), onclick: () => onPick(v) }, labels(v)));
+    return g;
+  }
+
+  function buildPanel() {
+    const sections = $('sections');
+
+    // Site
+    els.addr = h('input', { class: 'field', id: 'addr', type: 'text', placeholder: '3615 W Cypress St, Tampa, FL', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', enterkeyhint: 'go', 'aria-label': 'Address, coordinates, or Google Maps link', 'aria-describedby': 'addrHint' });
+    els.go = h('button', { class: 'btn solid', type: 'button', id: 'goBtn', onclick: () => go() }, 'Go');
+    els.addr.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); els.addr.blur(); go(); } });
+    els.addr.addEventListener('input', syncActions);
+    els.size = h('select', { id: 'sizeSel', 'aria-label': 'Site size' }, CONFIG.sizes.map((s) => h('option', { value: String(s) }, `${grouped(s)} ft`)));
+    els.size.value = String(state.size);
+    els.size.addEventListener('change', () => { state.size = Number(els.size.value); });
+    els.recents = h('div', { class: 'recents' });
+    els.recentsWrap = h('div', null, h('div', { class: 'label', style: 'padding:10px 0 2px' }, 'Recent sites'), els.recents);
+    sections.append(h('div', { class: 'sec' },
+      h('div', { class: 'label' }, 'Location'),
+      h('div', { class: 'addr-row' }, els.addr, els.go),
+      h('p', { class: 'help', id: 'addrHint' }, 'Address, lat/lon, or a Google Maps link'),
+      h('div', { class: 'select-row' }, h('label', { for: 'sizeSel' }, 'Site size (square)'), els.size),
+      els.recentsWrap));
+
+    // Progress
+    els.steps = h('ul', { class: 'steps', id: 'steps' }, CONFIG.steps.map(([k, label]) =>
+      h('li', { 'data-step': k, 'data-s': 'pending' }, h('span', { class: 'ic' }), h('span', null, h('span', { class: 'nm' }, label), h('span', { class: 'ms' }, 'Waiting')))));
+    els.elapsed = h('span', { class: 'aside', id: 'elapsed' });
+    els.progressHead = h('button', { class: 'label sec-head', type: 'button', id: 'progressHead', 'aria-expanded': 'true', onclick: () => setProgressOpen(els.progressHead.getAttribute('aria-expanded') !== 'true') },
+      h('span', { class: 'sec-title' }, h('span', { html: ICONS.chev, style: 'display:contents' }), 'Progress'), els.elapsed);
+    els.progressSec = h('div', { class: 'sec', id: 'progressSec', hidden: true }, els.progressHead, els.steps);
+    sections.append(els.progressSec);
+
+    // Layers
+    els.toggles = h('div', { class: 'toggles' }, CONFIG.layers.map(([k, l]) => toggleRow(k, l)));
+    sections.append(h('div', { class: 'sec' }, h('div', { class: 'label' }, 'Layers'), els.toggles));
+
+    // View
+    els.scaleSeg = seg(CONFIG.scales, 'scale', 'Vertical scale', state.vscale, setVScale, (v) => `${v}×`);
+    els.contourSeg = seg(CONFIG.contours, 'contour', 'Contour lines', state.contour, setContour, (v) => (v ? `${v} ft` : 'Off'));
+    sections.append(h('div', { class: 'sec' }, h('div', { class: 'label' }, 'View'),
+      h('div', { class: 'ctl-block' }, h('span', { class: 'ctl-label' }, 'Vertical scale'), els.scaleSeg),
+      h('div', { class: 'ctl-block' }, h('span', { class: 'ctl-label' }, 'Contour lines'), els.contourSeg)));
+
+    // Metrics
+    els.metrics = h('div', { id: 'metrics' });
+    sections.append(h('div', { class: 'sec' }, h('div', { class: 'label' }, 'Site data'), els.metrics));
+    renderMetrics();
+
+    sections.append(h('p', { class: 'credits' }, CREDITS));
+  }
+
+  function buildViews() {
+    els.btnFit = h('button', { type: 'button', id: 'btnFit', 'aria-pressed': 'false', title: 'Fit the whole site in the view', onclick: () => Scene.fit(true) }, 'Fit');
+    els.btnPlan = h('button', { type: 'button', id: 'btnPlan', 'aria-pressed': 'false', title: 'Look straight down', onclick: () => Scene.planView(true) }, 'Plan');
+    $('views').append(els.btnFit, els.btnPlan);
+    Scene.onPreset((p) => { els.btnFit.setAttribute('aria-pressed', String(p === 'fit')); els.btnPlan.setAttribute('aria-pressed', String(p === 'plan')); });
+  }
+
+  function buildCompass() {
+    const rose = $('compassRose'), nLabel = $('compassN'), v = new THREE.Vector3(0, 0, -1);
+    let last = NaN;
+    Scene.onCamera((cam) => {
+      v.set(0, 0, -1).transformDirection(cam.matrixWorldInverse);
+      const a = Math.atan2(v.x, v.y);
+      if (Math.abs(a - last) < 1e-3) return;
+      last = a;
+      rose.setAttribute('transform', `rotate(${(a * 180 / Math.PI).toFixed(1)} 24 24)`);
+      nLabel.setAttribute('x', (24 + 17.6 * Math.sin(a)).toFixed(2));
+      nLabel.setAttribute('y', (24 - 17.6 * Math.cos(a) + 2.4).toFixed(2));
+    });
+  }
+
+  /* ---- bottom sheet (iPad portrait and phone) ------------------------------------------------------------- */
+  function initSheet() {
+    const app = $('app'), grabber = $('grabber');
+    const GRAB = 44;
+    const total = () => app.clientHeight;
+    const lowest = () => GRAB + 40;
+    const snaps = () => [lowest(), Math.round(total() * 0.42), Math.round(total() * 0.86)];
+    const setH = (px) => app.style.setProperty('--sheet-h', `${Math.round(clamp(px, lowest(), total() * 0.9))}px`);
+    const curH = () => $('panel').getBoundingClientRect().height;
+    const animateTo = (to) => {
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return setH(to);
+      const from = curH(), t0 = performance.now();
+      const step = (now) => {
+        const p = clamp((now - t0) / 180, 0, 1);
+        setH(from + (to - from) * (1 - Math.pow(1 - p, 3)));
+        if (p < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    };
+    let drag = null;
+    grabber.addEventListener('pointerdown', (e) => { grabber.setPointerCapture(e.pointerId); drag = { y: e.clientY, h: curH(), moved: false }; });
+    grabber.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      const dy = drag.y - e.clientY;
+      if (Math.abs(dy) > 4) drag.moved = true;
+      if (drag.moved) setH(drag.h + dy);
+    });
+    const end = () => {
+      if (!drag) return;
+      const s = snaps(), now = curH();
+      if (!drag.moved) animateTo(s.find((v) => v > now + 8) || s[0]);
+      else animateTo(s.reduce((a, b) => (Math.abs(b - now) < Math.abs(a - now) ? b : a)));
+      drag = null;
+    };
+    grabber.addEventListener('pointerup', end);
+    grabber.addEventListener('pointercancel', end);
+    grabber.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+      e.preventDefault();
+      setH(curH() + (e.key === 'ArrowUp' ? 60 : -60));
+    });
+    const reset = () => { if (sheetQuery.matches) setH(total() * 0.42); else app.style.removeProperty('--sheet-h'); };
+    (sheetQuery.addEventListener ? sheetQuery.addEventListener('change', reset) : sheetQuery.addListener(reset));
+    reset();
+    window.addEventListener('resize', () => { if (sheetQuery.matches) { const px = parseFloat(app.style.getPropertyValue('--sheet-h')); if (px) setH(px); } });
+  }
+
+  function init() {
+    els.viewport = $('viewport'); els.chip = $('statusChip'); els.empty = $('emptyState');
+    buildTopbar();
+    buildPanel();
+    buildViews();
+    initSheet();
+    renderRecents();
+    syncActions();
+    return true;
+  }
+
+  return {
+    init, go, buildCompass, screenshot, download, fileFor, toggleLayer, setVScale, setContour, setSize, openMaps, syncActions,
+    state, els, metaOf, slugOf, renderMetrics, setStep,
+  };
+})();
+
+/* ==========================================================================
+   TESTS
+   In-page tests. Run by adding ?test to the address. They build a tiny synthetic site
+   (synthetic DEM and synthetic decoded tiles), run it through the model, the 3D scene
+   and the export functions, and run the pipeline against a fake network. The result
+   panel shows pass or fail for each test.
+   ========================================================================== */
+const SiteTests = (() => {
+  const { makeFrame, tileToLonLat } = GeoMod;
+  const { buildModel, summarize } = ModelMod;
+  const { revitCsv, siteDxf, notesMarkdown, CREDITS } = ExportsMod;
+
+  const Z = 14, TX = 4437, TY = 6865, EXT = 4096;
+  const [LON, LAT] = tileToLonLat(Z, TX, TY, EXT / 2, EXT / 2, EXT);       // centre of one z14 tile
+  const SIZE = 1000;
+
+  function synthetic() {
+    const frame = makeFrame(LAT, LON, SIZE);
+    const toTile = (x, y) => {
+      const [lon, lat] = frame.toLonLat(x, y), n = 2 ** Z, s = Math.sin(lat * Math.PI / 180);
+      const wx = (lon + 180) / 360 * n, wy = (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * n;
+      return [Math.round((wx - TX) * EXT), Math.round((wy - TY) * EXT)];
+    };
+    const area = (r) => { let a = 0; for (let i = 0; i < r.length; i++) { const p = r[i], q = r[(i + 1) % r.length]; a += p[0] * q[1] - q[0] * p[1]; } return a / 2; };
+    const ring = (pts, hole = false) => { let r = pts.map((p) => toTile(p[0], p[1])); if ((area(r) > 0) === hole) r = r.reverse(); return r; };
+    const rect = (x0, y0, x1, y1) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+    const layers = {
+      building: { extent: EXT, features: [
+        { id: 'b-data', type: 3, properties: { height: 30, '@height_source': 'test' }, geometry: [ring(rect(300, 300, 360, 340))] },
+        { id: 'b-floors', type: 3, properties: { num_floors: 4 }, geometry: [ring(rect(500, 300, 560, 360)), ] },
+        { id: 'b-court', type: 3, properties: { height: 40 }, geometry: [ring(rect(600, 600, 700, 700)), ring(rect(630, 630, 670, 670), true)] },
+        { id: 'b-est', type: 3, properties: {}, geometry: [ring(rect(200, 700, 240, 730))] },
+        { id: 'b-out', type: 3, properties: { height: 10 }, geometry: [ring(rect(2000, 2000, 2040, 2030))] },
+      ] },
+      segment: { extent: EXT, features: [
+        { id: 's1', type: 2, properties: { subtype: 'road', class: 'residential' }, geometry: [[toTile(0, 150), toTile(500, 160), toTile(1000, 150)]] },
+        { id: 's2', type: 2, properties: { subtype: 'road', class: 'footway' }, geometry: [[toTile(100, 0), toTile(120, 500), toTile(110, 1000)]] },
+      ] },
+      land: { extent: EXT, features: [
+        { id: 't1', type: 1, properties: { class: 'tree' }, geometry: [toTile(420, 420), toTile(440, 430)] },
+        { id: 'f1', type: 3, properties: { subtype: 'forest', class: 'wood' }, geometry: [ring(rect(800, 100, 900, 200))] },
+      ] },
+      water: { extent: EXT, features: [
+        { id: 'w1', type: 3, properties: { class: 'pond' }, geometry: [ring(rect(750, 750, 850, 830))] },
+      ] },
+    };
+    const tiles = [{ z: Z, x: TX, y: TY, layers }];
+    // synthetic DEM: a tilted plane with a bump, meters, row 0 = north
+    const w = 120, hgt = 120, bb = frame.bbox(60), pixelW = (bb.east - bb.west) / w, pixelH = (bb.north - bb.south) / hgt;
+    const data = new Float32Array(w * hgt);
+    for (let r = 0; r < hgt; r++) for (let c = 0; c < w; c++) {
+      const [x, y] = frame.toLocal(bb.west + (c + 0.5) * pixelW, bb.north - (r + 0.5) * pixelH);
+      data[r * w + c] = (30 + 0.01 * x + 0.005 * y + 3 * Math.sin(x / 120) * Math.cos(y / 150)) * 0.3048;
+    }
+    return { frame, tiles, dem: { width: w, height: hgt, data, west: bb.west, north: bb.north, pixelW, pixelH } };
+  }
+
+  /** Minimal little-endian single-strip float32 GeoTIFF, for the fake network. */
+  function encodeTiff(dem) {
+    const { width, height, data } = dem;
+    const entries = 12, ifdOff = 8 + data.byteLength, extraOff = ifdOff + 2 + entries * 12 + 4;
+    const buf = new ArrayBuffer(extraOff + 72), dv = new DataView(buf);
+    dv.setUint16(0, 0x4949, true); dv.setUint16(2, 42, true); dv.setUint32(4, ifdOff, true);
+    new Float32Array(buf, 8, data.length).set(data);
+    const tags = [
+      [256, 4, 1, width], [257, 4, 1, height], [258, 3, 1, 32], [259, 3, 1, 1], [273, 4, 1, 8], [277, 3, 1, 1],
+      [278, 4, 1, height], [279, 4, 1, data.byteLength], [339, 3, 1, 3], [33550, 12, 3, extraOff], [33922, 12, 6, extraOff + 24],
+    ];
+    dv.setUint16(ifdOff, tags.length, true);
+    tags.forEach(([tag, type, n, val], i) => {
+      const e = ifdOff + 2 + i * 12;
+      dv.setUint16(e, tag, true); dv.setUint16(e + 2, type, true); dv.setUint32(e + 4, n, true);
+      if (type === 3) dv.setUint16(e + 8, val, true); else dv.setUint32(e + 8, val, true);
+    });
+    [dem.pixelW, dem.pixelH, 0, 0, 0, 0, dem.west, dem.north, 0].forEach((v, i) => dv.setFloat64(extraOff + i * 8, v, true));
+    // bytes 0..23: ModelPixelScale; bytes 24..71: ModelTiepoint (I, J, K, X, Y, Z)
+    return buf;
+  }
+
+  function fakeNet({ dem, demFails = false } = {}) {
+    const calls = [];
+    const fn = async (url) => {
+      url = String(url); calls.push(url);
+      if (url.includes('nominatim.openstreetmap.org')) return new Response(JSON.stringify([{ lat: String(LAT), lon: String(LON), display_name: 'Test Address, Tampa' }]), { status: 200 });
+      if (url.includes('elevation.nationalmap.gov')) return demFails ? new Response('<html>error</html>', { status: 200 }) : new Response(encodeTiff(dem), { status: 200 });
+      if (url.includes('list-type=2')) return new Response('<ListBucketResult><CommonPrefixes><Prefix>tiles/2026-10-14.0/</Prefix></CommonPrefixes></ListBucketResult>', { status: 200 });
+      return new Response('', { status: 404 });                    // every .pmtiles request fails
+    };
+    fn.calls = calls;
+    return fn;
+  }
+
+  async function run() {
+    const results = [];
+    const eq = (a, b) => (JSON.stringify(a) === JSON.stringify(b) ? true : `got ${JSON.stringify(a)}, expected ${JSON.stringify(b)}`);
+    const near = (a, b, tol = 1e-6) => (Math.abs(a - b) <= tol ? true : `got ${a}, expected ${b}`);
+    const t = async (name, fn) => {
+      let r;
+      try { r = await fn(); } catch (e) { r = `threw ${e && e.message}`; }
+      results.push({ name, ok: r === true, detail: r === true ? '' : String(r) });
+    };
+
+    const { frame, tiles, dem } = synthetic();
+    let model = null;
+
+    /* ---- model ---- */
+    await t('ClipperLib is loaded', () => eq(typeof globalThis.ClipperLib, 'object'));
+    await t('buildModel on the synthetic site: 4 buildings (one outside is dropped)', () => {
+      model = buildModel(frame, { dem, tiles });
+      return eq(model.buildings.length, 4);
+    });
+    await t('building height rules: data, floors, data, estimate', () => {
+      const by = Object.fromEntries(model.buildings.map((b) => [b.id, b]));
+      return eq([by['b-data'].rule, by['b-floors'].rule, by['b-court'].rule, by['b-est'].rule], ['data', 'floors', 'data', 'estimate']);
+    });
+    await t('building heights: 30 m, 4 floors, estimate', () => {
+      const by = Object.fromEntries(model.buildings.map((b) => [b.id, b]));
+      return eq([Math.round(by['b-data'].height * 10) / 10, by['b-floors'].height, by['b-est'].height], [98.4, 48, 24]);
+    });
+    await t('model has roads, trees, one water area and no errors', () => {
+      const s = summarize(model);
+      return eq([model.roads.segments.length > 0, model.roads.pavement.length > 0, s.trees >= 2, s.waterAreas, Object.keys(model.errors).length], [true, true, true, 1, 0]);
+    });
+    await t('walks are built on request from the cached tiles', () => {
+      const roads = Pipeline.buildWalks({ tiles, frame, model });
+      return eq([roads.walks && roads.walks.length > 0, model.roads.walks], [true, null]);
+    });
+    await t('ground grid is 96 by 96 for 1000 ft', () => eq([model.ground.n, model.ground.spacing], [96, 10.5]));
+
+    /* ---- 3D scene ---- */
+    await t('WebGL scene is available', () => Scene.ready() || 'no WebGL');
+    await t('scene: setModel makes the expected buildings (4) in 2 meshes', () => {
+      Scene.setModel(model);
+      $('emptyState').hidden = true;
+      const i = Scene.info();
+      return eq([i.buildings, i.buildingMeshes], [4, 2]);
+    });
+    await t('scene: trees, water and road geometry exist', () => {
+      const i = Scene.info();
+      return eq([i.trees >= 2, i.waterAreas, i.roadTriangles > 0, i.walkTriangles], [true, 1, true, 0]);
+    });
+    await t('scene: the ground mesh surface equals the grid at a node', () => {
+      const g = model.ground;
+      return near(Scene.meshAt(g.xs[10], g.ys[20]), g.z[20 * g.n + 10], 1e-6);
+    });
+    await t('scene: the ground mesh surface is within 0.5 ft of the bilinear ground', () => {
+      let worst = 0;
+      for (const [x, y] of [[100.3, 200.7], [555.5, 301.2], [873.1, 64.9], [20, 960]]) worst = Math.max(worst, Math.abs(Scene.meshAt(x, y) - model.ground.at(x, y)));
+      return worst < 0.5 || `worst ${worst}`;
+    });
+    await t('scene: vertical scale keeps the ground minimum fixed', () => {
+      Scene.setVScale(3);
+      const root = Scene.groups().ground.parent;
+      const r = near(root.position.y + model.ground.min * root.scale.y, model.ground.min, 1e-6);
+      Scene.setVScale(1);
+      return r;
+    });
+    await t('scene: layer toggles', () => {
+      Scene.setLayer('buildings', false); const off = Scene.groups().buildings.visible;
+      Scene.setLayer('buildings', true); const on = Scene.groups().buildings.visible;
+      return eq([off, on], [false, true]);
+    });
+    await t('scene: contour setting', () => {
+      Scene.setContour(5); const a = Scene.info().contour; Scene.setContour(0);
+      return eq([a, Scene.info().contour], [5, 0]);
+    });
+    await t('scene: renders without a GL error', () => {
+      Scene.renderNow();
+      const gl = Scene.camera() && document.querySelector('#canvasHost canvas').getContext('webgl2');
+      return !gl || gl.getError() === 0 || `gl error ${gl.getError()}`;
+    });
+
+    /* ---- exports ---- */
+    const meta = { address: 'Test Address', lat: LAT, lon: LON, size: SIZE, release: '2026-10-14.0', date: '2026-10-21' };
+    await t('CSV has n*n rows', () => {
+      const rows = revitCsv(model.ground).trim().split('\n');
+      return eq(rows.length, model.ground.n * model.ground.n);
+    });
+    await t('DXF starts with a SECTION and ends with EOF', () => {
+      const dxf = siteDxf(model);
+      return eq([dxf.startsWith('  0\nSECTION'), dxf.trimEnd().endsWith('EOF')], [true, true]);
+    });
+    await t('DXF has the building layers', () => {
+      const dxf = siteDxf(model);
+      return eq(['BLDG-DATA', 'BLDG-ESTIMATE', 'TOPO-MESH', 'ROAD-PAVEMENT', 'WATER', 'TREE'].map((l) => dxf.includes(l)), [true, true, true, true, true, true]);
+    });
+    await t('notes mention the address, the release and the credits', () => {
+      const md = notesMarkdown(model, meta);
+      return eq([md.includes('Test Address'), md.includes('2026-10-14.0'), md.includes(CREDITS)], [true, true, true]);
+    });
+    await t('download names: slug from address and size', () => {
+      const keep = App.state.typed;
+      App.state.typed = '3615 W Cypress St, Tampa, FL';
+      const r = { frame, loc: { label: 'x' } };
+      const a = App.fileFor('csv', { ...r, model }).name, b = App.fileFor('dxf', { ...r, model }).name, c = App.fileFor('notes', { ...r, model, release: 'x', loc: { lat: LAT, lon: LON, label: 'x' } }).name;
+      App.state.typed = keep;
+      return eq([a, b, c], ['3615-w-cypress-st-tampa-fl-1000ft-topo.csv', '3615-w-cypress-st-tampa-fl-1000ft-site.dxf', '3615-w-cypress-st-tampa-fl-1000ft-notes.md']);
+    });
+
+    /* ---- pipeline on a fake network ---- */
+    await t('pipeline: ground loads, all three map themes fail, the run still finishes', async () => {
+      const log = [];
+      const r = await Pipeline.run({ text: 'Test Address', size: SIZE }, (s, st, m) => log.push([s, st, m]), { fetchFn: fakeNet({ dem }) });
+      const last = (s) => log.filter((e) => e[0] === s).pop()[1];
+      return eq([r.model.ground.n, r.release, r.failed, last('ground'), last('address'), last('release'), last('buildings'), last('roads'), last('base')],
+        [96, '2026-10-14.0', ['buildings', 'roads', 'base'], 'done', 'done', 'done', 'error', 'error', 'error']);
+    });
+    await t('pipeline: a ground failure stops with a clear message', async () => {
+      const log = [];
+      let msg = '';
+      try { await Pipeline.run({ text: 'Test Address', size: SIZE }, (s, st, m) => log.push([s, st, m]), { fetchFn: fakeNet({ dem, demFails: true }) }); } catch (e) { msg = e.message; }
+      const ground = log.filter((e) => e[0] === 'ground').pop();
+      return eq([msg.startsWith('Ground elevation could not be loaded.'), ground[1]], [true, 'error']);
+    });
+    await t('pipeline: coordinates skip the address service', async () => {
+      const net = fakeNet({ dem });
+      await Pipeline.run({ text: `${LAT.toFixed(5)}, ${LON.toFixed(5)}`, size: SIZE }, () => {}, { fetchFn: net });
+      return eq(net.calls.some((u) => u.includes('nominatim')), false);
+    });
+
+    /* ---- screenshot ---- */
+    await t('screenshot: the shared capture returns a PNG with the overlay', async () => {
+      const keep = App.state.result;
+      App.state.result = { model, frame, loc: { lat: LAT, lon: LON, label: 'Test Address' }, release: 'x' };
+      const blob = await App.screenshot({ deliver: false });
+      App.state.result = keep;
+      return eq([blob && blob.type, blob && blob.size > 2000], ['image/png', true]);
+    });
+
+    return results;
+  }
+
+  function show(results) {
+    const failed = results.filter((r) => !r.ok);
+    const panel = $('testPanel');
+    panel.hidden = false;
+    panel.textContent = '';
+    panel.append(h('h2', { class: failed.length ? 'fail' : 'pass', id: 'testSummary' }, failed.length ? `Tests: ${failed.length} of ${results.length} failed` : `Tests: all ${results.length} passed`), h('div', { class: 'det' }, 'Tap here to close this list.'));
+    for (const r of results) panel.append(h('div', { class: 'row' }, h('span', { class: r.ok ? 'ok' : 'no' }, r.ok ? 'pass' : 'FAIL'), h('span', null, r.name, r.ok ? null : h('span', { class: 'det' }, r.detail))));
+    panel.addEventListener('click', () => { panel.hidden = true; });
+  }
+
+  return { run, show, synthetic, encodeTiff };
+})();
+
+/* ==========================================================================
+   Start-up and test hook
+   ========================================================================== */
+const TEST_MODE = /[?&]test\b/.test(location.search);
+App.init();
+Scene.init($('canvasHost'));
+App.buildCompass();
+
+window.__site = {
+  go: (text, size) => { if (text != null) $('addr').value = text; if (size) App.setSize(size); return App.go(); },
+  state: () => App.state,
+  info: () => Scene.info(),
+  file: (kind) => App.fileFor(kind),
+  summary: () => (App.state.result ? ModelMod.summarize(App.state.result.model) : null),
+  timings: () => (App.state.result ? { ...App.state.result.timings, ui: App.state.result.uiMs } : null),
+  steps: () => [...document.querySelectorAll('#steps li')].map((li) => ({ step: li.dataset.step, status: li.dataset.s, message: li.querySelector('.ms').textContent })),
+  screenshot: () => App.screenshot({ deliver: false }),
+  runTests: () => SiteTests.run(),
+  /** Shows the synthetic test site (with trees, a pond and a courtyard building) in the 3D view. */
+  loadSynthetic: () => { const d = SiteTests.synthetic(); const m = ModelMod.buildModel(d.frame, { dem: d.dem, tiles: d.tiles }); Scene.setModel(m); $('emptyState').hidden = true; return ModelMod.summarize(m); },
+};
+
+if (TEST_MODE) {
+  SiteTests.run().then((r) => {
+    window.__siteTestResults = r;
+    SiteTests.show(r);
+    const failed = r.filter((x) => !x.ok);
+    Toast.show(failed.length ? `Tests: ${failed.length} of ${r.length} failed` : `Tests: all ${r.length} passed`, failed.length ? 'bad' : 'test-pass', 0);
+  });
+}
+</script>
+</body>
+</html>
