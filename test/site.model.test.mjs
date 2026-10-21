@@ -185,6 +185,16 @@ t("two crossing roads union (no double count)", () => {
   near(polyArea(r.pavement), 2600 + 2600 - 26 * 26, 40);
   eq(r.pavement.length, 1);
 });
+t("four roads around a block keep the block as a hole", () => {
+  // 200 ft square loop of 26 ft roads (centerlines 200..400). Pavement band = outer square (226 ft) − inner square (174 ft).
+  const r = rd([
+    road("s", { class: "residential" }, [[200, 200], [400, 200]]), road("e", { class: "residential" }, [[400, 200], [400, 400]]),
+    road("n", { class: "residential" }, [[400, 400], [200, 400]]), road("w", { class: "residential" }, [[200, 400], [200, 200]]),
+  ]);
+  eq(r.pavement.length, 1);
+  eq(r.pavement[0].holes.length, 1, "block hole");
+  near(polyArea(r.pavement), 226 * 226 - 174 * 174 - 4 * 13 * 13, 5, "band area");   // butt ends leave a 13 × 13 ft notch at each outer corner
+});
 t("class widths", () => {
   const w = (p) => rd([road("x", p, [[100, 100], [200, 100]])]).segments[0].width;
   eq(w({ class: "motorway" }), 48); eq(w({ class: "trunk" }), 48); eq(w({ class: "primary" }), 44); eq(w({ class: "secondary" }), 36);

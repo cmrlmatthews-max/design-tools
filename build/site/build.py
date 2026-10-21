@@ -22,12 +22,16 @@ MODS = {
     'tiff': ('TiffMod', 'site/tiff.js'),
     'model': ('ModelMod', 'site/model.js'),
     'exports': ('ExportsMod', 'site/exports.js'),
+    # SketchUp export. sketchupFormat must come before sketchup in 01_config.js (the site module reads SkFmt at load time).
+    'sketchupFormat': ('SkFmt', 'shared/sketchup-format.js'),
+    'sketchup': ('SkSite', 'site/sketchup.js'),
     'screenshot': ('ShotMod', 'shared/screenshot.js'),
 }
 BY_FILE = {os.path.basename(p): g for g, p in MODS.values()}
 
 EXPORT_RE = re.compile(r'^export\s+(?:async\s+)?(?:function\*?|const|let|class)\s+([A-Za-z_$][\w$]*)', re.M)
-IMPORT_RE = re.compile(r'^import\s*\{([^}]*)\}\s*from\s*["\']\./([\w.]+)["\'];?[ \t]*$', re.M)
+# "./x.js" and "../shared/x.js" (the shared modules are found by file name)
+IMPORT_RE = re.compile(r'^import\s*\{([^}]*)\}\s*from\s*["\']\.{1,2}/(?:shared/)?([\w.-]+)["\'];?[ \t]*$', re.M)
 
 
 def rd(p):

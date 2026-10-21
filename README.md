@@ -8,7 +8,11 @@ A small toolkit of browser-based design tools for early-stage architectural work
 |---|---|---|
 | Menu page | `index.html` | Links to each tool |
 | Tower Generator | `tower/index.html` | Version 1.1: click-to-select, 3D handles with snapping, copy segment, form controls, site envelope, live metrics, presets, saved options, compare view, screenshots, AI prompt library |
-| Site Model | `site/index.html` | Version 1: type an address, see a 3D site from public map data (USGS ground, Overture buildings, roads, trees, water), download Revit CSV, DXF, and notes |
+| Site Model | `site/index.html` | Version 1: type an address, see a 3D site from public map data (USGS ground, Overture buildings, roads, trees, water), download Revit CSV, DXF, SketchUp, and notes |
+
+## SketchUp
+
+Both tools export a `.sketchup.json` file. Install the extension `dist/cmrlm-design-tools.rbz` in SketchUp Pro 2021 or later, then use Extensions > CMRLM > Import Design Tools file. Steps: `docs/sketchup-install.md`.
 
 ## Folders
 

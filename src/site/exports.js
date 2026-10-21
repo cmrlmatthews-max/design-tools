@@ -267,6 +267,10 @@ export function notesMarkdown(model, meta) {
   const date = meta.date || new Date().toISOString().slice(0, 10);
   const rules = { data: 0, floors: 0, estimate: 0 };
   for (const b of model.buildings) rules[b.rule]++;
+  const skShift = Math.round(-g.min * 100) / 100 || 0, skN = Math.abs(skShift).toFixed(2);       // same rounding as sketchup.js
+  const skNote = skShift <= 0
+    ? `SketchUp: use Extensions > CMRLM > Import Design Tools file. The model is lowered by ${skN} ft so the lowest ground point is 0 ft. Add ${skN} ft to return to NAVD88 elevations.`
+    : `SketchUp: use Extensions > CMRLM > Import Design Tools file. The model is raised by ${skN} ft so the lowest ground point is 0 ft. Subtract ${skN} ft to return to NAVD88 elevations.`;
   const lines = [
     `# Site Model: ${meta.address || "Site"}`,
     "",
@@ -319,6 +323,8 @@ export function notesMarkdown(model, meta) {
     "",
     "1. Ground: Massing & Site > Toposolid > Create from Import > Create from CSV. Select the CSV file. Choose Decimal feet.",
     "2. Other layers: Insert > Import CAD. Select the DXF file. Set Positioning to Auto - Origin to Internal Origin. Set Units to Foot.",
+    "",
+    skNote,
     "",
   ];
   return lines.join("\n");

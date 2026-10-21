@@ -412,7 +412,9 @@ function pavement(items, S) {
     co.AddPaths(paths, C().JoinType.jtRound, C().EndType.etOpenButt);
     const sol = [];
     co.Execute(sol, (w / 2) * SCALE);
-    for (const path of sol) cl.AddPath(C().Clipper.Orientation(path) ? path : path.slice().reverse(), C().PolyType.ptSubject, true);
+    // Keep the offset output as it is: outers are positive and the holes of closed road loops
+    // (city blocks) are negative. Reversing the holes would fill every block under NonZero fill.
+    for (const path of sol) cl.AddPath(path, C().PolyType.ptSubject, true);
   }
   cl.AddPath(rectPath(0, 0, S, S, SCALE), C().PolyType.ptClip, true);
   const tree = new (C().PolyTree)();

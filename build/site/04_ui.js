@@ -7,6 +7,8 @@ const App = (() => {
   const { googleMapsUrl, parseCoordinates } = GeocodeMod;
   const { summarize } = ModelMod;
   const { revitCsv, siteDxf, notesMarkdown, CREDITS } = ExportsMod;
+  const { siteToSketchup } = SkSite;
+  const { sketchupFilename, docToBlob } = SkFmt;
 
   const state = {
     size: CONFIG.defaultSize,
@@ -172,17 +174,22 @@ const App = (() => {
     csv: { suffix: 'topo.csv', type: 'text/csv', make: (r) => revitCsv(r.model.ground) },
     dxf: { suffix: 'site.dxf', type: 'application/dxf', make: (r) => siteDxf(r.model) },
     notes: { suffix: 'notes.md', type: 'text/markdown', make: (r) => notesMarkdown(r.model, metaOf(r)) },
+    // SketchUp: the name comes from sketchupFilename (slug + date) and the file is a Blob made by docToBlob
+    sketchup: { type: 'application/json', name: (r) => sketchupFilename(slugOf(r), new Date()), blob: (r) => docToBlob(siteToSketchup(r.model, metaOf(r))) },
   };
   function fileFor(kind, r = state.result) {
     const f = FILES[kind];
+    if (f.blob) return { name: f.name(r), blob: f.blob(r), type: f.type };
     return { name: `${slugOf(r)}-${f.suffix}`, text: f.make(r), type: f.type };
   }
+  /** The SketchUp document for a result (default: the current site). */
+  function sketchupDoc(r = state.result) { return r ? siteToSketchup(r.model, metaOf(r)) : null; }
   async function download(kind) {
     Pop.close();
     if (!state.result) return;
     try {
       const f = fileFor(kind);
-      const res = await ShotMod.deliverImage(new Blob([f.text], { type: f.type }), f.name);
+      const res = await ShotMod.deliverImage(f.blob || new Blob([f.text], { type: f.type }), f.name);
       if (res === 'downloaded') Toast.show(`Saved ${f.name}`);
     } catch (e) { console.error(e); Toast.show(`The file could not be made. ${e.message}`, 'bad', 6000); }
   }
@@ -191,6 +198,7 @@ const App = (() => {
     Pop.open(els.btnDl, h('div', { role: 'menu' },
       item('csv', 'Revit CSV', 'Ground points for a Revit toposolid'),
       item('dxf', 'DXF', 'Topo mesh, buildings, roads, trees, water'),
+      item('sketchup', 'SketchUp', 'Ground, buildings, roads, water. Import with the CMRLM extension'),
       item('notes', 'Notes', 'Origin, counts, and Revit import steps')));
   }
   function overlayMetrics(r) {
@@ -241,7 +249,7 @@ const App = (() => {
 
   function buildTopbar() {
     els.btnMaps = tbBtn('btnMaps', ICONS.map, 'Google Maps', 'Open this place in Google Maps (a visual reference)', openMaps);
-    els.btnDl = tbBtn('btnDownloads', ICONS.download, 'Downloads', 'Downloads: Revit CSV, DXF, Notes', openDownloads, { 'aria-haspopup': 'true', 'aria-expanded': 'false' });
+    els.btnDl = tbBtn('btnDownloads', ICONS.download, 'Downloads', 'Downloads: Revit CSV, DXF, SketchUp, Notes', openDownloads, { 'aria-haspopup': 'true', 'aria-expanded': 'false' });
     els.btnDl.append(h('span', { html: ICONS.chev, style: 'display:contents' }));
     els.btnShot = tbBtn('btnShot', ICONS.camera, 'Screenshot', 'Save a picture of the 3D view', () => screenshot());
     $('tbActions').append(els.btnMaps, els.btnDl, els.btnShot);
@@ -386,7 +394,7 @@ const App = (() => {
   }
 
   return {
-    init, go, buildCompass, screenshot, download, fileFor, toggleLayer, setVScale, setContour, setSize, openMaps, syncActions,
+    init, go, buildCompass, screenshot, download, fileFor, sketchupDoc, openDownloads, toggleLayer, setVScale, setContour, setSize, openMaps, syncActions,
     state, els, metaOf, slugOf, renderMetrics, setStep,
   };
 })();

@@ -9,6 +9,7 @@ const SiteTests = (() => {
   const { makeFrame, tileToLonLat } = GeoMod;
   const { buildModel, summarize } = ModelMod;
   const { revitCsv, siteDxf, notesMarkdown, CREDITS } = ExportsMod;
+  const { validateDoc } = SkFmt;
 
   const Z = 14, TX = 4437, TY = 6865, EXT = 4096;
   const [LON, LAT] = tileToLonLat(Z, TX, TY, EXT / 2, EXT / 2, EXT);       // centre of one z14 tile
@@ -195,6 +196,35 @@ const SiteTests = (() => {
       const a = App.fileFor('csv', { ...r, model }).name, b = App.fileFor('dxf', { ...r, model }).name, c = App.fileFor('notes', { ...r, model, release: 'x', loc: { lat: LAT, lon: LON, label: 'x' } }).name;
       App.state.typed = keep;
       return eq([a, b, c], ['3615-w-cypress-st-tampa-fl-1000ft-topo.csv', '3615-w-cypress-st-tampa-fl-1000ft-site.dxf', '3615-w-cypress-st-tampa-fl-1000ft-notes.md']);
+    });
+
+    /* ---- SketchUp export ---- */
+    const skResult = () => ({ frame, model, release: '2026-10-14.0', loc: { lat: LAT, lon: LON, label: 'Test Address' } });
+    await t('SketchUp: the Downloads menu has a SketchUp button', () => {
+      Pop.close();
+      App.openDownloads();
+      const b = document.querySelector('[data-dl="sketchup"]');
+      const r = eq([!!b, b && b.textContent.includes('SketchUp'), !!document.querySelector('[data-dl="csv"]'), !!document.querySelector('[data-dl="dxf"]')], [true, true, true, true]);
+      Pop.close();
+      return r;
+    });
+    await t('SketchUp: the document validates (ground triangles, buildings, no trees)', () => {
+      const keep = App.state.typed;
+      App.state.typed = 'Test Address';
+      const d = App.sketchupDoc(skResult());
+      App.state.typed = keep;
+      const hasTreeNode = (nd) => /tree/i.test(nd.name) || (nd.children || []).some(hasTreeNode);
+      const v = validateDoc(d), n = model.ground.n, find = (name) => d.root.children.find((c) => c.name === name);
+      if (!v.ok) return v.errors.join('; ');
+      return eq([d.source, d.root.name, find('Ground').triangles.length, find('Buildings').children.length, hasTreeNode(d.root), d.zShift === Math.round(-model.ground.min * 100) / 100],
+        ['site', 'Site at Test Address', 2 * (n - 1) * (n - 1), 4, false, true]);
+    });
+    await t('SketchUp: the download name is slug + size + date, and the file is JSON', () => {
+      const keep = App.state.typed;
+      App.state.typed = '3615 W Cypress St, Tampa, FL';
+      const f = App.fileFor('sketchup', skResult());
+      App.state.typed = keep;
+      return eq([/^3615-w-cypress-st-tampa-fl-1000ft-\d{4}-\d{2}-\d{2}\.sketchup\.json$/.test(f.name), f.blob.type, f.blob.size > 1000], [true, 'application/json', true]);
     });
 
     /* ---- pipeline on a fake network ---- */

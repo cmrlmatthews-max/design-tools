@@ -10,6 +10,8 @@
 //@@MODULE tiff@@
 //@@MODULE model@@
 //@@MODULE exports@@
+//@@MODULE sketchupFormat@@
+//@@MODULE sketchup@@
 //@@MODULE screenshot@@
 
 const CONFIG = {

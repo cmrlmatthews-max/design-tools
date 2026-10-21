@@ -11,6 +11,8 @@ window.__site = {
   state: () => App.state,
   info: () => Scene.info(),
   file: (kind) => App.fileFor(kind),
+  /** The SketchUp document (cmrlm-design-tools/sketchup) for the current site, or null before a site is loaded. */
+  sketchupDoc: () => (App.state.result ? App.sketchupDoc() : null),
   summary: () => (App.state.result ? ModelMod.summarize(App.state.result.model) : null),
   timings: () => (App.state.result ? { ...App.state.result.timings, ui: App.state.result.uiMs } : null),
   steps: () => [...document.querySelectorAll('#steps li')].map((li) => ({ step: li.dataset.step, status: li.dataset.s, message: li.querySelector('.ms').textContent })),
