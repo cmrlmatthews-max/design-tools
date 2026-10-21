@@ -19,9 +19,9 @@ This file is the one place that lists every tool in the suite, who builds it, an
 | `tower` | Tower Generator | `tower/` | Version 1.1 live | Home |
 | `sun` | Sun Study (inside the Tower Generator) | `tower/` | In work | Work |
 | `plate` | Plate Planner | `plate/` | In work | Work |
-| — | Project file (`src/shared/project.js`), Workspace page, Site Model handoff | `index.html`, `src/shared/`, `site/` | Next: spec written, build first | Home |
-| `midrise` | Mid-Rise Generator | `midrise/` | Concept written, build after the project file | Home |
-| `parking` | Parking Deck Generator | `parking/` | Queued after Mid-Rise | Home |
+| — | Project file (`src/shared/project.js`), Workspace page, Site Model handoff | `index.html`, `src/shared/`, `site/` | Version 1 live | Home |
+| `midrise` | Mid-Rise Generator | `midrise/` | Version 1 built, in review | Home |
+| `parking` | Parking Deck Generator | `parking/` | Next | Home |
 | `facade` | Facade Studio | `facade/` | Queued after Parking | Home |
 | `grading` | Grading Sketch | `grading/` | Queued after Facade | Home |
 | `view` | View Study | `view/` | Later | — |
