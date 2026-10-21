@@ -1,0 +1,30 @@
+<div class="shell">
+  <header class="topbar" id="topbar">
+    <div class="brand">
+      <span class="wordmark">CMRLM</span>
+      <span class="brand-sep"></span>
+      <h1 class="app-title">Site Model</h1>
+    </div>
+    <div class="tb-spacer"></div>
+    <div class="tb-group" id="tbActions"></div>
+  </header>
+
+  <main class="app" id="app">
+    <section class="viewport" id="viewport" aria-label="3D view">
+      <div class="canvas-host" id="canvasHost"></div>
+      <div class="empty" id="emptyState"><div><strong>No site yet</strong><span>Type an address in the panel, then tap Go.</span></div></div>
+      <div class="status-chip" id="statusChip" hidden></div>
+      <div class="compass" id="compass" aria-label="North arrow" role="img"><svg viewBox="0 0 48 48" aria-hidden="true"><g id="compassRose"><circle cx="24" cy="24" r="21.5" class="c-ring"/><path d="M24 10.5l3.6 13.5h-7.2z" class="c-n"/><path d="M24 37.5l-3.6-13.5h7.2z" class="c-s"/></g><text id="compassN" x="24" y="10.2" text-anchor="middle" class="c-t">N</text></svg></div>
+      <nav class="views" id="views" aria-label="Camera views"></nav>
+      <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+      <div class="test-panel" id="testPanel" hidden></div>
+    </section>
+
+    <aside class="panel" id="panel" aria-label="Controls">
+      <div class="grabber" id="grabber" role="separator" aria-orientation="horizontal" aria-label="Drag to resize the controls sheet" tabindex="0"><span></span></div>
+      <div class="panel-scroll" id="panelScroll">
+        <div id="sections"></div>
+      </div>
+    </aside>
+  </main>
+</div>

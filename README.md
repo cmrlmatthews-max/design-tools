@@ -8,25 +8,30 @@ A small toolkit of browser-based design tools for early-stage architectural work
 |---|---|---|
 | Menu page | `index.html` | Links to each tool |
 | Tower Generator | `tower/index.html` | Version 1.1: click-to-select, 3D handles with snapping, copy segment, form controls, site envelope, live metrics, presets, saved options, compare view, screenshots, AI prompt library |
+| Site Model | `site/index.html` | Version 1: type an address, see a 3D site from public map data (USGS ground, Overture buildings, roads, trees, water), download Revit CSV, DXF, and notes |
 
 ## Folders
 
 | Folder | Contents |
 |---|---|
 | `tower/` | The finished tool. Do not edit `index.html` by hand. |
-| `build/tower/` | Source parts. Edit these, then run `python3 build.py` to rebuild `tower/index.html`. |
-| `src/` | Tested modules (geometry, envelope, storage, screenshot, presets, test cases). |
+| `site/` | The Site Model tool. Do not edit `index.html` by hand. |
+| `build/tower/` | Source parts. Edit these, then run `python3 build/tower/build.py` (or `npm run build:tower`) to rebuild `tower/index.html`. |
+| `build/site/` | Source parts for the Site Model. Edit these, then run `python3 build/site/build.py` (or `npm run build:site`) to rebuild `site/index.html`. |
+| `src/` | Tested modules. `src/tower/` (geometry, envelope, presets, test cases), `src/site/` (geo, geocode, pmtiles, mvt, tiff, model, exports), `src/shared/` (storage, screenshot). |
 | `test/` | Module tests. Run `npm install`, then `npm test`. |
 | `docs/` | Concept, technical plan, module contracts, integration notes. |
 
-Open `tower/index.html?test` to run the in-page test suite.
+Open `tower/index.html?test` or `site/index.html?test` to run the in-page test suites.
+
+Site Model module tests: `npm run test:site` (readers: geo, geocode, pmtiles, mvt, tiff) and `npm run test:model` (ground, buildings, roads, trees, water, exports). Both need `npm install` first (they use clipper-lib). The Site Model reads public data from the internet (Nominatim, USGS, Overture), so it needs a connection.
 
 ## Host on GitHub Pages
 
 1. Push this repository to GitHub (for example `design-tools`).
 2. Open the repository on GitHub: Settings, then Pages.
 3. Under "Build and deployment", set Source to "Deploy from a branch", choose the `main` branch and the `/ (root)` folder, then Save.
-4. After a minute the site is live at `https://<your-user>.github.io/design-tools/`. The tower generator is at `https://<your-user>.github.io/design-tools/tower/`.
+4. After a minute the site is live at `https://<your-user>.github.io/design-tools/`. The tower generator is at `https://<your-user>.github.io/design-tools/tower/` and the site model is at `https://<your-user>.github.io/design-tools/site/`.
 
 On an iPad, open the tower URL in Safari, tap Share, then "Add to Home Screen" to use it like an app.
 
