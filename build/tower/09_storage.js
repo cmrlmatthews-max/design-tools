@@ -59,11 +59,15 @@ const Options = (() => {
     Toast.show(`Opened ${quoted(rec.name)}. Undo brings your last design back.`);
     return true;
   }
-  /** A preset becomes a new, unsaved option; its context is replaced by the Surround set for its site. */
+  /** A preset becomes a new, unsaved option; its context is replaced by the Surround set for its site (or around the building when the design has no site). */
   function loadPreset(id) {
     const p = CONFIG.presets.find((x) => x.id === id);
     if (!p) return false;
     const s = fillDefaults(p.state);
+    // A design with no site keeps no site (and no height limit): the preset's own site numbers (width, depth, setbacks, stepback)
+    // come along, so switching to Rectangle later gives that preset's site.
+    const cur = Store.raw().site;
+    if (cur && cur.shape === 'none') { s.site.shape = 'none'; s.site.heightLimit = 0; }
     s.context.blocks = surroundBlocks(s);
     s.context.show = true;
     s.view.colorBy = 'program';          // v1.1: a preset is a new option, and new options color the Diagram by program

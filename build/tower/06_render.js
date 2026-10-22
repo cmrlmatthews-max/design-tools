@@ -263,9 +263,11 @@ const Render = (() => {
       if (diagram) out.push(new THREE.LineSegments(new THREE.EdgesGeometry(merged, 20), lineMaterial('edge')));
     }
     // Site boundary outline (rectangle or polygon), just above the ground.
-    const ring = sitePolygon(state);
-    const siteGeo = new THREE.BufferGeometry().setFromPoints(ring.map((q) => worldVec(q[0], q[1], 0.1)));
-    out.push(new THREE.LineLoop(siteGeo, lineMaterial('site')));
+    const ring = sitePolygon(state);                    // [] when the site is Unlimited: no site line
+    if (ring.length) {
+      const siteGeo = new THREE.BufferGeometry().setFromPoints(ring.map((q) => worldVec(q[0], q[1], 0.1)));
+      out.push(new THREE.LineLoop(siteGeo, lineMaterial('site')));
+    }
     return out;
   }
 
@@ -886,7 +888,7 @@ const Render = (() => {
     onRebuild: (fn) => rebuildListeners.push(fn),
     onViewChange: (fn) => viewListeners.push(fn),
     onResize: (fn) => resizeListeners.push(fn),
-    info: () => ({ camera: camType, preset, meshes: layers ? layers.model.group.children.length : 0, tweening: !!tween, distance: cam ? cam.position.distanceTo(controls.target) : 0, zoom: cam ? cam.zoom : 0, compare: !!cmp, drawQuality: derived ? Derived.display(Store.gestureActive() && !Store.gesturePath().startsWith('view')).quality : null }),
+    info: () => ({ siteLines: layers ? layers.model.group.children.filter((o) => o.isLineLoop).length : 0, envelopeLines: layers ? layers.envelope.group.children.length : 0, camera: camType, preset, meshes: layers ? layers.model.group.children.length : 0, tweening: !!tween, distance: cam ? cam.position.distanceTo(controls.target) : 0, zoom: cam ? cam.zoom : 0, compare: !!cmp, drawQuality: derived ? Derived.display(Store.gestureActive() && !Store.gesturePath().startsWith('view')).quality : null }),
     ready: () => !!renderer,
     comparing: () => !!cmp,
     // v1.1 hooks for direct editing (Select): the camera, the orbit controls, the overlay group and a per-frame callback

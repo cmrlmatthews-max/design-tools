@@ -53,7 +53,7 @@ const Templates = (() => {
 
   /** A rectangular site that is too small for the template grows (never shrinks), so the new layout starts inside the setbacks. */
   function growSite(s) {
-    if (s.site.shape === 'polygon') return;
+    if (s.site.shape !== 'rect') return;          // polygon and Unlimited sites never grow
     const warn = (st) => computeDerived(st).warnings.some((w) => w.id === 'bar-outside-site');
     if (!warn(s)) return;
     const d = computeDerived(s);

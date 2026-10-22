@@ -49,7 +49,7 @@ function defaultState() {
     type: 'bar',
 
     site: {
-      shape: 'rect', width: 360, depth: 242, points: [],
+      shape: 'none', width: 360, depth: 242, points: [],     // 'none' (Unlimited: no site line, setbacks or site checks) | 'rect' | 'polygon'
       setbacks: { front: 20, back: 20, left: 20, right: 20 },
       heightLimit: 0,
       stepback: { on: false, aboveHeight: 85, distance: 15 },
@@ -119,6 +119,12 @@ function defaultState() {
   };
 }
 
+/** Saved options and project files from before the Unlimited site have a site and no shape: they were drawn on a rectangle, so they
+ *  stay "rect". Only a state with no site at all gets the default ("none"). An unknown shape becomes "rect" too. */
+function legacySite(s) {
+  if (isObj(s.site) && !['none', 'rect', 'polygon'].includes(s.site.shape)) s.site.shape = 'rect';
+}
+
 /** Fill every missing field from the defaults so older or partial states (presets, imports) are complete. */
 function fillDefaults(src) {
   const s = isObj(src) ? deepClone(src) : {};
@@ -128,6 +134,7 @@ function fillDefaults(src) {
       else if (isObj(d[k]) && isObj(t[k])) merge(t[k], d[k]);
     }
   };
+  legacySite(s);
   const base = defaultState();
   const keepPlacement = s.placement;
   merge(s, base);

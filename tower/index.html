@@ -2899,6 +2899,7 @@ function buildPlates(state, { quality = "full" } = {}) {
 
 function siteAreaOf(state) {
   const s = state.site || {};
+  if (s.shape === "none") return 0;                 // Unlimited: no site, so no site area
   if (s.shape === "polygon" && Array.isArray(s.points) && s.points.length >= 3) {
     return Math.abs(ringArea(s.points.map((p) => [+p[0], +p[1]])));
   }
@@ -2974,6 +2975,7 @@ function computeMetrics(state, plates) {
     plateMax: towerAreas.length ? Math.max(...towerAreas) : 0,
     plateAvg: towerAreas.length ? towerArea / towerAreas.length : 0,
     siteArea,
+    hasSite: !(state.site && state.site.shape === "none"),   // false: siteArea, far and siteCoverage are 0 and mean "no site"
     far,
     floor1Area,
     siteCoverage: siteArea > 0 ? floor1Area / siteArea : 0,
@@ -4171,11 +4173,11 @@ function defaultState() {
     placement: null,          // { x, y, rotation, baseZ } while a project is open (ProjectUI, 09b_project.js)
 
     site: {
-      shape: 'rect',
+      shape: 'none',            // 'none' (Unlimited: no site line, setbacks or site checks) | 'rect' | 'polygon'
       width: 250, depth: 200,
       points: [],
       setbacks: { front: 10, back: 10, left: 10, right: 10 },
-      heightLimit: 400,
+      heightLimit: 0,              // 0 = no height limit
       stepback: { on: false, aboveHeight: 85, distance: 15 },
     },
 
@@ -4250,6 +4252,12 @@ function migrateTower(state, from) {
   return s;
 }
 
+/** Saved options and project files from before the Unlimited site have a site and no shape: they were drawn on a rectangle, so they
+ *  stay "rect". Only a state with no site at all gets the default ("none"). An unknown shape becomes "rect" too. */
+function legacySite(s) {
+  if (s.site && typeof s.site === 'object' && !Array.isArray(s.site) && !['none', 'rect', 'polygon'].includes(s.site.shape)) s.site.shape = 'rect';
+}
+
 /** Fill every missing field from the defaults so older or partial states (presets, imports) are complete. */
 function fillDefaults(src) {
   const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -4260,6 +4268,7 @@ function fillDefaults(src) {
       else if (isObj(d[k]) && isObj(t[k])) merge(t[k], d[k]);
     }
   };
+  legacySite(s);
   const base = defaultState();
   merge(s, base);                                           // a state with no colorBy gets "program"; an explicit "zone" or "program" is kept
   migrateView(s.view);
@@ -4413,16 +4422,33 @@ const Store = (() => {
 
 /* ---- site helpers the shell keeps (the zoning rules live in ENVELOPE) -------- */
 const siteRect = (w, d) => { const x = w / 2, y = d / 2; return [[-x, -y], [x, -y], [x, y], [-x, y]]; };
+/** The site ring, or [] when the design has no site (site.shape === 'none', "Unlimited"). Every caller checks for the empty ring. */
 function sitePolygon(state) {
   const s = state.site;
+  if (s.shape === 'none') return [];
   if (s.shape === 'polygon' && Array.isArray(s.points) && s.points.length >= 3) return s.points.map((p) => [p[0], p[1]]);
   return siteRect(clamp(num(s.width, 0), 0, CONFIG.limits.maxDim), clamp(num(s.depth, 0), 0, CONFIG.limits.maxDim));
 }
-function siteArea(state) { return Math.abs(Geo.ringArea(sitePolygon(state))); }
+function siteArea(state) { const ring = sitePolygon(state); return ring.length ? Math.abs(Geo.ringArea(ring)) : 0; }
+const designHasSite = (state) => !!state.site && state.site.shape !== 'none';
+
+/** The ring the Surround set sits around: the site, or, with no site, the box of the building as it stands (a draft build). */
+function surroundRing(state) {
+  const ring = sitePolygon(state);
+  if (ring.length || designHasSite(state)) return ring;
+  try {
+    const b = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
+    for (const p of Geo.buildPlates(state, { quality: 'draft' }).plates) {
+      if (p.void) continue;
+      for (const poly of p.polygons) for (const q of poly.outer) { b.minX = Math.min(b.minX, q[0]); b.maxX = Math.max(b.maxX, q[0]); b.minY = Math.min(b.minY, q[1]); b.maxY = Math.max(b.maxY, q[1]); }
+    }
+    return isFinite(b.minX) ? [[b.minX, b.minY], [b.maxX, b.minY], [b.maxX, b.maxY], [b.minX, b.maxY]] : [];
+  } catch (e) { return []; }
+}
 
 /** Surround set (plan 7.4): one block on each side of the site, 20 ft off the boundary. */
 function surroundBlocks(state) {
-  const ring = sitePolygon(state);
+  const ring = surroundRing(state);
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   for (const q of ring) { minX = Math.min(minX, q[0]); maxX = Math.max(maxX, q[0]); minY = Math.min(minY, q[1]); maxY = Math.max(maxY, q[1]); }
   if (!isFinite(minX)) return [];
@@ -4603,6 +4629,12 @@ function setbacksOf(state) {
   return { front: g("front"), back: g("back"), left: g("left"), right: g("right") };
 }
 
+/** False when the design has no site (site.shape === "none", "Unlimited"): there is no site ring, no setbacks and no stepback,
+ *  and allowedFootprint / envelopeWireframe return []. The height limit (when above 0) still applies. */
+function hasSite(state) {
+  return !state || !state.site || state.site.shape !== "none";
+}
+
 function usePolygonSite(state) {
   const s = state.site || {};
   return s.shape === "polygon" && Array.isArray(s.points) && s.points.length >= 3;
@@ -4615,6 +4647,7 @@ function rectRing(w, d) {
 /** Site ring, counter-clockwise, cleaned of duplicate and collinear points. */
 function siteRing(state) {
   const s = state.site || {};
+  if (!hasSite(state)) return [];
   if (!usePolygonSite(state)) return rectRing(Math.max(0, num(s.width, 0)), Math.max(0, num(s.depth, 0)));
   let ring = s.points.map((p) => [num(p[0]), num(p[1])]);
   if (ringSignedArea(ring) < 0) ring.reverse();
@@ -4674,6 +4707,7 @@ function offsetRingPerEdge(ring, dist) {
 
 /** Base allowed footprint: site minus side setbacks. Returns MultiPoly. */
 function baseFootprint(state) {
+  if (!hasSite(state)) return [];
   const sb = setbacksOf(state);
   const s = state.site || {};
   if (!usePolygonSite(state)) {
@@ -4711,6 +4745,7 @@ function stepFootprint(state, base) {
 
 /** MultiPoly allowed at elevation z. Stepback applies for z strictly above aboveHeight. */
 function allowedFootprint(state, z) {
+  if (!hasSite(state)) return [];
   const base = baseFootprint(state);
   const sb = stepbackOf(state);
   if (sb.on && z > sb.aboveHeight + STEP_EPS) return stepFootprint(state, base);
@@ -4721,6 +4756,7 @@ function allowedFootprint(state, z) {
 
 /** Prisms to draw. Height = heightLimit if set, else topZ. */
 function envelopeWireframe(state, topZ) {
+  if (!hasSite(state)) return [];                  // no site: nothing to draw
   const limit = Math.max(0, num(state.site && state.site.heightLimit, 0));
   const top = limit > 0 ? limit : num(topZ, 0);
   if (!(top > 0)) return [];
@@ -4787,8 +4823,9 @@ function copyPlate(p) {
  */
 function checkEnvelope(state, plates, solids = []) {
   const limit = Math.max(0, num(state.site && state.site.heightLimit, 0));
-  const sb = stepbackOf(state);
-  const base = baseFootprint(state);
+  const free = !hasSite(state);                     // no site: no setback or stepback checks, only the height limit
+  const sb = free ? { on: false, aboveHeight: 0, distance: 0 } : stepbackOf(state);
+  const base = free ? [] : baseFootprint(state);
   const step = sb.on ? stepFootprint(state, base) : base;
 
   const outside = new Map();
@@ -4802,7 +4839,7 @@ function checkEnvelope(state, plates, solids = []) {
     const stepped = sb.on && top > sb.aboveHeight + H_TOL;
     const allowed = stepped ? step : base;
 
-    const area = differenceArea(p.polygons, allowed);
+    const area = free ? 0 : differenceArea(p.polygons, allowed);
     p.outsideEnvelopeArea = area;
     outside.set(p.n, area);
 
@@ -4829,7 +4866,7 @@ function checkEnvelope(state, plates, solids = []) {
   return { plates: outPlates, outside, solidsOutside, warnings };
 }
 
-return { SCALE, allowedFootprint, envelopeWireframe, describeFloors, checkEnvelope };
+return { SCALE, hasSite, allowedFootprint, envelopeWireframe, describeFloors, checkEnvelope };
 })();
 
 
@@ -4843,6 +4880,8 @@ function computeBounds(state, plates, height) {
     for (const poly of p.polygons) for (const q of poly.outer) add(model, q[0], q[1]);
   }
   for (const q of sitePolygon(state)) add(site, q[0], q[1]);
+  // No site (Unlimited): the site box is the building box plus a margin, so framing, the figure and the sun grid still have an extent.
+  if (!isFinite(site.minX) && isFinite(model.minX)) { const m = 30; Object.assign(site, { minX: model.minX - m, maxX: model.maxX + m, minY: model.minY - m, maxY: model.maxY + m }); }
   if (!isFinite(site.minX)) Object.assign(site, { minX: -50, maxX: 50, minY: -50, maxY: 50 });
   if (!isFinite(model.minX)) Object.assign(model, site);
   const union = {
@@ -5208,9 +5247,11 @@ const Render = (() => {
       if (diagram) out.push(new THREE.LineSegments(new THREE.EdgesGeometry(merged, 20), lineMaterial('edge')));
     }
     // Site boundary outline (rectangle or polygon), just above the ground.
-    const ring = sitePolygon(state);
-    const siteGeo = new THREE.BufferGeometry().setFromPoints(ring.map((q) => worldVec(q[0], q[1], 0.1)));
-    out.push(new THREE.LineLoop(siteGeo, lineMaterial('site')));
+    const ring = sitePolygon(state);                    // [] when the site is Unlimited: no site line
+    if (ring.length) {
+      const siteGeo = new THREE.BufferGeometry().setFromPoints(ring.map((q) => worldVec(q[0], q[1], 0.1)));
+      out.push(new THREE.LineLoop(siteGeo, lineMaterial('site')));
+    }
     return out;
   }
 
@@ -5831,7 +5872,7 @@ const Render = (() => {
     onRebuild: (fn) => rebuildListeners.push(fn),
     onViewChange: (fn) => viewListeners.push(fn),
     onResize: (fn) => resizeListeners.push(fn),
-    info: () => ({ camera: camType, preset, meshes: layers ? layers.model.group.children.length : 0, tweening: !!tween, distance: cam ? cam.position.distanceTo(controls.target) : 0, zoom: cam ? cam.zoom : 0, compare: !!cmp, drawQuality: derived ? Derived.display(Store.gestureActive() && !Store.gesturePath().startsWith('view')).quality : null }),
+    info: () => ({ siteLines: layers ? layers.model.group.children.filter((o) => o.isLineLoop).length : 0, envelopeLines: layers ? layers.envelope.group.children.length : 0, camera: camType, preset, meshes: layers ? layers.model.group.children.length : 0, tweening: !!tween, distance: cam ? cam.position.distanceTo(controls.target) : 0, zoom: cam ? cam.zoom : 0, compare: !!cmp, drawQuality: derived ? Derived.display(Store.gestureActive() && !Store.gesturePath().startsWith('view')).quality : null }),
     ready: () => !!renderer,
     comparing: () => !!cmp,
     // v1.1 hooks for direct editing (Select): the camera, the orbit controls, the overlay group and a per-frame callback
@@ -6027,6 +6068,7 @@ function usePolygonSite(site) {
 
 function siteLines(out, state) {
   const site = (state && state.site) || {};
+  if (site.shape === "none") return;                 // Unlimited: no site line to snap to
   if (usePolygonSite(site)) {
     const pts = site.points.map((p) => [num(p[0]), num(p[1])]);
     const b = growRing(emptyBox(), pts);
@@ -6053,7 +6095,7 @@ function siteLines(out, state) {
 }
 
 function setbackLines(out, state) {
-  if (!state || !state.site) return;
+  if (!state || !state.site || state.site.shape === "none") return;
   let mp;
   try { mp = allowedFootprint(state, 0); } catch (e) { return; }   // polygon site without Clipper
   const b = mpBox(mp);
@@ -8096,6 +8138,8 @@ const UI = (() => {
   }
 
   /* ---- panel sections ------------------------------------------------------------- */
+  const NO_SITE_HELP = 'Unlimited: no site line, setbacks, or site checks. Pick Rectangle or Polygon to test a real site.';
+  const hasSiteNow = () => get('site.shape') !== 'none';
   function buildSite() {
     const shapeBind = {
       get: () => get('site.shape'),
@@ -8112,8 +8156,9 @@ const UI = (() => {
     };
     return {
       children: els([
-        sel('Shape', null, opts([['rect', 'Rectangle'], ['polygon', 'Polygon']]), shapeBind),
-        Controls.when(() => get('site.shape') !== 'polygon', [lenS('Width', 'site.width', 50, 600), lenS('Depth', 'site.depth', 50, 600)]),
+        sel('Shape', null, opts([['none', 'Unlimited'], ['rect', 'Rectangle'], ['polygon', 'Polygon']]), shapeBind),
+        Controls.when(() => get('site.shape') === 'none', [Controls.help(NO_SITE_HELP)]),
+        Controls.when(() => get('site.shape') === 'rect', [lenS('Width', 'site.width', 50, 600), lenS('Depth', 'site.depth', 50, 600)]),
         Controls.when(() => get('site.shape') === 'polygon', [Controls.points({ label: 'Site corners (x, y in feet)', bind: bs('site.points'), need: 3, needText: 'Needs at least 3 points. Until then the rectangle is used.' })]),
       ]),
     };
@@ -8139,10 +8184,12 @@ const UI = (() => {
           label: 'Height limit (0 = none)', bind: limitBind, min: 0, max: 800, step: 5, hardMin: 0, hardMax: 5000,
           format: (v) => (v > 0 ? Units.formatFeetInches(v) : 'None'), parse: (t) => (/^\s*(none|off)\s*$/i.test(t) ? 0 : Units.parseLength(t)), inputMode: 'text',
         }),
-        Controls.label('Stepback'),
-        Controls.toggle({ label: 'Stepback above a height', bind: bs('site.stepback.on') }),
-        Controls.when(() => get('site.stepback.on'), [lenS('Above height', 'site.stepback.aboveHeight', 20, 400), lenS('Step in by', 'site.stepback.distance', 5, 60)]),
-        Controls.help('Above the stepback height the allowed footprint shrinks by the step-in distance on every side.'),
+        Controls.when(hasSiteNow, [
+          Controls.label('Stepback'),
+          Controls.toggle({ label: 'Stepback above a height', bind: bs('site.stepback.on') }),
+          Controls.when(() => get('site.stepback.on'), [lenS('Above height', 'site.stepback.aboveHeight', 20, 400), lenS('Step in by', 'site.stepback.distance', 5, 60)]),
+          Controls.help('Above the stepback height the allowed footprint shrinks by the step-in distance on every side.'),
+        ]),
       ]),
     };
   }
@@ -8167,7 +8214,7 @@ const UI = (() => {
         h('div', { class: 'add-row' }, Controls.button('Surround', () => {
           Store.set('context.blocks', surroundBlocks(Store.raw()), { live: false });
           if (!get('context.show')) Store.set('context.show', true, { live: false });
-        }), h('span', { class: 'help', style: 'margin:0' }, 'One block on each side of the site.')),
+        }), h('span', { class: 'help', style: 'margin:0' }, 'One block on each side of the site (around the building when there is no site).')),
       ]),
     };
   }
@@ -8431,7 +8478,7 @@ const UI = (() => {
     // Project site (09b_project.js): the first Site section, shown only while a project is open.
     { id: 'project', tab: 'site', title: 'Project site', open: true, build: () => ProjectUI.buildSite({ bs, els, lenF, degS, get }), when: () => ProjectUI.has() },
     { id: 'site', tab: 'site', title: 'Site', open: true, build: buildSite },
-    { id: 'setbacks', tab: 'site', title: 'Setbacks', open: true, build: buildSetbacks },
+    { id: 'setbacks', tab: 'site', title: 'Setbacks', open: true, build: buildSetbacks, when: hasSiteNow },
     { id: 'height', tab: 'site', title: 'Height limit and stepback', open: true, build: buildHeight },
     { id: 'context', tab: 'site', title: 'Context blocks', build: buildContext },
   ];
@@ -8743,15 +8790,23 @@ const UI = (() => {
     if (!!prefs.hudOpen !== open) { prefs.hudOpen = open; saveUiPrefs(prefs); }
   }
   function setText(id, text) { const el = $(id); if (el.firstChild && el.firstChild.nodeType === 3) el.firstChild.nodeValue = text; else el.prepend(document.createTextNode(text)); }
+  /** A metric that needs the site: "—" with a small "no site" note while the site is Unlimited, the number otherwise. */
+  function siteMetric(id, text, hasSite) {
+    setText(id, hasSite ? text : '—');
+    const el = $(id);
+    const note = el.querySelector('small.nosite');
+    if (hasSite) { if (note) note.remove(); } else if (!note) el.append(h('small', { class: 'nosite' }, 'no site'));
+  }
   function updateHud(d) {
     const m = d.metrics;
+    const site = m.hasSite !== false;
     setText('mGfa', Units.formatArea(m.gfa));
-    setText('mFar', Units.formatRatio(m.far));
+    siteMetric('mFar', Units.formatRatio(m.far), site);
     setText('mHeight', Units.formatFeetInches(m.totalHeight));
     setText('mFloors', Units.formatInt(m.floorCount));
     $('mFloorsSub').textContent = floorsText(m);
-    setText('mSite', Units.formatArea(m.siteArea));
-    setText('mCover', pct1(m.siteCoverage));
+    siteMetric('mSite', Units.formatArea(m.siteArea), site);
+    siteMetric('mCover', pct1(m.siteCoverage), site);
     setText('mEff', pct1(m.efficiencyAvg));
     setText('mNet', Units.formatArea(m.netArea));
     setText('mCore', Units.formatArea(m.coreArea));
@@ -8785,7 +8840,7 @@ const UI = (() => {
         h('dd', { class: t.diff > 0 ? 'tgt-pos' : 'tgt-neg' }, `${signed(t.diff, fmt)} (${signed(t.pct, (v) => `${v.toFixed(1)}%`)})`));
     };
     addTarget('GFA', m.target.gfa, (v) => Units.formatArea(v));
-    addTarget('FAR', m.target.far, (v) => Units.formatRatio(v, 2));
+    if (site) addTarget('FAR', m.target.far, (v) => Units.formatRatio(v, 2));
     $('hudTargets').hidden = !tl.children.length;
 
     const list = $('warnList');
@@ -11206,11 +11261,15 @@ const Options = (() => {
     Toast.show(`Opened ${quoted(rec.name)}. Undo brings your last design back.`);
     return true;
   }
-  /** A preset becomes a new, unsaved option; its context is replaced by the Surround set for its site. */
+  /** A preset becomes a new, unsaved option; its context is replaced by the Surround set for its site (or around the building when the design has no site). */
   function loadPreset(id) {
     const p = CONFIG.presets.find((x) => x.id === id);
     if (!p) return false;
     const s = fillDefaults(p.state);
+    // A design with no site keeps no site (and no height limit): the preset's own site numbers (width, depth, setbacks, stepback)
+    // come along, so switching to Rectangle later gives that preset's site.
+    const cur = Store.raw().site;
+    if (cur && cur.shape === 'none') { s.site.shape = 'none'; s.site.heightLimit = 0; }
     s.context.blocks = surroundBlocks(s);
     s.context.show = true;
     s.view.colorBy = 'program';          // v1.1: a preset is a new option, and new options color the Diagram by program
@@ -12397,10 +12456,10 @@ const Shots = (() => {
     const ub = unitBreakdown(m);      // residential units + hotel keys; parking spaces are not counted
     return [
       ['GFA', Units.formatArea(m.gfa)],
-      ['FAR', Units.formatRatio(m.far)],
+      ['FAR', m.hasSite === false ? '—' : Units.formatRatio(m.far)],
       ['Height', Units.formatFeetInches(m.totalHeight)],
       ['Floors', Units.formatInt(m.floorCount)],
-      ub.hasTotal ? [ub.label, Units.formatInt(ub.total)] : ['Site coverage', `${(m.siteCoverage * 100).toFixed(1)}%`],
+      ub.hasTotal ? [ub.label, Units.formatInt(ub.total)] : ['Site coverage', m.hasSite === false ? '—' : `${(m.siteCoverage * 100).toFixed(1)}%`],
       ['Efficiency', `${(m.efficiencyAvg * 100).toFixed(1)}%`],
     ];
   }
@@ -12623,13 +12682,13 @@ const Compare = (() => {
   const parkingSpaces = (m) => { const ub = unitBreakdown(m); return ub.spaces.length ? ub.spaces.reduce((a, r) => a + r.count, 0) : null; };
   const ROWS = [
     { label: 'GFA', get: (e) => e.d.metrics.gfa, fmt: Units.formatArea, higher: true },
-    { label: 'FAR', get: (e) => e.d.metrics.far, fmt: (v) => Units.formatRatio(v, 2), higher: true },
+    { label: 'FAR', get: (e) => (e.d.metrics.hasSite === false ? null : e.d.metrics.far), fmt: (v) => Units.formatRatio(v, 2), higher: true },
     { label: 'Units + keys (estimate)', get: (e) => totalUnits(e.d.metrics), fmt: Units.formatInt, higher: true },
     { label: 'Parking spaces (estimate)', get: (e) => parkingSpaces(e.d.metrics), fmt: Units.formatInt },
     { label: 'Efficiency (avg)', get: (e) => e.d.metrics.efficiencyAvg, fmt: (v) => `${(v * 100).toFixed(1)}%`, higher: true },
     { label: 'Floors', get: (e) => e.d.metrics.floorCount, fmt: Units.formatInt },
     { label: 'Total height', get: (e) => e.d.metrics.totalHeight, fmt: Units.formatFeetInches },
-    { label: 'Site coverage', get: (e) => e.d.metrics.siteCoverage, fmt: (v) => `${(v * 100).toFixed(1)}%` },
+    { label: 'Site coverage', get: (e) => (e.d.metrics.hasSite === false ? null : e.d.metrics.siteCoverage), fmt: (v) => `${(v * 100).toFixed(1)}%` },
     { label: 'Tower plate (avg)', get: (e) => e.d.metrics.plateAvg, fmt: Units.formatArea },
     { label: 'Net area', get: (e) => e.d.metrics.netArea, fmt: Units.formatArea },
     { label: 'Warnings', get: (e) => e.d.warnings.length, fmt: Units.formatInt },
@@ -13114,11 +13173,11 @@ async function runTests() {
     return eq([p.filter((x) => x.outsideEnvelopeArea > 1).map((x) => x.n)], [[6, 7, 8, 9, 10]]);
   });
   await t('a plate that touches the allowed footprint exactly is inside', () => {
-    const s = defaultState(); s.segments[0].shape.w = 230; s.segments[0].shape.d = 180;
+    const s = defaultState(); s.site.shape = 'rect'; s.segments[0].shape.w = 230; s.segments[0].shape.d = 180;
     return eq(computeDerived(s).plates.filter((x) => x.outsideEnvelopeArea > 1).length, 0);
   });
   await t('a plate past the setback is outside and listed', () => {
-    const s = defaultState(); s.segments[0].shape.w = 240;
+    const s = defaultState(); s.site.shape = 'rect'; s.segments[0].shape.w = 240;
     const d = computeDerived(s);
     return eq([d.plates.every((x) => x.outsideEnvelopeArea > 1), d.warnings.some((x) => x.id === 'setback')], [true, true]);
   });
@@ -13128,7 +13187,8 @@ async function runTests() {
     return (hasCurves(s) && Math.abs(full - draft) / full < 1e-3) || `full ${full} draft ${draft}`;
   });
   await t('Surround makes one block per side, outside the site', () => {
-    const b = surroundBlocks(defaultState());
+    const s = defaultState(); s.site.shape = 'rect';
+    const b = surroundBlocks(s);
     return eq([b.length, b.every((k) => Math.abs(k.x) + k.w / 2 > 125 || Math.abs(k.y) + k.d / 2 > 100)], [4, true]);
   });
   await t('compare grid: 2 options landscape = 2 columns; 4 = 2 x 2', () => {
@@ -13491,7 +13551,8 @@ async function runAllTests() {
   const sketchup = await runSketchupTests();
   const project = await runProjectTests();     // 12f_tests_project.js
   const sun = await runSunTests();             // 12g_tests_sun.js
-  const all = [...(base.results || []), ...layout, ...select, ...fresh, ...sketchup, ...project, ...sun];
+  const nosite = await runNoSiteTests();       // 12h_tests_nosite.js
+  const all = [...(base.results || []), ...layout, ...select, ...fresh, ...sketchup, ...project, ...sun, ...nosite];
   const failed = all.filter((r) => !r.ok);
   console.log(`[tests] layout ${layout.length - layout.filter((r) => !r.ok).length}/${layout.length} passed`, layout.filter((r) => !r.ok).length ? JSON.stringify(layout.filter((r) => !r.ok)) : '');
   console.log(`[tests] select ${select.length - select.filter((r) => !r.ok).length}/${select.length} passed`, select.filter((r) => !r.ok).length ? JSON.stringify(select.filter((r) => !r.ok)) : '');
@@ -14353,7 +14414,7 @@ async function runProjectTests() {
       return ok || `buttons ${labels}, first ${first && first.dataset.section}, fields ${fields}`;
     });
     await t('the site boundary is given in the tower frame (centered on the tower)', () => eq(ProjectUI.boundaryLocal(), [[-500, -500], [500, -500], [500, 500], [-500, 500]]));
-    await t('the site layer draws the boundary and the north arrow', async () => {
+    await t('the site layer draws the boundary and the north arrow (the design itself has an Unlimited site: the layer is separate)', async () => {
       if (!Render.ready()) return true;
       await wait(250);
       const i = SiteLayer.info();
@@ -15151,6 +15212,171 @@ async function runSunTests() {
   }
   window.__sunTimings = timings;
   console.log('[sun] timings', JSON.stringify(timings));
+  return results;
+}
+
+/* ==========================================================================
+   TESTS: Unlimited site (site.shape 'none')
+   The default design has no site line, no site checks and "—" for the site numbers; Rectangle brings them back;
+   a preset keeps "no site"; old states keep their rectangle. runAllTests in 12b merges the results.
+   The tests restore the design, the tab and the metrics card when they finish, and hold the autosave.
+   ========================================================================== */
+async function runNoSiteTests() {
+  const results = [];
+  const eq = (a, b) => (JSON.stringify(a) === JSON.stringify(b) ? true : `got ${JSON.stringify(a)}, expected ${JSON.stringify(b)}`);
+  const t = async (name, fn) => {
+    let r;
+    try { r = await fn(); } catch (e) { r = `threw ${e && e.message}`; }
+    results.push({ name, ok: r === true, detail: r === true ? '' : String(r) });
+  };
+  const $ = (id) => document.getElementById(id);
+  const visible = (el) => !!el && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
+  const frames = async (n = 4) => { for (let i = 0; i < n; i++) await new Promise((r) => requestAnimationFrame(() => r())); };
+  const savedState = Store.snapshot(), savedTab = UI.activeTab(), savedHud = UI.hudOpen();
+  Options.holdAutosave(true);
+  const siteSetSite = (shape) => Store.set('site.shape', shape, { live: false });
+  const finite = (o) => !/NaN|Infinity/.test(JSON.stringify(o));
+  /** True when some element of the Site and Height sections with exactly this text is on screen (a hidden section or control has no layout boxes). */
+  const rowVisible = (label) => [...document.querySelectorAll('#tabpanel-site [data-section="site"] *, #tabpanel-site [data-section="height"] *')].some((e) => e.children.length === 0 && e.textContent.trim() === label && visible(e));
+
+  try {
+    /* ---- the state ---- */
+    await t('the default design has an Unlimited site and no height limit; width, depth and setbacks stay for Rectangle', () => {
+      const s = defaultState().site;
+      return eq([s.shape, s.heightLimit, s.width, s.depth, s.setbacks.front, s.stepback.aboveHeight], ['none', 0, 250, 200, 10, 85]);
+    });
+    await t('a state with a site and no shape stays a rectangle; a state with no site is Unlimited; a polygon stays', () => {
+      const old = fillDefaults({ site: { width: 200, depth: 100, setbacks: { front: 5, back: 5, left: 5, right: 5 }, heightLimit: 300 } });
+      const poly = fillDefaults({ site: { shape: 'polygon', points: [[0, 0], [100, 0], [100, 80]] } });
+      return eq([old.site.shape, old.site.width, old.site.heightLimit, fillDefaults({}).site.shape, poly.site.shape], ['rect', 200, 300, 'none', 'polygon']);
+    });
+    await t('every preset keeps its own site when it loads (rect, its numbers, its height limit)', () => {
+      const bad = CONFIG.presets.filter((p) => JSON.stringify(fillDefaults(p.state).site) !== JSON.stringify(p.state.site)).map((p) => p.id);
+      return eq(bad, []);
+    });
+    await t('sitePolygon is empty and siteArea is 0 with no site; Rectangle gives the ring and the area', () => {
+      const s = defaultState();
+      const a = [sitePolygon(s).length, siteArea(s)];
+      s.site.shape = 'rect';
+      return eq([a, sitePolygon(s).length, siteArea(s)], [[0, 0], 4, 50000]);
+    });
+
+    /* ---- numbers and warnings ---- */
+    await t('no site: zero warnings on the default design, no red plates, and every metric is finite', () => {
+      const d = computeDerived(defaultState());
+      return eq([d.warnings.length, d.plates.some((p) => p.outsideEnvelopeArea > 0), d.metrics.hasSite, d.metrics.siteArea, d.metrics.far, d.metrics.siteCoverage, finite(d.metrics), d.wire.length],
+        [0, false, false, 0, 0, 0, true, 0]);
+    });
+    await t('no site: a huge building has no setback, stepback or outside warning', () => {
+      const s = defaultState(); s.segments[0].shape.w = 900; s.segments[0].shape.d = 900; s.site.stepback = { on: true, aboveHeight: 20, distance: 300 };
+      const d = computeDerived(s);
+      return eq([d.warnings.map((w) => w.id), d.plates.some((p) => p.outsideEnvelopeArea > 0)], [[], false]);
+    });
+    await t('no site: the height limit still works, and 0 means no limit', () => {
+      const s = defaultState(); s.site.heightLimit = 55;
+      const w = computeDerived(s).warnings.map((x) => x.id);
+      s.site.heightLimit = 0;
+      return eq([w.includes('height'), computeDerived(s).warnings.length], [true, 0]);
+    });
+    await t('switching to Rectangle brings back the setback check, FAR and coverage', () => {
+      const s = defaultState(); s.segments[0].shape.w = 240; s.site.shape = 'rect';
+      const d = computeDerived(s);
+      return eq([d.warnings.some((w) => w.id === 'setback'), d.metrics.hasSite, d.metrics.siteArea, d.metrics.far > 0, d.metrics.siteCoverage > 0], [true, true, 50000, true, true]);
+    });
+    await t('Surround without a site goes around the building', () => {
+      const b = surroundBlocks(defaultState());
+      return eq([b.length, b.every((k) => finite(k))], [4, true]);
+    });
+    await t('the bounds without a site are the building plus a margin (framing, scale figure, sun grid)', () => {
+      const d = computeDerived(defaultState());
+      const { model, site } = d.bounds;
+      return eq([site.minX < model.minX, site.maxX > model.maxX, site.minY < model.minY, site.maxY > model.maxY, finite(d.bounds)], [true, true, true, true, true]);
+    });
+
+    /* ---- exports ---- */
+    await t('SketchUp export and the project derived section are valid with no site', () => {
+      Store.replace(fillDefaults(defaultState()));
+      const v = SkFmt.validateDoc(SketchupExport.doc());
+      const derived = TowerDerivedMod.towerDerived(Store.snapshot(), Derived.get(), Derived.get().metrics);
+      const doc = ProjectMod.writeSection(ProjectMod.newProject({ name: 'No site' }), 'massing', { tool: 'tower', schema: 1, placement: { x: 0, y: 0, rotation: 0, baseZ: 0 }, state: Store.snapshot(), derived });
+      const pv = ProjectMod.validate(doc);
+      return (v.ok && pv.ok && finite(derived) && doc.sections.massing.state.site.shape === 'none') || `sketchup ${v.errors} project ${pv.errors}`;
+    });
+    /* ---- presets ---- */
+    await t('a preset loaded while the site is Unlimited keeps no site and no height limit, with its other site numbers', () => {
+      Store.replace(fillDefaults(defaultState()));
+      Options.loadPreset('point-tower');
+      const s = Store.raw().site;
+      const a = [s.shape, s.heightLimit, s.width, s.depth, s.setbacks.left];
+      siteSetSite('rect');
+      return eq([a, Store.raw().site.width], [['none', 0, 150, 150, 10], 150]);
+    });
+    await t('a preset loaded over a Rectangle site brings its own site and height limit', () => {
+      const s0 = fillDefaults(defaultState()); s0.site.shape = 'rect';
+      Store.replace(s0);
+      Options.loadPreset('point-tower');
+      const s = Store.raw().site;
+      return eq([s.shape, s.heightLimit, s.width], ['rect', 550, 150]);
+    });
+
+    /* ---- panel and metrics card ---- */
+    await t('Site tab with Unlimited: the Shape control lists it, one help line shows, width, depth, corners, setbacks and stepback hide, the height limit stays', async () => {
+      Store.replace(fillDefaults(defaultState()));
+      UI.setTab('site');
+      await frames();
+      const opts = [...document.querySelectorAll('#tabpanel-site select')[0].options].map((o) => o.textContent);
+      const help = [...document.querySelectorAll('#tabpanel-site .help')].filter(visible).map((e) => e.textContent);
+      const setbacks = document.querySelector('#tabpanel-site [data-section="setbacks"]');
+      return eq([opts, help.includes('Unlimited: no site line, setbacks, or site checks. Pick Rectangle or Polygon to test a real site.'),
+        rowVisible('Width'), rowVisible('Depth'), rowVisible('Site corners (x, y in feet)'), visible(setbacks), rowVisible('Height limit (0 = none)'), rowVisible('Stepback above a height')],
+      [['Unlimited', 'Rectangle', 'Polygon'], true, false, false, false, false, true, false]);
+    });
+    await t('Site tab: picking Rectangle in the Shape control shows width, depth and setbacks; the numbers come back', async () => {
+      const sel = document.querySelectorAll('#tabpanel-site select')[0];
+      sel.value = 'rect'; sel.dispatchEvent(new Event('change', { bubbles: true }));
+      await frames();
+      const setbacks = document.querySelector('#tabpanel-site [data-section="setbacks"]');
+      return eq([Store.get('site.shape'), rowVisible('Width'), rowVisible('Depth'), visible(setbacks), rowVisible('Stepback above a height')], ['rect', true, true, true, true]);
+    });
+    await t('Metrics card: "—" with a small "no site" for FAR, site area and coverage; Rectangle shows the numbers', () => {
+      UI.setHudOpen(true);
+      Store.replace(fillDefaults(defaultState()));
+      UI.updateHud(Derived.get());
+      const none = ['mFar', 'mSite', 'mCover'].map((id) => [$(id).firstChild.nodeValue, !!$(id).querySelector('small.nosite')]);
+      siteSetSite('rect');
+      UI.updateHud(Derived.get());
+      const rect = ['mFar', 'mSite', 'mCover'].map((id) => [$(id).firstChild.nodeValue, !!$(id).querySelector('small.nosite')]);
+      return eq([none, rect], [[['—', true], ['—', true], ['—', true]], [['2.00', false], ['50,000 sf', false], ['20.0%', false]]]);
+    });
+    await t('the default design shows "No warnings" in the card', () => {
+      Store.replace(fillDefaults(defaultState()));
+      UI.updateHud(Derived.get());
+      return eq([$('warnCount').textContent, $('hudBadge').textContent], ['0', '0 warnings']);
+    });
+
+    /* ---- drawing ---- */
+    if (Render.ready()) {
+      await t('no site line is drawn and the envelope box is empty; Rectangle draws the site line and the envelope; back to Unlimited removes them', async () => {
+        Store.replace(fillDefaults(defaultState()));
+        await frames();
+        const a = Render.info();
+        siteSetSite('rect');
+        await frames();
+        const b = Render.info();
+        siteSetSite('none');
+        await frames();
+        const c = Render.info();
+        return eq([[a.siteLines, a.envelopeLines > 0], [b.siteLines, b.envelopeLines > 0], [c.siteLines, c.envelopeLines > 0]], [[0, false], [1, true], [0, false]]);
+      });
+    }
+  } finally {
+    Pop.close();
+    Store.replace(savedState);
+    UI.setTab(savedTab);
+    UI.setHudOpen(savedHud);
+    Options.holdAutosave(false);
+  }
+  console.log(`[tests] no site ${results.length - results.filter((r) => !r.ok).length}/${results.length} passed`, results.filter((r) => !r.ok).length ? JSON.stringify(results.filter((r) => !r.ok)) : '');
   return results;
 }
 

@@ -199,7 +199,8 @@ async function runAllTests() {
   const sketchup = await runSketchupTests();
   const project = await runProjectTests();     // 12f_tests_project.js
   const sun = await runSunTests();             // 12g_tests_sun.js
-  const all = [...(base.results || []), ...layout, ...select, ...fresh, ...sketchup, ...project, ...sun];
+  const nosite = await runNoSiteTests();       // 12h_tests_nosite.js
+  const all = [...(base.results || []), ...layout, ...select, ...fresh, ...sketchup, ...project, ...sun, ...nosite];
   const failed = all.filter((r) => !r.ok);
   console.log(`[tests] layout ${layout.length - layout.filter((r) => !r.ok).length}/${layout.length} passed`, layout.filter((r) => !r.ok).length ? JSON.stringify(layout.filter((r) => !r.ok)) : '');
   console.log(`[tests] select ${select.length - select.filter((r) => !r.ok).length}/${select.length} passed`, select.filter((r) => !r.ok).length ? JSON.stringify(select.filter((r) => !r.ok)) : '');

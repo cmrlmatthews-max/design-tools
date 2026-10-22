@@ -71,6 +71,9 @@ const Options = (() => {
     const p = CONFIG.presets.find((x) => x.id === id);
     if (!p) return false;
     const s = fillDefaults(p.state);
+    // A design with no site keeps no site (and no height limit); the preset's own site numbers come along for a later Rectangle.
+    const cur = Store.raw().site;
+    if (cur && cur.shape === 'none') { s.site.shape = 'none'; s.site.heightLimit = 0; }
     s.context.show = true;
     s.view.colorBy = 'program';          // v1.1: a preset is a new option, and new options color the Diagram by program
     show(s, { id: null, name: p.name });

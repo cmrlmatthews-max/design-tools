@@ -48,11 +48,11 @@ function defaultState() {
     placement: null,          // { x, y, rotation, baseZ } while a project is open (ProjectUI, 09b_project.js)
 
     site: {
-      shape: 'rect',
+      shape: 'none',            // 'none' (Unlimited: no site line, setbacks or site checks) | 'rect' | 'polygon'
       width: 250, depth: 200,
       points: [],
       setbacks: { front: 10, back: 10, left: 10, right: 10 },
-      heightLimit: 400,
+      heightLimit: 0,              // 0 = no height limit
       stepback: { on: false, aboveHeight: 85, distance: 15 },
     },
 
@@ -127,6 +127,12 @@ function migrateTower(state, from) {
   return s;
 }
 
+/** Saved options and project files from before the Unlimited site have a site and no shape: they were drawn on a rectangle, so they
+ *  stay "rect". Only a state with no site at all gets the default ("none"). An unknown shape becomes "rect" too. */
+function legacySite(s) {
+  if (s.site && typeof s.site === 'object' && !Array.isArray(s.site) && !['none', 'rect', 'polygon'].includes(s.site.shape)) s.site.shape = 'rect';
+}
+
 /** Fill every missing field from the defaults so older or partial states (presets, imports) are complete. */
 function fillDefaults(src) {
   const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -137,6 +143,7 @@ function fillDefaults(src) {
       else if (isObj(d[k]) && isObj(t[k])) merge(t[k], d[k]);
     }
   };
+  legacySite(s);
   const base = defaultState();
   merge(s, base);                                           // a state with no colorBy gets "program"; an explicit "zone" or "program" is kept
   migrateView(s.view);

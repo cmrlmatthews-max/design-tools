@@ -65,11 +65,11 @@ async function runTests() {
     return eq([p.filter((x) => x.outsideEnvelopeArea > 1).map((x) => x.n)], [[6, 7, 8, 9, 10]]);
   });
   await t('a plate that touches the allowed footprint exactly is inside', () => {
-    const s = defaultState(); s.segments[0].shape.w = 230; s.segments[0].shape.d = 180;
+    const s = defaultState(); s.site.shape = 'rect'; s.segments[0].shape.w = 230; s.segments[0].shape.d = 180;
     return eq(computeDerived(s).plates.filter((x) => x.outsideEnvelopeArea > 1).length, 0);
   });
   await t('a plate past the setback is outside and listed', () => {
-    const s = defaultState(); s.segments[0].shape.w = 240;
+    const s = defaultState(); s.site.shape = 'rect'; s.segments[0].shape.w = 240;
     const d = computeDerived(s);
     return eq([d.plates.every((x) => x.outsideEnvelopeArea > 1), d.warnings.some((x) => x.id === 'setback')], [true, true]);
   });
@@ -79,7 +79,8 @@ async function runTests() {
     return (hasCurves(s) && Math.abs(full - draft) / full < 1e-3) || `full ${full} draft ${draft}`;
   });
   await t('Surround makes one block per side, outside the site', () => {
-    const b = surroundBlocks(defaultState());
+    const s = defaultState(); s.site.shape = 'rect';
+    const b = surroundBlocks(s);
     return eq([b.length, b.every((k) => Math.abs(k.x) + k.w / 2 > 125 || Math.abs(k.y) + k.d / 2 > 100)], [4, true]);
   });
   await t('compare grid: 2 options landscape = 2 columns; 4 = 2 x 2', () => {

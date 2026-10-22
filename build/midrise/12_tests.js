@@ -169,7 +169,7 @@ async function runTests() {
     return eq(out, [4, 5]);
   });
   await t('a bar past the setback is outside and listed', () => {
-    const s = defaultState(); s.bars[0].length = 340;
+    const s = defaultState(); s.site.shape = 'rect'; s.bars[0].length = 340;
     const d = computeDerived(s);
     return eq([d.plates.every((p) => p.outsideEnvelopeArea > 1), d.warnings.some((w) => w.id === 'bar-outside-site')], [true, true]);
   });

@@ -15,11 +15,11 @@ const Shots = (() => {
     const m = d.metrics;
     return [
       ['Units', Units.formatInt(m.units)],
-      ['Density', `${Units.formatRatio(m.density, 1)} /ac`],
+      ['Density', m.hasSite === false ? '—' : `${Units.formatRatio(m.density, 1)} /ac`],
       ['Parking', `${Units.formatRatio(m.parking.ratioProvided, 2)} /unit`],
       ['Height', Units.formatFeetInches(m.height)],
       ['GFA', Units.formatArea(m.gfa)],
-      ['FAR', Units.formatRatio(m.far)],
+      ['FAR', m.hasSite === false ? '—' : Units.formatRatio(m.far)],
     ];
   }
 

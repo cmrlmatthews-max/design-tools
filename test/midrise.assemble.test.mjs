@@ -418,5 +418,65 @@ t("exclude accepts an index or a list; barBox null for an unknown bar", () => {
   eq(collectBarSnapTargets(hidden, built).lines.filter((l) => l.source === "context").length, 0, "hidden context");
 });
 
+/* ---- Unlimited site (site.shape "none") ---- */
+console.log("Unlimited site");
+const { computeMetrics } = await import("../src/midrise/metrics.js");
+const noSite = (bars, over = {}, siteOver = {}) => {
+  const s = makeState(bars, over);
+  Object.assign(s.site, { shape: "none", densityCap: 80, openSpaceShare: 0.3 }, siteOver);
+  return s;
+};
+const siteCodes = ["bar-outside-site", "setback", "stepback", "density-cap", "open-space"];
+t("none: a bar far outside the old site draws no site or setback warning, and no plate is outside", () => {
+  const s = noSite([bar("A", 900, 900, 0, 300)], {}, { stepback: { on: true, aboveHeight: 10, distance: 200 } });
+  const b = assemble(s);
+  eq(b.warnings.filter((w) => siteCodes.includes(w.code)).length, 0, JSON.stringify(b.warnings));
+  ok(b.plates.every((p) => p.outsideEnvelopeArea === 0), "outsideEnvelopeArea");
+  // the same bar on a rectangle does warn
+  const r = makeState([bar("A", 900, 900, 0, 300)]);
+  ok(assemble(r).warnings.some((w) => w.code === "bar-outside-site"), "rect warns");
+});
+t("none: building to building checks and the height limit stay", () => {
+  const s = noSite([bar("A", 0, 0, 0, 300), bar("B", 0, 75, 0, 300)], {}, { heightLimit: 30 });
+  const b = assemble(s);
+  const codes = b.warnings.map((w) => w.code);
+  ok(codes.includes("separation"), "separation " + codes);
+  ok(codes.includes("height"), "height " + codes);
+  eq(assemble(noSite([bar("A", 0, 0, 0, 300), bar("B", 0, 75, 0, 300)], {}, { heightLimit: 0 })).warnings.some((w) => w.code === "height"), false, "limit 0");
+});
+t("none: an allowed-footprint podium follows the bars instead of vanishing", () => {
+  const s = noSite([bar("A", 0, 0, 0, 300)], { podium: { on: true, levels: [{ ftf: 11, program: "parking" }], footprint: { mode: "allowed", percent: 100, offset: 0 }, liner: { on: false, side: "front", depth: 40 } } });
+  const b = assemble(s);
+  const pod = b.levels.find((l) => l.zone === "podium");
+  near(mpArea(pod.plates), 300 * 65, 0.5, "podium = bar box");
+});
+t("none: metrics show no site and have no NaN or Infinity; no density or open space warning", () => {
+  const s = noSite([bar("A", 0, 0, 0, 300)]);
+  const m = computeMetrics(s, assemble(s));
+  eq(m.hasSite, false); eq(m.siteArea, 0); eq(m.siteAcres, 0); eq(m.density, 0); eq(m.far, 0); eq(m.siteCoverage, 0);
+  const bad = [];
+  (function walk(o, p) { for (const [k, v] of Object.entries(o || {})) { if (typeof v === "number" && !isFinite(v)) bad.push(p + k); else if (v && typeof v === "object") walk(v, p + k + "."); } })(m, "");
+  eq(bad.join(), "");
+  eq(m.warnings.filter((w) => w.code === "density-cap" || w.code === "open-space").length, 0);
+  eq(m.openSpace.ok, true);
+  // the same design on a small rectangle does report all of them
+  const r = makeState([bar("A", 0, 0, 0, 300)]);
+  Object.assign(r.site, { width: 400, depth: 300, densityCap: 5, openSpaceShare: 0.9 });
+  const mr = computeMetrics(r, assemble(r));
+  eq(mr.hasSite, true); ok(mr.density > 0 && mr.far > 0);
+  ok(mr.warnings.some((w) => w.code === "density-cap") && mr.warnings.some((w) => w.code === "open-space"), "rect warns");
+});
+t("none: snap targets have no site or setback lines", () => {
+  const s = noSite([bar("A", 0, 0, 0, 300)]);
+  const lines = collectBarSnapTargets(s, assemble(s)).lines;
+  eq(lines.filter((l) => l.source === "site" || l.source === "setback").length, 0);
+  ok(lines.some((l) => l.source === "bar"), "bar lines stay");
+});
+t("a site with no shape (old file) is still a rectangle", () => {
+  const s = makeState([bar("A", 900, 900, 0, 300)]);
+  delete s.site.shape;
+  ok(assemble(s).warnings.some((w) => w.code === "bar-outside-site"));
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

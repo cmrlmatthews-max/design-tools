@@ -15,6 +15,8 @@ function computeBounds(state, plates, solids, height) {
   const model = box(), site = box();
   for (const p of plates) for (const poly of p.polygons) for (const q of poly.outer) add(model, q[0], q[1]);
   for (const q of sitePolygon(state)) add(site, q[0], q[1]);
+  // No site (Unlimited): the site box is the building box plus a margin, so framing, the figure and the sun grid still have an extent.
+  if (!isFinite(site.minX) && isFinite(model.minX)) { const m = 30; Object.assign(site, { minX: model.minX - m, maxX: model.maxX + m, minY: model.minY - m, maxY: model.maxY + m }); }
   if (!isFinite(site.minX)) Object.assign(site, { minX: -50, maxX: 50, minY: -50, maxY: 50 });
   if (!isFinite(model.minX)) Object.assign(model, site);
   const union = {
@@ -127,7 +129,7 @@ function safeWire(s, topZ) { try { return Env.envelopeWireframe(s, topZ); } catc
 
 /** Units, parking, metrics and the merged warning list for a built geometry. */
 function computeNumbers(s, g) {
-  const empty = { units: 0, unitsDetail: { total: 0, byBar: {}, byProgram: {} }, siteArea: siteArea(s), siteAcres: siteArea(s) / 43560, density: 0, gfa: 0, far: 0, siteCoverage: 0, efficiency: 0,
+  const empty = { units: 0, unitsDetail: { total: 0, byBar: {}, byProgram: {} }, hasSite: s.site.shape !== 'none', siteArea: siteArea(s), siteAcres: siteArea(s) / 43560, density: 0, gfa: 0, far: 0, siteCoverage: 0, efficiency: 0,
     corridorLength: 0, corridorPerUnit: 0, parking: { required: 0, provided: 0, ratioProvided: 0, surplus: 0, deficit: false }, courtyards: { count: 0, area: 0, minDim: 0, items: [] },
     bars: { count: 0, longest: null }, height: 0, deckTop: 0, floors: 0, floorsDetail: { bar: 0, podium: 0, deck: 0 }, stairs: { exit: 0, exterior: 0, total: 0, byBar: {} }, elevators: 0,
     constructionHint: '', openSpace: { area: 0, ratio: 0, required: 0, ok: true }, target: { units: null, density: null }, warnings: [] };

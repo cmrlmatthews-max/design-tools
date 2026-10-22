@@ -452,6 +452,8 @@ const UI = (() => {
     };
   }
 
+  const NO_SITE_HELP = 'Unlimited: no site line, setbacks, or site checks. Pick Rectangle or Polygon to test a real site.';
+  const hasSiteNow = () => get('site.shape') !== 'none';
   function buildSite() {
     const shapeBind = {
       get: () => get('site.shape'),
@@ -468,10 +470,11 @@ const UI = (() => {
     };
     return {
       children: els([
-        sel('Shape', null, opts([['rect', 'Rectangle'], ['polygon', 'Polygon']]), shapeBind),
-        Controls.when(() => get('site.shape') !== 'polygon', [lenS('Width', 'site.width', 100, 800), lenS('Depth', 'site.depth', 100, 800)]),
+        sel('Shape', null, opts([['none', 'Unlimited'], ['rect', 'Rectangle'], ['polygon', 'Polygon']]), shapeBind),
+        Controls.when(() => get('site.shape') === 'none', [Controls.help(NO_SITE_HELP)]),
+        Controls.when(() => get('site.shape') === 'rect', [lenS('Width', 'site.width', 100, 800), lenS('Depth', 'site.depth', 100, 800)]),
         Controls.when(() => get('site.shape') === 'polygon', [Controls.points({ label: 'Site corners (x, y in feet)', bind: bs('site.points'), need: 3, needText: 'Needs at least 3 points. Until then the rectangle is used.' })]),
-        Controls.help('Site area sets density. Front is south.'),
+        Controls.when(hasSiteNow, [Controls.help('Site area sets density. Front is south.')]),
       ]),
     };
   }
@@ -494,20 +497,24 @@ const UI = (() => {
           label: 'Height limit (0 = none)', bind: limitBind, min: 0, max: 200, step: 1, hardMin: 0, hardMax: 5000,
           format: (v) => (v > 0 ? Units.formatFeetInches(v) : 'None'), parse: (t) => (/^\s*(none|off)\s*$/i.test(t) ? 0 : Units.parseLength(t)), inputMode: 'text',
         }),
-        Controls.toggle({ label: 'Stepback above a height', bind: bs('site.stepback.on') }),
-        Controls.when(() => get('site.stepback.on'), [lenS('Above height', 'site.stepback.aboveHeight', 20, 200), lenS('Step in by', 'site.stepback.distance', 5, 60)]),
-        Controls.help('Above the stepback height the allowed footprint shrinks by the step-in distance on every side.'),
+        Controls.when(hasSiteNow, [
+          Controls.toggle({ label: 'Stepback above a height', bind: bs('site.stepback.on') }),
+          Controls.when(() => get('site.stepback.on'), [lenS('Above height', 'site.stepback.aboveHeight', 20, 200), lenS('Step in by', 'site.stepback.distance', 5, 60)]),
+          Controls.help('Above the stepback height the allowed footprint shrinks by the step-in distance on every side.'),
+        ]),
       ]),
     };
   }
   function buildRulesSite() {
     return {
       children: els([
-        numS('Density cap (units per acre, 0 = none)', 'site.densityCap', 0, 1, 1, 0, { compact: true }),
-        Controls.slider({
-          label: 'Open space share (0 = no rule)', bind: Controls.mapBind(bs('site.openSpaceShare'), (v) => num(v, 0) * 100, (v) => clamp(v, 0, 100) / 100),
-          min: 0, max: 60, step: 1, hardMin: 0, hardMax: 100, format: (v) => `${round1(v)}%`, inputMode: 'decimal',
-        }),
+        Controls.when(hasSiteNow, [
+          numS('Density cap (units per acre, 0 = none)', 'site.densityCap', 0, 1, 1, 0, { compact: true }),
+          Controls.slider({
+            label: 'Open space share (0 = no rule)', bind: Controls.mapBind(bs('site.openSpaceShare'), (v) => num(v, 0) * 100, (v) => clamp(v, 0, 100) / 100),
+            min: 0, max: 60, step: 1, hardMin: 0, hardMax: 100, format: (v) => `${round1(v)}%`, inputMode: 'decimal',
+          }),
+        ]),
         lenS('Separation between bars that do not join', 'site.separationMin', 0, 80, { hardMin: 0 }),
         lenS('Smallest courtyard dimension', 'site.courtyardMin', 0, 120, { hardMin: 0 }),
       ]),
@@ -542,7 +549,7 @@ const UI = (() => {
           Store.set('context.blocks', surroundBlocks(Store.raw()).map((b) => ({ ...b })), { live: false });
           Store.set('context.fromSite', false, { live: false });
           if (!get('context.show')) Store.set('context.show', true, { live: false });
-        }), h('span', { class: 'help', style: 'margin:0' }, 'One block on each side of the site.')),
+        }), h('span', { class: 'help', style: 'margin:0' }, 'One block on each side of the site (around the building when there is no site).')),
       ]),
     };
   }
@@ -593,7 +600,7 @@ const UI = (() => {
     { id: 'scene', tab: 'view', title: 'Context and envelope', open: true, build: buildScene },
     { id: 'sun', tab: 'view', title: 'Sun', open: true, build: buildSun },
     { id: 'site', tab: 'site', title: 'Site', open: true, build: buildSite },
-    { id: 'setbacks', tab: 'site', title: 'Setbacks', open: true, build: buildSetbacks },
+    { id: 'setbacks', tab: 'site', title: 'Setbacks', open: true, build: buildSetbacks, when: hasSiteNow },
     { id: 'height', tab: 'site', title: 'Height limit and stepback', open: true, build: buildHeight },
     { id: 'siterules', tab: 'site', title: 'Zoning rules', build: buildRulesSite },
     { id: 'targets', tab: 'site', title: 'Targets', build: buildTargets },
@@ -621,6 +628,7 @@ const UI = (() => {
         onToggle: (isOpen) => rememberSection(s.id, isOpen),
       });
       sectionCtl[s.id] = sec;
+      if (s.when) { const sync = () => { sec.el.hidden = !s.when(); }; swatchSyncs.push(sync); sync(); }   // shown only while when() is true
       panels[s.tab].append(sec.el);
     }
   }
@@ -886,11 +894,19 @@ const UI = (() => {
     list.textContent = '';
     for (const [k, v, cls] of rows) list.append(h('dt', null, k), h('dd', cls ? { class: cls } : null, v));
   }
+  /** A metric that needs the site: "—" with a small "no site" note while the site is Unlimited, the number otherwise. */
+  function siteMetric(id, text, hasSite) {
+    setText(id, hasSite ? text : '—');
+    const el = $(id);
+    const note = el.querySelector('small.nosite');
+    if (hasSite) { if (note) note.remove(); } else if (!note) el.append(h('small', { class: 'nosite' }, 'no site'));
+  }
   function updateHud(d) {
     const m = d.metrics, st = Store.raw();
+    const site = m.hasSite !== false;
     setText('mUnits', Units.formatInt(m.units));
-    setText('mDensity', `${Units.formatRatio(m.density, 1)} /ac`);
-    $('mDensitySub').textContent = `${Units.formatRatio(m.siteAcres, 2)} acres`;
+    setText('mDensity', site ? `${Units.formatRatio(m.density, 1)} /ac` : '—');
+    $('mDensitySub').textContent = site ? `${Units.formatRatio(m.siteAcres, 2)} acres` : 'no site';
     const pk = m.parking;
     setText('mParkRatio', Units.formatRatio(pk.ratioProvided, 2));
     $('mParkSub').textContent = `${Units.formatInt(pk.provided)} of ${Units.formatInt(pk.required)} stalls`;
@@ -900,11 +916,11 @@ const UI = (() => {
     $('mHeightSub').textContent = `${Units.formatInt(m.floors)} floors${fd.deck ? ` · ${fd.deck} deck` : ''}`;
 
     setText('mGfa', Units.formatArea(m.gfa));
-    setText('mFar', Units.formatRatio(m.far, 2));
-    setText('mSite', Units.formatArea(m.siteArea));
-    setText('mCover', pct1(m.siteCoverage));
+    siteMetric('mFar', Units.formatRatio(m.far, 2), site);
+    siteMetric('mSite', Units.formatArea(m.siteArea), site);
+    siteMetric('mCover', pct1(m.siteCoverage), site);
     setText('mEff', pct1(m.efficiency));
-    setText('mOpen', pct1(m.openSpace.ratio));
+    siteMetric('mOpen', pct1(m.openSpace.ratio), site);
     $('mOpen').classList.toggle('bad', !m.openSpace.ok);
     setText('mCorr', `${Units.formatInt(m.corridorLength)} ft`);
     setText('mCourts', m.courtyards.count ? `${m.courtyards.count} · ${Units.formatInt(m.courtyards.area)} sf · min ${Units.formatFeetInches(m.courtyards.minDim)}` : 'none');
@@ -943,7 +959,7 @@ const UI = (() => {
       trows.push([`${label} (target ${fmt(t.target)})`, `${signed(t.diff, fmt)} (${signed(t.pct, (v) => `${v.toFixed(1)}%`)})`, t.diff >= 0 ? 'tgt-pos' : 'tgt-neg']);
     };
     addTarget('Units', m.target.units, Units.formatInt);
-    addTarget('Density', m.target.density, (v) => Units.formatRatio(v, 1));
+    if (site) addTarget('Density', m.target.density, (v) => Units.formatRatio(v, 1));
     kvRows($('hudTargetsList'), trows);
     $('hudTargets').hidden = !trows.length;
 

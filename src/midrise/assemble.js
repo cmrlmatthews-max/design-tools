@@ -33,7 +33,7 @@
    ========================================================================== */
 
 import { legsOf, legRing, barSpine, buildingLevels, barLevels } from "./bars.js";
-import { checkEnvelope, allowedFootprint } from "../tower/envelope.js";
+import { checkEnvelope, allowedFootprint, hasSite } from "../tower/envelope.js";
 import { cleanRing2 } from "../shared/sketchup-format.js";
 
 const SCALE = 1000;
@@ -476,7 +476,8 @@ function mpCentroid(mp) {
 function podiumPlate(state, barRings, full) {
   const pod = state.podium || {};
   const fp = pod.footprint || {};
-  if (fp.mode === "offset") {
+  // Without a site (shape "none") there is no allowed footprint, so the podium follows the bars at the offset (0 by default).
+  if (fp.mode === "offset" || !hasSite(state)) {
     const b = emptyBox();
     for (const r of barRings) growBox(b, r);
     if (!boxOk(b)) return { polygons: [], warning: null };
@@ -509,13 +510,15 @@ function podiumPlate(state, barRings, full) {
   return { polygons: fixed, warning };
 }
 
+/** The site ring (counter-clockwise), or [] when there is no site (shape "none") or its size is 0. */
 function siteRing(state) {
   const s = state.site || {};
+  if (!hasSite(state)) return [];
   if (s.shape === "polygon" && Array.isArray(s.points) && s.points.length >= 3) {
     return ccw(s.points.map((p) => [num(p[0]), num(p[1])]));
   }
   const w = num(s.width, 0), d = num(s.depth, 0);
-  if (!(w > 0 && d > 0)) return null;
+  if (!(w > 0 && d > 0)) return [];
   return rectRing(0, 0, w, d);
 }
 
@@ -692,7 +695,7 @@ export function assemble(state, { quality = "full" } = {}) {
     }
     if (!full) continue;
     const paths = legsByBar.get(bar.id).map((l) => ccwPath(l.ring));
-    if (sRing) {
+    if (sRing && sRing.length) {
       const out = clip(paths, [toPath(sRing)], CL().ClipType.ctDifference).area;
       if (out > MIN_OVERLAP) {
         warnings.push({ code: "bar-outside-site", severity: "warn", floors: [], message: `${barName(bar)} extends past the site.` });
