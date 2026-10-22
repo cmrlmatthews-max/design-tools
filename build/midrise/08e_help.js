@@ -25,7 +25,7 @@ const Help = (() => {
     ['Projects', [
       'A project holds the site, this building and the work of other tools in one file. Use Project > New, or send a site here from the Site Model.',
       'In a project, the Site tab sets where the building sits. Center on site puts it in the middle and its floor at the ground. Context from site loads the neighbors.',
-      'The project saves by itself a second after each change. Export > Send to Plate Planner or Parking Deck saves it and opens that tool.',
+      'The project saves by itself a second after each change. Export > Send to Plate Planner, Parking Deck, Facade Studio, or Grading Sketch saves it and opens that tool.',
     ]],
     ['Files', [
       'Option menu > Save keeps the design in this browser. Export > Export JSON downloads all saved options. Import JSON adds them back.',
