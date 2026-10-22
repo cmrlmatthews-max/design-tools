@@ -30,6 +30,9 @@ const Help = (() => {
       'Diagram style colors the faces by system or by window-to-wall ratio (five steps, light to dark). Street faces get an orange edge.',
       'While you drag a slider the picture drops the mullions and fins. They come back when you let go.',
     ]],
+    ['Site', [
+      'The Site toggle in the View tab shows the project site from the Site Model. It shows the real ground, roads, water, and trees. Neighbor buildings are solid grey blocks with dark edges. This tool does not drag. Move the building in the Tower Generator or the Mid-Rise Generator.',
+    ]],
     ['Projects', [
       'A project holds the site, the massing and the work of other tools in one file. Use Project > New, or open a project from the Mid-Rise or the Tower.',
       'The page reads the massing, the plates (for per-unit balconies), the site and the sun, and writes a facade section back. It saves by itself a second after each change.',

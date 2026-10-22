@@ -59,6 +59,7 @@ function fillDefaults(src) {
   if (s.bike.mode !== 'count') s.bike.mode = 'per-units';
   if (s.bike.rack !== 'two-tier') s.bike.rack = 'single';
   const v = s.view;
+  v.site = v.site !== false;                       // the project site layer (ground, roads, water, trees, neighbors); on unless switched off
   if (v.colorBy !== 'slope') v.colorBy = 'kind';
   if (v.style !== 'diagram') v.style = 'model';
   v.level = Math.round(clamp(num(v.level, 0), 0, s.levels.count));

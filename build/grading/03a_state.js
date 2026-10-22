@@ -127,6 +127,7 @@ function fillDefaults(src) {
 
   // view
   const v = s.view;
+  v.site = v.site !== false;                       // the project site layer (roads, water, trees, neighbors); on unless switched off
   if (!STYLES.includes(v.style)) v.style = 'model';
   v.contours.on = !!v.contours.on;
   v.contours.interval = v.contours.interval === 2 ? 2 : 1;

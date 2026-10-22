@@ -405,6 +405,8 @@ Site Model (home session, on the `project-file` branch):
 1. Write `site.derived` (section 6.1) and `site.state` after every successful run, when a project is open.
 2. Buttons: "Send to Tower Generator" and "Send to Mid-Rise Generator". With no project open, the button first creates one named after the address.
 
+Site layer (October 22, 2026): every tool draws `site.derived` (section 6.1) as the project site: ground, neighbor buildings, roads, walks, water, and trees. The Grading Sketch keeps its own ground. The context radius only limits which neighbor buildings become context blocks. The Tower Generator, the Mid-Rise Generator, and a standalone Parking Deck write `placement` (section 4) when the user drags the building. No section shape changes.
+
 ## 13. pyRevit bridge
 
 A future pyRevit script reads `sections.*.derived` only, in the project frame, through `toProject`. So `derived` must always hold enough to rebuild the geometry in Revit: rings, heights, levels, and elevations, never only metrics. Nothing in this repository writes Revit directly yet. The script belongs to the work side, where the pyRevit MCP runs.

@@ -86,15 +86,8 @@ const ProjectUI = (() => {
 
   /** The ground elevation (project frame, ft) at a project point: bilinear on the site grid. null without a grid. */
   function groundAt(xp, yp) {
-    const info = siteInfo();
-    const g = info && info.ground;
-    if (!g || !Array.isArray(g.points) || !(g.n >= 2) || !(g.spacing > 0) || g.points.length !== g.n * g.n) return null;
-    const x0 = g.points[0][0], y0 = g.points[0][1];
-    const fi = clamp((xp - x0) / g.spacing, 0, g.n - 1), fj = clamp((yp - y0) / g.spacing, 0, g.n - 1);
-    const i = Math.min(Math.floor(fi), g.n - 2), j = Math.min(Math.floor(fj), g.n - 2);
-    const tx = fi - i, ty = fj - j;
-    const z = (a, b) => g.points[b * g.n + a][2];
-    return z(i, j) * (1 - tx) * (1 - ty) + z(i + 1, j) * tx * (1 - ty) + z(i, j + 1) * (1 - tx) * ty + z(i + 1, j + 1) * tx * ty;
+    const sec = sectionOf('site');
+    return sec && isObjP(sec.derived) ? SiteLayerMod.groundZAt(sec.derived, xp, yp) : null;
   }
 
   /** The Grading Sketch tier that sets the ground floor of the massing: { ffe, source, id } or null (spec section 4: the lowest tier). */
@@ -606,7 +599,7 @@ const ProjectUI = (() => {
           Controls.slider({ label: 'Radius around the tower', bind: bs('context.radius'), min: 100, max: 2000, step: 50, hardMin: 50, hardMax: 5000, format: Units.formatFeetInches, parse: Units.parseLength, inputMode: 'text' }).el,
           h('div', { class: 'add-row' }, Controls.button('Context from site', () => contextFromSite(), 'outline sm'), h('span', { class: 'help', style: 'margin:0', id: 'ctxSiteNote' })),
           keep.el,
-          Controls.toggle({ label: 'Show site boundary and neighbors', bind: bs('context.show') }).el,
+          Controls.toggle({ label: 'Context blocks from the site (sun hours and metrics)', bind: bs('context.show') }).el,
         ]).el,
       ],
     };

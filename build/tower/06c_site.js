@@ -1,62 +1,110 @@
+//@@MODULE sitelayer@@
 /* ==========================================================================
-   SITE LAYER  (docs/tower-project-sun-plan.md sections 4.1 and 6.1)
-   `SiteLayer` draws the project site boundary under the tower when a project with a site is open
-   (in the tower local frame, ProjectMod.transformRing(placement, boundary, "toLocal"), given by ProjectUI.boundaryLocal()).
-   Neighbor buildings come in as context blocks through Context from site, so the context layer already draws them.
-   The boundary is a dashed orange loop just above the ground, with a north arrow beside its north-east corner. The arrow
-   turns with the placement rotation, so it always points to project north. Both follow "Show site boundary and neighbors"
-   (state.context.show).
+   SITE LAYER  (docs/site-layer-technical-plan.md sections 4 and 7)
+   `SiteLayer` is the small adapter between the page and the shared site layer. While a project with a site is open and the View
+   tab's "Site" toggle (view.site) is on, it builds the layer data with SiteLayerMod.buildSiteLayerData (the site in the tower's
+   local frame) and the Three.js objects with SiteLayer3D.objects (build/shared/06x_sitelayer.js): the ground with a skirt, the
+   dashed site boundary with the north arrow, the neighbor buildings (solid, dark edges), roads, walks, water and trees.
+   The layer is rebuilt only when its key changes (site, placement, theme).
+   The layer draws EVERY site building as a solid with dark edges. While it shows, Render's context layer leaves out the context blocks
+   that came from the site (block.site === true; they stay in the state for metrics and sun hours), so nothing draws twice.
    ========================================================================== */
 const SiteLayer = (() => {
-  let drawn = { shown: false, points: 0, rotation: 0 };
-  let dashed = null, solid = null;
+  const EMPTY = { shown: false, ground: false, buildings: 0, roads: 0, walks: 0, waterAreas: 0, trees: 0, triangles: 0, points: 0, rotation: 0, key: 'off', bounds: null };
+  let drawn = { ...EMPTY };
+  let lastObjects = [];
+  let builtPl = null;                // the placement the objects were built for
+  let zCache = { key: null, min: 0, max: 0 };
+  const isObjP = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
-  const materials = () => {
-    if (!dashed) {
-      dashed = new THREE.LineDashedMaterial({ color: 0xc0701a, dashSize: 12, gapSize: 8 });
-      solid = new THREE.LineBasicMaterial({ color: 0x1d2733 });
-    }
-    return { dashed, solid };
-  };
+  /** site.derived of the open project, or null. */
+  function derivedOf() {
+    if (!ProjectUI.has()) return null;
+    let sec = null;
+    try { sec = ProjectMod.getSection(ProjectUI.doc(), 'site'); } catch (e) { sec = null; }
+    return sec && isObjP(sec.derived) ? sec.derived : null;
+  }
+  /** True while the layer draws: a project with a site is open and view.site is not off. */
+  function isOn(state) {
+    const st = state || Store.raw();
+    return ProjectUI.has() && ProjectUI.hasSite() && !(st.view && st.view.site === false);
+  }
 
   /** Called by Render.syncMain on every frame of the main view (never in Compare).
    *  layer = { group, key } (a THREE.Group already in the scene, hidden in Compare and in the AI-ready image);
-   *  state = Store.raw(); d = Derived.get(); kit = { syncLayer, clearGroup, materialFor, lineMaterial }.
+   *  state = Store.raw(); d = Derived.get(); kit = { syncLayer, clearGroup, materialFor, lineMaterial, themeEpoch }.
    *  Returns true when the scene changed. */
   function update(layer, state, d, kit) {
-    const ring = ProjectUI.has() && state.context && state.context.show ? ProjectUI.boundaryLocal() : null;
-    const on = !!ring && ring.length >= 3;
-    const rot = on ? ProjectUI.placement().rotation : 0;
-    const key = on ? `b|${ProjectUI.boundaryKey()}` : 'off';
-    return kit.syncLayer(layer, key, () => {
-      drawn = { shown: on, points: on ? ring.length : 0, rotation: rot };
-      if (!on) return [];
-      const mats = materials();
-      const out = [];
-      const loop = new THREE.BufferGeometry().setFromPoints(ring.map((q) => worldVec(q[0], q[1], 0.2)));
-      const line = new THREE.LineLoop(loop, mats.dashed);
-      line.computeLineDistances();
-      out.push(line);
-
-      // north arrow: project north in the local frame is (sin r, cos r); a shaft, a head and an N, flat on the ground
-      const r = (rot * Math.PI) / 180, nx = Math.sin(r), ny = Math.cos(r), ex = ny, ey = -nx;     // north and east unit vectors
-      let maxX = -Infinity, maxY = -Infinity, minX = Infinity, minY = Infinity;
-      for (const q of ring) { maxX = Math.max(maxX, q[0]); maxY = Math.max(maxY, q[1]); minX = Math.min(minX, q[0]); minY = Math.min(minY, q[1]); }
-      const span = Math.max(maxX - minX, maxY - minY, 1);
-      const k = Math.max(0.5, Math.min(4, span / 1000));                                         // scales with the site, 1 at 1,000 ft
-      let best = null;                                                                           // the boundary corner farthest toward north-east
-      for (const q of ring) { const s = q[0] * (ex + nx) + q[1] * (ey + ny); if (!best || s > best.s) best = { s, q }; }
-      const base = [best.q[0] + (ex - nx) * 30 * k, best.q[1] + (ey - ny) * 30 * k];
-      const P = (a, b) => [base[0] + ex * a * k + nx * b * k, base[1] + ey * a * k + ny * b * k];   // a = east, b = north
-      const pts = [];
-      const seg = (p, q) => { pts.push(worldVec(p[0], p[1], 0.2), worldVec(q[0], q[1], 0.2)); };
-      seg(P(0, 0), P(0, 40)); seg(P(0, 40), P(-7, 26)); seg(P(0, 40), P(7, 26));
-      seg(P(-6, 50), P(-6, 68)); seg(P(-6, 68), P(6, 50)); seg(P(6, 50), P(6, 68));              // the letter N
-      out.push(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), mats.solid));
-      return out;
+    const on = isOn(state);
+    const pl = on ? ProjectUI.placement() : null;
+    // While the building is dragged or turned (a live placement gesture) the layer is not rebuilt: the built objects are moved as a solid
+    // from the placement they were built for to the live one. The rebuild comes with the commit (the key then carries the new placement).
+    const g = layer.group;
+    const gesture = on && builtPl && layer.key && layer.key !== 'off' && Store.gestureActive() && String(Store.gesturePath()).startsWith('placement');
+    if (gesture) {
+      const phi = ((builtPl.rotation - pl.rotation) * Math.PI) / 180, c = Math.cos(pl.rotation * Math.PI / 180), s = Math.sin(pl.rotation * Math.PI / 180);
+      const ox = builtPl.x - pl.x, oy = builtPl.y - pl.y;
+      // local_new = Rot(builtRot - rot) local_old + Rot(-rot) (t_old - t_new); plan (x, y, z) is world (x, z, -y)
+      const dx = ox * c + oy * s, dy = -ox * s + oy * c, dz = builtPl.baseZ - pl.baseZ;
+      const moved = g.rotation.y !== phi || g.position.x !== dx || g.position.y !== dz || g.position.z !== -dy;
+      g.rotation.y = phi; g.position.set(dx, dz, -dy);
+      return moved;
+    }
+    const wasMoved = g.rotation.y !== 0 || g.position.x !== 0 || g.position.y !== 0 || g.position.z !== 0;
+    if (wasMoved) { g.rotation.y = 0; g.position.set(0, 0, 0); }
+    const key = on ? SiteLayer3D.keyFor(ProjectUI.doc(), pl, 'site', kit.themeEpoch ? kit.themeEpoch() : 0) : 'off';
+    const rebuilt = kit.syncLayer(layer, key, () => {
+      builtPl = pl;
+      SiteLayer3D.dispose(lastObjects);
+      lastObjects = [];
+      const derived = on ? derivedOf() : null;
+      if (!derived) { drawn = { ...EMPTY, key }; return []; }
+      const data = SiteLayerMod.buildSiteLayerData(derived, pl, {});
+      const ring = ProjectUI.boundaryLocal();
+      if (!data.ok) { drawn = { ...EMPTY, shown: true, key, points: ring ? ring.length : 0, rotation: pl.rotation }; return []; }
+      const res = SiteLayer3D.objects(data, { rotation: pl.rotation });
+      lastObjects = res.objects;
+      drawn = { ...EMPTY, ...res.info, shown: true, key, points: ring ? ring.length : 0, rotation: pl.rotation };
+      return res.objects;
     });
+    return rebuilt || wasMoved;
   }
+
+  /** Shadow flags for the layer (Render.applyView): the buildings and trees cast, the ground, roads and water receive. */
+  function applyShadows(cast, receive) { SiteLayer3D.setShadows(lastObjects, cast, receive); }
+
+  /** The site ground elevation at a LOCAL point, relative to the placement base, or null (no site, layer off, or no grid). */
+  function groundZ(x, y) {
+    if (!isOn()) return null;
+    const derived = derivedOf();
+    return derived ? SiteLayerMod.groundZLocal(derived, ProjectUI.placement(), x, y) : null;
+  }
+
+  /** The extent of what the layer shows, in the local frame: { minX, maxX, minY, maxY, zMin, zMax } or null while it is off.
+   *  Worked out from the project (not from the built objects), so a view can be framed before the first frame draws. */
+  function frameBounds() {
+    if (!isOn()) return null;
+    const ring = ProjectUI.boundaryLocal();
+    const derived = derivedOf();
+    if (!ring || ring.length < 3 || !derived) return null;
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const q of ring) { minX = Math.min(minX, q[0]); maxX = Math.max(maxX, q[0]); minY = Math.min(minY, q[1]); maxY = Math.max(maxY, q[1]); }
+    const g = isObjP(derived.ground) ? derived.ground : null;
+    const zk = g ? `${ProjectUI.boundaryKey().split('|')[0]}|${g.n}|${g.points && g.points.length}` : 'none';
+    if (zCache.key !== zk) {
+      let lo = Infinity, hi = -Infinity;
+      if (g && Array.isArray(g.points)) for (const p of g.points) { if (p[2] < lo) lo = p[2]; if (p[2] > hi) hi = p[2]; }
+      zCache = { key: zk, min: Number.isFinite(lo) ? lo : 0, max: Number.isFinite(hi) ? hi : 0 };
+    }
+    const bz = ProjectUI.placement().baseZ;
+    return { minX, maxX, minY, maxY, zMin: zCache.min - bz, zMax: zCache.max - bz };
+  }
+  /** Changes when the layer switches on or off or another site opens (not when the building moves): Render re-frames on it. */
+  function frameKey() { return isOn() ? `on|${ProjectUI.boundaryKey().split('|')[0]}` : 'off'; }
+
   /** For tests: what is drawn. */
-  function info() { return { ...drawn }; }
-  return { update, info };
+  function info() { return { ...drawn, bounds: drawn.bounds ? { ...drawn.bounds } : null }; }
+  /** The site ground mesh now on screen (shadows, the drag hit test), or null. */
+  function groundMesh() { return lastObjects.find((o) => o.userData && o.userData.kind === 'site-ground') || null; }
+  return { update, info, groundMesh, applyShadows, groundZ, frameBounds, frameKey, isOn };
 })();

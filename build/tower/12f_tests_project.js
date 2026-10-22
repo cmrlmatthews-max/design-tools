@@ -116,14 +116,18 @@ async function runProjectTests() {
       Store.set('placement.x', 500, { live: false });
       return eq(ring[0], [-600, -500]);
     });
-    await t('the site layer hides with the context toggle, and with no project', async () => {
+    await t('the site layer hides with the View Site toggle (view.site), and stays when only the context blocks are off', async () => {
       if (!Render.ready()) return true;
-      Store.set('context.show', false, { live: false });
+      Store.set('view.site', false, { live: false });
       await wait(250);
       const hidden = SiteLayer.info().shown;
+      Store.set('view.site', true, { live: false });
+      Store.set('context.show', false, { live: false });
+      await wait(250);
+      const stays = SiteLayer.info().shown;
       Store.set('context.show', true, { live: false });
       await wait(250);
-      return eq([hidden, SiteLayer.info().shown], [false, true]);
+      return eq([hidden, stays, SiteLayer.info().shown], [false, true, true]);
     });
 
     /* ---- context ---- */

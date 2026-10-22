@@ -97,6 +97,7 @@ function defaultState() {
       grid: true,
       figure: true,
       envelope: true,
+      site: true,                // the project site (ground, boundary, neighbors, roads, water, trees) while a project with a site is open
       shot: { title: true, date: true, metrics: true, mark: true },
     },
   };

@@ -16,6 +16,32 @@
     --scene-context: #6f7882;
   }
 }
+/* ---- Site Model tokens (shared site layer) -----------------------------------------------
+   Copied from build/site/css_add.css. build/shared/06x_sitelayer.js reads them when it builds the site. */
+:root {
+  --scene-terrain-lo: #d6dadd;
+  --scene-terrain-hi: #eceeef;
+  --scene-skirt: #bcc2c8;
+  --scene-est: #efe2cf;
+  --scene-road: #9ba1a8;
+  --scene-walk: #c6cacd;
+  --scene-water: #8dbbe3;
+  --scene-tree: #8fa88b;
+  --scene-trunk: #8a8378;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --scene-terrain-lo: #3a4047;
+    --scene-terrain-hi: #4a5159;
+    --scene-skirt: #2a2f35;
+    --scene-est: #dccaa9;
+    --scene-road: #656c74;
+    --scene-walk: #858d95;
+    --scene-water: #3f72a6;
+    --scene-tree: #6e8d6c;
+    --scene-trunk: #8a8378;
+  }
+}
 [hidden] { display: none !important; }
 
 .btn .chev { width: 12px; height: 12px; stroke-width: 2; }
@@ -399,3 +425,7 @@ textarea.ai-preview {
 .proj-new[hidden] { display: none; }
 .proj-line { margin: 4px 0 8px; font-size: 12.5px; color: var(--ink-2); line-height: 1.4; }
 .chev-r { color: var(--ink-3); }
+
+/* ---- placement gizmo: rotation grip (06y_placement.js, phase C) ---- */
+.hdl-rotate .hdl-glyph { background: var(--accent); }
+.hdl-rotate .hdl-glyph svg { stroke: var(--accent-ink); }

@@ -409,6 +409,8 @@ const UI = (() => {
     return {
       children: els([
         choice('Style', 'view.style', [['model', 'Model'], ['diagram', 'Diagram']], { id: 'styleChips' }),
+        Controls.toggle({ label: 'Site', bind: v('site') }),
+        Controls.help('The ground, roads, water, trees, and neighbors of the project site. From the Site Model.'),
         Controls.toggle({ label: 'Unit labels', bind: v('labels') }),
         Controls.toggle({ label: 'Corridor wall lines', bind: v('walls') }),
         Controls.toggle({ label: 'Bay lines (drag to move)', bind: v('bays') }),

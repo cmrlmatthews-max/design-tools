@@ -39,6 +39,9 @@ const Help = (() => {
       'Model draws white slabs with dark demising lines and dashed corridor wall lines. Diagram colors each unit by type. Labels show the type and area where the zoom allows. A red outline marks a flagged unit. A dashed amber outline marks a locked unit. An A marks an accessible unit.',
       'Levels in 3D stacks every filled level of the project at its height. The grid and the snap set the step for moving blocks and bay lines. Hold Option to skip snapping.',
     ]],
+    ['Site', [
+      'The Site toggle in the View tab shows the project site from the Site Model. It shows the real ground, roads, water, and trees. Neighbor buildings are solid grey blocks with dark edges. This tool does not drag. Move the building in the Tower Generator or the Mid-Rise Generator.',
+    ]],
     ['Projects', [
       'A project holds the site, the massing and the work of other tools in one file. The Plate Planner reads the massing levels and writes a plates section with the units, so the Parking Deck and the Facade Studio can read it.',
       'The page saves by itself a second after each change. If the massing changes after the last fill, a notice says so. Re-fill takes the new massing.',

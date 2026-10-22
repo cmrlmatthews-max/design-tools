@@ -39,6 +39,7 @@ This file is the one place that lists every tool in the suite, who builds it, an
 | SketchUp export | `src/shared/sketchup-format.js`, `sketchup/` | Same `.sketchup.json` format. |
 | Sun position | `src/shared/solar.js` (home session, with the Sun Study) | API in the project-file spec, section on the `sun` section. |
 | Look and controls | `build/tower/` parts | New tools copy the tower shell. Same tokens, top bar, tabs, CMRLM mark. |
+| Site layer | `src/shared/sitelayer.js`, `build/shared/06x_sitelayer.js`, `build/shared/06y_placement.js` | Every tool draws the project site from `site.derived`. Drag placement only in the Tower Generator, the Mid-Rise Generator, and a standalone Parking Deck. The Grading Sketch keeps its own ground. |
 
 ## 4. Pipeline order
 
@@ -83,3 +84,10 @@ Caution: the work session cannot push to GitHub. It works on a download. Merge b
 | Review of math and geometry | Opus | Finds calculation errors |
 | Branch, pull request | Home session | Cade merges |
 | Mac and iPad test | Cade | Only he can judge the feel |
+
+## 8. Ideas saved for later
+
+| Idea | Note | Added |
+|---|---|---|
+| First-visit tour | When a person first opens the Workspace page, show a short tour of the tools: one popup box with a few slides (what each tool does, the pipeline order, how to start a project). Show it once; a "Tour" link brings it back. | October 22, 2026 (Cade) |
+| Tower help panel | The Tower Generator has no Help panel. The other five tools have one. Add it and place the Site paragraph there. | October 22, 2026 |

@@ -18,6 +18,7 @@ import re
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.normpath(os.path.join(HERE, '..', '..', 'src'))
+SHARED = os.path.normpath(os.path.join(HERE, '..', 'shared'))      # page parts shared by the tools (docs/site-layer-technical-plan.md section 7)
 OUT = os.path.normpath(os.path.join(HERE, '..', '..', 'tower', 'index.html'))
 
 # key -> (global name, path under src). The order here does not matter: the markers and the imports set the order.
@@ -37,6 +38,8 @@ MODS = {
     'towerDerived': ('TowerDerivedMod', 'tower/derived.js'),
     'solar': ('SolarMod', 'shared/solar.js'),
     'sunhours': ('SunHoursMod', 'tower/sunhours.js'),
+    # the shared site layer (docs/site-layer-technical-plan.md): data only, placed by the marker at the top of 06c_site.js
+    'sitelayer': ('SiteLayerMod', 'shared/sitelayer.js'),
 }
 OPTIONAL = {'towerDerived', 'solar', 'sunhours'}
 BY_PATH = {rel: key for key, (_, rel) in MODS.items()}
@@ -192,8 +195,10 @@ PARTS = [
     '04_geometry.js',
     '05_envelope.js',
     '06_render.js',
+    os.path.join(SHARED, '06x_sitelayer.js'),     # SiteLayer3D (shared)
     '06b_select.js',
-    '06c_site.js',            # SiteLayer
+    os.path.join(SHARED, '06y_placement.js'),     # PlacementGizmo (shared; phase C)
+    '06c_site.js',            # SiteLayer (the adapter of SiteLayer3D)
     '06d_sunhours.js',        # SunLayer
     '07_controls.js',
     '08_ui.js',
@@ -213,8 +218,16 @@ PARTS = [
     '12f_tests_project.js',
     '12g_tests_sun.js',
     '12h_tests_nosite.js',
+    '12i_tests_site.js',      # the site layer (tests 1 to 6)
+    '12j_tests_gizmo.js',     # placement gizmo tests (phase C)
     '13_start.js',
 ]
+# parts another build phase writes: left out until the file exists
+OPTIONAL_PARTS = {os.path.join(SHARED, '06y_placement.js'), '12j_tests_gizmo.js'}
+for _p in sorted(OPTIONAL_PARTS):
+    if _p in PARTS and not os.path.isfile(os.path.join(HERE, _p)):
+        print('warning: optional part not written yet, left out:', os.path.basename(_p))
+        PARTS.remove(_p)
 missing = [p for p in PARTS if isinstance(p, str) and not os.path.isfile(os.path.join(HERE, p))]
 if missing:
     raise SystemExit('missing parts: ' + ', '.join(missing))

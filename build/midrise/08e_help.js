@@ -19,10 +19,13 @@ const Help = (() => {
       'Diagram style and the Plan view show spines, unit ticks, corner zones, courtyard sizes and stall counts.',
       'Snap pulls a drag to the grid, the site lines and the edges and centers of other bars. Hold Option (Alt) to skip it.',
     ]],
+    ['Site', [
+      'The Site toggle in the View tab shows the project site from the Site Model. It shows the real ground, roads, water, and trees. Neighbor buildings are solid grey blocks with dark edges. Drag the building on the ground to move it. Use the rotation handle to turn it. The base elevation, the ground height under the building, follows the ground.',
+    ]],
     ['Projects', [
       'A project holds the site, this building and the work of other tools in one file. Use Project > New, or send a site here from the Site Model.',
       'In a project, the Site tab sets where the building sits. Center on site puts it in the middle and its floor at the ground. Context from site loads the neighbors.',
-      'The project saves by itself a second after each change. Export > Send to Plate Planner or Parking Deck saves it and opens that tool.',
+      'The project saves by itself a second after each change. Export > Send to Plate Planner, Parking Deck, Facade Studio, or Grading Sketch saves it and opens that tool.',
     ]],
     ['Files', [
       'Option menu > Save keeps the design in this browser. Export > Export JSON downloads all saved options. Import JSON adds them back.',

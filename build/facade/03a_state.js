@@ -92,6 +92,7 @@ function fillDefaults(src) {
   s.checks.transparencyTarget = s.checks.transparencyTarget == null ? null : clamp(num(s.checks.transparencyTarget, 0.6), 0, 1);
   if (!Array.isArray(s.materials) || !s.materials.length) s.materials = deepClone(base.materials);
   const v = s.view;
+  v.site = v.site !== false;                       // the project site layer (ground, roads, water, trees, neighbors); on unless switched off
   if (v.style !== 'diagram') v.style = 'model';
   if (v.colorBy !== 'wwr') v.colorBy = 'system';
   if (!CONFIG.orientations.includes(v.elevation)) v.elevation = null;

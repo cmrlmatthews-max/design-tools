@@ -39,6 +39,9 @@ const Help = (() => {
       'Draw section (View tab) takes two points. A profile appears under the view with the existing ground dashed, the proposed ground solid, the pads and the walls.',
       'Vertical exaggeration changes only the picture. Every number uses the true heights.',
     ]],
+    ['Site', [
+      'The Site toggle in the View tab shows the project site from the Site Model. It shows neighbor buildings, roads, water, and trees. They are solid grey blocks with dark edges. The sketch keeps its own ground, existing and proposed. This tool does not drag. Move a building in the tool that owns it.',
+    ]],
     ['Projects', [
       'A project holds the site, the massing and the work of other tools in one file. With a project open, the site gives the existing ground, and the Mid-Rise massing and the Parking Deck can be buildings here.',
       'The page writes a grading section back with the floor elevations, so the other tools can read them. It saves by itself a second after each change.',
