@@ -162,12 +162,12 @@ async function runUiTests() {
     /* ---- the top bar and its menus ---- */
     await t('the top bar has Option, Project, Undo, Redo, Model/Diagram, Export and Help', () => eq(
       ['btnOption', 'btnProject', 'btnExport', 'btnHelp'].map((id) => !!$(id)).concat([$('tbHistory').children.length, $('styleToggle').children.length]), [true, true, true, true, 2, 2]));
-    await t('the Export menu: Image, AI-ready image, AI Prompts, overlay, SketchUp, Elevations DXF, JSON; no CSV, no Send', () => {
+    await t('the Export menu: Image, AI-ready image, AI Prompts, overlay, SketchUp, Elevations DXF, JSON, Send to Grading Sketch; no CSV', () => {
       click($('btnExport'));
       const ids = [...document.querySelectorAll('#exportMenu .pop-item')].map((b) => b.id);
       const sendText = /Send to/.test($('exportMenu').textContent);
       Pop.close();
-      return eq([ids, sendText], [['miImage', 'miAiReady', 'miAiPrompts', 'miOverlay', 'miSketchup', 'miDxf', 'miExportJson', 'miImportJson'], false]);
+      return eq([ids, sendText], [['miImage', 'miAiReady', 'miAiPrompts', 'miOverlay', 'miSketchup', 'miDxf', 'miExportJson', 'miImportJson', 'miSendGrading'], true]);
     });
     await t('the Option menu lists every preset', () => {
       click($('btnOption'));

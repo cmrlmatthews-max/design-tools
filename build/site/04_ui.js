@@ -268,6 +268,8 @@ const App = (() => {
     els.btnSendTower.title = canSend ? 'Save this site in a project and open the Tower Generator' : 'Load a site first';
     els.btnSendMid.disabled = !canSend;
     els.btnSendMid.title = canSend ? 'Save this site in a project and open the Mid-Rise Generator' : 'Load a site first';
+    els.btnSendGrading.disabled = !canSend;
+    els.btnSendGrading.title = canSend ? 'Save this site in a project and open the Grading Sketch' : 'Load a site first';
   }
 
   /* ---- project file (docs/project-file-spec.md, sections 8 and 12) ----------------------------------------------
@@ -447,7 +449,7 @@ const App = (() => {
   async function projectSend(toolId) {
     Pop.close();
     const r = state.result;
-    if ((toolId !== 'tower' && toolId !== 'midrise') || !r || state.busy) return false;
+    if (!['tower', 'midrise', 'grading'].includes(toolId) || !r || state.busy) return false;
     if (project.readOnly) { noticeOnce('readonly', READ_ONLY_TEXT); return false; }
     if (!project.doc) {
       if (!projectCreate(defaultProjectName(), { quiet: true })) return false;
@@ -577,7 +579,8 @@ const App = (() => {
     els.btnProject.append(h('span', { html: ICONS.chev, style: 'display:contents' }));
     els.btnSendTower = tbBtn('btnSendTower', ICONS.tower, 'Send to Tower Generator', 'Load a site first', () => projectSend('tower'), { class: 'btn has-text send', disabled: true });
     els.btnSendMid = tbBtn('btnSendMidrise', ICONS.midrise, 'Send to Mid-Rise Generator', 'Load a site first', () => projectSend('midrise'), { class: 'btn has-text send', disabled: true });
-    $('tbActions').append(els.btnMaps, els.btnDl, els.btnShot, h('span', { class: 'tb-sep', 'aria-hidden': 'true' }), els.btnProject, els.btnSendTower, els.btnSendMid);
+    els.btnSendGrading = tbBtn('btnSendGrading', ICONS.grading, 'Send to Grading Sketch', 'Load a site first', () => projectSend('grading'), { class: 'btn has-text send', disabled: true });
+    $('tbActions').append(els.btnMaps, els.btnDl, els.btnShot, h('span', { class: 'tb-sep', 'aria-hidden': 'true' }), els.btnProject, els.btnSendTower, els.btnSendMid, els.btnSendGrading);
   }
 
   function toggleRow(key, label) {

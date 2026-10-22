@@ -1693,7 +1693,7 @@ function validateDoc(doc) {
   if (!doc || typeof doc !== "object") return { ok: false, errors: ["document: not an object"], counts };
   if (doc.format !== FORMAT) err("format", `must be "${FORMAT}"`);
   if (doc.version !== VERSION) err("version", `must be ${VERSION}`);
-  if (!["tower", "site", "midrise", "parking", "facade"].includes(doc.source)) err("source", "must be tower, site, midrise, parking, or facade");
+  if (!["tower", "site", "midrise", "parking", "facade", "grading"].includes(doc.source)) err("source", "must be tower, site, midrise, parking, facade, or grading");
   if (doc.units !== "feet") err("units", "must be feet");
   if (!Number.isFinite(doc.zShift)) err("zShift", "must be a number");
   const tagNames = new Set(), matNames = new Set();
@@ -8340,7 +8340,8 @@ const UI = (() => {
         item('miSketchup', 'SketchUp (.json)', 'Import with the CMRLM SketchUp extension', () => SketchupExport.download()),
         item('miDxf', 'Elevations (.dxf)', 'Four elevation sheets with panels, glass and balconies', () => SketchupExport.dxf()),
         item('miExportJson', 'Export JSON', 'Download all saved options', () => Options.exportJson()),
-        item('miImportJson', 'Import JSON', 'Add the options from a file', () => $('importFile').click()));
+        item('miImportJson', 'Import JSON', 'Add the options from a file', () => $('importFile').click()),
+        item('miSendGrading', 'Send to Grading Sketch', 'Save the project and open the Grading Sketch', () => ProjectUI.send('grading')));
     };
     const overlay = () => {
       el.textContent = '';
@@ -9763,6 +9764,28 @@ const ProjectUI = (() => {
     return true;
   }
 
+  const SEND_TO = ['grading'];
+  /** Send to another tool: save the project, then open ../<tool>/?project=<id>. With no project open, one is made first. */
+  async function send(toolId) {
+    Pop.close();
+    if (!SEND_TO.includes(toolId)) return false;
+    if (!project.doc && !create(defaultName(), { quiet: true })) return false;
+    if (project.readOnly) { noticeOnce('readonly', READ_ONLY_TEXT); return false; }
+    project.dirty = true;
+    const saved = flush();
+    if (saved && saved.ok === false) return false;
+    let url = null;
+    try { url = ProjectMod.sendTo(storageOf(), project.doc, toolId, CONFIG.tool, storageNotice()); } catch (e) {
+      console.error(e);
+      Toast.show(`The project could not be sent. ${e && e.message ? e.message : ''}`.trim(), 'bad', 8000);
+      return false;
+    }
+    if (!url) { Toast.show('The project could not be sent.', 'bad', 8000); return false; }
+    try { project.doc = ProjectMod.loadProject(storageOf(), project.doc.id, storageNotice()) || project.doc; } catch (e) { /* keep the copy in memory */ }
+    project.dirty = false;
+    project.navigate(url);
+    return url;
+  }
   function openById(id) { flush(); project.navigate(`${location.pathname}?project=${encodeURIComponent(id)}`); }
   async function exportFile() {
     const doc = project.doc;
@@ -9889,7 +9912,7 @@ const ProjectUI = (() => {
 
   return {
     has, hasMassing, massingInfo, placement, useProject, useStandalone, contextPolys, dataDoc, dataKey, massingPlacement,
-    start, openDoc, close, create, rename, flush, openMenu, exportFile, importFile, nameControl, reloadData,
+    start, openDoc, close, create, rename, flush, openMenu, exportFile, importFile, nameControl, reloadData, send,
     markDirty, renderPill,
     doc: () => project.doc,
     status: () => ({ open: !!project.doc, id: project.doc && project.doc.id, name: project.doc && project.doc.name, dirty: project.dirty, readOnly: project.readOnly }),
@@ -10534,12 +10557,12 @@ async function runUiTests() {
     /* ---- the top bar and its menus ---- */
     await t('the top bar has Option, Project, Undo, Redo, Model/Diagram, Export and Help', () => eq(
       ['btnOption', 'btnProject', 'btnExport', 'btnHelp'].map((id) => !!$(id)).concat([$('tbHistory').children.length, $('styleToggle').children.length]), [true, true, true, true, 2, 2]));
-    await t('the Export menu: Image, AI-ready image, AI Prompts, overlay, SketchUp, Elevations DXF, JSON; no CSV, no Send', () => {
+    await t('the Export menu: Image, AI-ready image, AI Prompts, overlay, SketchUp, Elevations DXF, JSON, Send to Grading Sketch; no CSV', () => {
       click($('btnExport'));
       const ids = [...document.querySelectorAll('#exportMenu .pop-item')].map((b) => b.id);
       const sendText = /Send to/.test($('exportMenu').textContent);
       Pop.close();
-      return eq([ids, sendText], [['miImage', 'miAiReady', 'miAiPrompts', 'miOverlay', 'miSketchup', 'miDxf', 'miExportJson', 'miImportJson'], false]);
+      return eq([ids, sendText], [['miImage', 'miAiReady', 'miAiPrompts', 'miOverlay', 'miSketchup', 'miDxf', 'miExportJson', 'miImportJson', 'miSendGrading'], true]);
     });
     await t('the Option menu lists every preset', () => {
       click($('btnOption'));
@@ -10874,7 +10897,7 @@ async function runProjectTests() {
   try {
     fresh();
     await t('no project: the standalone massing is the default and the project line is empty', () => eq([ProjectUI.has(), Store.get('source'), ProjectUI.massingInfo().has], [false, 'standalone', false]));
-    await t('there is no Send item in the Project or Export code (version 1)', () => eq([typeof ProjectUI.send, /Send to/.test($('btnExport') ? $('btnExport').title : '')], ['undefined', false]));
+    await t('ProjectUI.send goes to the Grading Sketch only', async () => eq([typeof ProjectUI.send, await ProjectUI.send('nowhere')], ['function', false]));
 
     await t('opening a project with a massing makes the source "project" and takes its placement', () => {
       open();

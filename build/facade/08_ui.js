@@ -756,7 +756,8 @@ const UI = (() => {
         item('miSketchup', 'SketchUp (.json)', 'Import with the CMRLM SketchUp extension', () => SketchupExport.download()),
         item('miDxf', 'Elevations (.dxf)', 'Four elevation sheets with panels, glass and balconies', () => SketchupExport.dxf()),
         item('miExportJson', 'Export JSON', 'Download all saved options', () => Options.exportJson()),
-        item('miImportJson', 'Import JSON', 'Add the options from a file', () => $('importFile').click()));
+        item('miImportJson', 'Import JSON', 'Add the options from a file', () => $('importFile').click()),
+        item('miSendGrading', 'Send to Grading Sketch', 'Save the project and open the Grading Sketch', () => ProjectUI.send('grading')));
     };
     const overlay = () => {
       el.textContent = '';

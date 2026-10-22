@@ -170,7 +170,7 @@ async function runUiTests() {
       click($('btnExport'));
       const got = ids(document.querySelectorAll('#exportMenu .pop-item'));
       Pop.close();
-      const want = ['miImage', 'miAiReady', 'miAiPrompts', 'miOverlay', 'miSketchup', 'miExportJson', 'miImportJson', 'miSendPlate', 'miSendParking', 'miSendFacade'];
+      const want = ['miImage', 'miAiReady', 'miAiPrompts', 'miOverlay', 'miSketchup', 'miExportJson', 'miImportJson', 'miSendPlate', 'miSendParking', 'miSendFacade', 'miSendGrading'];
       return eq(got, want);
     });
     await t('Export > Image overlay shows the choices and goes back', () => {

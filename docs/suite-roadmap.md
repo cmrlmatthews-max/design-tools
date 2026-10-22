@@ -23,7 +23,7 @@ This file is the one place that lists every tool in the suite, who builds it, an
 | `midrise` | Mid-Rise Generator | `midrise/` | Version 1 live | Home |
 | `parking` | Parking Deck Generator | `parking/` | Version 1 live | Home |
 | `facade` | Facade Studio | `facade/` | Version 1 live | Home |
-| `grading` | Grading Sketch | `grading/` | Concept written, waiting on Cade | Home |
+| `grading` | Grading Sketch | `grading/` | Version 1 built, in review | Home |
 | `view` | View Study | `view/` | Later | — |
 | `egress` | Egress Sketch | `egress/` | Later | — |
 | — | Yield Study | — | Skipped for now | — |
