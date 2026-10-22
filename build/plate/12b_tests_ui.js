@@ -12,6 +12,10 @@ async function runUiTests() {
   try {
     fresh();
     await t('the title bar says Plate Planner with the CMRLM mark', () => eq([document.querySelector('.app-title').textContent, document.querySelector('.wordmark').textContent], ['Plate Planner', 'CMRLM']));
+    await t('the Tools button and the CMRLM mark link back to the Workspace (../)', () => {
+      const home = document.getElementById('tbHome'), mark = document.querySelector('.wordmark');
+      return eq([home && home.tagName, home && home.getAttribute('href'), mark.tagName, mark.getAttribute('href'), home && home.textContent.trim()], ['A', '../', 'A', '../', 'Tools']);
+    });
     await t('the HUD shows 17 units, 15,078 sf and 77.3% for the default plate', () => eq(['mUnits', 'mNrsf', 'mEff'].map((id) => $(id).textContent), ['17', '15,078 sf', '77.3%']));
     await t('the HUD expands to the mix, the corridor, the stair door path and the support', () => {
       UI.setHudOpen(true);
