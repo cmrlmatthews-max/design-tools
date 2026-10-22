@@ -153,12 +153,12 @@ async function runUiTests() {
       const ids = ['btnOption', 'btnProject', 'btnSnap', 'btnExport', 'btnHelp'];
       return eq([ids.every((i) => !!$(i)), $('tbHistory').querySelectorAll('button').length, $('styleToggle').querySelectorAll('button').length], [true, 2, 2]);
     });
-    await t('the Export menu lists Image, AI-ready image, AI Prompts, SketchUp, DXF, Stall list, JSON and a disabled Send', async () => {
+    await t('the Export menu lists Image, AI-ready image, AI Prompts, SketchUp, DXF, Stall list, JSON and Send to Facade Studio', async () => {
       click($('btnExport')); await frames(2);
       const ids = ['miImage', 'miAiReady', 'miAiPrompts', 'miOverlay', 'miSketchup', 'miDxf', 'miCsv', 'miExportJson', 'miImportJson', 'miSendFacade'];
       const have = ids.map((i) => !!$(i));
       const send = $('miSendFacade');
-      const out = [have.every(Boolean), !!send && send.disabled, send ? /Planned/.test(send.textContent) : false];
+      const out = [have.every(Boolean), !!send && !send.disabled, send ? /Facade Studio/.test(send.textContent) : false];
       Pop.close();
       return eq(out, [true, true, true]);
     });

@@ -285,11 +285,26 @@ const ProjectUI = (() => {
     return true;
   }
 
-  /** Send: only Facade Studio would be next, and it does not exist yet (plan section 7: the item stays disabled, "Planned"). */
+  /** Send to Facade Studio: save the project, then open ../facade/?project=<id>. With no project open, one is made first. */
   async function send(toolId) {
     Pop.close();
-    Toast.show(`${toolId === 'facade' ? 'Facade Studio' : 'That tool'} is planned. It is not available yet.`, 'warn', 4000);
-    return false;
+    if (toolId !== 'facade') return false;
+    if (!project.doc && !create(defaultName(), { quiet: true })) return false;
+    if (project.readOnly) { noticeOnce('readonly', READ_ONLY_TEXT); return false; }
+    project.dirty = true;
+    const saved = flush();
+    if (saved && saved.ok === false) return false;
+    let url = null;
+    try { url = ProjectMod.sendTo(storageOf(), project.doc, toolId, CONFIG.tool, storageNotice()); } catch (e) {
+      console.error(e);
+      Toast.show(`The project could not be sent. ${e && e.message ? e.message : ''}`.trim(), 'bad', 8000);
+      return false;
+    }
+    if (!url) { Toast.show('The project could not be sent.', 'bad', 8000); return false; }
+    try { project.doc = ProjectMod.loadProject(storageOf(), project.doc.id, storageNotice()) || project.doc; } catch (e) { /* keep the copy in memory */ }
+    project.dirty = false;
+    project.navigate(url);
+    return url;
   }
   function openById(id) { flush(); project.navigate(`${location.pathname}?project=${encodeURIComponent(id)}`); }
   async function exportFile() {

@@ -235,6 +235,12 @@ Optional keys (added with the Parking Deck Generator, October 21, 2026):
 
 `wwr` is the window-to-wall ratio: glazing area divided by wall area. `groundTransparency` is the glazed share of the ground-floor street wall.
 
+Optional keys (added with the Facade Studio, October 22, 2026):
+
+- On each face: `"edge": [[x, y], [x, y]]` (local frame, on `levelFrom`), `"bearing"` (degrees clockwise from project north), `"zone"`, `"street": true | false`.
+- In `metrics`: `"facadeArea"`, `"glazingArea"`, `"balconyCount"`, `"balconyArea"`, `"wwrLimit"`, `"exposure": { "N", "E", "S", "W" } | null`.
+- `levelFrom` and `levelTo` are massing level indices. Glazing counts the whole window opening. `system` is kebab-case: `punched`, `window-wall`, `curtain-wall`, `storefront`, `solid`.
+
 ### 6.6 `sun.derived` (writer: Sun Study, inside the Tower Generator)
 
 ```jsonc
@@ -359,7 +365,7 @@ Tower Generator (work session, with the Sun Study):
 
 1. Add `src/tower/derived.js` with `towerDerived(state, built)` → `massing.derived` (section 6.2). Test it against the presets: GFA from `derived.levels` equals `computeMetrics(...).gfa` within 0.1 sf.
 2. Accept `?project=`; autosave the `massing` section; Project menu in the top bar.
-3. Export menu: "Send to Plate Planner".
+3. Export menu: "Send to Plate Planner" and "Send to Facade Studio" (`sendTo(storage, doc, "facade", "tower")`). The Facade Studio reads tower faces from `massing.derived.levels`; until item 1 exists it shows a note and uses its standalone massing.
 4. Site context: when the project has a site, offer "Context from site" in the Site tab. It calls `siteContextFor(doc, placement, radius)` and replaces `state.context.blocks` with the returned `blocks`. Keep the manual blocks when the user says no.
 5. Sun Study: build on `src/shared/solar.js` (section 6.6). Write the `sun` section with `tool: "tower"`. Set `view.sun` from the chosen date and time.
 6. Placement: when the project has a site, show the placement (x, y, rotation, baseZ) in the Site tab, with a "Center on site" button that sets x and y to the site center and baseZ to the ground there.

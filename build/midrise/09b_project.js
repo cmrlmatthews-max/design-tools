@@ -323,7 +323,7 @@ const ProjectUI = (() => {
   /** Send: the project holds this massing (a project is made now when none is open), then the next tool opens with ?project=<id>. */
   async function send(toolId) {
     Pop.close();
-    if (toolId !== 'plate' && toolId !== 'parking') return false;
+    if (toolId !== 'plate' && toolId !== 'parking' && toolId !== 'facade') return false;
     if (!project.doc && !create(defaultName(), { quiet: true })) return false;
     if (project.readOnly && !(project.replaceNeeded && !project.confirmed)) { noticeOnce('readonly', READ_ONLY_TEXT); return false; }
     if (project.replaceNeeded && !project.confirmed) { const ok = await askReplace(); if (!ok) return false; }

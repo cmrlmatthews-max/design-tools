@@ -820,7 +820,7 @@ const UI = (() => {
         item('miExportJson', 'Export JSON', 'Download all saved options', () => Options.exportJson()),
         item('miImportJson', 'Import JSON', 'Add the options from a file', () => $('importFile').click()),
         h('div', { class: 'pop-sep' }), h('div', { class: 'label pop-label' }, 'Send to'),
-        item('miSendFacade', 'Send to Facade Studio', 'Planned', () => ProjectUI.send('facade'), { disabled: true }));
+        item('miSendFacade', 'Send to Facade Studio', 'Save the project and open the Facade Studio', () => ProjectUI.send('facade')));
     };
     const overlay = () => {
       el.textContent = '';
