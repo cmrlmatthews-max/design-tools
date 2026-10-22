@@ -1744,7 +1744,7 @@ function validateDoc(doc) {
   if (!doc || typeof doc !== "object") return { ok: false, errors: ["document: not an object"], counts };
   if (doc.format !== FORMAT) err("format", `must be "${FORMAT}"`);
   if (doc.version !== VERSION) err("version", `must be ${VERSION}`);
-  if (!["tower", "site", "midrise", "parking"].includes(doc.source)) err("source", "must be tower, site, midrise, or parking");
+  if (!["tower", "site", "midrise", "parking", "facade"].includes(doc.source)) err("source", "must be tower, site, midrise, parking, or facade");
   if (doc.units !== "feet") err("units", "must be feet");
   if (!Number.isFinite(doc.zShift)) err("zShift", "must be a number");
   const tagNames = new Set(), matNames = new Set();
@@ -12323,7 +12323,7 @@ const UI = (() => {
         item('miExportJson', 'Export JSON', 'Download all saved options', () => Options.exportJson()),
         item('miImportJson', 'Import JSON', 'Add the options from a file', () => $('importFile').click()),
         h('div', { class: 'pop-sep' }), h('div', { class: 'label pop-label' }, 'Send to'),
-        item('miSendFacade', 'Send to Facade Studio', 'Planned', () => ProjectUI.send('facade'), { disabled: true }));
+        item('miSendFacade', 'Send to Facade Studio', 'Save the project and open the Facade Studio', () => ProjectUI.send('facade')));
     };
     const overlay = () => {
       el.textContent = '';
@@ -13728,11 +13728,26 @@ const ProjectUI = (() => {
     return true;
   }
 
-  /** Send: only Facade Studio would be next, and it does not exist yet (plan section 7: the item stays disabled, "Planned"). */
+  /** Send to Facade Studio: save the project, then open ../facade/?project=<id>. With no project open, one is made first. */
   async function send(toolId) {
     Pop.close();
-    Toast.show(`${toolId === 'facade' ? 'Facade Studio' : 'That tool'} is planned. It is not available yet.`, 'warn', 4000);
-    return false;
+    if (toolId !== 'facade') return false;
+    if (!project.doc && !create(defaultName(), { quiet: true })) return false;
+    if (project.readOnly) { noticeOnce('readonly', READ_ONLY_TEXT); return false; }
+    project.dirty = true;
+    const saved = flush();
+    if (saved && saved.ok === false) return false;
+    let url = null;
+    try { url = ProjectMod.sendTo(storageOf(), project.doc, toolId, CONFIG.tool, storageNotice()); } catch (e) {
+      console.error(e);
+      Toast.show(`The project could not be sent. ${e && e.message ? e.message : ''}`.trim(), 'bad', 8000);
+      return false;
+    }
+    if (!url) { Toast.show('The project could not be sent.', 'bad', 8000); return false; }
+    try { project.doc = ProjectMod.loadProject(storageOf(), project.doc.id, storageNotice()) || project.doc; } catch (e) { /* keep the copy in memory */ }
+    project.dirty = false;
+    project.navigate(url);
+    return url;
   }
   function openById(id) { flush(); project.navigate(`${location.pathname}?project=${encodeURIComponent(id)}`); }
   async function exportFile() {
@@ -14324,9 +14339,9 @@ async function runTests() {
     const s = fillDefaults({ footprint: { width: 200 } });
     return eq([s.footprint.width, s.footprint.depth > 0, s.levels.count > 0, Array.isArray(s.cores)], [200, true, true, true]);
   });
-  await t('Send to Facade Studio is a planned stub', async () => {
-    const r = await ProjectUI.send('facade');
-    return eq([r, /planned/i.test(TestHelp.toastText())], [false, true]);
+  await t('Send to an unknown tool does nothing', async () => {
+    const r = await ProjectUI.send('nowhere');
+    return eq(r, false);
   });
   return results;
 }
@@ -14486,12 +14501,12 @@ async function runUiTests() {
       const ids = ['btnOption', 'btnProject', 'btnSnap', 'btnExport', 'btnHelp'];
       return eq([ids.every((i) => !!$(i)), $('tbHistory').querySelectorAll('button').length, $('styleToggle').querySelectorAll('button').length], [true, 2, 2]);
     });
-    await t('the Export menu lists Image, AI-ready image, AI Prompts, SketchUp, DXF, Stall list, JSON and a disabled Send', async () => {
+    await t('the Export menu lists Image, AI-ready image, AI Prompts, SketchUp, DXF, Stall list, JSON and Send to Facade Studio', async () => {
       click($('btnExport')); await frames(2);
       const ids = ['miImage', 'miAiReady', 'miAiPrompts', 'miOverlay', 'miSketchup', 'miDxf', 'miCsv', 'miExportJson', 'miImportJson', 'miSendFacade'];
       const have = ids.map((i) => !!$(i));
       const send = $('miSendFacade');
-      const out = [have.every(Boolean), !!send && send.disabled, send ? /Planned/.test(send.textContent) : false];
+      const out = [have.every(Boolean), !!send && !send.disabled, send ? /Facade Studio/.test(send.textContent) : false];
       Pop.close();
       return eq(out, [true, true, true]);
     });
@@ -14950,12 +14965,12 @@ async function runProjectTests() {
       ProjectUI.close();
       return eq([out, $('projPill').hidden], [[true, true], true]);
     });
-    await t('Send to Facade Studio stays disabled in the menu of an open project', async () => {
+    await t('Send to Facade Studio is enabled in the menu of an open project', async () => {
       open({}, 'Send');
       $('btnExport').dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await TestHelp.frames(2);
       const b = $('miSendFacade');
-      const out = [!!b && b.disabled, b ? /Planned/.test(b.textContent) : false];
+      const out = [!!b && !b.disabled, b ? /Facade Studio/.test(b.textContent) : false];
       Pop.close();
       ProjectUI.close();
       return eq(out, [true, true]);

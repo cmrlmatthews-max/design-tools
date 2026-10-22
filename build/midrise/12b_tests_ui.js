@@ -166,11 +166,11 @@ async function runUiTests() {
       Store.set('view.snap', { on: true, grid: 5 }, { live: false });
       return eq([off, grid], [false, 10]);
     });
-    await t('Export menu: Image, AI-ready image, AI Prompts, SketchUp, Export JSON, Import JSON, Send to Plate Planner, Send to Parking Deck', () => {
+    await t('Export menu: Image, AI-ready image, AI Prompts, SketchUp, Export JSON, Import JSON, Send to Plate Planner, Send to Parking Deck, Send to Facade Studio', () => {
       click($('btnExport'));
       const got = ids(document.querySelectorAll('#exportMenu .pop-item'));
       Pop.close();
-      const want = ['miImage', 'miAiReady', 'miAiPrompts', 'miOverlay', 'miSketchup', 'miExportJson', 'miImportJson', 'miSendPlate', 'miSendParking'];
+      const want = ['miImage', 'miAiReady', 'miAiPrompts', 'miOverlay', 'miSketchup', 'miExportJson', 'miImportJson', 'miSendPlate', 'miSendParking', 'miSendFacade'];
       return eq(got, want);
     });
     await t('Export > Image overlay shows the choices and goes back', () => {

@@ -203,9 +203,9 @@ async function runTests() {
     const s = fillDefaults({ footprint: { width: 200 } });
     return eq([s.footprint.width, s.footprint.depth > 0, s.levels.count > 0, Array.isArray(s.cores)], [200, true, true, true]);
   });
-  await t('Send to Facade Studio is a planned stub', async () => {
-    const r = await ProjectUI.send('facade');
-    return eq([r, /planned/i.test(TestHelp.toastText())], [false, true]);
+  await t('Send to an unknown tool does nothing', async () => {
+    const r = await ProjectUI.send('nowhere');
+    return eq(r, false);
   });
   return results;
 }
