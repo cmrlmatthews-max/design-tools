@@ -58,12 +58,12 @@ export const TEST_CASES = [
     description: 'Section 8.1-wall: the default bar with a drawn wall on the south pad edge.',
     state: barSouthWall(),
     // Wall height 1,000 − 998.375 = 1.625 along the south edge (max and average within 0.01).
-    // Grid fill 296.9 and cut 325.1. Net = 296.9 − 325.1 = −28.2.
+    // Grid fill 297.3 and cut 325.1 (integrator, October 22, 2026: the wall-end corner cones add 0.4 cy over the plan's 296.9). Net −27.8.
     expect: {
       padTops: [1000.0],
       cutCy: 325.1,
-      fillCy: 296.9,
-      netCy: -28.2,
+      fillCy: 297.3,
+      netCy: -27.8,
       wallMax: 1.625,
       tolerance: 0.01,
       volumeTolerance: 0.5,
@@ -140,13 +140,13 @@ export const TEST_CASES = [
     state: stateOf('garden-falling-site'),
     // Pad tops: the mean existing under each pad at y = −120, 0, 120 (slope 0.06). 1,000 − 7.2, 1,000, 1,000 + 7.2.
     // Wall heights 0.06 × 38 = 2.28 on each south pad edge.
-    // Grid cut 4,208.7 and fill 4,312.3. Net 103.7 as section 8.4 states. The rounded printed values give 103.6.
+    // Grid cut 4,208.7 and fill 4,315.4 (integrator: wall-end corner cones add 3.1 cy over the plan's 4,312.3). Net 106.7.
     // The grid cut and fill differ from the closed form by the stated edge error (section 8.4).
     expect: {
       padTops: [992.8, 1000.0, 1007.2],
       cutCy: 4208.7,
-      fillCy: 4312.3,
-      netCy: 103.7,
+      fillCy: 4315.4,
+      netCy: 106.7,
       wallMax: 2.28,
       tolerance: 0.01,
       volumeTolerance: 0.5,
@@ -178,11 +178,11 @@ export const TEST_CASES = [
     state: stateOf('podium-retail-street'),
     // Pad top 991.60 = 992.60 − 1.0 = existing at the south pad edge (y = −105) = 1,000 − 0.08 × 105.
     // Wall on the north edge: existing 1,000 + 0.08 × 105 = 1,008.40. Height 1,008.40 − 991.60 = 16.80 ft.
-    // Grid cut 21,998.9 and fill 0. Without the wall the cut is 26,032.5.
+    // Grid cut 22,174.7 and fill 0 (integrator: hand total 20,253.3 + 1,463.5 + two corner cones of 230.0 = 22,176.8; the plan's 21,998.9 undercounted the cones). Without the wall the cut is 26,032.5.
     // Pad only: 310 × 8.4 × 210 = 546,840 cf. 546,840 ÷ 27 = 20,253.3 cy. The grid adds the two corner cones past the wall ends.
     expect: {
       padTops: [991.6],
-      cutCy: 21998.9,
+      cutCy: 22174.7,
       fillCy: 0,
       wallMax: 16.8,
       tolerance: 0.01,

@@ -410,7 +410,7 @@ Phase 6 (Haiku) types these values into `src/grading/presets.js`. Unless a prese
 
 Existing at the south face 998.375, at the north face 1,001.625. Balanced pad top = the mean = **1,000.00**; FFE **1,001.00**. Pad volumes: 0.5 × 32.5 × 1.625 × 300 = 7,921.9 cf = **293.4 cy** each way (exact). Closed form with the long-side slopes only: cut 326.0, fill 345.2. **Grid: cut 325.1, fill 348.2, net +23.1, balance 0.934.** FFE above existing: south corners +2.625, north corners −0.625.
 
-Variant **8.1-wall** (test only): a drawn wall on the south pad edge, (−150, −32.5) to (150, −32.5). Wall height **1.625** (max and average within 0.01). **Grid: cut 325.1, fill 296.9, net −28.2.** The fill keeps the pad and the short ends.
+Variant **8.1-wall** (test only): a drawn wall on the south pad edge, (−150, −32.5) to (150, −32.5). Wall height **1.625** (max and average within 0.01). **Grid: cut 325.1, fill 297.3, net −27.8** (corrected October 22, 2026: the wall-end corner cones add 0.4 cy). The fill keeps the pad and the short ends.
 
 Variant **8.1-site** (test only): `balance` "site". Pad top **999.97**; grid cut 336.9, fill 335.5; |fill − cut| ≤ 2 cy.
 
@@ -437,7 +437,7 @@ Same ground, bar, and daylight. Three equal tiers (the stepping suggestion: `cei
 | Walls | drawn on each south pad edge, y = yc − 38, x −101 to 101 |
 | Lot | L1 rect x 130 to 290, y −150 to 150; anchor the centroid (210, 0), start "existing" (1,000.00); `dir` 0, slope 2, cross 1 |
 
-Pad tops **992.80, 1,000.00, 1,007.20** (the mean under each pad); FFEs 993.80, 1,001.00, 1,008.20. Wall heights **2.28** each (0.06 × 38). Pad volumes, closed form: 0.5 × 38 × 2.28 × 202 = 8,750.9 cf = 324.1 cy per bar each way, 972.3 cy for three. **Grid: 937.5 cy each way** (the 101 ft and 38 ft half-sizes fall between 2.5 ft samples; −3.6 percent, the stated edge error). Lot: `diff = −0.04 y − 0.01 (x − 210)`; cut = fill = half of ∫∫|diff| = (2 × 80 × 0.04 × 150² + (0.01² ÷ 0.04) × 2 × 80³ ÷ 3) ÷ 2 = 72,426.7 cf = **2,682.5 cy** (grid 2,682.4, edges aligned). **Whole preset, grid: cut 4,208.7, fill 4,312.3, net +103.7.** Lot slope 2 percent: no warning.
+Pad tops **992.80, 1,000.00, 1,007.20** (the mean under each pad); FFEs 993.80, 1,001.00, 1,008.20. Wall heights **2.28** each (0.06 × 38). Pad volumes, closed form: 0.5 × 38 × 2.28 × 202 = 8,750.9 cf = 324.1 cy per bar each way, 972.3 cy for three. **Grid: 937.5 cy each way** (the 101 ft and 38 ft half-sizes fall between 2.5 ft samples; −3.6 percent, the stated edge error). Lot: `diff = −0.04 y − 0.01 (x − 210)`; cut = fill = half of ∫∫|diff| = (2 × 80 × 0.04 × 150² + (0.01² ÷ 0.04) × 2 × 80³ ÷ 3) ÷ 2 = 72,426.7 cf = **2,682.5 cy** (grid 2,682.4, edges aligned). **Whole preset, grid: cut 4,208.7, fill 4,315.4, net +106.7** (corrected October 22, 2026: wall-end corner cones add 3.1 cy). Lot slope 2 percent: no warning.
 
 ### 8.5 Wrap with a deck on a slope
 
@@ -456,7 +456,7 @@ The deck pad (310 × 135) lies inside the wrap pad (460 × 285) and wins there (
 | Building | B1 typed rect 300 × 200 centered, one tier, FFE typed **992.60** (pad top 991.60 = existing at the south pad edge, y = −105); `padOffset` 5 (pad 310 × 210) |
 | Wall | drawn on the north pad edge, (−155, 105) to (155, 105) |
 
-Wall height **16.80 ft** (flagged over 4 ft). Pad: all cut, 310 × 8.4 × 210 = 546,840 cf = **20,253.3 cy** (exact). End slopes (2:1 cut against ground level along x): 2 × ∫ (8.4 + 0.08 y)² dy = 2 × 16.8³ ÷ (3 × 0.08) = 39,513.6 cf = 1,463.5 cy. **Whole preset, grid: cut 21,998.9, fill 0** (the rest is the two corner cones past the wall ends). Without the wall: cut 26,032.5.
+Wall height **16.80 ft** (flagged over 4 ft). Pad: all cut, 310 × 8.4 × 210 = 546,840 cf = **20,253.3 cy** (exact). End slopes (2:1 cut against ground level along x): 2 × ∫ (8.4 + 0.08 y)² dy = 2 × 16.8³ ÷ (3 × 0.08) = 39,513.6 cf = 1,463.5 cy. **Whole preset, grid: cut 22,174.7, fill 0** (corrected October 22, 2026: the two corner cones past the wall ends integrate to 230.0 cy each, so the hand total is 20,253.3 + 1,463.5 + 460.0 = 22,176.8). Without the wall: cut 26,032.5.
 
 ### 8.7 Flat site
 
@@ -504,7 +504,7 @@ Every test that fixes a number writes the arithmetic in a comment. Grid values c
 
 - Shell: the default state builds; the HUD shows cut 330, fill 350, net +20 (rounded to 10 cy), tallest wall 0.
 - Every preset loads with its section 8 values.
-- Drawing: a wall drawn by four taps on the south edge of preset 8.1 changes the fill to 296.9.
+- Drawing: a wall drawn by four taps on the south edge of preset 8.1 changes the fill to 297.3.
 - Tiers: "Apply" on the stepping suggestion of preset 8.2 gives preset 8.3's numbers.
 - Project: a fixture project with a synthetic site and the Mid-Rise `double-bar` massing → source "project" → one building `massing` with the massing footprint in the project frame; a tower project with no levels shows the note.
 - Exports: SketchUp doc validates; CSV, DXF, notes, and JSON download.
