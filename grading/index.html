@@ -2192,8 +2192,11 @@ function transformMultiPoly(section, mp, dir) {
  *     polygons: [{ id, name, outer, holes, base, height }] }    the building rings, in the local frame
  * where base is the building base minus placement.baseZ. Numbers are rounded to 0.01 ft (rings to 0.001).
  * Empty lists when the project has no site section.
+ * A building with `removed: true` (the user removed it in the Site Model) is skipped from both lists, unless
+ * opts.includeRemoved is true; then it is kept and its block and polygon carry `removed: true`.
  */
-function siteContextFor(doc, placement, radiusFt) {
+function siteContextFor(doc, placement, radiusFt, opts) {
+  const includeRemoved = !!(isObj(opts) && opts.includeRemoved);
   const out = { blocks: [], polygons: [] };
   const site = getSection(doc, "site");
   const list = site && isObj(site.derived) && Array.isArray(site.derived.buildings) ? site.derived.buildings : [];
@@ -2201,6 +2204,8 @@ function siteContextFor(doc, placement, radiusFt) {
   const radius = Number.isFinite(radiusFt) ? radiusFt : Infinity;
   for (const b of list) {
     if (!isObj(b) || !Array.isArray(b.outer) || b.outer.length < 3) continue;
+    const removed = b.removed === true;
+    if (removed && !includeRemoved) continue;
     const outer = mapRing(pl, b.outer, false);
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     for (const [x, y] of outer) {
@@ -2215,8 +2220,11 @@ function siteContextFor(doc, placement, radiusFt) {
     const name = typeof b.name === "string" ? b.name : "";
     const height = Number.isFinite(b.height) ? b.height : (Number.isFinite(b.top) && Number.isFinite(b.base) ? b.top - b.base : 0);
     const base = r2((Number.isFinite(b.base) ? b.base : pl.baseZ) - pl.baseZ);
-    out.blocks.push({ id: b.id, name, x: r2((minX + maxX) / 2), y: r2((minY + maxY) / 2), w: r2(maxX - minX), d: r2(maxY - minY), h: r2(height), base });
-    out.polygons.push({ id: b.id, name, outer, holes: (Array.isArray(b.holes) ? b.holes : []).map((h) => mapRing(pl, h, false)), base, height: r2(height) });
+    const block = { id: b.id, name, x: r2((minX + maxX) / 2), y: r2((minY + maxY) / 2), w: r2(maxX - minX), d: r2(maxY - minY), h: r2(height), base };
+    const polygon = { id: b.id, name, outer, holes: (Array.isArray(b.holes) ? b.holes : []).map((h) => mapRing(pl, h, false)), base, height: r2(height) };
+    if (removed) { block.removed = true; polygon.removed = true; }
+    out.blocks.push(block);
+    out.polygons.push(polygon);
   }
   return out;
 }
@@ -2856,7 +2864,7 @@ function emptyResult(reason) {
   return {
     ok: false, reason, bounds: null, ground: null, boundary: null, buildings: [], roads: [], walks: [],
     water: { areas: [], lines: [] }, trees: [],
-    counts: { buildings: 0, roads: 0, walks: 0, waterAreas: 0, trees: 0, groundNodes: 0 },
+    counts: { buildings: 0, removed: 0, roads: 0, walks: 0, waterAreas: 0, trees: 0, groundNodes: 0 },
   };
 }
 
@@ -2932,16 +2940,24 @@ function idSet(ids) {
   return out;
 }
 
+/**
+ * { buildings, removed }: buildings = the records to return; removed = how many buildings with `removed: true` were
+ * met (skipped by default, returned with `removed: true` when opts.includeRemoved). maxBuildings caps the drawn
+ * buildings only; removed ones never take a place under the cap.
+ */
 function buildingsData(list, pl, grid, s, c, opts) {
   const skip = idSet(opts.contextIds);
   const max = fin(opts.maxBuildings) && opts.maxBuildings >= 0 ? Math.floor(opts.maxBuildings) : DEFAULT_MAX_BUILDINGS;
-  const out = [];
+  const includeRemoved = opts.includeRemoved === true;
+  const out = [], gone = [];
   (Array.isArray(list) ? list : []).forEach((b, index) => {
     if (!isObj(b)) return;
     const id = b.id !== undefined && b.id !== null ? b.id : `b${index}`;
     if (skip.has(String(id))) return;
     const outer = localRing(pl, b.outer);
     if (!outer) return;
+    const removed = b.removed === true;
+    if (removed && !includeRemoved) { gone.push(null); return; }
     const holes = [];
     for (const h of Array.isArray(b.holes) ? b.holes : []) {
       const r = localRing(pl, h);
@@ -2954,17 +2970,19 @@ function buildingsData(list, pl, grid, s, c, opts) {
     if (!(height > 0)) height = 0;
     const bb = bboxOf(outer);
     const gx = Math.max(bb.minX, 0, -bb.maxX), gy = Math.max(bb.minY, 0, -bb.maxY);
-    out.push({
+    const rec = {
       index, dist: Math.hypot(gx, gy), cdist: Math.hypot((bb.minX + bb.maxX) / 2, (bb.minY + bb.maxY) / 2),
       b: { id, name: typeof b.name === "string" ? b.name : "", outer, holes, base: r3(base), height: r3(height), rule: typeof b.rule === "string" && b.rule ? b.rule : "data" },
-    });
+    };
+    if (removed) { rec.b.removed = true; gone.push(rec); } else out.push(rec);
   });
   let keep = out;
   if (out.length > max) {
     keep = out.slice().sort((p, q) => p.dist - q.dist || p.cdist - q.cdist || p.index - q.index).slice(0, max);
-    keep.sort((p, q) => p.index - q.index);
   }
-  return keep.map((e) => e.b);
+  if (includeRemoved) keep = keep.concat(gone);
+  keep.sort((p, q) => p.index - q.index);
+  return { buildings: keep.map((e) => e.b), removed: gone.length };
 }
 
 function multiPolyData(mp, pl) {
@@ -3023,9 +3041,13 @@ function treesData(list, pl, grid, s, c) {
 /**
  * The whole site layer in a tool's local frame (plan section 3.2).
  * siteDerived: site.derived or null. placement: { x, y, rotation, baseZ }. opts: { contextIds: Set | Array of building
- * ids to skip (already drawn as context blocks), maxBuildings: 2000 }.
+ * ids to skip (already drawn as context blocks), maxBuildings: 2000, includeRemoved: false }.
  * Returns { ok, reason, bounds, ground, boundary, buildings, roads, walks, water, trees, counts }. ok is false (with a
  * reason) when there is neither a ground grid nor a boundary; `reason` also says why the ground is null when ok is true.
+ * Removed buildings (`removed: true` in site.derived, set by the Site Model) are skipped. With opts.includeRemoved they
+ * are returned too, in list order, each record with `removed: true` (the Site Model draws their dashed outlines).
+ * counts.buildings counts the buildings to draw as solids (never the removed ones); counts.removed counts the removed
+ * ones (skipped or returned).
  */
 function buildSiteLayerData(siteDerived, placement, opts = {}) {
   if (!isObj(siteDerived)) return emptyResult("There is no site.");
@@ -3054,7 +3076,7 @@ function buildSiteLayerData(siteDerived, placement, opts = {}) {
   if (!box) return emptyResult("The site has no usable ground and no usable boundary.");
   const bounds = { minX: r3(box.minX), maxX: r3(box.maxX), minY: r3(box.minY), maxY: r3(box.maxY), zMin: r3(box.zMin), zMax: r3(box.zMax) };
 
-  const buildings = buildingsData(siteDerived.buildings, pl, grid, s, c, o);
+  const { buildings, removed } = buildingsData(siteDerived.buildings, pl, grid, s, c, o);
   const roadsIn = siteDerived.roads;
   const roads = multiPolyData(Array.isArray(roadsIn) ? roadsIn : isObj(roadsIn) ? roadsIn.pavement : null, pl);
   const walksIn = siteDerived.walks !== undefined && siteDerived.walks !== null ? siteDerived.walks : isObj(roadsIn) ? roadsIn.walks : null;
@@ -3074,7 +3096,7 @@ function buildSiteLayerData(siteDerived, placement, opts = {}) {
     water,
     trees,
     counts: {
-      buildings: buildings.length, roads: roads.length, walks: walks.length, waterAreas: water.areas.length,
+      buildings: buildings.length - (o.includeRemoved === true ? removed : 0), removed, roads: roads.length, walks: walks.length, waterAreas: water.areas.length,
       trees: trees.length, groundNodes: ground ? ground.n * ground.n : 0,
     },
   };
