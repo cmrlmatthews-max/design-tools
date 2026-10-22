@@ -56,6 +56,8 @@ window.__plate = {
   getDerivedSection: () => { const st = Store.snapshot(), d = Derived.get(); return PlateDerivedMod.platesDerived(st, d.built, d.metrics); },
   overlayInfo: () => Render.overlayInfo(),
   layerInfo: () => Render.layerInfo(),
+  massingInfo: () => Render.massingInfo(),
+  framedBox: (id) => Render.framedBox(id),
   // project file (ProjectUI; tests inject storage and navigation with projectConfigure)
   projectConfigure: (o) => ProjectUI.configure(o),
   projectReset: () => ProjectUI.reset(),

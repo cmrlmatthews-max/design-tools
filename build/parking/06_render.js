@@ -450,8 +450,8 @@ const Render = (() => {
       };
     }
     const b = boxOf(Derived.get());
-    const sb = withSite ? SiteLayer.frameBox(Store.raw()) : null;       // Axon fits the whole site; the elevations and the plan keep the deck
-    if (sb) { b.minX = Math.min(b.minX, sb.minX); b.maxX = Math.max(b.maxX, sb.maxX); b.minY = Math.min(b.minY, sb.minY); b.maxY = Math.max(b.maxY, sb.maxY); }
+    const sb = withSite ? SiteLayer.frameBox(Store.raw()) : null;       // Axon frames the building with a margin of max(150 ft, 0.6 x its larger plan span), clamped to the site square; the elevations and the plan keep the building box
+    if (sb) Object.assign(b, SiteLayer3D.frameAround(b, sb));
     return b;
   }
 
@@ -874,6 +874,7 @@ const Render = (() => {
     onViewChange: (fn) => viewListeners.push(fn),
     onResize: (fn) => resizeListeners.push(fn),
     overlayInfo: () => { const kids = layers.overlay.group.children; return { total: kids.length, plan: kids.filter((o) => o.userData.plan).length, planVisible: kids.some((o) => o.userData.plan && o.visible), labels: kids.filter((o) => o.userData.label).map((o) => o.userData.label) }; },
+    framedBox: (id = 'axon') => framingBox(id === 'axon'),       // tests: the box a preset frames
     info: () => ({ camera: camType, preset, meshes: layers ? layers.model.group.children.length : 0, tweening: !!tween, distance: cam ? cam.position.distanceTo(controls.target) : 0, zoom: cam ? cam.zoom : 0, compare: !!cmp, drawQuality: derived ? Derived.display(Store.gestureActive() && !Store.gesturePath().startsWith('view')).quality : null }),
     ready: () => !!renderer,
     comparing: () => !!cmp,

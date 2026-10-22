@@ -87,6 +87,36 @@ const ProjectUI = (() => {
     const list = massingLevels().filter((l) => l && Array.isArray(l.plates) && l.plates.length);
     return { has: !!sec, tool: sec ? (sec.tool || null) : null, levels: list.length, noLevels: !!sec && list.length === 0 };
   }
+  /** The program of the massing: 'hotel' when most of its non-podium levels say so, else 'multifamily' (null without a massing). */
+  function massingMode() {
+    const list = massingLevels().filter((l) => l && Array.isArray(l.plates) && l.plates.length && l.zone !== 'podium' && l.zone !== 'deck');
+    if (!list.length) return null;
+    const hotel = list.filter((l) => String(l.program || '').toLowerCase() === 'hotel').length;
+    return hotel * 2 > list.length ? 'hotel' : 'multifamily';
+  }
+  /** A one-time notice when the massing program and the plate mode differ (a hotel tower opened in multifamily mode fills with nothing). */
+  function noticeMode() {
+    const want = massingMode(), have = Store.raw().mode;
+    if (!want || !have || want === have) return;
+    const label = want === 'hotel' ? 'Hotel' : 'Multifamily';
+    noticeOnce(`mode:${project.doc && project.doc.id}:${want}`, `The massing program is ${want}. The Plate Planner is in ${have} mode. Select ${label} under Source and program to fill it with ${want === 'hotel' ? 'keys' : 'units'}.`, 'warn', 12000);
+  }
+  /** The massing levels to draw as solids: [{ index, z, ftf, zone, program, plates }] for the levels that have a ring. In the massing frame. */
+  function massingSolids() {
+    return massingLevels().filter((l) => l && Array.isArray(l.plates) && l.plates.some((p) => p && Array.isArray(p.outer) && p.outer.length >= 3))
+      .map((l) => ({ index: l.index, z: num(l.z, 0), ftf: Math.max(0.5, num(l.ftf, 10)), zone: l.zone || '', program: l.program || null, plates: l.plates.filter((p) => p && Array.isArray(p.outer) && p.outer.length >= 3) }));
+  }
+  /** The plan extent and height of the massing { minX, maxX, minY, maxY, height }, or null without levels. */
+  function massingBox() {
+    const list = massingSolids();
+    if (!list.length) return null;
+    const b = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity, height: 0 };
+    for (const l of list) {
+      for (const p of l.plates) for (const q of p.outer) { b.minX = Math.min(b.minX, q[0]); b.maxX = Math.max(b.maxX, q[0]); b.minY = Math.min(b.minY, q[1]); b.maxY = Math.max(b.maxY, q[1]); }
+      b.height = Math.max(b.height, l.z + l.ftf);
+    }
+    return Number.isFinite(b.minX + b.maxX + b.minY + b.maxY) ? b : null;
+  }
   /** The site neighbors in the plate frame: [{ id, name, outer, holes, base, height }]. */
   function contextPolys() {
     if (!project.doc) return [];
@@ -105,6 +135,9 @@ const ProjectUI = (() => {
     if (next.source !== 'project') {
       if (next.corridor) { next.corridor.kind = 'auto'; next.corridor.spine = null; }
       if (next.core) next.core.rect = null;
+      // The mode follows the massing program the first time a project is taken (a hotel tower fills with keys).
+      const want = massingMode();
+      if (want) next.mode = want;
     }
     next.source = 'project';
     Store.replace(fillDefaults(next));
@@ -236,6 +269,7 @@ const ProjectUI = (() => {
     }
     renderPill();
     if (Render.ready()) Render.setView(Render.info().preset || 'plan', true);
+    if (hasMassing()) noticeMode();
     return doc;
   }
   /** Forgets the open project (the saved copy stays where it is). */
@@ -426,7 +460,7 @@ const ProjectUI = (() => {
   }
 
   return {
-    has, hasMassing, hasSection, massingInfo, placement, useProject, useDrawn, contextPolys, dataDoc, dataKey, massingPlacement, massingStamp, fillStamp, refill,
+    has, hasMassing, hasSection, massingInfo, massingMode, massingSolids, massingBox, placement, useProject, useDrawn, contextPolys, dataDoc, dataKey, massingPlacement, massingStamp, fillStamp, refill,
     start, openDoc, close, create, rename, flush, openMenu, exportFile, importFile, nameControl, reloadData, send,
     markDirty, renderPill,
     doc: () => project.doc,

@@ -126,17 +126,21 @@ async function runSiteTests() {
       return eq(['site-ground', 'site-buildings', 'site-roads', 'site-walks', 'site-water', 'site-trees'].every((k) => kinds.includes(k)), true);
     });
 
-    await t('12 Axon frames the whole site; switching the layer off frames the building again, and on again frames the site', async () => {
+    await t('12 Axon frames the building plus a margin of max(150 ft, 0.6 x its span), clamped to the site square: smaller than the site, holding the building; the layer off frames the building alone', async () => {
       Render.setView('axon', false);
       await frames(3);
-      const a = Render.info().distance;
+      const on = Render.framedBox('axon'), sb = SiteLayer.frameBox(Store.raw()), a = Render.info().distance;
       Store.set('view.site', false, { live: false });
       await wait(1600);
-      const b = Render.info().distance;
+      const off = Render.framedBox('axon'), b = Render.info().distance;
       Store.set('view.site', true, { live: false });
       await wait(1600);
       const c = Render.info().distance;
-      return eq([a > b * 1.5, c > b * 1.5], [true, true]);
+      const m = Math.max(150, 0.6 * Math.max(off.maxX - off.minX, off.maxY - off.minY));
+      const holds = on.minX <= off.minX && on.maxX >= off.maxX && on.minY <= off.minY && on.maxY >= off.maxY;
+      const smaller = on.maxX - on.minX < sb.maxX - sb.minX - 1 && on.maxY - on.minY < sb.maxY - sb.minY - 1;
+      const margin = [on.minX - Math.min(off.minX, Math.max(off.minX - m, sb.minX)), on.maxX - Math.max(off.maxX, Math.min(off.maxX + m, sb.maxX)), on.minY - Math.min(off.minY, Math.max(off.minY - m, sb.minY)), on.maxY - Math.max(off.maxY, Math.min(off.maxY + m, sb.maxY))].every((v) => Math.abs(v) < 1e-6);
+      return eq([holds, smaller, margin, a > b * 1.1, Math.abs(a - c) < a * 0.01, m >= 150], [true, true, true, true, true, true]);
     });
     await t('8 closing the project removes the layer', async () => {
       ProjectUI.close();

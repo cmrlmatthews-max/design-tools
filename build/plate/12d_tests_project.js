@@ -133,6 +133,17 @@ async function runProjectTests() {
       const fills = d.built.groups.map((g) => g.fill);
       return eq([Store.get('corridor.kind'), d.groups.length, fills.every((f) => f && f.kind === 'point' && f.units.length > 0), d.hud.building.floors], ['auto', 2, true, 3]);
     });
+    await t('a hotel tower (117 by 93 ft plates, a 52 by 42 ft core) opens in hotel mode and fills with keys; the mode notice stays quiet', () => {
+      const rect = (w, d) => [[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2]];
+      const lv = (index) => ({ index, name: `Level ${index}`, zone: 'tower', z: (index - 1) * 15, ftf: 15, program: 'hotel', plates: [{ outer: rect(117, 93), holes: [] }], core: rect(52, 42), spines: [], seeds: [] });
+      let doc = ProjectMod.newProject({ name: 'Hotel tower' });
+      doc = ProjectMod.writeSection(doc, 'massing', { tool: 'tower', schema: 2, placement: { x: 0, y: 0, rotation: 0, baseZ: 0 }, state: {}, derived: { levels: [lv(2), lv(3), lv(4)] } });
+      ProjectMod.saveProject(mem, doc);
+      fresh();
+      ProjectUI.openDoc(doc);
+      const d = Derived.get();
+      return eq([ProjectUI.massingMode(), Store.get('mode'), d.hud.building.units > 10], ['hotel', 'hotel', true]);
+    });
     await t('a project with no massing keeps the drawn plate', () => {
       const doc = ProjectFixture.project({ name: 'Empty', withMassing: false });
       ProjectMod.saveProject(mem, doc);

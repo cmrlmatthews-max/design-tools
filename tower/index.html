@@ -5500,11 +5500,10 @@ const Render = (() => {
       };
     }
     const box = boxOf(Derived.get(), showEnv);
-    // Axon and Plan fit the whole project site when the site layer shows; the elevations keep the building box.
+    // Axon and Plan frame the building with a margin of max(150 ft, 0.6 x its larger plan span), clamped to the project site: the site runs past the edges of the view. The elevations keep the building box.
     const sb = id === 'axon' || id === 'plan' ? SiteLayer.frameBounds() : null;
     if (sb) {
-      box.minX = Math.min(box.minX, sb.minX); box.maxX = Math.max(box.maxX, sb.maxX);
-      box.minY = Math.min(box.minY, sb.minY); box.maxY = Math.max(box.maxY, sb.maxY);
+      Object.assign(box, SiteLayer3D.frameAround(box, sb));
       box.minZ = Math.min(0, sb.zMin); box.height = Math.max(box.height, sb.zMax);
     }
     return box;
@@ -5931,6 +5930,7 @@ const Render = (() => {
     onRebuild: (fn) => rebuildListeners.push(fn),
     onViewChange: (fn) => viewListeners.push(fn),
     onResize: (fn) => resizeListeners.push(fn),
+    framedBox: (id = 'axon') => framingBox(id),       // tests: the box a preset frames
     info: () => ({ siteLines: layers ? layers.model.group.children.filter((o) => o.isLineLoop).length : 0, envelopeLines: layers ? layers.envelope.group.children.length : 0, camera: camType, preset, meshes: layers ? layers.model.group.children.length : 0, tweening: !!tween, distance: cam ? cam.position.distanceTo(controls.target) : 0, zoom: cam ? cam.zoom : 0, compare: !!cmp, drawQuality: derived ? Derived.display(Store.gestureActive() && !Store.gesturePath().startsWith('view')).quality : null }),
     ready: () => !!renderer,
     comparing: () => !!cmp,
@@ -6342,7 +6342,20 @@ const SiteLayer3D = (() => {
     return `${stamp}|${p.x || 0},${p.y || 0},${p.rotation || 0},${p.baseZ || 0}|${flags}|${themeEpoch || 0}`;
   }
 
-  return { objects, dispose, setShadows, keyFor, makeSampler };
+  /** The box a view frames when a site is open: the building box grown by max(150 ft, 0.6 x its larger plan span) on every side,
+   *  then clamped to the site square, so the site runs past the edges of the view. A building that sticks out of the square stays inside the box.
+   *  b, sb: { minX, maxX, minY, maxY } (b may carry height and minZ, which are kept). → a new box. */
+  function frameAround(b, sb) {
+    const span = Math.max(b.maxX - b.minX, b.maxY - b.minY);
+    const m = Math.max(150, 0.6 * span);
+    return {
+      ...b,
+      minX: Math.min(b.minX, Math.max(b.minX - m, sb.minX)), maxX: Math.max(b.maxX, Math.min(b.maxX + m, sb.maxX)),
+      minY: Math.min(b.minY, Math.max(b.minY - m, sb.minY)), maxY: Math.max(b.maxY, Math.min(b.maxY + m, sb.maxY)),
+    };
+  }
+
+  return { objects, dispose, setShadows, keyFor, makeSampler, frameAround };
 })();
 
 /* ---- src/tower/snap.js ---- */
@@ -16997,6 +17010,25 @@ async function runSiteLayerTests() {
       await wait(350);
       const after = SiteLayer.info().key, mesh2 = SiteLayer.groundMesh();
       return eq([Render.themeEpoch() === epoch + 1, after !== before, mesh2 !== mesh, SiteLayer.info().shown], [true, true, true, true]);
+    });
+
+    await t('6b. Axon and Plan frame the building plus a margin of max(150 ft, 0.6 x its span), clamped to the site square: smaller than the site, holding the building (the elevations keep the building box)', async () => {
+      if (!live) return true;
+      const out = [];
+      for (const id of ['axon', 'plan', 'e']) {
+        Store.set('view.site', false, { live: false });
+        await wait(150);
+        const off = Render.framedBox(id);
+        Store.set('view.site', true, { live: false });
+        await wait(150);
+        const on = Render.framedBox(id), sb = SiteLayer.frameBounds();
+        const m = Math.max(150, 0.6 * Math.max(off.maxX - off.minX, off.maxY - off.minY));
+        const holds = on.minX <= off.minX && on.maxX >= off.maxX && on.minY <= off.minY && on.maxY >= off.maxY;
+        const smaller = on.maxX - on.minX < sb.maxX - sb.minX - 1 && on.maxY - on.minY < sb.maxY - sb.minY - 1;
+        const margin = [on.minX - Math.min(off.minX, Math.max(off.minX - m, sb.minX)), on.maxX - Math.max(off.maxX, Math.min(off.maxX + m, sb.maxX)), on.minY - Math.min(off.minY, Math.max(off.minY - m, sb.minY)), on.maxY - Math.max(off.maxY, Math.min(off.maxY + m, sb.maxY))].every((v) => Math.abs(v) < 1e-6);
+        out.push(id === 'e' ? [holds, on.maxX - on.minX === off.maxX - off.minX] : [holds, smaller, margin, m >= 150]);
+      }
+      return eq(out, [[true, true, true, true], [true, true, true, true], [true, true]]);
     });
 
     await t('7a. a live placement drag moves the built layer as a solid without rebuilding it; the commit rebuilds it', async () => {

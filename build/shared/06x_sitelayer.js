@@ -387,5 +387,18 @@ const SiteLayer3D = (() => {
     return `${stamp}|${p.x || 0},${p.y || 0},${p.rotation || 0},${p.baseZ || 0}|${flags}|${themeEpoch || 0}`;
   }
 
-  return { objects, dispose, setShadows, keyFor, makeSampler };
+  /** The box a view frames when a site is open: the building box grown by max(150 ft, 0.6 x its larger plan span) on every side,
+   *  then clamped to the site square, so the site runs past the edges of the view. A building that sticks out of the square stays inside the box.
+   *  b, sb: { minX, maxX, minY, maxY } (b may carry height and minZ, which are kept). → a new box. */
+  function frameAround(b, sb) {
+    const span = Math.max(b.maxX - b.minX, b.maxY - b.minY);
+    const m = Math.max(150, 0.6 * span);
+    return {
+      ...b,
+      minX: Math.min(b.minX, Math.max(b.minX - m, sb.minX)), maxX: Math.max(b.maxX, Math.min(b.maxX + m, sb.maxX)),
+      minY: Math.min(b.minY, Math.max(b.minY - m, sb.minY)), maxY: Math.max(b.maxY, Math.min(b.maxY + m, sb.maxY)),
+    };
+  }
+
+  return { objects, dispose, setShadows, keyFor, makeSampler, frameAround };
 })();
