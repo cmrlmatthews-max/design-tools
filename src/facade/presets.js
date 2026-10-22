@@ -38,7 +38,7 @@ export function defaultState() {
 
     systems: {
       punched: { module: 14, windowW: 6, sill: 2.5, head: 8, mullionW: 0.1667, mullionD: 0.333 },
-      windowWall: { module: 5, slabCover: 1.3333, mullionW: 0.2083, mullionD: 0.5 },
+      windowWall: { module: 5, slabCover: 4 / 3, mullionW: 0.2083, mullionD: 0.5 },
       curtainWall: { module: 5, vision: 8, sill: 0, mullionW: 0.2083, mullionD: 0.6667 },
       storefront: { module: 5, sill: 1.5, head: 10, mullionW: 0.1667, mullionD: 0.375 },
       solid: { module: 10 },
@@ -238,7 +238,7 @@ export const PRESETS = [
         middle: { system: 'punched' },
         top: { system: 'punched' },
       };
-      Object.assign(s.balconies, { on: true, type: 'projected', pattern: 'alternating', spacing: 2 });
+      Object.assign(s.balconies, { on: true, type: 'projected', pattern: 'alternating', spacing: 2, orientations: ['N', 'E', 'S', 'W'] });
     }),
   },
 

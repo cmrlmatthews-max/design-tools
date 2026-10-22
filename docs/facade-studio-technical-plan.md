@@ -276,7 +276,7 @@ Caution: the 40 percent limit is the prescriptive path of ASHRAE 90.1-2019 for t
 ### 3.12 Step 12 — Envelope note and exposure
 
 - **Envelope note** (when on): for each zone, the glazing type's U and SHGC against `limits`, and the wall type's U. Plain text lines. No calculation beyond the comparison.
-- **Exposure** (when `sections.sun.derived.samples` exists): for each face group and each sample with `altitude > 0`, add `cos(alt) × cos(az − bearing)` when that cosine is positive. Per orientation: the length-weighted mean over its face groups. Divide each by the largest (most exposed = 1.00). Without samples, `exposure: null` and the panel says "Run a sun study in the Tower Generator to see exposure."
+- **Exposure** (when `sections.sun.derived.samples` exists): for each face group and each sample with `altitude >= 0` (a sunrise sample at 0 counts), add `cos(alt) × cos(az − bearing)` when that cosine is positive. Per orientation: the length-weighted mean over its face groups. Divide each by the largest (most exposed = 1.00). Without samples, `exposure: null` and the panel says "Run a sun study in the Tower Generator to see exposure."
 
 ### 3.13 Step 13 — Derived writer
 
