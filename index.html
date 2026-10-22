@@ -160,7 +160,7 @@ li.warn .stl{color:var(--red)}
 <li>Select the project in the <b>Project schedule</b>.</li>
 <li>In <b>Tools</b>, select <b>Tower Generator</b> or <b>Mid-Rise Generator</b> on the <b>Massing</b> card. The tool opens with the project.</li>
 <li>Look at the top bar. The tool shows the project name there.</li>
-<li>Look at the model. The site layer shows the ground, roads, water, and trees. Neighbor buildings are solid grey blocks with dark edges.</li>
+<li>Look at the model. The site layer shows the ground, roads, water, and trees. Neighbor buildings are solid grey blocks with dark edges. A building you removed in the Site Model does not show, and casts no shadow.</li>
 <li>Drag the building on the ground to move it. The base elevation follows the ground. Each drag is one undo step.</li>
 <li>Drag the rotation handle to turn the building. It turns in 5-degree steps.</li>
 <li>To type exact values, open the <b>Site</b> tab. Type X, Y, rotation, and base elevation under <b>Placement</b>.</li>
@@ -187,7 +187,7 @@ li.warn .stl{color:var(--red)}
 
 <h3>5 · What each tool reads and writes</h3>
 <table aria-label="What each tool reads and writes"><thead><tr><th>Tool</th><th>Reads from the project</th><th>Writes to the project</th><th>Send to</th></tr></thead><tbody>
-<tr><td>Site Model</td><td>Nothing</td><td>Site: ground, site boundary, neighbor buildings, roads, walks, water, trees</td><td>Tower Generator, Mid-Rise Generator, Grading Sketch</td></tr>
+<tr><td>Site Model</td><td>Nothing</td><td>Site: ground, site boundary, neighbor buildings (removed buildings are flagged), roads, walks, water, trees</td><td>Tower Generator, Mid-Rise Generator, Grading Sketch</td></tr>
 <tr><td>Site layer (every tool)</td><td>Site: ground, boundary, roads, walks, water, trees, neighbor buildings (View tab, Site toggle)</td><td>Nothing. A drag writes the placement of the tool (Tower, Mid-Rise, standalone Parking Deck).</td><td>—</td></tr>
 <tr><td>Tower Generator</td><td>Site: ground for the base elevation; neighbors for context blocks (Site tab, Context from site); site location for the Sun Study</td><td>Massing: floor plates, cores, crown, placement; Sun (see the Sun Study row)</td><td>Plate Planner, Facade Studio, Grading Sketch</td></tr>
 <tr><td>Mid-Rise Generator</td><td>Site: ground for the base elevation; neighbors for context blocks (Site tab, Context from site)</td><td>Massing: floor plates, corridors, stairs, deck and podium levels, placement</td><td>Plate Planner, Parking Deck, Facade Studio, Grading Sketch</td></tr>

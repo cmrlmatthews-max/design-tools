@@ -20,7 +20,7 @@ const Help = (() => {
       'Snap pulls a drag to the grid, the site lines and the edges and centers of other bars. Hold Option (Alt) to skip it.',
     ]],
     ['Site', [
-      'The Site toggle in the View tab shows the project site from the Site Model. It shows the real ground, roads, water, and trees. Neighbor buildings are solid grey blocks with dark edges. Drag the building on the ground to move it. Use the rotation handle to turn it. The base elevation, the ground height under the building, follows the ground.',
+      'The Site toggle in the View tab shows the project site from the Site Model. It shows the real ground, roads, water, and trees. Neighbor buildings are solid grey blocks with dark edges. Buildings removed in the Site Model do not show here. Drag the building on the ground to move it. Use the rotation handle to turn it. The base elevation, the ground height under the building, follows the ground.',
     ]],
     ['Projects', [
       'A project holds the site, this building and the work of other tools in one file. Use Project > New, or send a site here from the Site Model.',
