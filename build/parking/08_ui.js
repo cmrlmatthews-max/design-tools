@@ -639,6 +639,8 @@ const UI = (() => {
         sel('Style', 'view.style', opts([['model', 'Model'], ['diagram', 'Diagram']])),
         sel('Color by (diagram)', 'view.colorBy', opts([['kind', 'Stall kind'], ['slope', 'Ramp slope']])),
         Controls.slider({ label: 'Level (0 = all levels)', bind: levelBind, min: 0, max: 10, step: 1, hardMin: 0, hardMax: CONFIG.limits.maxLevels, integer: true, format: (x) => (x === 0 ? 'All' : String(x)), inputMode: 'numeric', compact: true }),
+        Controls.toggle({ label: 'Site', bind: v('site') }),
+        Controls.help('The ground, roads, water, trees, and neighbors of the project site. From the Site Model.'),
         Controls.toggle({ label: 'Stall numbers', bind: v('stallNumbers') }),
         Controls.toggle({ label: 'Column overlay (demising lines, conflicts)', bind: v('overlay') }),
         Controls.toggle({ label: 'Massing context (ghost)', bind: v('context') }),

@@ -154,6 +154,7 @@ function fillDefaults(src) {
 
   // view
   const v = s.view;
+  v.site = v.site !== false;                       // the project site layer (ground, roads, water, trees, neighbors); on unless switched off
   if (!STYLES.includes(v.style)) v.style = 'model';
   for (const k of ['labels', 'walls', 'bays', 'levels3d', 'context', 'grid', 'figure']) v[k] = !!v[k];
   v.snap = { on: v.snap && v.snap.on !== false, grid: clamp(num(v.snap && v.snap.grid, 0.5), 0.05, 10) };

@@ -10,10 +10,17 @@ Compare.init();
 Options.syncDirty();
 if (!Render.init(document.getElementById('canvasHost'))) Store.subscribe(() => UI.updateHud(Derived.get()));
 Select.init();
+PlacementGizmo.init({   // 06y_placement.js: drag the building to place it, turn it with the ring (a project must be open)
+  enabled: () => Store.raw().source === 'standalone',   // a wrap or podium deck follows the massing
+  bounds: () => Derived.get().bounds.model,
+  path: 'placement',
+  onCommit: () => {},
+});
 ProjectUI.start();
 
 const optionInfo = (o) => ({ id: o.id, name: o.name, updatedAt: o.updatedAt });
 window.__parking = {
+  placementGizmo: PlacementGizmo,
   getState: () => Store.snapshot(),
   setState: (path, value) => { Store.set(path, value, { live: false }); },
   setStateLive: (path, value) => { Store.set(path, value, { live: true }); },

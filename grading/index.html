@@ -340,6 +340,32 @@ button { cursor: pointer; }
     --scene-context: #6f7882;
   }
 }
+/* ---- Site Model tokens (shared site layer) -----------------------------------------------
+   Copied from build/site/css_add.css. build/shared/06x_sitelayer.js reads them when it builds the site. */
+:root {
+  --scene-terrain-lo: #d6dadd;
+  --scene-terrain-hi: #eceeef;
+  --scene-skirt: #bcc2c8;
+  --scene-est: #efe2cf;
+  --scene-road: #9ba1a8;
+  --scene-walk: #c6cacd;
+  --scene-water: #8dbbe3;
+  --scene-tree: #8fa88b;
+  --scene-trunk: #8a8378;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --scene-terrain-lo: #3a4047;
+    --scene-terrain-hi: #4a5159;
+    --scene-skirt: #2a2f35;
+    --scene-est: #dccaa9;
+    --scene-road: #656c74;
+    --scene-walk: #858d95;
+    --scene-water: #3f72a6;
+    --scene-tree: #6e8d6c;
+    --scene-trunk: #8a8378;
+  }
+}
 [hidden] { display: none !important; }
 
 .btn .chev { width: 12px; height: 12px; stroke-width: 2; }
@@ -2553,6 +2579,508 @@ function sendTo(storage, doc, toolId, fromToolId, opts) {
 }
 
 return { FORMAT, VERSION, SECTIONS, SIZE_WARN, SIZE_MAX, newProject, validate, migrate, getSection, writeSection, toProject, toLocal, transformRing, transformMultiPoly, siteContextFor, projectBytes, largestSection, listProjects, loadProject, saveProject, deleteProject, exportProject, importProject, projectIdFromUrl, sendTo };
+})();
+
+/* ---- src/shared/sitelayer.js ---- */
+const SiteLayerMod = (() => {
+/* ==========================================================================
+   SHARED: sitelayer
+   The site layer data: reads site.derived (docs/project-file-spec.md section 6.1) and returns plain
+   arrays in a tool's LOCAL frame, ready for the Three.js part (build/shared/06x_sitelayer.js).
+   Plan: docs/site-layer-technical-plan.md sections 3 and 4.
+
+   Frames
+   - Input points are in the project frame (the site section placement is the identity).
+   - Output points are local: [x, y] through transformRing(placement, ring, "toLocal"), z = z - placement.baseZ.
+   - The ground grid stays axis-aligned in the project frame. A rotated placement rotates the whole mesh as a
+     solid: node positions are transformed, nothing is resampled.
+
+   Rules
+   - Pure ES module, no Three.js, no DOM. Node-testable. One-line import (the build scripts inline it).
+   - Never mutates its inputs. No NaN in any output: malformed items are skipped.
+   - Output rings have no repeated closing point and no repeated consecutive points.
+   ========================================================================== */
+
+const { transformRing, toLocal, toProject } = ProjectMod;
+
+const SITE_LAYER_VERSION = 1;
+
+const DEFAULT_MAX_BUILDINGS = 2000;
+const SKIRT_DEPTH = 4;          // ft under the lowest ground node
+const BOUNDARY_STEP = 10;       // ft between draped boundary points
+const BOUNDARY_LIFT = 0.6;
+const WATER_LINE_STEP = 10;
+const WATER_LINE_LIFT = 0.4;
+const MAX_SEGS_PER_EDGE = 10000;
+const FLAT_RANGE = 0.5;         // ground with less relief than this shades flat (0.5), like the Site Model
+
+/* ---------- small helpers ---------- */
+
+const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+const fin = (v) => typeof v === "number" && Number.isFinite(v);
+
+/** Round to 0.001 ft (and never return -0). */
+function r3(v) {
+  const r = Math.round(v * 1000) / 1000;
+  return r === 0 ? 0 : r;
+}
+
+/** The four placement numbers; a missing or bad number counts as 0 (same rule as project.js placementOf). */
+function placementNums(p) {
+  const q = isObj(p) && isObj(p.placement) ? p.placement : p;
+  const n = (v) => (fin(v) ? v : 0);
+  return isObj(q) ? { x: n(q.x), y: n(q.y), rotation: n(q.rotation), baseZ: n(q.baseZ) } : { x: 0, y: 0, rotation: 0, baseZ: 0 };
+}
+
+/** A ring of finite [x, y] points, without the closing point and without consecutive repeats. null when a point is bad. */
+function cleanInputRing(ring) {
+  if (!Array.isArray(ring)) return null;
+  const out = [];
+  for (const p of ring) {
+    if (!Array.isArray(p) || !fin(p[0]) || !fin(p[1])) return null;
+    const last = out[out.length - 1];
+    if (last && last[0] === p[0] && last[1] === p[1]) continue;
+    out.push([p[0], p[1]]);
+  }
+  while (out.length > 1 && out[0][0] === out[out.length - 1][0] && out[0][1] === out[out.length - 1][1]) out.pop();
+  return out;
+}
+
+/** The same cleanup on a ring that is already local (after the 0.001 rounding two points can become equal). */
+function dedupeRing(ring) {
+  const out = [];
+  for (const p of ring) {
+    const last = out[out.length - 1];
+    if (last && last[0] === p[0] && last[1] === p[1]) continue;
+    out.push(p);
+  }
+  while (out.length > 1 && out[0][0] === out[out.length - 1][0] && out[0][1] === out[out.length - 1][1]) out.pop();
+  return out;
+}
+
+/** A project-frame ring to a clean local ring of >= 3 points, or null. */
+function localRing(pl, ring) {
+  const c = cleanInputRing(ring);
+  if (!c || c.length < 3) return null;
+  const out = dedupeRing(transformRing(pl, c, "toLocal"));
+  return out.length >= 3 ? out : null;
+}
+
+/** A project-frame MultiPoly polygon ({ outer | ring, holes }) to { outer, holes } local, or null. */
+function localPoly(pl, poly) {
+  if (!isObj(poly)) return null;
+  const outer = localRing(pl, Array.isArray(poly.outer) ? poly.outer : poly.ring);
+  if (!outer) return null;
+  const holes = [];
+  for (const h of Array.isArray(poly.holes) ? poly.holes : []) {
+    const r = localRing(pl, h);
+    if (r) holes.push(r);
+  }
+  return { outer, holes };
+}
+
+function bboxOf(ring) {
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const p of ring) {
+    if (p[0] < minX) minX = p[0];
+    if (p[0] > maxX) maxX = p[0];
+    if (p[1] < minY) minY = p[1];
+    if (p[1] > maxY) maxY = p[1];
+  }
+  return { minX, maxX, minY, maxY };
+}
+
+/** Points every `step` along a polyline (closed: back to the first point, which is not repeated). */
+function densify(pts, step, closed) {
+  const out = [];
+  const m = pts.length;
+  if (m === 0) return out;
+  if (m === 1) return [[pts[0][0], pts[0][1]]];
+  const edges = closed ? m : m - 1;
+  for (let e = 0; e < edges; e++) {
+    const a = pts[e], b = pts[(e + 1) % m];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const segs = Math.min(MAX_SEGS_PER_EDGE, Math.max(1, Math.ceil(len / step - 1e-9)));
+    for (let k = 0; k < segs; k++) {
+      const t = k / segs;
+      out.push([a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])]);
+    }
+  }
+  if (!closed) out.push([pts[m - 1][0], pts[m - 1][1]]);
+  return out;
+}
+
+/* ---------- the ground grid (validated once per grid object) ---------- */
+
+const gridCache = new WeakMap();
+
+/**
+ * The checked grid of site.derived.ground: { ok: true, n, spacing, x0, y0, xs, ys, zs, zMin, zMax } with the node
+ * coordinates as Float64Arrays (row-major from the south), or { ok: false, reason }.
+ */
+function gridOf(siteDerived) {
+  const g = isObj(siteDerived) ? siteDerived.ground : null;
+  if (g === undefined || g === null) return { ok: false, reason: "The site has no ground grid." };
+  if (!isObj(g)) return { ok: false, reason: "The site ground grid is not an object." };
+  const hit = gridCache.get(g);
+  if (hit && hit.points === g.points && hit.n === g.n && hit.spacing === g.spacing && hit.len === (Array.isArray(g.points) ? g.points.length : -1)) return hit.grid;
+  const grid = checkGrid(g);
+  gridCache.set(g, { points: g.points, n: g.n, spacing: g.spacing, len: Array.isArray(g.points) ? g.points.length : -1, grid });
+  return grid;
+}
+
+function checkGrid(g) {
+  const { n, spacing, points } = g;
+  if (!Number.isInteger(n) || n < 2) return { ok: false, reason: "The site ground grid needs n of 2 or more." };
+  if (!fin(spacing) || spacing <= 0) return { ok: false, reason: "The site ground grid spacing must be a positive number." };
+  if (!Array.isArray(points) || points.length !== n * n) return { ok: false, reason: `The site ground grid has ${Array.isArray(points) ? points.length : 0} points; n = ${n} needs ${n * n}.` };
+  const N = n * n, xs = new Float64Array(N), ys = new Float64Array(N), zs = new Float64Array(N);
+  let zMin = Infinity, zMax = -Infinity;
+  for (let k = 0; k < N; k++) {
+    const p = points[k];
+    if (!Array.isArray(p) || !fin(p[0]) || !fin(p[1]) || !fin(p[2])) return { ok: false, reason: `The site ground grid point ${k} is not a finite [x, y, z].` };
+    xs[k] = p[0]; ys[k] = p[1]; zs[k] = p[2];
+    if (p[2] < zMin) zMin = p[2];
+    if (p[2] > zMax) zMax = p[2];
+  }
+  return { ok: true, n, spacing, x0: xs[0], y0: ys[0], xs, ys, zs, zMin, zMax };
+}
+
+/** Bilinear on a checked grid at a project point, clamped to the grid edge. */
+function sample(grid, xp, yp) {
+  const { n, spacing, x0, y0, zs } = grid;
+  const L = n - 1;
+  let fi = (xp - x0) / spacing, fj = (yp - y0) / spacing;
+  fi = fi < 0 ? 0 : fi > L ? L : fi;
+  fj = fj < 0 ? 0 : fj > L ? L : fj;
+  const i = Math.min(Math.floor(fi), n - 2), j = Math.min(Math.floor(fj), n - 2);
+  const tx = fi - i, ty = fj - j, o = j * n + i;
+  return zs[o] * (1 - tx) * (1 - ty) + zs[o + 1] * tx * (1 - ty) + zs[o + n] * (1 - tx) * ty + zs[o + n + 1] * tx * ty;
+}
+
+/* ---------- public lookups ---------- */
+
+/**
+ * The ground elevation (absolute, NAVD88 ft) at a project-frame point: bilinear on the site grid, clamped to the
+ * grid edge (a point outside the grid gets the elevation of the nearest edge point). null without a usable grid
+ * or for a non-finite point.
+ */
+function groundZAt(siteDerived, xp, yp) {
+  if (!fin(xp) || !fin(yp)) return null;
+  const grid = gridOf(siteDerived);
+  if (!grid.ok) return null;
+  const z = sample(grid, xp, yp);
+  return fin(z) ? z : null;
+}
+
+/** groundZAt at a LOCAL-frame point of a tool (placement { x, y, rotation, baseZ }), relative to baseZ. null without a grid. */
+function groundZLocal(siteDerived, placement, x, y) {
+  if (!fin(x) || !fin(y)) return null;
+  const pl = placementNums(placement);
+  const [xp, yp] = toProject(pl, [x, y]);
+  const z = groundZAt(siteDerived, xp, yp);
+  return z === null ? null : z - pl.baseZ;
+}
+
+/**
+ * A LOCAL ring draped on the ground: [[x, y, z], …] with points every `step` ft along the ring (the corners are
+ * kept; no closing point), z = groundZLocal + lift. Without a grid z is 0 (the tool's base). Input points may be
+ * [x, y] or [x, y, z] (z is ignored). The 6th argument `closed` (default true) is an extension: pass false for an
+ * open polyline (no segment from the last point back to the first; the last point is kept).
+ */
+function drapeRing(siteDerived, placement, ring, step = 10, lift = 0.6, closed = true) {
+  const pts = closed ? cleanInputRing(ring) : cleanLine(ring);
+  if (!pts || pts.length === 0) return [];
+  const st = fin(step) && step > 0 ? step : 10;
+  const lf = fin(lift) ? lift : 0;
+  const pl = placementNums(placement);
+  const grid = gridOf(siteDerived);
+  const [s, c] = sinCos(pl);
+  const out = [];
+  for (const [x, y] of densify(pts, st, closed)) {
+    let z = 0;
+    if (grid.ok) {
+      const xp = x * c - y * s + pl.x, yp = x * s + y * c + pl.y;
+      z = sample(grid, xp, yp) - pl.baseZ + lf;
+    }
+    out.push([r3(x), r3(y), r3(z)]);
+  }
+  return out;
+}
+
+/** An open polyline of finite [x, y] points without consecutive repeats, or null. */
+function cleanLine(line) {
+  if (!Array.isArray(line)) return null;
+  const out = [];
+  for (const p of line) {
+    if (!Array.isArray(p) || !fin(p[0]) || !fin(p[1])) return null;
+    const last = out[out.length - 1];
+    if (last && last[0] === p[0] && last[1] === p[1]) continue;
+    out.push([p[0], p[1]]);
+  }
+  return out;
+}
+
+/** [sin, cos] of the placement rotation, exact for the quarter turns (taken from project.js toLocal). */
+function sinCos(pl) {
+  const u = toLocal({ x: 0, y: 0, rotation: pl.rotation, baseZ: 0 }, [1, 0]);   // = [cos, -sin]
+  return [-u[1] === 0 ? 0 : -u[1], u[0] === 0 ? 0 : u[0]];
+}
+
+/**
+ * The site square in the project frame: { size, boundary, center: [x, y] }, or null when the site has neither a
+ * boundary, a size, nor a ground grid. boundary is site.derived.boundary (cleaned), else the square of `size`,
+ * else the square the grid covers. size is site.derived.size, else the larger side of the boundary box.
+ */
+function siteBounds(siteDerived) {
+  if (!isObj(siteDerived)) return null;
+  let boundary = cleanInputRing(siteDerived.boundary);
+  if (!boundary || boundary.length < 3) boundary = null;
+  const S = fin(siteDerived.size) && siteDerived.size > 0 ? siteDerived.size : null;
+  if (!boundary && S !== null) boundary = [[0, 0], [S, 0], [S, S], [0, S]];
+  if (!boundary) {
+    const grid = gridOf(siteDerived);
+    if (grid.ok) {
+      const L = (grid.n - 1) * grid.spacing, x0 = grid.x0, y0 = grid.y0;
+      boundary = [[x0, y0], [x0 + L, y0], [x0 + L, y0 + L], [x0, y0 + L]];
+    }
+  }
+  if (!boundary) return null;
+  const b = bboxOf(boundary);
+  return { size: S !== null ? S : Math.max(b.maxX - b.minX, b.maxY - b.minY), boundary, center: [(b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2] };
+}
+
+/* ---------- the layer data ---------- */
+
+function emptyResult(reason) {
+  return {
+    ok: false, reason, bounds: null, ground: null, boundary: null, buildings: [], roads: [], walks: [],
+    water: { areas: [], lines: [] }, trees: [],
+    counts: { buildings: 0, roads: 0, walks: 0, waterAreas: 0, trees: 0, groundNodes: 0 },
+  };
+}
+
+/** The ground mesh arrays in the local frame (section 3.2). */
+function groundData(grid, pl) {
+  const { n, spacing, xs, ys, zs, zMin, zMax } = grid;
+  const N = n * n, [s, c] = sinCos(pl), bz = pl.baseZ;
+  const positions = new Float32Array(N * 3), shade = new Float32Array(N);
+  const range = zMax - zMin, flat = !(range > FLAT_RANGE);
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (let k = 0; k < N; k++) {
+    const dx = xs[k] - pl.x, dy = ys[k] - pl.y;
+    const x = dx * c + dy * s, y = -dx * s + dy * c;
+    positions[3 * k] = x; positions[3 * k + 1] = y; positions[3 * k + 2] = zs[k] - bz;
+    shade[k] = flat ? 0.5 : (zs[k] - zMin) / range;
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+  const indices = new Uint32Array((n - 1) * (n - 1) * 6);
+  let q = 0;
+  for (let j = 0; j < n - 1; j++) for (let i = 0; i < n - 1; i++) {
+    const a = j * n + i, b = a + 1, cc = a + n + 1, d = a + n;
+    indices[q++] = a; indices[q++] = b; indices[q++] = cc;
+    indices[q++] = a; indices[q++] = cc; indices[q++] = d;
+  }
+  // skirt: four sides, each n top + n bottom vertices (interleaved top, bottom), two triangles per segment, faces out
+  const bottomZ = zMin - bz - SKIRT_DEPTH;
+  const sides = [
+    (k) => k,                               // south, travelling east
+    (k) => k * n + n - 1,                   // east, travelling north
+    (k) => (n - 1) * n + (n - 1 - k),       // north, travelling west
+    (k) => (n - 1 - k) * n,                 // west, travelling south
+  ];
+  const sp = new Float32Array(4 * n * 2 * 3), si = new Uint32Array(4 * (n - 1) * 6);
+  let v = 0, t = 0;
+  for (const side of sides) {
+    const base = v;
+    for (let k = 0; k < n; k++) {
+      const node = side(k);
+      const x = positions[3 * node], y = positions[3 * node + 1], z = positions[3 * node + 2];
+      sp[3 * v] = x; sp[3 * v + 1] = y; sp[3 * v + 2] = z; v++;
+      sp[3 * v] = x; sp[3 * v + 1] = y; sp[3 * v + 2] = bottomZ; v++;
+    }
+    for (let k = 0; k < n - 1; k++) {
+      const t0 = base + 2 * k, b0 = t0 + 1, t1 = t0 + 2, b1 = t0 + 3;
+      si[t++] = t0; si[t++] = b0; si[t++] = t1;
+      si[t++] = t1; si[t++] = b0; si[t++] = b1;
+    }
+  }
+  return {
+    ground: { n, spacing, positions, shade, indices, skirt: { positions: sp, indices: si, bottomZ } },
+    box: { minX, maxX, minY, maxY, zMin: zMin - bz, zMax: zMax - bz },
+  };
+}
+
+/** A z for a local point: the ground there (relative), else `fallback`. */
+function zHere(grid, pl, s, c, x, y, fallback) {
+  if (!grid.ok) return fallback;
+  return sample(grid, x * c - y * s + pl.x, x * s + y * c + pl.y) - pl.baseZ;
+}
+
+function centroid(ring) {
+  let sx = 0, sy = 0;
+  for (const p of ring) { sx += p[0]; sy += p[1]; }
+  return [sx / ring.length, sy / ring.length];
+}
+
+function idSet(ids) {
+  const out = new Set();
+  if (ids instanceof Set || Array.isArray(ids)) for (const id of ids) if (id !== undefined && id !== null) out.add(String(id));
+  return out;
+}
+
+function buildingsData(list, pl, grid, s, c, opts) {
+  const skip = idSet(opts.contextIds);
+  const max = fin(opts.maxBuildings) && opts.maxBuildings >= 0 ? Math.floor(opts.maxBuildings) : DEFAULT_MAX_BUILDINGS;
+  const out = [];
+  (Array.isArray(list) ? list : []).forEach((b, index) => {
+    if (!isObj(b)) return;
+    const id = b.id !== undefined && b.id !== null ? b.id : `b${index}`;
+    if (skip.has(String(id))) return;
+    const outer = localRing(pl, b.outer);
+    if (!outer) return;
+    const holes = [];
+    for (const h of Array.isArray(b.holes) ? b.holes : []) {
+      const r = localRing(pl, h);
+      if (r) holes.push(r);
+    }
+    let base;
+    if (fin(b.base)) base = b.base - pl.baseZ;
+    else { const [cx, cy] = centroid(outer); base = zHere(grid, pl, s, c, cx, cy, 0); }
+    let height = fin(b.height) ? b.height : fin(b.top) && fin(b.base) ? b.top - b.base : 0;
+    if (!(height > 0)) height = 0;
+    const bb = bboxOf(outer);
+    const gx = Math.max(bb.minX, 0, -bb.maxX), gy = Math.max(bb.minY, 0, -bb.maxY);
+    out.push({
+      index, dist: Math.hypot(gx, gy), cdist: Math.hypot((bb.minX + bb.maxX) / 2, (bb.minY + bb.maxY) / 2),
+      b: { id, name: typeof b.name === "string" ? b.name : "", outer, holes, base: r3(base), height: r3(height), rule: typeof b.rule === "string" && b.rule ? b.rule : "data" },
+    });
+  });
+  let keep = out;
+  if (out.length > max) {
+    keep = out.slice().sort((p, q) => p.dist - q.dist || p.cdist - q.cdist || p.index - q.index).slice(0, max);
+    keep.sort((p, q) => p.index - q.index);
+  }
+  return keep.map((e) => e.b);
+}
+
+function multiPolyData(mp, pl) {
+  const out = [];
+  for (const poly of Array.isArray(mp) ? mp : []) {
+    const p = localPoly(pl, poly);
+    if (p) out.push(p);
+  }
+  return out;
+}
+
+function waterData(water, pl, grid, s, c, siteDerived) {
+  const areas = [], lines = [];
+  const w = isObj(water) ? water : {};
+  for (const a of Array.isArray(w.areas) ? w.areas : []) {
+    const p = localPoly(pl, a);
+    if (!p) continue;
+    let level;
+    if (fin(a.level)) level = a.level - pl.baseZ;
+    else {
+      level = Infinity;
+      for (const [x, y] of p.outer) level = Math.min(level, zHere(grid, pl, s, c, x, y, 0));
+      if (!fin(level)) level = 0;
+    }
+    areas.push({ outer: p.outer, holes: p.holes, level: r3(level) });
+  }
+  for (const line of Array.isArray(w.lines) ? w.lines : []) {
+    const pts = cleanLine(line);
+    if (!pts || pts.length < 2) continue;
+    const local = transformRing(pl, pts, "toLocal");
+    const dr = drapeRing(siteDerived, pl, local, WATER_LINE_STEP, WATER_LINE_LIFT, false);
+    if (!grid.ok) {
+      // no ground: keep the line's own z (relative) where it has one, else 0
+      const z0 = Array.isArray(line[0]) && fin(line[0][2]) ? line[0][2] - pl.baseZ : 0;
+      for (const p of dr) p[2] = r3(z0);
+    }
+    if (dr.length >= 2) lines.push(dr);
+  }
+  return { areas, lines };
+}
+
+function treesData(list, pl, grid, s, c) {
+  const out = [];
+  for (const t of Array.isArray(list) ? list : []) {
+    if (!isObj(t) || !fin(t.x) || !fin(t.y)) continue;
+    const [x, y] = toLocal(pl, [t.x, t.y]);
+    const height = fin(t.height) && t.height > 0 ? t.height : 30;
+    let canopy = fin(t.canopy) && t.canopy > 0 ? t.canopy : 20;
+    if (canopy > 2 * height) canopy = 2 * height;      // the trunk is height - canopy / 2; never negative
+    const z = zHere(grid, pl, s, c, x, y, fin(t.z) ? t.z - pl.baseZ : 0);
+    out.push({ x: r3(x), y: r3(y), z: r3(z), canopy: r3(canopy), height: r3(height) });
+  }
+  return out;
+}
+
+/**
+ * The whole site layer in a tool's local frame (plan section 3.2).
+ * siteDerived: site.derived or null. placement: { x, y, rotation, baseZ }. opts: { contextIds: Set | Array of building
+ * ids to skip (already drawn as context blocks), maxBuildings: 2000 }.
+ * Returns { ok, reason, bounds, ground, boundary, buildings, roads, walks, water, trees, counts }. ok is false (with a
+ * reason) when there is neither a ground grid nor a boundary; `reason` also says why the ground is null when ok is true.
+ */
+function buildSiteLayerData(siteDerived, placement, opts = {}) {
+  if (!isObj(siteDerived)) return emptyResult("There is no site.");
+  const o = isObj(opts) ? opts : {};
+  const pl = placementNums(placement);
+  const [s, c] = sinCos(pl);
+  const grid = gridOf(siteDerived);
+  const sb = siteBounds(siteDerived);
+  if (!grid.ok && !sb) return emptyResult(grid.reason || "The site has no ground and no boundary.");
+
+  let ground = null, box = null;
+  if (grid.ok) ({ ground, box } = groundData(grid, pl));
+
+  let boundary = null;
+  if (sb) {
+    const local = transformRing(pl, sb.boundary, "toLocal");
+    boundary = drapeRing(siteDerived, pl, local, BOUNDARY_STEP, BOUNDARY_LIFT);
+    if (boundary.length < 3) boundary = null;
+  }
+  if (boundary) {
+    const b = bboxOf(boundary);
+    box = box
+      ? { minX: Math.min(box.minX, b.minX), maxX: Math.max(box.maxX, b.maxX), minY: Math.min(box.minY, b.minY), maxY: Math.max(box.maxY, b.maxY), zMin: box.zMin, zMax: box.zMax }
+      : { ...b, zMin: 0, zMax: 0 };
+  }
+  if (!box) return emptyResult("The site has no usable ground and no usable boundary.");
+  const bounds = { minX: r3(box.minX), maxX: r3(box.maxX), minY: r3(box.minY), maxY: r3(box.maxY), zMin: r3(box.zMin), zMax: r3(box.zMax) };
+
+  const buildings = buildingsData(siteDerived.buildings, pl, grid, s, c, o);
+  const roadsIn = siteDerived.roads;
+  const roads = multiPolyData(Array.isArray(roadsIn) ? roadsIn : isObj(roadsIn) ? roadsIn.pavement : null, pl);
+  const walksIn = siteDerived.walks !== undefined && siteDerived.walks !== null ? siteDerived.walks : isObj(roadsIn) ? roadsIn.walks : null;
+  const walks = multiPolyData(walksIn, pl);
+  const water = waterData(siteDerived.water, pl, grid, s, c, siteDerived);
+  const trees = treesData(siteDerived.trees, pl, grid, s, c);
+
+  return {
+    ok: true,
+    reason: grid.ok ? null : grid.reason,
+    bounds,
+    ground,
+    boundary,
+    buildings,
+    roads,
+    walks,
+    water,
+    trees,
+    counts: {
+      buildings: buildings.length, roads: roads.length, walks: walks.length, waterAreas: water.areas.length,
+      trees: trees.length, groundNodes: ground ? ground.n * ground.n : 0,
+    },
+  };
+}
+
+return { SITE_LAYER_VERSION, groundZAt, groundZLocal, drapeRing, siteBounds, buildSiteLayerData };
 })();
 
 /* ---- src/tower/prompts.js ---- */
@@ -6912,6 +7440,7 @@ function fillDefaults(src) {
 
   // view
   const v = s.view;
+  v.site = v.site !== false;                       // the project site layer (roads, water, trees, neighbors); on unless switched off
   if (!STYLES.includes(v.style)) v.style = 'model';
   v.contours.on = !!v.contours.on;
   v.contours.interval = v.contours.interval === 2 ? 2 : 1;
@@ -7339,7 +7868,8 @@ const Overlays = (() => {
      cut and fill colors (five steps each), the existing ground as a light wireframe where it differs, contours (proposed solid,
      existing dashed, majors heavier), the zero line, pad outlines and caps, one-story blocks on the tiers, walls (1 ft thick prisms
      from the low side to the top), routes (tubes colored per sample class), drive and lot outlines, the property line, slope
-     conflict markers, the section line, and the site neighbors as a ghost.
+     conflict markers and the section line. The site neighbors, roads, water and trees are not drawn here: the shared site layer
+     (SiteLayer in 06c_site.js) draws them with this mapper's exaggeration.
    Elevations are shifted by the base level (D.zBase) and scaled by the exaggeration; plan coordinates go through planToWorld.
    Everything the renderer owns (materials) is created here with userData.ownMat, so the renderer disposes it on rebuild.
    ========================================================================== */
@@ -7770,35 +8300,6 @@ const Ground3D = (() => {
     }
   }
 
-  /** The site neighbors, as a ghost (25 percent), standing on the existing ground. */
-  function contextObjects(D, state, M) {
-    const out = [];
-    if (!state.view.context) return out;
-    let list = [];
-    try { list = ProjectUI.contextPolys() || []; } catch (e) { list = []; }
-    const geos = [];
-    for (const p of list) {
-      try {
-        const c = p.outer[0];
-        const base = D.built.existingAt(c[0], c[1]);
-        const shape = new THREE.Shape(p.outer.map((q) => new THREE.Vector2(q[0], q[1])));
-        for (const hole of p.holes || []) shape.holes.push(new THREE.Path(hole.map((q) => new THREE.Vector2(q[0], q[1]))));
-        const geo = new THREE.ExtrudeGeometry(shape, { depth: Math.max(0.1, num(p.height, 20)) * M.ex, bevelEnabled: false, steps: 1, curveSegments: 1 });
-        geo.deleteAttribute('uv');
-        geo.applyMatrix4(planMatrix(M.Y(base)));
-        geos.push(geo);
-      } catch (e) { /* skip a bad polygon */ }
-    }
-    if (!geos.length) return out;
-    const merged = geos.length === 1 ? geos[0] : BufferGeometryUtils.mergeGeometries(geos, false);
-    if (geos.length > 1) geos.forEach((g) => g.dispose());
-    if (!merged) return out;
-    const mesh = new THREE.Mesh(merged, new THREE.MeshStandardMaterial({ color: col('#9aa3ad'), roughness: 0.95, metalness: 0, transparent: true, opacity: 0.25, depthWrite: false }));
-    mesh.userData.model = true; mesh.userData.ownMat = true; mesh.userData.context = true; mesh.renderOrder = 4;
-    out.push(mesh);
-    return out;
-  }
-
   /* ---- build ---------------------------------------------------------------------------------------------- */
   /** → { model: [...], overlay: [...] }. model objects cast and receive shadows; overlay objects are lines, tubes and flat labels. */
   function build(D, state, disp, opts = {}) {
@@ -7828,7 +8329,7 @@ const Ground3D = (() => {
     return { model, overlay };
   }
 
-  return { build, contextObjects, mapper, diffColor, fat };
+  return { build, mapper, diffColor, fat };
 })();
 
 /* ==========================================================================
@@ -7880,9 +8381,10 @@ const Render = (() => {
   let gridMesh, figure, sun, hemi;
   let selOverlay = null;                   // v1.1: selection outline, carve outlines and snap guides (Select draws into it; never captured or saved)
   const frameListeners = [];            // v1.1: called once per drawn frame, just before the render (handles follow the camera)
-  let layers = null;                    // { model, context, overlay } each { group, key }
+  let layers = null;                    // { site, model, overlay } each { group, key }
   let derived = null;
   let needsRender = true, tween = null, preset = null, refitPending = false, capturing = false;
+  let siteFrameSeen = null;
   let viewVersion = -1, sunKey = '', styleApplied = null, themeEpoch = 0, themeApplied = -1, geomIdSeen = -1, frameKey = '';
   let sceneRadius = 200, rebuildNotified = null;
   let insetProvider = () => ({ right: 0 });
@@ -7975,7 +8477,7 @@ const Render = (() => {
     scene.add(selOverlay);
 
     layers = {};
-    for (const id of ['model', 'context', 'overlay']) {
+    for (const id of ['site', 'model', 'overlay']) {     // site: SiteLayer (06c_site.js), everything of the site but its ground
       const group = new THREE.Group();
       scene.add(group);
       layers[id] = { group, key: null };
@@ -8010,7 +8512,7 @@ const Render = (() => {
       for (const o of built.overlay) layers.overlay.group.add(o);
       overlayVis = null; changed = true;
     }
-    changed = syncLayer(layers.context, [v.context, v.exaggeration, disp.key, ProjectUI.dataKey(), state.source].join('|'), () => Ground3D.contextObjects(d, state, Ground3D.mapper(d, state))) || changed;
+    changed = SiteLayer.update(layers.site, state, d, { syncLayer, clearGroup, cssColor, themeEpoch: () => themeEpoch, mapper: () => Ground3D.mapper(d, state) }) || changed;     // the project site (06c_site.js)
     if (changed) { viewVersion = -1; needsRender = true; }
   }
   /** The plan labels show in the plan view and in Cut and fill style (never while a slider or a handle drags). */
@@ -8028,7 +8530,7 @@ const Render = (() => {
   /** All model meshes in whatever is on screen (main layers or compare groups). */
   function eachModelMesh(fn) {
     const walk = (g) => g.children.forEach((o) => { if (o.userData.model) fn(o); });
-    if (cmp) cmp.entries.forEach((e) => walk(e.group)); else { walk(layers.model.group); walk(layers.context.group); }
+    if (cmp) cmp.entries.forEach((e) => walk(e.group)); else { walk(layers.model.group); }
   }
 
   /* ---- per-frame view state (cheap) ------------------------------------------------ */
@@ -8071,7 +8573,8 @@ const Render = (() => {
     // While a slider moves: casters off (no shadow pass work). Sun drags keep shadows so you can see them move.
     const dragging = Store.gestureActive() && !Store.gesturePath().startsWith('view.sun');
     const cast = shadowsOn && !dragging;
-    eachModelMesh((m) => { m.castShadow = cast && !m.userData.skirt && !m.userData.context; m.receiveShadow = shadowsOn; });
+    eachModelMesh((m) => { m.castShadow = cast && !m.userData.skirt; m.receiveShadow = shadowsOn; });
+    SiteLayer3D.setShadows(layers.site.group.children, cast, shadowsOn);
     figure.traverse((o) => { if (o.isMesh) o.castShadow = cast; });
     // The figure stands near the front-left corner of the work (front = south, plan -y), on the proposed ground.
     if (derived && derived.ok) {
@@ -8141,7 +8644,7 @@ const Render = (() => {
     };
     return b;
   }
-  function framingBox() {
+  function framingBox(withSite = false) {
     if (cmp) {
       const bs = cmp.entries.map((e) => boxOf(e.d));
       return {
@@ -8150,7 +8653,10 @@ const Render = (() => {
         height: Math.max(...bs.map((x) => x.height)),
       };
     }
-    return boxOf(Derived.get());
+    const b = boxOf(Derived.get());
+    const sb = withSite ? SiteLayer.frameBox(Store.raw()) : null;       // Axon fits the whole site; the elevations and the plan keep the work
+    if (sb) { b.minX = Math.min(b.minX, sb.minX); b.maxX = Math.max(b.maxX, sb.maxX); b.minY = Math.min(b.minY, sb.minY); b.maxY = Math.max(b.maxY, sb.maxY); }
+    return b;
   }
 
   /** Perspective: the nearest distance (and the look-at point) that puts all box corners inside the visible area. */
@@ -8233,7 +8739,7 @@ const Render = (() => {
 
   function setView(id, animate = true) {
     if (!renderer) return;
-    const goal = viewTarget(id, framingBox(), framingAspect(), cmp ? 0 : num(Derived.get().rotation, 0));
+    const goal = viewTarget(id, framingBox(id === 'axon'), framingAspect(), cmp ? 0 : num(Derived.get().rotation, 0));
     preset = id;
     overlayVis = null;
     tween = null;
@@ -8367,7 +8873,8 @@ const Render = (() => {
     exitCompare(true);
     const list = entries.map((e, i) => ({ ...e, uid: `${i}:${e.uid || e.name}`, group: null }));
     cmp = { entries: list, key: null, reserve, bounds: combineBounds(list.map((e) => e.d)) };
-    layers.model.group.visible = layers.context.group.visible = layers.overlay.group.visible = false;
+    layers.model.group.visible = layers.overlay.group.visible = false;
+    layers.site.group.visible = false;
     selOverlay.visible = false;
     figure.visible = false;
     applyViewOffset();
@@ -8380,7 +8887,8 @@ const Render = (() => {
     if (!cmp) return;
     for (const e of cmp.entries) if (e.group) { clearGroup(e.group); scene.remove(e.group); }
     cmp = null;
-    layers.model.group.visible = layers.context.group.visible = layers.overlay.group.visible = true;
+    layers.model.group.visible = layers.overlay.group.visible = true;
+    layers.site.group.visible = true;
     selOverlay.visible = true;
     overlayVis = null;
     resetLayers();
@@ -8417,6 +8925,9 @@ const Render = (() => {
       geomIdSeen = d.geomId;
     }
     derived = d;
+    const sfk = SiteLayer.frameKey(Store.raw());
+    if (siteFrameSeen !== null && sfk !== siteFrameSeen) refitPending = true;     // the site layer switched on or off: it is part of the framed box
+    siteFrameSeen = sfk;
     syncMain(d, disp, state);
     syncOverlayVisibility(disp.quality === 'draft');
     if (first && !preset) setView('axon', false);
@@ -8467,14 +8978,14 @@ const Render = (() => {
     }
     const prev = {
       bg: scene.background, grid: gridMesh.visible, fig: figure.visible,
-      model: layers.model.group.visible, ctx: layers.context.group.visible, ov: layers.overlay.group.visible,
+      model: layers.model.group.visible, site: layers.site.group.visible, ov: layers.overlay.group.visible,
     };
     const restore = () => {
       scene.remove(cap);
       clearGroup(cap);
       scene.background = prev.bg;
       gridMesh.visible = prev.grid; figure.visible = prev.fig;
-      layers.model.group.visible = prev.model; layers.context.group.visible = prev.ctx; layers.overlay.group.visible = prev.ov;
+      layers.model.group.visible = prev.model; layers.site.group.visible = prev.site; layers.overlay.group.visible = prev.ov;
       viewVersion = -1;
     };
     capturing = true;
@@ -8487,7 +8998,7 @@ const Render = (() => {
         scene.add(cap);
         scene.background = new THREE.Color('#f3f5f7');
         gridMesh.visible = false; figure.visible = false;
-        layers.model.group.visible = layers.context.group.visible = layers.overlay.group.visible = false;
+        layers.model.group.visible = layers.site.group.visible = layers.overlay.group.visible = false;      // the AI-ready picture has no site layer
         for (const c of [persp, ortho]) c.clearViewOffset();
         syncLineResolution();
         pending = ShotMod.captureView({ renderer, scene, camera: cam, scale });
@@ -8551,7 +9062,7 @@ const Render = (() => {
 
   return {
     init, setView, capture, captureClean, enterCompare, exitCompare,
-    sceneFlags: () => ({ grid: gridMesh.visible, figure: figure.visible, model: layers.model.group.visible, context: layers.context.group.visible, overlay: layers.overlay.group.visible, children: scene.children.length }),
+    sceneFlags: () => ({ grid: gridMesh.visible, figure: figure.visible, model: layers.model.group.visible, site: layers.site.group.visible, overlay: layers.overlay.group.visible, children: scene.children.length }),
     setInsetProvider: (fn) => { insetProvider = fn; },
     refreshInsets: (animate = true) => { if (!renderer) return; applyViewOffset(); if (preset) setView(preset, animate); else needsRender = true; },
     relayout: () => { needsRender = true; resizeListeners.forEach((fn) => fn()); },
@@ -8574,9 +9085,403 @@ const Render = (() => {
     camera: () => cam,
     cameraType: () => camType,
     canvas: () => (renderer ? renderer.domElement : null),
+    themeChanged: () => { themeEpoch++; viewVersion = -1; needsRender = true; },        // tests: what a light/dark switch does
+    sceneObjects: () => { const out = []; scene.traverse((o) => out.push(o)); return out; },        // tests
     setOrbitEnabled: (on) => { if (controls) { controls.enabled = !!on; if (!on) tween = null; } },
     orbitEnabled: () => !!controls && controls.enabled,
   };
+})();
+
+/* ==========================================================================
+   SITE LAYER 3D  (docs/site-layer-technical-plan.md sections 4 and 5)
+   `SiteLayer3D` turns the data of SiteLayerMod.buildSiteLayerData (plain arrays in a tool's local frame, z relative to the
+   tool's base) into Three.js objects: the ground with elevation shading and a skirt, the draped boundary with its north arrow,
+   the neighbor buildings (solid, with dark edges), roads, walks, water and trees. One merged BufferGeometry per kind.
+   Same look as the Site Model scene (build/site/03_scene.js).
+
+   Shared by every tool. Page globals used (at call time only): THREE, BufferGeometryUtils, planToWorld, planMatrix, worldVec.
+   The tool's own 06c_site.js (SiteLayer) decides when to build and calls objects() inside kit.syncLayer.
+
+   Everything draped on the ground (roads, walks, trees, the boundary arrow) samples the drawn ground MESH (the same two
+   triangles per cell as the ground geometry), so nothing floats or sinks. Without a ground the sampler gives 0.
+   ========================================================================== */
+const SiteLayer3D = (() => {
+  const ALL_PARTS = ['ground', 'boundary', 'buildings', 'roads', 'walks', 'water', 'trees'];
+  const EDGE_ANGLE = 30;
+  const BOUNDARY_COLOR = 0xc0701a;       // the Tower's dashed site loop
+  const ARROW_COLOR = 0x1d2733;
+
+  /* ---- colors from the CSS tokens (light value, dark value when the page has no token yet) ---- */
+  const FALLBACK = {
+    '--scene-terrain-lo': ['#d6dadd', '#3a4047'], '--scene-terrain-hi': ['#eceeef', '#4a5159'], '--scene-skirt': ['#bcc2c8', '#2a2f35'],
+    '--scene-est': ['#efe2cf', '#dccaa9'], '--scene-road': ['#9ba1a8', '#656c74'], '--scene-walk': ['#c6cacd', '#858d95'],
+    '--scene-water': ['#8dbbe3', '#3f72a6'], '--scene-tree': ['#8fa88b', '#6e8d6c'], '--scene-trunk': ['#8a8378', '#8a8378'],
+    '--scene-model': ['#f6f6f3', '#efefec'], '--scene-edge': ['#20262d', '#e7eaee'],
+  };
+  const isDark = () => { try { return !!(window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches); } catch (e) { return false; } };
+  function defaultCss(name, fallback) {
+    let v = '';
+    try { v = getComputedStyle(document.documentElement).getPropertyValue(name).trim(); } catch (e) { v = ''; }
+    const fb = fallback || (FALLBACK[name] ? FALLBACK[name][isDark() ? 1 : 0] : '#888888');
+    try { return new THREE.Color(v || fb); } catch (e) { return new THREE.Color(fb); }
+  }
+
+  /* ---- the drawn ground surface: elevation at a local point (relative z) ---- */
+  /** Sampler over data.ground. The grid may be rotated (a rotated placement turns the mesh as a solid), so the query point is
+   *  projected on the two grid axes. Same triangles as the mesh: cell split a-b-c / a-c-d, u >= v. null without a ground. */
+  function makeSampler(g) {
+    if (!g || !g.positions || !(g.n >= 2)) return null;
+    const P = g.positions, n = g.n, d = g.spacing;
+    const x0 = P[0], y0 = P[1];
+    let e1x = (P[3] - x0) / d, e1y = (P[4] - y0) / d;
+    let e2x = (P[3 * n] - x0) / d, e2y = (P[3 * n + 1] - y0) / d;
+    const l1 = Math.hypot(e1x, e1y) || 1, l2 = Math.hypot(e2x, e2y) || 1;
+    e1x /= l1; e1y /= l1; e2x /= l2; e2y /= l2;
+    const L = n - 1;
+    return (x, y) => {
+      const dx = x - x0, dy = y - y0;
+      const cu = Math.min(L, Math.max(0, (dx * e1x + dy * e1y) / d)), cv = Math.min(L, Math.max(0, (dx * e2x + dy * e2y) / d));
+      const i = Math.min(Math.floor(cu), n - 2), j = Math.min(Math.floor(cv), n - 2);
+      const u = cu - i, v = cv - j, o = j * n + i;
+      const za = P[3 * o + 2], zb = P[3 * (o + 1) + 2], zc = P[3 * (o + n + 1) + 2], zd = P[3 * (o + n) + 2];
+      return u >= v ? za + u * (zb - za) + v * (zc - zb) : za + u * (zc - zd) + v * (zd - za);
+    };
+  }
+
+  /* ---- helpers ---- */
+  /** Maps the y (elevation) of a world-space geometry through zOf. Only for a non-identity zOf. */
+  function mapElevation(geo, zOf) {
+    if (!zOf) return geo;
+    const p = geo.getAttribute('position');
+    for (let i = 0; i < p.count; i++) p.setY(i, zOf(p.getY(i)));
+    p.needsUpdate = true;
+    return geo;
+  }
+  function densifyRing(ring, step) {
+    const out = [];
+    for (let i = 0; i < ring.length; i++) {
+      const a = ring[i], b = ring[(i + 1) % ring.length];
+      out.push(a);
+      const L = Math.hypot(b[0] - a[0], b[1] - a[1]), k = Math.ceil(L / step);
+      for (let s = 1; s < k; s++) out.push([a[0] + (b[0] - a[0]) * s / k, a[1] + (b[1] - a[1]) * s / k]);
+    }
+    return out;
+  }
+  /** Drops a repeated closing point (ShapeUtils would drop it and shift the hole indices). */
+  function trimRing(r) {
+    const o = r.slice();
+    while (o.length > 1 && o[0][0] === o[o.length - 1][0] && o[0][1] === o[o.length - 1][1]) o.pop();
+    return o;
+  }
+  /** polys: [{ outer, holes }]. elevOf(x, y) gives the local elevation, zOf maps it to world y. Returns a BufferGeometry or null. */
+  function polyGeometry(polys, elevOf, zOf, step) {
+    const pos = [], idx = [];
+    for (const p of polys) {
+      try {
+        const outer = step ? densifyRing(trimRing(p.outer), step) : trimRing(p.outer);
+        const holes = (p.holes || []).map((hh) => (step ? densifyRing(trimRing(hh), step) : trimRing(hh)));
+        const tris = THREE.ShapeUtils.triangulateShape(outer.map((q) => new THREE.Vector2(q[0], q[1])), holes.map((hh) => hh.map((q) => new THREE.Vector2(q[0], q[1]))));
+        const all = outer.concat(...holes), base = pos.length / 3;
+        for (const q of all) pos.push(q[0], zOf(elevOf(q[0], q[1])), -q[1]);
+        for (const [a, b, c] of tris) {
+          const ax = all[a][0], ay = all[a][1], bx = all[b][0], by = all[b][1], cx = all[c][0], cy = all[c][1];
+          const ccw = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax) > 0;      // plan CCW = facing up
+          if (ccw) idx.push(base + a, base + b, base + c); else idx.push(base + a, base + c, base + b);
+        }
+      } catch (e) { console.warn('site polygon skipped', e); }
+    }
+    if (!idx.length) return null;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setIndex(idx);
+    geo.computeVertexNormals();
+    return geo;
+  }
+  const mergeAll = (list) => {
+    if (list.length === 1) return list[0];
+    const merged = BufferGeometryUtils.mergeGeometries(list, false);
+    list.forEach((g) => g.dispose());
+    return merged;
+  };
+
+  /* ---- the parts ---- */
+  function buildGround(data, o, mats, out, info) {
+    const g = data.ground;
+    if (!g) return;
+    const n = g.n, N = n * n, P = g.positions;
+    const lo = o.css('--scene-terrain-lo'), hi = o.css('--scene-terrain-hi'), c = new THREE.Color();
+    const pos = new Float32Array(N * 3), col = new Float32Array(N * 3);
+    for (let k = 0; k < N; k++) {
+      pos[3 * k] = P[3 * k]; pos[3 * k + 1] = o.zOf(P[3 * k + 2]); pos[3 * k + 2] = -P[3 * k + 1];
+      c.copy(lo).lerp(hi, g.shade[k]);
+      col[3 * k] = c.r; col[3 * k + 1] = c.g; col[3 * k + 2] = c.b;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    geo.setIndex(new THREE.BufferAttribute(g.indices, 1));
+    geo.computeVertexNormals();
+    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 2 });
+    mats.push(mat);
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.userData.kind = 'site-ground';
+    mesh.userData.site = true;
+    mesh.userData.receives = true;
+    out.push(mesh);
+    info.triangles += g.indices.length / 3;
+
+    // skirt: a thin plate under the ground, the site reads as a physical model
+    const sk = g.skirt;
+    if (sk && sk.positions && sk.indices) {
+      const sp = new Float32Array(sk.positions.length);
+      for (let k = 0; k < sk.positions.length; k += 3) { sp[k] = sk.positions[k]; sp[k + 1] = o.zOf(sk.positions[k + 2]); sp[k + 2] = -sk.positions[k + 1]; }
+      const sg = new THREE.BufferGeometry();
+      sg.setAttribute('position', new THREE.BufferAttribute(sp, 3));
+      sg.setIndex(new THREE.BufferAttribute(sk.indices, 1));
+      sg.computeVertexNormals();
+      const smat = new THREE.MeshStandardMaterial({ color: o.css('--scene-skirt'), roughness: 1, metalness: 0 });
+      mats.push(smat);
+      const skirt = new THREE.Mesh(sg, smat);
+      skirt.userData.kind = 'site-skirt';
+      skirt.userData.site = true;
+      out.push(skirt);
+      info.triangles += sk.indices.length / 3;
+    }
+  }
+
+  /** The dashed site loop, just above the ground, and the north arrow beside its north-east corner (turns with the placement). */
+  function buildBoundary(data, o, mats, out, zAt) {
+    const ring = data.boundary;
+    if (!ring || ring.length < 3) return;
+    const dashed = new THREE.LineDashedMaterial({ color: BOUNDARY_COLOR, dashSize: 12, gapSize: 8 });
+    const solid = new THREE.LineBasicMaterial({ color: ARROW_COLOR });
+    mats.push(dashed, solid);
+    const loop = new THREE.BufferGeometry().setFromPoints(ring.map((q) => worldVec(q[0], q[1], o.zOf(q[2]))));
+    const line = new THREE.LineLoop(loop, dashed);
+    line.computeLineDistances();
+    line.userData.kind = 'site-boundary';
+    out.push(line);
+
+    // north arrow: project north in the local frame is (sin r, cos r); a shaft, a head and an N, flat on the ground
+    const r = ((o.rotation || 0) * Math.PI) / 180, nx = Math.sin(r), ny = Math.cos(r), ex = ny, ey = -nx;     // north and east unit vectors
+    let maxX = -Infinity, maxY = -Infinity, minX = Infinity, minY = Infinity;
+    for (const q of ring) { maxX = Math.max(maxX, q[0]); maxY = Math.max(maxY, q[1]); minX = Math.min(minX, q[0]); minY = Math.min(minY, q[1]); }
+    const span = Math.max(maxX - minX, maxY - minY, 1);
+    const k = Math.max(0.5, Math.min(4, span / 1000));                                         // scales with the site, 1 at 1,000 ft
+    let best = null;                                                                           // the boundary corner farthest toward north-east
+    for (const q of ring) { const s = q[0] * (ex + nx) + q[1] * (ey + ny); if (!best || s > best.s) best = { s, q }; }
+    const base = [best.q[0] + (ex - nx) * 30 * k, best.q[1] + (ey - ny) * 30 * k];
+    const P = (a, b) => [base[0] + ex * a * k + nx * b * k, base[1] + ey * a * k + ny * b * k];   // a = east, b = north
+    const pts = [];
+    const seg = (p, q) => { pts.push(worldVec(p[0], p[1], o.zOf(zAt(p[0], p[1]) + 0.3)), worldVec(q[0], q[1], o.zOf(zAt(q[0], q[1]) + 0.3))); };
+    // each stroke is cut into short pieces so it follows a sloping ground
+    const stroke = (p, q) => { const m = Math.max(1, Math.ceil(Math.hypot(q[0] - p[0], q[1] - p[1]) / (6 * k))); for (let s = 0; s < m; s++) seg([p[0] + (q[0] - p[0]) * s / m, p[1] + (q[1] - p[1]) * s / m], [p[0] + (q[0] - p[0]) * (s + 1) / m, p[1] + (q[1] - p[1]) * (s + 1) / m]); };
+    stroke(P(0, 0), P(0, 40)); stroke(P(0, 40), P(-7, 26)); stroke(P(0, 40), P(7, 26));
+    stroke(P(-6, 50), P(-6, 68)); stroke(P(-6, 68), P(6, 50)); stroke(P(6, 50), P(6, 68));      // the letter N
+    const arrow = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), solid);
+    arrow.userData.kind = 'site-arrow';
+    out.push(arrow);
+  }
+
+  function buildBuildings(data, o, mats, out, info) {
+    const plain = [], est = [];
+    let count = 0;
+    for (const b of data.buildings || []) {
+      try {
+        if (!b.outer || b.outer.length < 3) continue;
+        const shape = new THREE.Shape(b.outer.map((q) => new THREE.Vector2(q[0], q[1])));
+        for (const hole of b.holes || []) if (hole.length >= 3) shape.holes.push(new THREE.Path(hole.map((q) => new THREE.Vector2(q[0], q[1]))));
+        const geo = new THREE.ExtrudeGeometry(shape, { depth: Math.max(0.1, b.height) + 1, bevelEnabled: false, steps: 1, curveSegments: 1 });
+        geo.deleteAttribute('uv');
+        geo.applyMatrix4(planMatrix(b.base - 1));
+        mapElevation(geo, o.identity ? null : o.zOf);
+        (b.rule === 'estimate' ? est : plain).push(geo);
+        count++;
+      } catch (e) { console.warn('site building skipped', b && b.id, e); }
+    }
+    for (const [list, color] of [[plain, o.css('--scene-model')], [est, o.css('--scene-est')]]) {
+      if (!list.length) continue;
+      const merged = mergeAll(list);
+      const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.94, metalness: 0 });
+      mats.push(mat);
+      const mesh = new THREE.Mesh(merged, mat);
+      mesh.userData.kind = 'site-buildings';
+      mesh.userData.site = true;
+      mesh.userData.casts = true; mesh.userData.receives = true;
+      out.push(mesh);
+      info.triangles += (merged.index ? merged.index.count : merged.getAttribute('position').count) / 3;
+      if (o.edges) {
+        const emat = new THREE.LineBasicMaterial({ color: o.css('--scene-edge') });
+        mats.push(emat);
+        const edges = new THREE.LineSegments(new THREE.EdgesGeometry(merged, EDGE_ANGLE), emat);
+        edges.userData.kind = 'site-building-edges';
+        edges.userData.site = true;
+        out.push(edges);
+      }
+    }
+    info.buildings = count;
+  }
+
+  function buildPavement(polys, colorName, lift, factor, kind, o, mats, out, info, zAt) {
+    if (!polys || !polys.length) return;
+    const geo = polyGeometry(polys, (x, y) => zAt(x, y) + lift, o.zOf, 10);
+    if (!geo) return;
+    const mat = new THREE.MeshStandardMaterial({ color: o.css(colorName), roughness: 1, metalness: 0, polygonOffset: true, polygonOffsetFactor: factor, polygonOffsetUnits: factor });
+    mats.push(mat);
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.userData.kind = kind;
+    mesh.userData.site = true;
+    mesh.userData.receives = true;
+    out.push(mesh);
+    info.triangles += geo.index.count / 3;
+    info[kind === 'site-roads' ? 'roads' : 'walks'] = polys.length;
+  }
+
+  function buildWater(data, o, mats, out, info) {
+    const w = data.water || {};
+    const geos = [];
+    for (const a of w.areas || []) {
+      const g = polyGeometry([a], () => a.level, o.zOf, 0);
+      if (g) geos.push(g);
+    }
+    info.waterAreas = geos.length;
+    const color = o.css('--scene-water');
+    if (geos.length) {
+      const merged = mergeAll(geos);
+      const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.35, metalness: 0, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+      mats.push(mat);
+      const mesh = new THREE.Mesh(merged, mat);
+      mesh.userData.kind = 'site-water';
+      mesh.userData.site = true;
+      mesh.userData.receives = true;
+      out.push(mesh);
+      info.triangles += merged.index.count / 3;
+    }
+    const seg = [];
+    for (const line of w.lines || []) {
+      for (let i = 1; i < line.length; i++) {
+        const a = line[i - 1], b = line[i];
+        seg.push(a[0], o.zOf(a[2]), -a[1], b[0], o.zOf(b[2]), -b[1]);
+      }
+    }
+    if (seg.length) {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(seg, 3));
+      const lmat = new THREE.LineBasicMaterial({ color });
+      mats.push(lmat);
+      const lines = new THREE.LineSegments(g, lmat);
+      lines.userData.kind = 'site-water-lines';
+      out.push(lines);
+    }
+  }
+
+  /** Two InstancedMesh (low-poly canopy, thin trunk), like the Site Model. */
+  function buildTrees(data, o, mats, out, info, zAt) {
+    const trees = data.trees || [];
+    if (!trees.length) return;
+    info.trees = trees.length;
+    const canopyGeo = new THREE.IcosahedronGeometry(1, 1);
+    const trunkGeo = new THREE.CylinderGeometry(0.55, 0.8, 1, 6);
+    trunkGeo.translate(0, 0.5, 0);
+    const cm = new THREE.MeshStandardMaterial({ color: o.css('--scene-tree'), roughness: 0.94, metalness: 0, flatShading: true });
+    const tm = new THREE.MeshStandardMaterial({ color: o.css('--scene-trunk'), roughness: 0.94, metalness: 0 });
+    mats.push(cm, tm);
+    const canopy = new THREE.InstancedMesh(canopyGeo, cm, trees.length);
+    const trunk = new THREE.InstancedMesh(trunkGeo, tm, trees.length);
+    const ky = o.identity ? 1 : o.zOf(1) - o.zOf(0);
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
+    trees.forEach((t, i) => {
+      const e = o.hasGround ? zAt(t.x, t.y) : t.z, r = t.canopy / 2;
+      p.set(t.x, o.zOf(e + t.height - r), -t.y); s.set(r, r * 0.9 * ky, r);
+      canopy.setMatrixAt(i, m.compose(p, q, s));
+      p.set(t.x, o.zOf(e), -t.y); s.set(1, (t.height - r) * ky, 1);
+      trunk.setMatrixAt(i, m.compose(p, q, s));
+    });
+    canopy.instanceMatrix.needsUpdate = trunk.instanceMatrix.needsUpdate = true;
+    canopy.computeBoundingSphere(); trunk.computeBoundingSphere();
+    for (const mesh of [trunk, canopy]) { mesh.userData.kind = 'site-trees'; mesh.userData.site = true; mesh.userData.casts = true; out.push(mesh); }
+    info.triangles += (canopyGeo.index ? canopyGeo.index.count / 3 : 0) * trees.length + (trunkGeo.index ? trunkGeo.index.count / 3 : 0) * trees.length;
+  }
+
+  /* ---- public ---- */
+  /** THREE objects for a data result of SiteLayerMod.buildSiteLayerData.
+   *  opts: { parts: ['ground','boundary','buildings','roads','walks','water','trees'] (default all),
+   *          zOf: (localZ) => worldY (default identity; the Grading Sketch passes its exaggeration mapper),
+   *          css: (name, fallback) => THREE.Color, edges: true, shadows: true,
+   *          rotation: placement rotation in degrees (turns the north arrow; default 0),
+   *          zAt: (x, y) => local ground z (default: the drawn ground mesh) }
+   *  Returns { objects: [THREE.Object3D], info: { ground, buildings, roads, walks, waterAreas, trees, triangles, bounds } }.
+   *  Each object has userData.kind ('site-ground', 'site-skirt', 'site-boundary', 'site-arrow', 'site-buildings',
+   *  'site-building-edges', 'site-roads', 'site-walks', 'site-water', 'site-water-lines', 'site-trees') and userData.site = true;
+   *  userData.casts / userData.receives say which shadow flags setShadows() turns on. */
+  function objects(data, opts = {}) {
+    const info = { ground: false, buildings: 0, roads: 0, walks: 0, waterAreas: 0, trees: 0, triangles: 0, bounds: data && data.bounds ? { ...data.bounds } : null };
+    const out = [], mats = [];
+    if (!data || !data.ok) return { objects: out, info };
+    const parts = new Set(Array.isArray(opts.parts) ? opts.parts : ALL_PARTS);
+    const identity = typeof opts.zOf !== 'function';
+    const o = {
+      zOf: identity ? (z) => z : opts.zOf, identity,
+      css: typeof opts.css === 'function' ? opts.css : defaultCss,
+      edges: opts.edges !== false, rotation: opts.rotation || 0,
+      hasGround: !!data.ground,
+    };
+    const sampler = makeSampler(data.ground);
+    const zAt = typeof opts.zAt === 'function' ? opts.zAt : (sampler || (() => 0));
+    if (parts.has('ground')) { buildGround(data, o, mats, out, info); info.ground = !!data.ground; }
+    if (parts.has('boundary')) buildBoundary(data, o, mats, out, zAt);
+    if (parts.has('buildings')) buildBuildings(data, o, mats, out, info);
+    if (parts.has('roads')) buildPavement(data.roads, '--scene-road', 0.3, -2, 'site-roads', o, mats, out, info, zAt);
+    if (parts.has('walks')) buildPavement(data.walks, '--scene-walk', 0.45, -4, 'site-walks', o, mats, out, info, zAt);
+    if (parts.has('water')) buildWater(data, o, mats, out, info);
+    if (parts.has('trees')) buildTrees(data, o, mats, out, info, zAt);
+    info.triangles = Math.round(info.triangles);
+    const shadows = opts.shadows !== false;
+    for (const obj of out) {
+      obj.userData.ownMaterials = mats;             // all of this call's materials; dispose() frees them once
+      obj.castShadow = shadows && !!obj.userData.casts;
+      obj.receiveShadow = shadows && !!obj.userData.receives;
+    }
+    return { objects: out, info };
+  }
+
+  /** Disposes the geometries and the own materials of objects made by objects(). Safe to call twice. */
+  function dispose(objs) {
+    const done = new Set();
+    for (const o of objs || []) {
+      if (o.geometry) o.geometry.dispose();
+      if (o.isInstancedMesh) o.dispose();
+      const list = o.userData && o.userData.ownMaterials;
+      if (list && !done.has(list)) { done.add(list); list.forEach((m) => m.dispose()); }
+    }
+  }
+
+  /** Turns the shadow flags of objects made by objects() on or off (casters only when `cast`, receivers only when `receive`). */
+  function setShadows(objs, cast, receive) {
+    for (const o of objs || []) {
+      if (!o.userData || !o.userData.site) continue;
+      o.castShadow = !!cast && !!o.userData.casts;
+      o.receiveShadow = !!receive && !!o.userData.receives;
+    }
+  }
+
+  /** The cache key for a tool's syncLayer: `${siteUpdatedAt}|${x},${y},${rot},${baseZ}|${showFlags}|${themeEpoch}`.
+   *  doc: the project document (or null); show: a string or an object of flags. */
+  function keyFor(doc, placement, show, themeEpoch) {
+    let stamp = '';
+    try {
+      const sec = ProjectMod.getSection(doc, 'site');
+      if (sec) {
+        const dv = sec.derived || {};
+        stamp = `${sec.updatedAt || ''}#${dv.ground ? dv.ground.n : 0}.${(dv.buildings || []).length}`;
+      }
+    } catch (e) { stamp = ''; }
+    const p = placement || {};
+    const flags = show && typeof show === 'object' ? Object.keys(show).sort().map((k) => `${k}=${show[k] ? 1 : 0}`).join(',') : String(show === undefined ? '' : show);
+    return `${stamp}|${p.x || 0},${p.y || 0},${p.rotation || 0},${p.baseZ || 0}|${flags}|${themeEpoch || 0}`;
+  }
+
+  return { objects, dispose, setShadows, keyFor, makeSampler };
 })();
 
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
@@ -9238,6 +10143,85 @@ const Select = (() => {
     onChange: (fn) => listeners.push(fn), refreshOverlay,
     overlayInfo: () => ({ outline: group ? group.children.length : 0, preview: previewGroup ? previewGroup.children.length : 0 }),
   };
+})();
+
+/* ==========================================================================
+   SITE LAYER  (docs/site-layer-technical-plan.md sections 2, 4 and 7)
+   `SiteLayer` is the small adapter between the open project and the shared drawing part (SiteLayer3D, build/shared/06x_sitelayer.js).
+   The Grading Sketch keeps its own ground (existing and proposed, cut and fill, exaggeration). With a project that has a site, the
+   layer draws everything else of the site in the project frame: the neighbor buildings as solid blocks with dark edges, roads, walks,
+   water and trees. Elevations are NAVD88 feet (placement is the identity), mapped through the sketch's own exaggeration mapper
+   (Ground3D.mapper) so the neighbors stand on the same scale as the ground. Roads and trees are draped on the existing site ground.
+   The layer follows the View > Site toggle (view.site). It never feeds a number.
+   ========================================================================== */
+
+const SiteLayer = (() => {
+  const OFF = { shown: false, ground: false, buildings: 0, roads: 0, walks: 0, waterAreas: 0, trees: 0, key: 'off' };
+  let drawn = { ...OFF };
+
+  /** site.derived of the open project, or null (no project, no site section, or nothing in it). */
+  function siteDerived() {
+    if (!ProjectUI.has()) return null;
+    let sec = null;
+    try { sec = ProjectMod.getSection(ProjectUI.doc(), 'site'); } catch (e) { sec = null; }
+    const dv = sec && sec.derived;
+    return dv && typeof dv === 'object' && !Array.isArray(dv) ? dv : null;
+  }
+
+  /** Called by Render.syncMain on every frame of the main view (never in Compare).
+   *  layer = { group, key } (a THREE.Group already in the scene, hidden in Compare and in the AI-ready image);
+   *  state = Store.raw(); d = Derived.get(); kit = { syncLayer, clearGroup, cssColor, themeEpoch, mapper }.
+   *  Returns true when the scene changed. */
+  function update(layer, state, d, kit) {
+    if (layer.key && Store.gestureActive() && Store.gesturePath().startsWith('placement')) return false;     // a drag moves the building: the layer is rebuilt once, on release
+    const dv = state.view && state.view.site !== false ? siteDerived() : null;
+    const doc = dv ? ProjectUI.doc() : null;
+    const pl = dv ? ProjectUI.placement() : null;
+    const M = dv && d && Number.isFinite(d.zBase) ? kit.mapper() : null;                 // the sketch's elevation mapper (base level and exaggeration)
+    const key = M ? `${SiteLayer3D.keyFor(doc, pl, { site: true, buildings: true }, kit.themeEpoch ? kit.themeEpoch() : 0)}|${M.ex}|${M.zb}` : 'off';
+    if (layer.key !== key) SiteLayer3D.dispose(layer.group.children);       // the materials; kit.syncLayer frees the geometry
+    return kit.syncLayer(layer, key, () => {
+      drawn = { ...OFF, key };
+      if (!M) return [];
+      let data = null;
+      try { data = SiteLayerMod.buildSiteLayerData(dv, pl, { contextIds: new Set() }); } catch (e) { console.error(e); return []; }
+      if (!data || !data.ok) return [];
+      let res = null;
+      try { res = SiteLayer3D.objects(data, { parts: ['buildings', 'roads', 'walks', 'water', 'trees'], zOf: M.Y, css: kit.cssColor, rotation: pl.rotation, edges: true, shadows: true }); } catch (e) { console.error(e); return []; }
+      const i = res.info;
+      drawn = { shown: true, ground: false, buildings: i.buildings, roads: i.roads, walks: i.walks, waterAreas: i.waterAreas, trees: i.trees, key };
+      return res.objects;
+    });
+  }
+
+  /** For tests: { shown, ground, buildings, roads, walks, waterAreas, trees, key }. */
+  function info() { return { ...drawn }; }
+  /** The site ground mesh now on screen: none here, the Grading Sketch draws its own ground. */
+  function groundMesh() { return null; }
+  /** The site square in the local frame { minX, maxX, minY, maxY } while the layer is switched on (it does not need the layer built yet), or null. */
+  function frameBox(state) {
+    if (!state.view || state.view.site === false) return null;
+    const dv = siteDerived();
+    if (!dv) return null;
+    try {
+      const sb = SiteLayerMod.siteBounds(dv);
+      const ring = sb && ProjectMod.transformRing(ProjectUI.placement(), sb.boundary, 'toLocal');
+      if (!ring || !ring.length) return null;
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      for (const q of ring) { minX = Math.min(minX, q[0]); maxX = Math.max(maxX, q[0]); minY = Math.min(minY, q[1]); maxY = Math.max(maxY, q[1]); }
+      return Number.isFinite(minX + maxX + minY + maxY) ? { minX, maxX, minY, maxY } : null;
+    } catch (e) { return null; }
+  }
+  /** Changes when the layer switches on or off or another site opens (not when the building moves): Render re-frames on it. */
+  function frameKey(state) {
+    if (!(state.view && state.view.site !== false)) return 'off';
+    const dv = siteDerived();
+    if (!dv) return 'off';
+    let sec = null;
+    try { sec = ProjectMod.getSection(ProjectUI.doc(), 'site'); } catch (e) { sec = null; }
+    return `on|${ProjectUI.doc().id}|${(sec && sec.updatedAt) || ''}`;
+  }
+  return { update, info, groundMesh, frameKey, frameBox };
 })();
 
 /* ==========================================================================
@@ -10049,7 +11033,8 @@ const UI = (() => {
         choice('Vertical exaggeration', 'view.exaggeration', CONFIG.exaggerations.map((x) => [x, `${x}x`]), { id: 'exagChips' }),
         h('div', { class: 'ctl' }, h('div', { class: 'ctl-label' }, 'Section'),
           h('div', { class: 'add-row' }, Controls.button('Draw section', () => Select.startDraw('section'), 'outline sm'), Controls.button('Clear section', () => Store.set('view.section', null, { live: false }), 'outline sm'))),
-        Controls.toggle({ label: 'Site context (ghost)', bind: v('context') }),
+        Controls.toggle({ label: 'Site', bind: v('site') }),
+        Controls.help('Site context from the Site Model: neighbor buildings, roads, walks, water, and trees. The ground stays the one you grade.'),
         Controls.toggle({ label: 'Shadows', bind: v('shadows') }),
         Controls.toggle({ label: 'Grid', bind: v('grid') }),
         Controls.toggle({ label: 'Scale figure', bind: v('figure') }),
@@ -11262,6 +12247,9 @@ const Help = (() => {
       'Cut and fill colors the proposed ground by how far it is above (blue, fill) or below (red, cut) the existing ground, in steps of 1, 2, 4 and 8 ft. Contours: existing dashed, proposed solid. The Plan view shows elevation labels.',
       'Draw section (View tab) takes two points. A profile appears under the view with the existing ground dashed, the proposed ground solid, the pads and the walls.',
       'Vertical exaggeration changes only the picture. Every number uses the true heights.',
+    ]],
+    ['Site', [
+      'The Site toggle in the View tab shows the project site from the Site Model. It shows neighbor buildings, roads, water, and trees. They are solid grey blocks with dark edges. The sketch keeps its own ground, existing and proposed. This tool does not drag. Move a building in the tool that owns it.',
     ]],
     ['Projects', [
       'A project holds the site, the massing and the work of other tools in one file. With a project open, the site gives the existing ground, and the Mid-Rise massing and the Parking Deck can be buildings here.',
@@ -13012,6 +14000,184 @@ async function runAllTests() {
   TestHelp.merged('all', all);
   window.__gradingTestResults = { total: all.length, passed: all.length - failed.length, failed, results: all };
   return window.__gradingTestResults;
+}
+
+/* ==========================================================================
+   TESTS: the project site layer  (docs/site-layer-technical-plan.md section 9.2, tests 1 to 6)
+   A project with a 1,000 ft site (a sloping 11 x 11 ground, two buildings, a road, a walk, a pond and three trees) and a deck massing
+   placed on it. The layer draws the whole site: the ground, the neighbors, the pavement, the water and the trees. View > Site switches
+   it, Compare and the AI-ready image hide it, a theme change rebuilds it. A fixture project lives in an in-memory storage, so a ?test
+   visit never touches the saved projects. runAllTests below picks these tests up after the others.
+   ========================================================================== */
+const SiteFixture = (() => {
+  const memory = () => ({ data: {}, getItem(k) { return this.data[k] === undefined ? null : this.data[k]; }, setItem(k, v) { this.data[k] = String(v); }, removeItem(k) { delete this.data[k]; } });
+  const S = 1000, N = 11, SPACING = 100;
+  const rect = (x0, y0, x1, y1) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+  /** The massing placement on the site: its ground floor at the ground there (1000 + 0.01 x + 0.02 y = 1008 at x 300, y 250). */
+  const PLACEMENT = { x: 300, y: 250, rotation: 0, baseZ: 1008 };
+  /** A 1000 ft site square with a sloping ground (z = 1000 + 0.01 x + 0.02 y), a near and a far building, a road, a walk, a pond and trees. */
+  function siteProject({ massing = null } = {}) {
+    let doc = ProjectMod.newProject({ name: 'Site fixture', frame: { kind: 'site', lat: 33.927, lon: -84.339, size: S } });
+    const points = [];
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) points.push([i * SPACING, j * SPACING, 1000 + 0.01 * i * SPACING + 0.02 * j * SPACING]);
+    const derived = {
+      address: 'Fixture', lat: 33.927, lon: -84.339, size: S, release: 'test',
+      boundary: rect(0, 0, S, S), ground: { spacing: SPACING, n: N, points },
+      buildings: [
+        { id: 'near', outer: rect(480, 380, 560, 420), holes: [], base: 1010, height: 40, top: 1050, floors: 3, rule: 'data', name: 'Near' },
+        { id: 'far', outer: rect(950, 950, 990, 990), holes: [], base: 1030, height: 30, top: 1060, floors: 2, rule: 'data', name: 'Far' },
+      ],
+      roads: { segments: [], pavement: [{ outer: rect(0, 560, S, 600), holes: [] }] },
+      walks: [{ outer: rect(0, 610, S, 618), holes: [] }],
+      trees: [{ x: 620, y: 300, z: 1010, canopy: 22, height: 34 }, { x: 660, y: 330, z: 1011, canopy: 18, height: 30 }, { x: 700, y: 280, z: 1010, canopy: 20, height: 32 }],
+      water: { areas: [{ outer: rect(760, 120, 860, 200), holes: [], level: 1010 }], lines: [] },
+    };
+    doc = ProjectMod.writeSection(doc, 'site', { tool: 'site', schema: 1, placement: { x: 0, y: 0, rotation: 0, baseZ: 0 }, state: { query: 'Fixture', lat: 33.927, lon: -84.339, size: S, release: 'test', walks: false }, derived });
+    if (massing) doc = ProjectMod.writeSection(doc, 'massing', massing);
+    return doc;
+  }
+  return { memory, siteProject, S, PLACEMENT };
+})();
+
+async function runSiteTests() {
+  const { eq, near, make, $, wait, frames } = TestHelp;
+  const { results, t } = make();
+  const savedState = Store.snapshot(), savedTab = UI.activeTab();
+  Options.holdAutosave(true);
+  const mem = SiteFixture.memory();
+  ProjectUI.reset();
+  ProjectUI.configure({ storage: mem, navigate: () => {}, updateUrl: () => {} });
+  const fresh = () => { Store.replace(fillDefaults(defaultState())); };
+  const errors = [];
+  const onErr = (e) => { errors.push(String(e && e.message ? e.message : e)); };
+  window.addEventListener('error', onErr);
+  const siteMesh = (kind) => Render.sceneObjects().find((o) => o.userData && o.userData.kind === kind) || null;
+  const viewRow = () => [...document.querySelectorAll('#tabpanel-view .toggle-row')].find((b) => b.textContent.trim() === 'Site');
+  const open = () => { const doc = SiteFixture.siteProject(); ProjectMod.saveProject(mem, doc); ProjectUI.openDoc(doc); return doc; };
+  const bbox = (mesh) => { mesh.geometry.computeBoundingBox(); return mesh.geometry.boundingBox; };
+
+  try {
+    fresh();
+    await frames(3);
+    await t('1 no project: the site layer is off', () => eq([SiteLayer.info().shown, SiteLayer.groundMesh()], [false, null]));
+    await t('2 a project with a site draws the neighbors, the pavement, the water and the trees; the ground stays the sketch ground', async () => {
+      open();
+      await frames(4);
+      const i = SiteLayer.info();
+      return eq([i.shown, i.ground, i.buildings, i.roads, i.walks, i.waterAreas, i.trees, Render.sceneFlags().site, !!siteMesh('site-buildings'), !!siteMesh('site-ground'), errors.length],
+        [true, false, 2, 1, 1, 1, 3, true, true, false, 0]);
+    });
+    await t('3 the View Site toggle switches the layer off and on again', async () => {
+      UI.setTab('view');
+      const row = viewRow();
+      const a = [SiteLayer.info().shown, !!row, row && row.getAttribute('aria-checked')];
+      row.click();
+      await frames(3);
+      const off = [SiteLayer.info().shown, Store.get('view.site'), Render.sceneFlags().site];
+      row.click();
+      await frames(3);
+      const on = [SiteLayer.info().shown, Store.get('view.site'), SiteLayer.info().buildings];
+      return eq([a, off, on], [[true, true, 'true'], [false, false, true], [true, true, 2]]);
+    });
+    await t('4 the Compare view hides the layer; closing Compare shows it again', async () => {
+      fresh();
+      Options.save(); Options.duplicate();
+      const ok = Compare.enter();
+      await frames(3);
+      const during = [ok !== false, Render.sceneFlags().site];
+      Compare.exit();
+      await frames(3);
+      for (const o of Options.list()) Options.storage.remove(o.id);
+      return eq([during, Render.sceneFlags().site, SiteLayer.info().shown], [[true, false], true, true]);
+    });
+    await t('5 the AI-ready image hides the layer while it is drawn and puts it back after', async () => {
+      const orig = ShotMod.captureView;
+      let seen = null;
+      ShotMod.captureView = (o) => { seen = { site: Render.sceneFlags().site }; return orig(o); };
+      try { await Shots.aiReady({ deliver: false }); } finally { ShotMod.captureView = orig; }
+      await frames(3);
+      return eq([seen, Render.sceneFlags().site], [{ site: false }, true]);
+    });
+    await t('6 a theme change rebuilds the layer (the key carries the theme epoch)', async () => {
+      const k0 = SiteLayer.info().key, m0 = siteMesh('site-buildings');
+      Render.themeChanged();
+      await frames(4);
+      const k1 = SiteLayer.info().key, m1 = siteMesh('site-buildings');
+      return eq([k0 !== k1, !!m0, !!m1, m0 !== m1, SiteLayer.info().buildings], [true, true, true, true, 2]);
+    });
+    await t('7 the layer draws the site meshes: buildings, roads, walks, water, trees', async () => {
+      const kinds = [];
+      Render.sceneObjects().forEach((o) => { if (o.userData && o.userData.site && !kinds.includes(o.userData.kind)) kinds.push(o.userData.kind); });
+      return eq(['site-buildings', 'site-roads', 'site-walks', 'site-water', 'site-trees'].every((k) => kinds.includes(k)), true);
+    });
+    await t('9 the neighbors follow the vertical exaggeration of the sketch', async () => {
+      const h1 = bbox(siteMesh('site-buildings')).max.y - bbox(siteMesh('site-buildings')).min.y;
+      Store.set('view.exaggeration', 3, { live: false });
+      await frames(4);
+      const h3 = bbox(siteMesh('site-buildings')).max.y - bbox(siteMesh('site-buildings')).min.y;
+      Store.set('view.exaggeration', 1, { live: false });
+      await frames(3);
+      return eq([Math.abs(h3 / h1 - 3) < 0.02, h1 > 30], [true, true]);
+    });
+    await t('10 the old 25 percent ghost is gone: no context mesh in the scene and no Ground3D.contextObjects', async () => {
+      Store.set('view.context', true, { live: false });
+      await frames(3);
+      const ghosts = Render.sceneObjects().filter((o) => o.userData && o.userData.context).length;
+      return eq([ghosts, typeof Ground3D.contextObjects, SiteLayer.info().ground, SiteLayer.info().buildings], [0, 'undefined', false, 2]);
+    });
+    await t('11 the layer never feeds a number: the grading numbers stay the same when the Site switch flips', async () => {
+      const a = JSON.stringify(Derived.get().hud);
+      Store.set('view.site', false, { live: false });
+      await frames(2);
+      const b = JSON.stringify(Derived.get().hud);
+      Store.set('view.site', true, { live: false });
+      await frames(2);
+      return eq([a === b, a.length > 20], [true, true]);
+    });
+    await t('12 Axon frames the whole site; switching the layer off frames the building again, and on again frames the site', async () => {
+      Render.setView('axon', false);
+      await frames(3);
+      const a = Render.info().distance;
+      Store.set('view.site', false, { live: false });
+      await wait(1600);
+      const b = Render.info().distance;
+      Store.set('view.site', true, { live: false });
+      await wait(1600);
+      const c = Render.info().distance;
+      return eq([a > b * 1.5, c > b * 1.5], [true, true]);
+    });
+    await t('8 closing the project removes the layer', async () => {
+      ProjectUI.close();
+      await frames(3);
+      return eq([SiteLayer.info().shown, !!siteMesh('site-buildings')], [false, false]);
+    });
+  } finally {
+    window.removeEventListener('error', onErr);
+    if (Compare.isActive()) Compare.exit();
+    ProjectUI.reset();
+    ProjectUI.restoreDefaults();
+    Select.clear();
+    Store.replace(savedState);
+    UI.setTab(savedTab, { remember: false });
+    Options.holdAutosave(false);
+  }
+  return results;
+}
+
+/* The merged run (runAllTests, in 12d) picks the site tests up here, after the others. */
+{
+  const runAllBefore = runAllTests;
+  runAllTests = async function runAllTestsWithSite() {
+    const r = await runAllBefore();
+    const site = await runSiteTests();
+    const failed = site.filter((x) => !x.ok);
+    r.results.push(...site);
+    r.failed.push(...failed);
+    r.total += site.length;
+    r.passed += site.length - failed.length;
+    TestHelp.merged('site', site);
+    return r;
+  };
 }
 
 /* ==========================================================================

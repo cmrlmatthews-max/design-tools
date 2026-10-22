@@ -47,9 +47,10 @@ const Render = (() => {
   let gridMesh, figure, sun, hemi;
   let selOverlay = null;                   // v1.1: selection outline, carve outlines and snap guides (Select draws into it; never captured or saved)
   const frameListeners = [];            // v1.1: called once per drawn frame, just before the render (handles follow the camera)
-  let layers = null;                    // { model, context, overlay } each { group, key }
+  let layers = null;                    // { site, model, overlay } each { group, key }
   let derived = null;
   let needsRender = true, tween = null, preset = null, refitPending = false, capturing = false;
+  let siteFrameSeen = null;
   let viewVersion = -1, sunKey = '', styleApplied = null, themeEpoch = 0, themeApplied = -1, geomIdSeen = -1, frameKey = '';
   let sceneRadius = 200, rebuildNotified = null;
   let insetProvider = () => ({ right: 0 });
@@ -142,7 +143,7 @@ const Render = (() => {
     scene.add(selOverlay);
 
     layers = {};
-    for (const id of ['model', 'context', 'overlay']) {
+    for (const id of ['site', 'model', 'overlay']) {     // site: SiteLayer (06c_site.js), everything of the site but its ground
       const group = new THREE.Group();
       scene.add(group);
       layers[id] = { group, key: null };
@@ -177,7 +178,7 @@ const Render = (() => {
       for (const o of built.overlay) layers.overlay.group.add(o);
       overlayVis = null; changed = true;
     }
-    changed = syncLayer(layers.context, [v.context, v.exaggeration, disp.key, ProjectUI.dataKey(), state.source].join('|'), () => Ground3D.contextObjects(d, state, Ground3D.mapper(d, state))) || changed;
+    changed = SiteLayer.update(layers.site, state, d, { syncLayer, clearGroup, cssColor, themeEpoch: () => themeEpoch, mapper: () => Ground3D.mapper(d, state) }) || changed;     // the project site (06c_site.js)
     if (changed) { viewVersion = -1; needsRender = true; }
   }
   /** The plan labels show in the plan view and in Cut and fill style (never while a slider or a handle drags). */
@@ -195,7 +196,7 @@ const Render = (() => {
   /** All model meshes in whatever is on screen (main layers or compare groups). */
   function eachModelMesh(fn) {
     const walk = (g) => g.children.forEach((o) => { if (o.userData.model) fn(o); });
-    if (cmp) cmp.entries.forEach((e) => walk(e.group)); else { walk(layers.model.group); walk(layers.context.group); }
+    if (cmp) cmp.entries.forEach((e) => walk(e.group)); else { walk(layers.model.group); }
   }
 
   /* ---- per-frame view state (cheap) ------------------------------------------------ */
@@ -238,7 +239,8 @@ const Render = (() => {
     // While a slider moves: casters off (no shadow pass work). Sun drags keep shadows so you can see them move.
     const dragging = Store.gestureActive() && !Store.gesturePath().startsWith('view.sun');
     const cast = shadowsOn && !dragging;
-    eachModelMesh((m) => { m.castShadow = cast && !m.userData.skirt && !m.userData.context; m.receiveShadow = shadowsOn; });
+    eachModelMesh((m) => { m.castShadow = cast && !m.userData.skirt; m.receiveShadow = shadowsOn; });
+    SiteLayer3D.setShadows(layers.site.group.children, cast, shadowsOn);
     figure.traverse((o) => { if (o.isMesh) o.castShadow = cast; });
     // The figure stands near the front-left corner of the work (front = south, plan -y), on the proposed ground.
     if (derived && derived.ok) {
@@ -308,7 +310,7 @@ const Render = (() => {
     };
     return b;
   }
-  function framingBox() {
+  function framingBox(withSite = false) {
     if (cmp) {
       const bs = cmp.entries.map((e) => boxOf(e.d));
       return {
@@ -317,7 +319,10 @@ const Render = (() => {
         height: Math.max(...bs.map((x) => x.height)),
       };
     }
-    return boxOf(Derived.get());
+    const b = boxOf(Derived.get());
+    const sb = withSite ? SiteLayer.frameBox(Store.raw()) : null;       // Axon fits the whole site; the elevations and the plan keep the work
+    if (sb) { b.minX = Math.min(b.minX, sb.minX); b.maxX = Math.max(b.maxX, sb.maxX); b.minY = Math.min(b.minY, sb.minY); b.maxY = Math.max(b.maxY, sb.maxY); }
+    return b;
   }
 
   /** Perspective: the nearest distance (and the look-at point) that puts all box corners inside the visible area. */
@@ -400,7 +405,7 @@ const Render = (() => {
 
   function setView(id, animate = true) {
     if (!renderer) return;
-    const goal = viewTarget(id, framingBox(), framingAspect(), cmp ? 0 : num(Derived.get().rotation, 0));
+    const goal = viewTarget(id, framingBox(id === 'axon'), framingAspect(), cmp ? 0 : num(Derived.get().rotation, 0));
     preset = id;
     overlayVis = null;
     tween = null;
@@ -534,7 +539,8 @@ const Render = (() => {
     exitCompare(true);
     const list = entries.map((e, i) => ({ ...e, uid: `${i}:${e.uid || e.name}`, group: null }));
     cmp = { entries: list, key: null, reserve, bounds: combineBounds(list.map((e) => e.d)) };
-    layers.model.group.visible = layers.context.group.visible = layers.overlay.group.visible = false;
+    layers.model.group.visible = layers.overlay.group.visible = false;
+    layers.site.group.visible = false;
     selOverlay.visible = false;
     figure.visible = false;
     applyViewOffset();
@@ -547,7 +553,8 @@ const Render = (() => {
     if (!cmp) return;
     for (const e of cmp.entries) if (e.group) { clearGroup(e.group); scene.remove(e.group); }
     cmp = null;
-    layers.model.group.visible = layers.context.group.visible = layers.overlay.group.visible = true;
+    layers.model.group.visible = layers.overlay.group.visible = true;
+    layers.site.group.visible = true;
     selOverlay.visible = true;
     overlayVis = null;
     resetLayers();
@@ -584,6 +591,9 @@ const Render = (() => {
       geomIdSeen = d.geomId;
     }
     derived = d;
+    const sfk = SiteLayer.frameKey(Store.raw());
+    if (siteFrameSeen !== null && sfk !== siteFrameSeen) refitPending = true;     // the site layer switched on or off: it is part of the framed box
+    siteFrameSeen = sfk;
     syncMain(d, disp, state);
     syncOverlayVisibility(disp.quality === 'draft');
     if (first && !preset) setView('axon', false);
@@ -634,14 +644,14 @@ const Render = (() => {
     }
     const prev = {
       bg: scene.background, grid: gridMesh.visible, fig: figure.visible,
-      model: layers.model.group.visible, ctx: layers.context.group.visible, ov: layers.overlay.group.visible,
+      model: layers.model.group.visible, site: layers.site.group.visible, ov: layers.overlay.group.visible,
     };
     const restore = () => {
       scene.remove(cap);
       clearGroup(cap);
       scene.background = prev.bg;
       gridMesh.visible = prev.grid; figure.visible = prev.fig;
-      layers.model.group.visible = prev.model; layers.context.group.visible = prev.ctx; layers.overlay.group.visible = prev.ov;
+      layers.model.group.visible = prev.model; layers.site.group.visible = prev.site; layers.overlay.group.visible = prev.ov;
       viewVersion = -1;
     };
     capturing = true;
@@ -654,7 +664,7 @@ const Render = (() => {
         scene.add(cap);
         scene.background = new THREE.Color('#f3f5f7');
         gridMesh.visible = false; figure.visible = false;
-        layers.model.group.visible = layers.context.group.visible = layers.overlay.group.visible = false;
+        layers.model.group.visible = layers.site.group.visible = layers.overlay.group.visible = false;      // the AI-ready picture has no site layer
         for (const c of [persp, ortho]) c.clearViewOffset();
         syncLineResolution();
         pending = ShotMod.captureView({ renderer, scene, camera: cam, scale });
@@ -718,7 +728,7 @@ const Render = (() => {
 
   return {
     init, setView, capture, captureClean, enterCompare, exitCompare,
-    sceneFlags: () => ({ grid: gridMesh.visible, figure: figure.visible, model: layers.model.group.visible, context: layers.context.group.visible, overlay: layers.overlay.group.visible, children: scene.children.length }),
+    sceneFlags: () => ({ grid: gridMesh.visible, figure: figure.visible, model: layers.model.group.visible, site: layers.site.group.visible, overlay: layers.overlay.group.visible, children: scene.children.length }),
     setInsetProvider: (fn) => { insetProvider = fn; },
     refreshInsets: (animate = true) => { if (!renderer) return; applyViewOffset(); if (preset) setView(preset, animate); else needsRender = true; },
     relayout: () => { needsRender = true; resizeListeners.forEach((fn) => fn()); },
@@ -741,6 +751,8 @@ const Render = (() => {
     camera: () => cam,
     cameraType: () => camType,
     canvas: () => (renderer ? renderer.domElement : null),
+    themeChanged: () => { themeEpoch++; viewVersion = -1; needsRender = true; },        // tests: what a light/dark switch does
+    sceneObjects: () => { const out = []; scene.traverse((o) => out.push(o)); return out; },        // tests
     setOrbitEnabled: (on) => { if (controls) { controls.enabled = !!on; if (!on) tween = null; } },
     orbitEnabled: () => !!controls && controls.enabled,
   };

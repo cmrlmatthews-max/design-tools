@@ -14,6 +14,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.normpath(os.path.join(HERE, '..', '..', 'src'))
+SHARED = os.path.normpath(os.path.join(HERE, '..', 'shared'))
 OUT = os.path.normpath(os.path.join(HERE, '..', '..', 'parking', 'index.html'))
 
 # key -> (global name, path under src). The order here does not matter: imports set the order.
@@ -23,6 +24,7 @@ MODS = {
     'screenshot': ('ShotMod', 'shared/screenshot.js'),
     'sketchupFormat': ('SkFmt', 'shared/sketchup-format.js'),
     'project': ('ProjectMod', 'shared/project.js'),
+    'sitelayer': ('SiteLayerMod', 'shared/sitelayer.js'),
     # tower modules the parking generator reuses (snap, prompts; snap imports envelope and geometry)
     'geometry': ('Geo', 'tower/geometry.js'),
     'envelope': ('Env', 'tower/envelope.js'),
@@ -161,7 +163,10 @@ PARTS = [
     '05b_overlays.js',
     '05c_deck3d.js',
     '06_render.js',
+    os.path.join(SHARED, '06x_sitelayer.js'),        # SiteLayer3D (shared page part)
     '06b_select.js',
+    os.path.join(SHARED, '06y_placement.js'),        # PlacementGizmo (shared page part)
+    '06c_site.js',                                  # SiteLayer adapter
     '07_controls.js',
     '08_ui.js',
     '08b_prompts.js',
@@ -175,6 +180,8 @@ PARTS = [
     '12b_tests_ui.js',
     '12c_tests_select.js',
     '12d_tests_project.js',
+    '12e_tests_site.js',
+    '12j_tests_gizmo.js',
     '13_start.js',
 ]
 missing = [p for p in PARTS if not os.path.isfile(os.path.join(HERE, p))]

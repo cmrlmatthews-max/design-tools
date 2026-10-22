@@ -5,7 +5,8 @@
      cut and fill colors (five steps each), the existing ground as a light wireframe where it differs, contours (proposed solid,
      existing dashed, majors heavier), the zero line, pad outlines and caps, one-story blocks on the tiers, walls (1 ft thick prisms
      from the low side to the top), routes (tubes colored per sample class), drive and lot outlines, the property line, slope
-     conflict markers, the section line, and the site neighbors as a ghost.
+     conflict markers and the section line. The site neighbors, roads, water and trees are not drawn here: the shared site layer
+     (SiteLayer in 06c_site.js) draws them with this mapper's exaggeration.
    Elevations are shifted by the base level (D.zBase) and scaled by the exaggeration; plan coordinates go through planToWorld.
    Everything the renderer owns (materials) is created here with userData.ownMat, so the renderer disposes it on rebuild.
    ========================================================================== */
@@ -436,35 +437,6 @@ const Ground3D = (() => {
     }
   }
 
-  /** The site neighbors, as a ghost (25 percent), standing on the existing ground. */
-  function contextObjects(D, state, M) {
-    const out = [];
-    if (!state.view.context) return out;
-    let list = [];
-    try { list = ProjectUI.contextPolys() || []; } catch (e) { list = []; }
-    const geos = [];
-    for (const p of list) {
-      try {
-        const c = p.outer[0];
-        const base = D.built.existingAt(c[0], c[1]);
-        const shape = new THREE.Shape(p.outer.map((q) => new THREE.Vector2(q[0], q[1])));
-        for (const hole of p.holes || []) shape.holes.push(new THREE.Path(hole.map((q) => new THREE.Vector2(q[0], q[1]))));
-        const geo = new THREE.ExtrudeGeometry(shape, { depth: Math.max(0.1, num(p.height, 20)) * M.ex, bevelEnabled: false, steps: 1, curveSegments: 1 });
-        geo.deleteAttribute('uv');
-        geo.applyMatrix4(planMatrix(M.Y(base)));
-        geos.push(geo);
-      } catch (e) { /* skip a bad polygon */ }
-    }
-    if (!geos.length) return out;
-    const merged = geos.length === 1 ? geos[0] : BufferGeometryUtils.mergeGeometries(geos, false);
-    if (geos.length > 1) geos.forEach((g) => g.dispose());
-    if (!merged) return out;
-    const mesh = new THREE.Mesh(merged, new THREE.MeshStandardMaterial({ color: col('#9aa3ad'), roughness: 0.95, metalness: 0, transparent: true, opacity: 0.25, depthWrite: false }));
-    mesh.userData.model = true; mesh.userData.ownMat = true; mesh.userData.context = true; mesh.renderOrder = 4;
-    out.push(mesh);
-    return out;
-  }
-
   /* ---- build ---------------------------------------------------------------------------------------------- */
   /** → { model: [...], overlay: [...] }. model objects cast and receive shadows; overlay objects are lines, tubes and flat labels. */
   function build(D, state, disp, opts = {}) {
@@ -494,5 +466,5 @@ const Ground3D = (() => {
     return { model, overlay };
   }
 
-  return { build, contextObjects, mapper, diffColor, fat };
+  return { build, mapper, diffColor, fat };
 })();

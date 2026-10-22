@@ -605,6 +605,8 @@ const UI = (() => {
         sel('Style', 'view.style', opts([['model', 'Model'], ['diagram', 'Diagram']])),
         sel('Color by (diagram)', 'view.colorBy', opts([['system', 'Facade system'], ['wwr', 'Window-to-wall ratio']])),
         Controls.when(() => { sync(); return true; }, [h('div', { class: 'ctl' }, h('div', { class: 'ctl-label' }, 'View'), wrap)]),
+        Controls.toggle({ label: 'Site', bind: v('site') }),
+        Controls.help('The ground, roads, water, trees, and neighbors of the project site. From the Site Model.'),
         Controls.toggle({ label: 'Mullions', bind: v('mullions') }),
         Controls.toggle({ label: 'Site context (ghost)', bind: v('context') }),
         Controls.toggle({ label: 'Shadows', bind: v('shadows') }),

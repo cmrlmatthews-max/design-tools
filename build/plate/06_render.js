@@ -38,6 +38,7 @@ function compareRects(n, W, H, resv = {}, gap = 2) {
 
 const Render = (() => {
   const FOV = 30;
+  const GRID_MINOR_A = 0.42, GRID_MAJOR_A = 0.8, GRID_SITE_FADE = 0.4;     // grid line strength; the grid fades to 40% over a site ground
   const ORTHO_HALF = 100;               // ortho frustum half-height; zoom does the rest
   const LABEL_PX = 1.8;                 // unit labels show when the plan is drawn at this many pixels per foot or more
   const rad = THREE.MathUtils.degToRad;
@@ -47,9 +48,10 @@ const Render = (() => {
   let gridMesh, figure, sun, hemi;
   let selOverlay = null;                   // v1.1: selection outline, carve outlines and snap guides (Select draws into it; never captured or saved)
   const frameListeners = [];            // v1.1: called once per drawn frame, just before the render (handles follow the camera)
-  let layers = null;                    // { model, context, overlay } each { group, key }
+  let layers = null;                    // { site, model, context, overlay } each { group, key }
   let derived = null;
   let needsRender = true, tween = null, preset = null, refitPending = false, capturing = false;
+  let siteFrameSeen = null;
   let viewVersion = -1, sunKey = '', styleApplied = null, themeEpoch = 0, themeApplied = -1, geomIdSeen = -1, frameKey = '';
   let sceneRadius = 200, rebuildNotified = null;
   let insetProvider = () => ({ right: 0 });
@@ -59,7 +61,7 @@ const Render = (() => {
   const _v2 = { x: 0, y: 0, set(x, y) { this.x = x; this.y = y; return this; } };
   const gridUniforms = {
     uMinor: { value: new THREE.Color() }, uMajor: { value: new THREE.Color() },
-    uMinorA: { value: 0.42 }, uMajorA: { value: 0.8 }, uFade: { value: new THREE.Vector2(450, 1100) },
+    uMinorA: { value: GRID_MINOR_A }, uMajorA: { value: GRID_MAJOR_A }, uFade: { value: new THREE.Vector2(450, 1100) },
   };
 
   /* ---- colors from CSS tokens --------------------------------------------- */
@@ -137,7 +139,7 @@ const Render = (() => {
     scene.add(selOverlay);
 
     layers = {};
-    for (const id of ['model', 'context', 'overlay']) {
+    for (const id of ['site', 'model', 'context', 'overlay']) {     // site: SiteLayer (06c_site.js)
       const group = new THREE.Group();
       scene.add(group);
       layers[id] = { group, key: null };
@@ -172,7 +174,19 @@ const Render = (() => {
       for (const o of built.overlay) layers.overlay.group.add(o);
       overlayVis = null; changed = true;
     }
-    changed = syncLayer(layers.context, [v.context, disp.key, ProjectUI.dataKey(), state.source].join('|'), () => Plate3D.contextObjects(d, state)) || changed;
+    changed = SiteLayer.update(layers.site, state, d, { syncLayer, clearGroup, cssColor, themeEpoch: () => themeEpoch }) || changed;     // the project site (06c_site.js)
+    // the ghost of the site neighbors would double the solid ones of the site layer, so it draws only without them (the outlines of other level groups stay)
+    const solidNeighbors = SiteLayer.info().buildings > 0;
+    changed = syncLayer(layers.context, [v.context, disp.key, ProjectUI.dataKey(), state.source, solidNeighbors].join('|'), () => {
+      const list = Plate3D.contextObjects(d, state);
+      if (!solidNeighbors) return list;
+      return list.filter((o) => {
+        if (!o.userData.context) return true;
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) o.material.dispose();
+        return false;
+      });
+    }) || changed;
     if (changed) { viewVersion = -1; needsRender = true; }
   }
   /** The unit labels show when the plan is drawn large enough to read them, and never while a handle or a slider moves. */
@@ -229,10 +243,14 @@ const Render = (() => {
     if (themeApplied !== themeEpoch) refreshColors();
     gridMesh.visible = !!v.grid;
     figure.visible = !!v.figure && !cmp;
-    // The figure stands near the front-left corner of the plate (front = south, plan -y).
+    // With a site ground on screen the grid fades to 40 percent.
+    const siteGround = !cmp && SiteLayer.info().ground;
+    gridUniforms.uMinorA.value = GRID_MINOR_A * (siteGround ? GRID_SITE_FADE : 1);
+    gridUniforms.uMajorA.value = GRID_MAJOR_A * (siteGround ? GRID_SITE_FADE : 1);
+    // The figure stands near the front-left corner of the plate (front = south, plan -y), on the site ground when there is one.
     if (derived && derived.ok) {
       const u = derived.bounds.model;
-      figure.position.set(...planToWorld(u.minX + 14, u.minY - 14, 0));
+      figure.position.set(...planToWorld(u.minX + 14, u.minY - 14, (siteGround && SiteLayer.groundZ(u.minX + 14, u.minY - 14)) || 0));
       figure.scale.setScalar(1);
     }
     updateSun();
@@ -295,7 +313,7 @@ const Render = (() => {
     };
     return b;
   }
-  function framingBox() {
+  function framingBox(withSite = false) {
     if (cmp) {
       const bs = cmp.entries.map((e) => boxOf(e.d));
       return {
@@ -304,7 +322,10 @@ const Render = (() => {
         height: Math.max(...bs.map((x) => x.height)),
       };
     }
-    return boxOf(Derived.get());
+    const b = boxOf(Derived.get());
+    const sb = withSite ? SiteLayer.frameBox(Store.raw()) : null;       // Axon fits the whole site; the elevations and the plan keep the plate
+    if (sb) { b.minX = Math.min(b.minX, sb.minX); b.maxX = Math.max(b.maxX, sb.maxX); b.minY = Math.min(b.minY, sb.minY); b.maxY = Math.max(b.maxY, sb.maxY); }
+    return b;
   }
 
   /** Perspective: the nearest distance (and the look-at point) that puts all box corners inside the visible area. */
@@ -387,7 +408,7 @@ const Render = (() => {
 
   function setView(id, animate = true) {
     if (!renderer) return;
-    const goal = viewTarget(id, framingBox(), framingAspect(), cmp ? 0 : num(Derived.get().rotation, 0));
+    const goal = viewTarget(id, framingBox(id === 'axon'), framingAspect(), cmp ? 0 : num(Derived.get().rotation, 0));
     preset = id;
     overlayVis = null;
     tween = null;
@@ -522,6 +543,7 @@ const Render = (() => {
     const list = entries.map((e, i) => ({ ...e, uid: `${i}:${e.uid || e.name}`, group: null }));
     cmp = { entries: list, key: null, reserve, bounds: combineBounds(list.map((e) => e.d)) };
     layers.model.group.visible = layers.context.group.visible = layers.overlay.group.visible = false;
+    layers.site.group.visible = false;
     selOverlay.visible = false;
     figure.visible = false;
     applyViewOffset();
@@ -535,6 +557,7 @@ const Render = (() => {
     for (const e of cmp.entries) if (e.group) { clearGroup(e.group); scene.remove(e.group); }
     cmp = null;
     layers.model.group.visible = layers.context.group.visible = layers.overlay.group.visible = true;
+    layers.site.group.visible = true;
     selOverlay.visible = true;
     overlayVis = null;
     resetLayers();
@@ -571,6 +594,9 @@ const Render = (() => {
       geomIdSeen = d.geomId;
     }
     derived = d;
+    const sfk = SiteLayer.frameKey(Store.raw());
+    if (siteFrameSeen !== null && sfk !== siteFrameSeen) refitPending = true;     // the site layer switched on or off: it is part of the framed box
+    siteFrameSeen = sfk;
     syncMain(d, disp, state);
     syncOverlayVisibility(disp.quality === 'draft');
     if (first && !preset) setView('plan', false);
@@ -652,7 +678,7 @@ const Render = (() => {
 
   return {
     init, setView, capture, enterCompare, exitCompare, pxPerFt,
-    sceneFlags: () => ({ grid: gridMesh.visible, figure: figure.visible, model: layers.model.group.visible, context: layers.context.group.visible, overlay: layers.overlay.group.visible, children: scene.children.length }),
+    sceneFlags: () => ({ site: layers.site.group.visible, gridA: gridUniforms.uMajorA.value, grid: gridMesh.visible, figure: figure.visible, model: layers.model.group.visible, context: layers.context.group.visible, overlay: layers.overlay.group.visible, children: scene.children.length }),
     setInsetProvider: (fn) => { insetProvider = fn; },
     refreshInsets: (animate = true) => { if (!renderer) return; applyViewOffset(); if (preset) setView(preset, animate); else needsRender = true; },
     relayout: () => { needsRender = true; resizeListeners.forEach((fn) => fn()); },
@@ -678,6 +704,9 @@ const Render = (() => {
     camera: () => cam,
     cameraType: () => camType,
     canvas: () => (renderer ? renderer.domElement : null),
+    themeChanged: () => { themeEpoch++; viewVersion = -1; needsRender = true; },        // tests: what a light/dark switch does
+    sceneObjects: () => { const out = []; scene.traverse((o) => out.push(o)); return out; },        // tests
+    contextMeshes: () => layers.context.group.children.filter((o) => o.isMesh).length,       // tests: the ghost of the site neighbors
     setOrbitEnabled: (on) => { if (controls) { controls.enabled = !!on; if (!on) tween = null; } },
     orbitEnabled: () => !!controls && controls.enabled,
   };

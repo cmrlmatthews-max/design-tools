@@ -40,6 +40,8 @@ const Render = (() => {
   const FOV = 30;
   const ORTHO_HALF = 100;               // ortho frustum half-height; zoom does the rest
   const GROUND_SIZE = 30000;
+  const SLAB_DROP = 4;                  // ft the flat ground slab sits under the lowest site ground node
+  const GRID_MINOR_A = 0.42, GRID_MAJOR_A = 0.8, GRID_SITE_FADE = 0.4;     // grid line strength; the grid fades to 40% over a site ground
   const rad = THREE.MathUtils.degToRad;
   const reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -47,9 +49,10 @@ const Render = (() => {
   let ground, shadowPlane, gridMesh, figure, sun, hemi;
   let selOverlay = null;                   // v1.1: selection outline, carve outlines and snap guides (Select draws into it; never captured or saved)
   const frameListeners = [];            // v1.1: called once per drawn frame, just before the render (handles follow the camera)
-  let layers = null;                    // { model, context, overlay } each { group, key }
+  let layers = null;                    // { site, model, context, overlay } each { group, key }
   let derived = null;
   let needsRender = true, tween = null, preset = null, refitPending = false, capturing = false;
+  let siteFrameSeen = null;
   let viewVersion = -1, sunKey = '', styleApplied = null, themeEpoch = 0, themeApplied = -1, geomIdSeen = -1;
   let sceneRadius = 200, rebuildNotified = null;
   let insetProvider = () => ({ right: 0 });
@@ -59,7 +62,7 @@ const Render = (() => {
   const _v2 = { x: 0, y: 0, set(x, y) { this.x = x; this.y = y; return this; } };
   const gridUniforms = {
     uMinor: { value: new THREE.Color() }, uMajor: { value: new THREE.Color() },
-    uMinorA: { value: 0.42 }, uMajorA: { value: 0.8 }, uFade: { value: new THREE.Vector2(450, 1100) },
+    uMinorA: { value: GRID_MINOR_A }, uMajorA: { value: GRID_MAJOR_A }, uFade: { value: new THREE.Vector2(450, 1100) },
   };
 
   /* ---- colors from CSS tokens --------------------------------------------- */
@@ -196,7 +199,7 @@ const Render = (() => {
     scene.add(selOverlay);
 
     layers = {};
-    for (const id of ['model', 'context', 'overlay']) {
+    for (const id of ['site', 'model', 'context', 'overlay']) {     // site: SiteLayer (06c_site.js)
       const group = new THREE.Group();
       scene.add(group);
       layers[id] = { group, key: null };
@@ -259,7 +262,9 @@ const Render = (() => {
       for (const o of built.overlay) layers.overlay.group.add(o);
       overlayVis = null; changed = true;
     }
-    changed = syncLayer(layers.context, [v.style, v.context, ProjectUI.dataKey(), state.source].join('|'), () => buildContextObjects(state)) || changed;
+    changed = SiteLayer.update(layers.site, state, d, { syncLayer, clearGroup, cssColor, themeEpoch: () => themeEpoch }) || changed;     // the project site (06c_site.js)
+    // the ghost of the site neighbors would double the solid ones of the site layer, so it draws only without them
+    changed = syncLayer(layers.context, [v.style, v.context, ProjectUI.dataKey(), state.source, SiteLayer.info().buildings > 0].join('|'), () => (SiteLayer.info().buildings > 0 ? [] : buildContextObjects(state))) || changed;
     if (changed) { viewVersion = -1; needsRender = true; }
   }
   /** The plan labels show in the plan view and in Diagram style (never while a geometry slider drags). */
@@ -311,6 +316,9 @@ const Render = (() => {
     needsRender = true;
   }
 
+  /** True while the site ground is on screen: the layer has one, it is switched on, and this is neither Compare nor an AI-ready capture. */
+  const siteGroundOn = () => !cmp && !capturing && SiteLayer.info().ground;
+
   function applyView() {
     const s = Store.raw(), v = s.view;
     if (styleApplied !== v.style || themeApplied !== themeEpoch) refreshColors();
@@ -321,11 +329,21 @@ const Render = (() => {
     // While a slider moves: casters off (no shadow pass work). Sun drags keep shadows so you can see them move.
     const dragging = Store.gestureActive() && !Store.gesturePath().startsWith('view.sun');
     const cast = shadowsOn && !dragging;
-    shadowPlane.visible = shadowsOn;
+    // With a site ground on screen the flat slab drops under it, the grid fades, and shadows fall on the site ground (the 8,000 ft catcher hides).
+    const siteGround = siteGroundOn();
+    const bottom = siteGround ? SiteLayer.groundBottom() : null;
+    ground.position.y = bottom == null ? 0 : bottom - SLAB_DROP;          // plan z is world y
+    gridUniforms.uMinorA.value = GRID_MINOR_A * (siteGround ? GRID_SITE_FADE : 1);
+    gridUniforms.uMajorA.value = GRID_MAJOR_A * (siteGround ? GRID_SITE_FADE : 1);
+    shadowPlane.visible = shadowsOn && !siteGround;
     eachModelMesh((m) => { m.castShadow = cast; m.receiveShadow = shadowsOn; });
+    SiteLayer3D.setShadows(layers.site.group.children, cast, shadowsOn);
     figure.traverse((o) => { if (o.isMesh) o.castShadow = cast; });
-    // The figure stands near the front-left corner of the site (front = south, plan -y).
-    if (derived) figure.position.copy(worldVec(derived.bounds.site.minX + 14, derived.bounds.site.minY + 14, 0));
+    // The figure stands near the front-left corner of the site (front = south, plan -y), on the site ground when there is one.
+    if (derived) {
+      const fx = derived.bounds.site.minX + 14, fy = derived.bounds.site.minY + 14;
+      figure.position.copy(worldVec(fx, fy, (siteGround && SiteLayer.groundZ(fx, fy)) || 0));
+    }
     updateSun(v);
     needsRender = true;
   }
@@ -386,7 +404,7 @@ const Render = (() => {
     };
     return b;
   }
-  function framingBox() {
+  function framingBox(withSite = false) {
     if (cmp) {
       const bs = cmp.entries.map((e) => boxOf(e.d));
       return {
@@ -395,7 +413,10 @@ const Render = (() => {
         height: Math.max(...bs.map((x) => x.height)),
       };
     }
-    return boxOf(Derived.get());
+    const b = boxOf(Derived.get());
+    const sb = withSite ? SiteLayer.frameBox(Store.raw()) : null;       // Axon fits the whole site; the elevations keep the building
+    if (sb) { b.minX = Math.min(b.minX, sb.minX); b.maxX = Math.max(b.maxX, sb.maxX); b.minY = Math.min(b.minY, sb.minY); b.maxY = Math.max(b.maxY, sb.maxY); }
+    return b;
   }
 
   /** Perspective: the nearest distance (and the look-at point) that puts all box corners inside the visible area. */
@@ -478,7 +499,7 @@ const Render = (() => {
 
   function setView(id, animate = true) {
     if (!renderer) return;
-    const goal = viewTarget(id, framingBox(), framingAspect(), cmp ? 0 : num(Derived.get().rotation, 0));
+    const goal = viewTarget(id, framingBox(id === 'axon'), framingAspect(), cmp ? 0 : num(Derived.get().rotation, 0));
     preset = id;
     overlayVis = null;
     tween = null;
@@ -615,6 +636,7 @@ const Render = (() => {
     const list = entries.map((e, i) => ({ ...e, uid: `${i}:${e.uid || e.name}`, group: null }));
     cmp = { entries: list, key: null, reserve, bounds: combineBounds(list.map((e) => e.d)) };
     layers.model.group.visible = layers.context.group.visible = layers.overlay.group.visible = false;
+    layers.site.group.visible = false;
     selOverlay.visible = false;
     figure.visible = false;
     applyViewOffset();
@@ -628,6 +650,7 @@ const Render = (() => {
     for (const e of cmp.entries) if (e.group) { clearGroup(e.group); scene.remove(e.group); }
     cmp = null;
     layers.model.group.visible = layers.context.group.visible = layers.overlay.group.visible = true;
+    layers.site.group.visible = true;
     selOverlay.visible = true;
     overlayVis = null;
     resetLayers();
@@ -658,6 +681,9 @@ const Render = (() => {
       geomIdSeen = d.geomId;
     }
     derived = d;
+    const sfk = SiteLayer.frameKey(Store.raw());
+    if (siteFrameSeen !== null && sfk !== siteFrameSeen) refitPending = true;     // the site layer switched on or off: it is part of the framed box
+    siteFrameSeen = sfk;
     syncMain(d, disp, state);
     syncOverlayVisibility(disp.quality === 'draft');
     if (first && !preset) setView('axon', false);
@@ -717,6 +743,7 @@ const Render = (() => {
     const prev = {
       bg: scene.background, ground: ground.material.color.clone(), grid: gridMesh.visible, fig: figure.visible,
       model: layers.model.group.visible, ctx: layers.context.group.visible, ov: layers.overlay.group.visible, shadow: shadowPlane.visible,
+      site: layers.site.group.visible, slabY: ground.position.y,
     };
     const restore = () => {
       scene.remove(cap);
@@ -726,6 +753,7 @@ const Render = (() => {
       ground.material.color.copy(prev.ground);
       gridMesh.visible = prev.grid; figure.visible = prev.fig; shadowPlane.visible = prev.shadow;
       layers.model.group.visible = prev.model; layers.context.group.visible = prev.ctx; layers.overlay.group.visible = prev.ov;
+      layers.site.group.visible = prev.site; ground.position.y = prev.slabY;
       viewVersion = -1;
     };
     capturing = true;
@@ -740,6 +768,7 @@ const Render = (() => {
         ground.material.color.set('#e4e7ea');
         gridMesh.visible = false; figure.visible = false; shadowPlane.visible = shadowsOn;
         layers.model.group.visible = layers.context.group.visible = layers.overlay.group.visible = false;
+        layers.site.group.visible = false; ground.position.y = 0;          // the AI-ready picture has no site layer
         for (const c of [persp, ortho]) c.clearViewOffset();
         pending = ShotMod.captureView({ renderer, scene, camera: cam, scale });
       } finally { restore(); }
@@ -802,7 +831,7 @@ const Render = (() => {
 
   return {
     init, setView, capture, captureClean, enterCompare, exitCompare,
-    sceneFlags: () => ({ grid: gridMesh.visible, figure: figure.visible, model: layers.model.group.visible, context: layers.context.group.visible, overlay: layers.overlay.group.visible, children: scene.children.length }),
+    sceneFlags: () => ({ site: layers.site.group.visible, slabY: ground.position.y, shadowPlane: shadowPlane.visible, grid: gridMesh.visible, figure: figure.visible, model: layers.model.group.visible, context: layers.context.group.visible, overlay: layers.overlay.group.visible, children: scene.children.length }),
     setInsetProvider: (fn) => { insetProvider = fn; },
     refreshInsets: (animate = true) => { if (!renderer) return; applyViewOffset(); if (preset) setView(preset, animate); else needsRender = true; },
     relayout: () => { needsRender = true; resizeListeners.forEach((fn) => fn()); },
@@ -822,6 +851,9 @@ const Render = (() => {
     camera: () => cam,
     cameraType: () => camType,
     canvas: () => (renderer ? renderer.domElement : null),
+    themeChanged: () => { themeEpoch++; viewVersion = -1; needsRender = true; },        // tests: what a light/dark switch does
+    sceneObjects: () => { const out = []; scene.traverse((o) => out.push(o)); return out; },        // tests
+    contextMeshes: () => layers.context.group.children.filter((o) => o.isMesh).length,       // tests: the ghost of the site neighbors
     setOrbitEnabled: (on) => { if (controls) { controls.enabled = !!on; if (!on) tween = null; } },
     orbitEnabled: () => !!controls && controls.enabled,
   };
