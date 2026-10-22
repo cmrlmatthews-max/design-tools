@@ -22,8 +22,8 @@ This file is the one place that lists every tool in the suite, who builds it, an
 | — | Project file (`src/shared/project.js`), Workspace page, Site Model handoff | `index.html`, `src/shared/`, `site/` | Version 1 live | Home |
 | `midrise` | Mid-Rise Generator | `midrise/` | Version 1 live | Home |
 | `parking` | Parking Deck Generator | `parking/` | Version 1 live | Home |
-| `facade` | Facade Studio | `facade/` | Version 1 built, in review | Home |
-| `grading` | Grading Sketch | `grading/` | Next | Home |
+| `facade` | Facade Studio | `facade/` | Version 1 live | Home |
+| `grading` | Grading Sketch | `grading/` | Concept written, waiting on Cade | Home |
 | `view` | View Study | `view/` | Later | — |
 | `egress` | Egress Sketch | `egress/` | Later | — |
 | — | Yield Study | — | Skipped for now | — |
