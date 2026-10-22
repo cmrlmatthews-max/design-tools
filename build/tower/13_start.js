@@ -20,7 +20,17 @@ SunUI.init();          // 08d_sun.js: the study driver (before the project loads
 ProjectUI.start();     // 09b_project.js: ?project= load and autosave
 
 const optionInfo = (o) => ({ id: o.id, name: o.name, updatedAt: o.updatedAt });
+// First-visit tip (build/shared/08x_tip.js): one short card the first time this tool opens. Never shows on ?test.
+FirstTip.init({
+  tool: "tower",
+  title: "Tower Generator",
+  purpose: "The Tower Generator shapes a tower and shows its floor area and height as you work.",
+  tries: ["Drag a handle on the tower to change it.", "Select the View tab to find the Sun Study."],
+  help: null,
+});
+
 window.__tower = {
+  firstTip: FirstTip,
   getState: () => Store.snapshot(),
   setState: (path, value) => { Store.set(path, value, { live: false }); },
   setStateLive: (path, value) => { Store.set(path, value, { live: true }); },

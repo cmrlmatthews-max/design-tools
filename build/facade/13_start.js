@@ -14,7 +14,17 @@ ProjectUI.start();
 if (Render.ready() && Store.raw().view.elevation) Render.setView(Store.raw().view.elevation.toLowerCase(), false);
 
 const optionInfo = (o) => ({ id: o.id, name: o.name, updatedAt: o.updatedAt });
+// First-visit tip (build/shared/08x_tip.js): one short card the first time this tool opens. Never shows on ?test.
+FirstTip.init({
+  tool: "facade",
+  title: "Facade Studio",
+  purpose: "The Facade Studio puts facade systems on each face and reads the window-to-wall ratio.",
+  tries: ["Select a facade system for each zone in the Facade tab.", "Click a face in the 3D view."],
+  help: () => Help.toggle(),
+});
+
 window.__facade = {
+  firstTip: FirstTip,
   getState: () => Store.snapshot(),
   setState: (path, value) => { Store.set(path, value, { live: false }); },
   setStateLive: (path, value) => { Store.set(path, value, { live: true }); },

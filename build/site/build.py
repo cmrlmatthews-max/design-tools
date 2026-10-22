@@ -11,6 +11,7 @@ import re
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.normpath(os.path.join(HERE, '..', '..', 'src'))
+SHARED = os.path.normpath(os.path.join(HERE, '..', 'shared'))
 OUT = os.path.normpath(os.path.join(HERE, '..', '..', 'site', 'index.html'))
 
 # key -> (global name, path under src). Order does not matter here; the //@@MODULE key@@ markers set the output order.
@@ -80,7 +81,9 @@ clip = '<script src="https://cdn.jsdelivr.net/npm/clipper-lib@6.4.2/clipper.js">
 head = head.replace('<style>', clip + '\n<style>', 1)
 head += '</head>\n<body>\n'
 
-PARTS = ['00_imports.js', '01_config.js', '02_pipeline.js', '03_scene.js', '04_ui.js', '05_tests.js', '06_start.js']
+PARTS = ['00_imports.js', '01_config.js', '02_pipeline.js', '03_scene.js', '04_ui.js',
+         os.path.join(SHARED, '08x_tip.js'),      # FirstTip (shared page part)
+         '05_tests.js', '05b_tests_tip.js', '06_start.js']
 js = '\n'.join(part(p) for p in PARTS)
 
 html = head + rd('body.html') + '<script type="module">\n' + js + '</script>\n</body>\n</html>\n'

@@ -105,6 +105,51 @@ li.warn .stl{color:var(--red)}
 .hw td{padding:5px 6px;border:1px solid var(--ink);vertical-align:top;line-height:1.35;color:var(--soft)}
 .hw td:first-child{color:var(--ink);font-family:"RC","Arial Narrow","Roboto Condensed",sans-serif;font-weight:700;letter-spacing:.03em;text-transform:uppercase;font-size:12px;white-space:nowrap}
 @media (max-width:640px){.hw{padding:4px 10px 12px}.hw td:first-child{white-space:normal}}
+/* first-visit tour: a native dialog drawn like the sheet */
+.lederow{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;margin:0 0 14px}
+.lederow .lede{flex:1 1 300px;margin:0}
+.lederow .stamp{margin:0}
+.tour{width:min(920px,calc(100vw - 32px));max-width:none;max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);margin:auto;padding:0;overflow:auto;overscroll-behavior:contain;color-scheme:light;color:var(--ink);background:var(--paper);border:2px solid var(--ink);border-radius:0;outline:1px solid var(--edge);outline-offset:4px}
+.tour:not([open]){display:none}
+.tour::backdrop{background:rgba(237,239,241,.7)}
+@media (prefers-color-scheme:dark){.tour::backdrop{background:rgba(27,32,37,.7)}}
+.tour-top{display:flex;align-items:center;gap:14px;min-height:48px;padding:0 0 0 24px;border-bottom:2px solid var(--ink)}
+.tour-top .mk{font-size:18px;letter-spacing:.12em}
+.tour-top .kick{font-size:12px;letter-spacing:.16em;color:var(--soft);text-transform:uppercase}
+.tour-x{margin-left:auto;flex:none;width:48px;height:48px;padding:0;border:0;border-left:2px solid var(--ink);background:none;color:var(--ink);cursor:pointer;display:flex;align-items:center;justify-content:center}
+.tour-x:hover{background:var(--ink);color:#fff}
+.tour-x svg{width:16px;height:16px;stroke:currentColor;stroke-width:2;fill:none}
+.tour-stage{display:grid;gap:16px;padding:22px 24px 10px;touch-action:pan-y}
+.tour-text{min-width:0}
+.tour-text h2{margin:0 0 12px;font-size:28px;line-height:1.12;letter-spacing:.01em;text-transform:uppercase}
+.tour-body p{margin:0 0 10px;font-size:15px;line-height:1.55;color:var(--soft)}
+.tour-fig{margin:0;min-width:0}
+.tour-frame{position:relative;aspect-ratio:1200/750;background:var(--paper);border:1px solid var(--ink);overflow:hidden}
+.tour-frame img{position:absolute;inset:0;display:block;width:100%;height:100%;object-fit:cover;user-select:none;-webkit-user-select:none}
+.tour-frame.broke{background:repeating-linear-gradient(45deg,var(--hair) 0 1px,var(--paper) 1px 8px)}
+.tour-frame.broke img{opacity:0}
+.tour-fig figcaption{margin-top:8px;font-size:11px;line-height:1.4;letter-spacing:.1em;text-transform:uppercase;color:var(--soft)}
+.tour-dots{display:flex;justify-content:center;padding:4px 24px 0}
+.tour-dots button{display:flex;align-items:center;justify-content:center;width:44px;height:44px;padding:0;border:0;background:none;cursor:pointer}
+.tour-dots button::before{content:"";width:12px;height:12px;border:2px solid var(--ink);background:var(--paper)}
+.tour-dots button[aria-current="true"]::before{background:var(--ink)}
+.tour-btns{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;padding:0 24px 22px}
+.tour-btns .stamp{margin:0}
+.tour-btns #tourNext{margin-left:auto;min-width:96px}
+@media (min-width:960px){.tour-stage{grid-template-columns:minmax(0,330px) minmax(0,1fr);gap:28px;align-items:start}}
+@media (max-width:640px){
+.tour-top{padding-left:16px}
+.tour-stage{padding:16px 16px 6px}
+.tour-text h2{font-size:22px;margin-bottom:8px}
+.tour-body p{font-size:14px;margin-bottom:8px}
+.tour-dots{padding:2px 8px 0}
+.tour-btns{padding:0 16px 16px}
+}
+@media (prefers-reduced-motion:no-preference){
+.tour[open]{animation:tourfade 160ms ease-out}
+.tour-stage.fade{animation:tourfade 160ms ease-out}
+@keyframes tourfade{from{opacity:0}to{opacity:1}}
+}
 @media (max-width:640px){
 .sheet{margin:12px 16px;grid-template-columns:1fr;outline-offset:3px}
 .draw{padding:20px 16px 24px}h1{font-size:26px}
@@ -123,7 +168,7 @@ li.warn .stl{color:var(--red)}
 <main class="sheet"><div class="draw">
 <div class="date rc" id="date"></div>
 <h1>Design Tools — Workspace</h1>
-<p class="lede">One project file moves between the tools. Pick a project, then open a tool.</p>
+<div class="lederow"><p class="lede">One project file moves between the tools. Pick a project, then open a tool.</p><button class="stamp ink" id="tourOpen" type="button" aria-haspopup="dialog">Tour</button></div>
 <p id="notice" class="note" role="alert" hidden>Browser storage is not available. Projects cannot be saved on this device.</p>
 <p id="modNote" class="note" hidden>Projects are not available right now. The tools below still open on their own.</p>
 <p id="testNote" class="note info" hidden>Test mode. Projects on this page are temporary. Nothing is read from or saved to the browser.</p>
@@ -137,6 +182,7 @@ li.warn .stl{color:var(--red)}
 <li><b>Site layer</b>: the project site from the Site Model. It shows the ground, the site boundary, roads, water, trees, and neighbor buildings. Every tool draws it.</li>
 <li><b>Placement</b>: the position of the building on the site. It is X (east), Y (north), rotation, and base elevation. The base elevation is the elevation of the ground floor, in feet.</li>
 </ul>
+<p>Select <b>Tour</b> at the top of this page for a five-slide tour.</p>
 
 <h3>2 · Start a project</h3>
 <p>Start a project on this page or in the Site Model. Use the Site Model when the design has a real site.</p>
@@ -247,7 +293,16 @@ li.warn .stl{color:var(--red)}
 <div class="c4"><div class="k">UPDATED</div><div class="v" id="tbUpd">—</div></div>
 <div class="c6"><div class="k">LEGEND</div><div class="lg"><svg viewBox="0 0 22 14" aria-hidden="true"><defs><pattern id="hl" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="5" stroke="#1D2733" stroke-width="1"/></pattern></defs><rect x="1" y="1" width="20" height="12" fill="url(#hl)" stroke="#1D2733" stroke-width="1.2"/></svg>HAS DATA</div><div class="lg"><svg viewBox="0 0 22 14" aria-hidden="true"><rect x="1" y="1" width="20" height="12" fill="#fff" stroke="#1D2733" stroke-width="1.2"/></svg>EMPTY</div><div class="lg"><svg viewBox="0 0 22 14" aria-hidden="true"><rect x="1" y="1" width="20" height="12" fill="#fff" stroke="#9AA3AD" stroke-width="1.2" stroke-dasharray="3 2"/></svg>PLANNED</div><div class="lg"><svg viewBox="0 0 22 14" aria-hidden="true"><rect x="1" y="1" width="20" height="12" fill="#fff" stroke="#D12A2A" stroke-width="1.4" stroke-dasharray="3 2"/></svg>NEWER VERSION</div><div class="lg"><svg viewBox="0 0 22 14" aria-hidden="true"><path d="M3,7 L6.5,1.5 L15.5,1.5 L19,7 L15.5,12.5 L6.5,12.5 Z" fill="#1D2733" stroke="#1D2733" stroke-width="1.1"/></svg>OPEN PROJECT</div></div>
 <div class="c5"><div class="k">SHEET</div><div class="sh">G-001</div></div>
-</aside></main>
+</aside>
+<dialog id="tour" class="tour" aria-modal="true" aria-labelledby="tourTitle">
+<div class="tour-top"><span class="rc mk">CMRLM</span><span class="rc kick" id="tourKicker">1 of 5</span><button class="tour-x" id="tourClose" type="button" aria-label="Close tour"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2L14 14M14 2L2 14"/></svg></button></div>
+<div class="tour-stage" id="tourStage">
+<div class="tour-text" aria-live="polite"><h2 class="rc" id="tourTitle"></h2><div class="tour-body" id="tourBody"></div></div>
+<figure class="tour-fig"><div class="tour-frame" id="tourFrame"><img id="tourImg" width="1200" height="750" loading="lazy" draggable="false" alt=""></div><figcaption class="rc" id="tourCap"></figcaption></figure>
+</div>
+<div class="tour-dots" id="tourDots" role="group" aria-label="Tour slides"></div>
+<div class="tour-btns"><button class="stamp ink" id="tourBack" type="button">Back</button><button class="stamp ink" id="tourSkip" type="button">Skip</button><button class="stamp" id="tourNext" type="button">Next</button></div>
+</dialog></main>
 <script type="module" onerror="var d=document,o=d.getElementById('testOut');d.getElementById('modNote').hidden=false;if(/[?&]test/.test(location.search)){d.getElementById('testBox').hidden=false;o.hidden=false;o.textContent='FAIL  src/shared/project.js did not load'}">
 // Workspace page. Calls src/shared/project.js (spec section 10).
 import * as Project from "./src/shared/project.js";
@@ -487,6 +542,132 @@ $("#file").addEventListener("change", async (e) => {
   render();
 });
 
+/* ---------- first-visit tour ---------- */
+// Copy: docs/tour-copy.md. Bump TOUR_KEY to v2 when the slides change in substance (a new tool, a new order).
+const TOUR_KEY = "cmrlm.tour.v1";
+const TOUR_SLIDES = [
+  { title: "Welcome to the Design Tools",
+    body: ["The Design Tools help you test early building designs in a web browser.", "A project is one file that holds the work of every tool for one design study.", "Projects stay on this device only, so select Export to keep a copy."],
+    img: "assets/tour/01-workspace.jpg", alt: "The Workspace page, with a project schedule that lists two projects.",
+    cap: "The Workspace page with two projects in the project schedule." },
+  { title: "One project, in order",
+    body: ["Each tool reads the parts that come before it and writes its own part.", "The order is Site Model, Tower or Mid-Rise Generator, Plate Planner, Parking Deck, Facade Studio, Sun Study, and Grading Sketch.", "The Tools list on this page uses the same order."],
+    img: "assets/tour/02-pipeline.jpg", alt: "The Tools list on the Workspace page, with numbered cards for each tool in order.",
+    cap: "The Tools list on the Workspace page, cards 1 to 8." },
+  { title: "Start with the site",
+    body: ["The Site Model builds a 3D site from an address and public map data.", "Select Send to Tower Generator or Send to Mid-Rise Generator. Massing is the 3D shape of a building.", "Drag the building on the site to place it."],
+    img: "assets/tour/03-tower-on-site.jpg", alt: "A tower on a real site, with neighboring buildings shown in grey.",
+    cap: "The Tower on a real site, with neighbor buildings in grey." },
+  { title: "Add the later tools",
+    body: ["The Plate Planner, Parking Deck, Facade Studio, Sun Study, and Grading Sketch come after the massing tool.", "Each one opens the project and adds its own part.", "Select the next tool in the Export menu to move on."],
+    img: "assets/tour/04-plate-fill.jpg", alt: "The Plate Planner in plan view, with a floor plate filled with units.",
+    cap: "The Plate Planner fill on the same project." },
+  { title: "Start a project",
+    body: ["Select New project below the Project schedule on this page.", "Or type an address in the Site Model to make a project from a real site.", "To see this tour again, select Tour at the top of this page."],
+    img: "assets/tour/05-grading.jpg", alt: "The Grading Sketch in a 3D view, with areas of cut and fill on the site.",
+    cap: "The Grading Sketch on the same project." }
+];
+
+const Tour = (() => {
+  const N = TOUR_SLIDES.length, SWIPE = 40, SWIPE_OFF = 24;
+  const dlg = $("#tour"), opener = $("#tourOpen"), stage = $("#tourStage"), frame = $("#tourFrame"), img = $("#tourImg");
+  const kick = $("#tourKicker"), title = $("#tourTitle"), body = $("#tourBody"), cap = $("#tourCap"), dotsBox = $("#tourDots");
+  const bBack = $("#tourBack"), bSkip = $("#tourSkip"), bNext = $("#tourNext"), bX = $("#tourClose");
+  const hasModal = typeof dlg.showModal === "function";
+  let tstore = null, cur = 1, active = false;
+  const dots = TOUR_SLIDES.map((s, i) => h("button", { type: "button", "data-n": String(i + 1), "aria-label": "Slide " + (i + 1) + " of " + N }));
+  dotsBox.append(...dots);
+
+  const seen = () => { try { return !!tstore && tstore.getItem(TOUR_KEY) != null; } catch (e) { return false; } };
+  const markSeen = () => { try { if (tstore) tstore.setItem(TOUR_KEY, "seen"); } catch (e) { /* storage blocked: the tour shows again next time */ } };
+  // Open on load only for a first visit that did not come from a tool (?project) and is not a test run (?test).
+  const shouldAutoOpen = (search) => {
+    const p = new URLSearchParams(search == null ? location.search : search);
+    return !p.has("test") && !p.has("project") && !seen();
+  };
+
+  function render(animate) {
+    const s = TOUR_SLIDES[cur - 1], a = document.activeElement;   // read focus first: hiding a button drops it
+    kick.textContent = cur + " of " + N;
+    title.textContent = s.title;
+    body.replaceChildren(...s.body.map((t) => h("p", {}, t)));
+    frame.classList.remove("broke");
+    img.alt = s.alt;
+    if (img.getAttribute("src") !== s.img) img.src = s.img;
+    cap.textContent = s.cap;
+    bBack.hidden = cur === 1;
+    bSkip.hidden = cur === N;
+    bNext.textContent = cur === N ? "Done" : "Next";
+    dots.forEach((d, i) => { if (i + 1 === cur) d.setAttribute("aria-current", "true"); else d.removeAttribute("aria-current"); });
+    if (a === bBack && bBack.hidden || a === bSkip && bSkip.hidden) bNext.focus();   // Back or Skip just hid itself: keep focus inside the dialog
+    if (cur < N) new Image().src = TOUR_SLIDES[cur].img;   // preload the next picture so Next does not flash
+    if (animate) { stage.classList.remove("fade"); void stage.offsetWidth; stage.classList.add("fade"); }
+  }
+  function go(n) {
+    const k = Math.max(1, Math.min(N, Math.round(Number(n)) || 1));
+    if (k === cur) return cur;
+    cur = k;
+    render(true);
+    return cur;
+  }
+  const next = () => go(cur + 1);
+  const back = () => go(cur - 1);
+
+  function open() {
+    cur = 1;
+    active = true;
+    render(false);
+    if (!dlg.open) { if (hasModal) dlg.showModal(); else dlg.setAttribute("open", ""); }
+    bNext.focus();
+  }
+  // Every way out ends here: write the key, put focus back on the Tour link.
+  function finish() {
+    if (!active) return;
+    active = false;
+    markSeen();
+    opener.focus();
+  }
+  function close() {
+    if (dlg.open) { if (typeof dlg.close === "function") dlg.close(); else dlg.removeAttribute("open"); }
+    finish();
+  }
+  const init = (o) => { tstore = o && "store" in o ? o.store : tstore; return api; };
+
+  opener.addEventListener("click", open);
+  bX.addEventListener("click", close);
+  bSkip.addEventListener("click", close);
+  bBack.addEventListener("click", back);
+  bNext.addEventListener("click", () => { if (cur === N) close(); else next(); });
+  dotsBox.addEventListener("click", (e) => { const b = e.target.closest("button[data-n]"); if (b) go(Number(b.dataset.n)); });
+  dlg.addEventListener("keydown", (e) => {
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+    if (e.key === "ArrowRight") { e.preventDefault(); next(); }
+    else if (e.key === "ArrowLeft") { e.preventDefault(); back(); }
+    else if (e.key === "Escape") { e.preventDefault(); close(); }
+  });
+  dlg.addEventListener("close", () => { if (!dlg.open) finish(); });   // a close the browser started, such as a system back gesture
+  img.addEventListener("error", () => frame.classList.add("broke"));
+  img.addEventListener("load", () => frame.classList.remove("broke"));
+
+  // Swipe: pointer events on the stage, mouse drags included.
+  let sid = null, sx = 0, sy = 0;
+  stage.addEventListener("pointerdown", (e) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    sid = e.pointerId; sx = e.clientX; sy = e.clientY;
+    try { stage.setPointerCapture(e.pointerId); } catch (err) { /* not capturable: the stage still sees the release */ }
+  });
+  stage.addEventListener("pointerup", (e) => {
+    if (e.pointerId !== sid) return;
+    sid = null;
+    const dx = e.clientX - sx, dy = e.clientY - sy;
+    if (Math.abs(dx) >= SWIPE && Math.abs(dy) < SWIPE_OFF) { if (dx < 0) next(); else back(); }
+  });
+  stage.addEventListener("pointercancel", () => { sid = null; });
+
+  const api = { init, shouldAutoOpen, open, close, next, back, go, seen, slide: () => cur, isOpen: () => dlg.open, N };
+  return api;
+})();
+
 /* ---------- self-test: add ?test to the URL ---------- */
 async function selfTest() {
   const out = $("#testOut"), mem = memStore();   // every check uses this object; real localStorage is never used
@@ -561,6 +742,134 @@ async function selfTest() {
     ok(probe(() => { throw new Error("blocked"); }) === null, "throwing getter accepted");
     ok(probe(() => ({ getItem() { throw new Error("blocked"); } })) === null, "throwing getItem accepted");
   });
+  /* ---- first-visit tour: each check gets its own memory store; the dialog is closed between steps ---- */
+  const dlg = $("#tour"), tk = () => $("#tourKicker").textContent;
+  const fresh = () => { const s = memStore(); Tour.init({ store: s }); return s; };
+  const shut = () => { if (Tour.isOpen()) Tour.close(); };
+  const dotsOn = () => [...document.querySelectorAll("#tourDots button")].map((d) => d.getAttribute("aria-current") === "true");
+  const key = (el, k) => el.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true }));
+  const ptr = (type, x, y) => $("#tourStage").dispatchEvent(new PointerEvent(type, { pointerId: 7, clientX: x, clientY: y, button: 0, pointerType: "touch", bubbles: true }));
+  await t("tour opens on a first visit", () => {
+    fresh();
+    ok(Tour.shouldAutoOpen("") === true, "a fresh store with no query should open the tour");
+  });
+  await t("tour stays closed when the key is set", () => {
+    const s = fresh();
+    s.setItem(TOUR_KEY, "seen");
+    ok(Tour.seen() && Tour.shouldAutoOpen("") === false, "a stored key should keep the tour closed");
+  });
+  await t("tour stays closed with ?project or ?test in the URL", () => {
+    fresh();
+    ok(Tour.shouldAutoOpen("?project=x") === false, "?project=x should keep the tour closed");
+    ok(Tour.shouldAutoOpen("?a=1&project=x") === false, "project among other parameters should keep the tour closed");
+    ok(Tour.shouldAutoOpen("?test") === false, "?test should keep the tour closed");
+  });
+  await t("tour: open shows slide 1 with Back hidden and Skip shown", () => {
+    fresh(); Tour.open();
+    ok(dlg.open && dlg.getAttribute("aria-modal") === "true", "dialog is not open and modal");
+    const lab = document.getElementById(dlg.getAttribute("aria-labelledby"));
+    ok(lab && lab.textContent.trim() === TOUR_SLIDES[0].title, "dialog is not labelled by the slide title");
+    ok(tk() === "1 of 5", "kicker reads " + tk());
+    ok($("#tourBack").hidden && !$("#tourSkip").hidden, "Back should be hidden and Skip shown");
+    ok($("#tourNext").textContent === "Next", "Next reads " + $("#tourNext").textContent);
+    ok(dotsOn().join() === "true,false,false,false,false", "dots read " + dotsOn());
+    shut();
+  });
+  await t("tour: Next four times reaches slide 5 with Done", () => {
+    fresh(); Tour.open();
+    for (let i = 0; i < 4; i++) $("#tourNext").click();
+    ok(tk() === "5 of 5" && Tour.slide() === 5, "kicker reads " + tk());
+    ok($("#tourNext").textContent === "Done" && $("#tourSkip").hidden && !$("#tourBack").hidden, "slide 5 buttons are wrong");
+    ok(dotsOn().join() === "false,false,false,false,true", "dots read " + dotsOn());
+    shut();
+  });
+  await t("tour: Back moves to slide 4, go(2) to slide 2, dots follow", () => {
+    fresh(); Tour.open();
+    Tour.go(5); $("#tourBack").click();
+    ok(tk() === "4 of 5", "Back gave " + tk());
+    Tour.go(2);
+    ok(tk() === "2 of 5" && dotsOn().join() === "false,true,false,false,false", "go(2) gave " + tk() + " " + dotsOn());
+    document.querySelectorAll("#tourDots button")[2].click();
+    ok(tk() === "3 of 5" && dotsOn()[2], "dot 3 did not jump");
+    ok(document.querySelectorAll("#tourDots button").length === 5 && [...document.querySelectorAll("#tourDots button")].every((d, i) => d.getAttribute("aria-label") === "Slide " + (i + 1) + " of 5"), "dot labels are wrong");
+    shut();
+  });
+  await t("tour: arrow keys move the slide", () => {
+    fresh(); Tour.open();
+    key(dlg, "ArrowRight"); ok(tk() === "2 of 5", "ArrowRight gave " + tk());
+    key(dlg, "ArrowRight"); key(dlg, "ArrowLeft"); ok(tk() === "2 of 5", "ArrowLeft gave " + tk());
+    key(dlg, "ArrowLeft"); key(dlg, "ArrowLeft"); ok(tk() === "1 of 5", "arrows past the start gave " + tk());
+    shut();
+  });
+  await t("tour: a swipe of 40 px moves the slide, a short or tilted one does not", () => {
+    fresh(); Tour.open();
+    ptr("pointerdown", 300, 200); ptr("pointerup", 255, 205);
+    ok(tk() === "2 of 5", "swipe left gave " + tk());
+    ptr("pointerdown", 300, 200); ptr("pointerup", 340, 205);
+    ok(tk() === "1 of 5", "swipe right gave " + tk());
+    ptr("pointerdown", 300, 200); ptr("pointerup", 270, 200);
+    ptr("pointerdown", 300, 200); ptr("pointerup", 240, 260);
+    ok(tk() === "1 of 5", "a 30 px or a tilted swipe moved the slide to " + tk());
+    shut();
+  });
+  await t("tour: every slide has a picture under assets/tour, alt text, and copy", () => {
+    ok(TOUR_SLIDES.length === 5, "expected 5 slides");
+    for (const s of TOUR_SLIDES) {
+      ok(/^assets\/tour\/[\w.-]+\.jpg$/.test(s.img), "picture path " + s.img);
+      ok(s.alt && s.alt.trim().length > 10, "alt text missing on " + s.img);
+      ok(s.title && s.cap && s.body.length >= 2 && s.body.length <= 3, "title, caption, or sentences missing on " + s.img);
+    }
+    fresh(); Tour.open();
+    const im = $("#tourImg");
+    ok(im.getAttribute("width") === "1200" && im.getAttribute("height") === "750", "picture needs width 1200 and height 750");
+    for (let i = 1; i <= 5; i++) { Tour.go(i); ok(im.getAttribute("src") === TOUR_SLIDES[i - 1].img && im.alt === TOUR_SLIDES[i - 1].alt, "slide " + i + " picture or alt is wrong"); }
+    shut();
+  });
+  await t("tour: Done writes the key and closes", () => {
+    const s = fresh(); Tour.open();
+    ok(s.getItem(TOUR_KEY) === null, "key written before the tour ended");
+    Tour.go(5); $("#tourNext").click();
+    ok(s.getItem(TOUR_KEY) === "seen" && !dlg.open, "key is " + s.getItem(TOUR_KEY) + ", open is " + dlg.open);
+  });
+  await t("tour: Skip writes the key and closes", () => {
+    const s = fresh(); Tour.open();
+    $("#tourSkip").click();
+    ok(s.getItem(TOUR_KEY) === "seen" && !dlg.open, "key is " + s.getItem(TOUR_KEY) + ", open is " + dlg.open);
+  });
+  await t("tour: the close button writes the key and closes", () => {
+    const s = fresh(); Tour.open();
+    $("#tourClose").click();
+    ok(s.getItem(TOUR_KEY) === "seen" && !dlg.open, "key is " + s.getItem(TOUR_KEY));
+  });
+  await t("tour: Escape closes and writes the key", () => {
+    const s = fresh(); Tour.open();
+    key(dlg, "Escape");
+    ok(s.getItem(TOUR_KEY) === "seen" && !dlg.open, "key is " + s.getItem(TOUR_KEY) + ", open is " + dlg.open);
+  });
+  await t("tour: the Tour link reopens at slide 1 after a close", () => {
+    fresh(); Tour.open(); Tour.go(4); Tour.close();
+    ok(!dlg.open, "tour did not close");
+    $("#tourOpen").click();
+    ok(dlg.open && tk() === "1 of 5", "reopen gave open " + dlg.open + " " + tk());
+    shut();
+  });
+  await t("tour: focus returns to the Tour link on close", () => {
+    fresh(); Tour.open();
+    ok(dlg.contains(document.activeElement), "focus did not move into the dialog");
+    Tour.close();
+    ok(document.activeElement === $("#tourOpen"), "focus is on " + (document.activeElement && (document.activeElement.id || document.activeElement.tagName)));
+    Tour.open(); key(dlg, "Escape");
+    ok(document.activeElement === $("#tourOpen"), "focus after Escape is on " + (document.activeElement && (document.activeElement.id || document.activeElement.tagName)));
+  });
+  await t("tour: blocked storage never throws", () => {
+    Tour.init({ store: { getItem() { throw new Error("blocked"); }, setItem() { throw new Error("blocked"); } } });
+    ok(Tour.shouldAutoOpen("") === true, "blocked storage should still allow the tour");
+    Tour.open(); Tour.close();
+    ok(!dlg.open, "tour did not close");
+    Tour.init({ store: null });
+    ok(Tour.shouldAutoOpen("") === true, "no storage should still allow the tour");
+  });
+  Tour.init({ store: tourStore });   // back to the page's own tour store
   out.textContent += "\n" + pass + " passed, " + fail + " failed\n";
   out.dataset.fail = fail;
   out.dataset.done = "1";
@@ -591,6 +900,10 @@ if (TEST) { $("#testNote").hidden = false; $("#testBox").hidden = false; seedSam
 if (store) $("#newBtn").disabled = $("#impBtn").disabled = false;
 else $("#notice").hidden = false;
 render();
+// The tour keeps its own key: test mode uses a separate in-memory store, never real storage.
+const tourStore = TEST ? memStore() : store;
+Tour.init({ store: tourStore });
+if (Tour.shouldAutoOpen()) Tour.open();
 addEventListener("pageshow", (e) => { if (e.persisted) render(); });
 document.addEventListener("visibilitychange", () => { if (!document.hidden) render(); });
 addEventListener("storage", (e) => { if (!document.hidden && (!e.key || e.key.startsWith("cmrlm.project."))) render(); });

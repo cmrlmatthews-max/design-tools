@@ -202,6 +202,7 @@ PARTS = [
     '06d_sunhours.js',        # SunLayer
     '07_controls.js',
     '08_ui.js',
+    os.path.join(SHARED, '08x_tip.js'),            # FirstTip (shared page part)
     '08b_prompts.js',
     '08c_sketchup.js',
     '08d_sun.js',             # SunUI
@@ -220,6 +221,7 @@ PARTS = [
     '12h_tests_nosite.js',
     '12i_tests_site.js',      # the site layer (tests 1 to 6)
     '12j_tests_gizmo.js',     # placement gizmo tests (phase C)
+    '12k_tests_tip.js',      # the first-visit tip
     '13_start.js',
 ]
 # parts another build phase writes: left out until the file exists

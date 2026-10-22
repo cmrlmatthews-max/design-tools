@@ -19,7 +19,17 @@ PlacementGizmo.init({   // 06y_placement.js: drag the building to place it, turn
 ProjectUI.start();
 
 const optionInfo = (o) => ({ id: o.id, name: o.name, updatedAt: o.updatedAt });
+// First-visit tip (build/shared/08x_tip.js): one short card the first time this tool opens. Never shows on ?test.
+FirstTip.init({
+  tool: "midrise",
+  title: "Mid-Rise Generator",
+  purpose: "The Mid-Rise Generator lays out bars and courtyards, with unit and parking estimates.",
+  tries: ["Select a template from the Templates menu.", "Click a bar in the view to open its row."],
+  help: () => Help.toggle(),
+});
+
 window.__midrise = {
+  firstTip: FirstTip,
   placementGizmo: PlacementGizmo,
   getState: () => Store.snapshot(),
   setState: (path, value) => { Store.set(path, value, { live: false }); },

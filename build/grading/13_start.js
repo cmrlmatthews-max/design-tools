@@ -13,7 +13,17 @@ SectionView.init();
 ProjectUI.start();
 
 const optionInfo = (o) => ({ id: o.id, name: o.name, updatedAt: o.updatedAt });
+// First-visit tip (build/shared/08x_tip.js): one short card the first time this tool opens. Never shows on ?test.
+FirstTip.init({
+  tool: "grading",
+  title: "Grading Sketch",
+  purpose: "The Grading Sketch shapes the ground and sets the finished floor elevation of each building.",
+  tries: ["Open a project that has a site.", "In Balance and steps, select The whole site."],
+  help: () => Help.toggle(),
+});
+
 window.__grading = {
+  firstTip: FirstTip,
   getState: () => Store.snapshot(),
   setState: (path, value) => { Store.set(path, value, { live: false }); },
   setStateLive: (path, value) => { Store.set(path, value, { live: true }); },

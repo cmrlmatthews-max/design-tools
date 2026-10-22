@@ -89,5 +89,5 @@ Caution: the work session cannot push to GitHub. It works on a download. Merge b
 
 | Idea | Note | Added |
 |---|---|---|
-| First-visit tour | When a person first opens the Workspace page, show a short tour of the tools: one popup box with a few slides (what each tool does, the pipeline order, how to start a project). Show it once; a "Tour" link brings it back. | October 22, 2026 (Cade) |
+| First-visit tour | Built October 22, 2026: a five-slide tour on the Workspace page (Tour link brings it back) and a one-card tip in every tool. Pictures: `npm run shots:tour`. Plan: `docs/first-visit-tour-technical-plan.md`. | October 22, 2026 (Cade) |
 | Tower help panel | The Tower Generator has no Help panel. The other five tools have one. Add it and place the Site paragraph there. | October 22, 2026 |

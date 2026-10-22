@@ -11,7 +11,17 @@ Select.init();
 ProjectUI.start();
 
 const optionInfo = (o) => ({ id: o.id, name: o.name, updatedAt: o.updatedAt });
+// First-visit tip (build/shared/08x_tip.js): one short card the first time this tool opens. Never shows on ?test.
+FirstTip.init({
+  tool: "plate",
+  title: "Plate Planner",
+  purpose: "The Plate Planner fills a floor plate with units or hotel keys and counts the area.",
+  tries: ["In Source and program, select Hotel or Multifamily.", "Turn on Bay lines in the View tab."],
+  help: () => Help.toggle(),
+});
+
 window.__plate = {
+  firstTip: FirstTip,
   getState: () => Store.snapshot(),
   setState: (path, value) => { Store.set(path, value, { live: false }); },
   setStateLive: (path, value) => { Store.set(path, value, { live: true }); },

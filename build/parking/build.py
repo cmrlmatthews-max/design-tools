@@ -169,6 +169,7 @@ PARTS = [
     '06c_site.js',                                  # SiteLayer adapter
     '07_controls.js',
     '08_ui.js',
+    os.path.join(SHARED, '08x_tip.js'),            # FirstTip (shared page part)
     '08b_prompts.js',
     '08c_sketchup.js',
     '08e_help.js',
@@ -182,6 +183,7 @@ PARTS = [
     '12d_tests_project.js',
     '12e_tests_site.js',
     '12j_tests_gizmo.js',
+    '12k_tests_tip.js',      # the first-visit tip
     '13_start.js',
 ]
 missing = [p for p in PARTS if not os.path.isfile(os.path.join(HERE, p))]
