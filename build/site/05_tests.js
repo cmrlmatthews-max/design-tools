@@ -310,7 +310,7 @@ const SiteTests = (() => {
         [true, true, true, 1, null, true, true, true]);
     });
     await t('project: siteState has query, lat, lon, size, release and walks', () => eq(siteState({ ...pmeta, walks: true }),
-      { query: 'Test Address', lat: LAT, lon: LON, size: SIZE, release: '2026-10-14.0', walks: true }));
+      { query: 'Test Address', lat: LAT, lon: LON, size: SIZE, release: '2026-10-14.0', walks: true, removed: [] }));
     await t('project: writeSection, validate, saveProject and loadProject keep the site section (in memory)', () => {
       const mem = memStorage(), doc = siteProjectDoc();
       const v = ProjectMod.validate(doc);
@@ -403,6 +403,179 @@ const SiteTests = (() => {
       const at0 = mem.getItem(key);
       await new Promise((r) => setTimeout(r, CONFIG.projectSaveMs + 250));
       return eq([at0, !!mem.getItem(key), CONFIG.projectSaveMs], [null, true, 1000]);
+    }));
+
+    /* ---- remove existing buildings (docs/site-remove-technical-plan.md, section 7.2) ---- */
+    const bById = (id) => model.buildings.find((b) => b.id === id);
+    const ptOf = (id, top = true) => {                       // client point of the middle of a building (roof or ground)
+      const b = bById(id), xs = b.ring.map((q) => q[0]), ys = b.ring.map((q) => q[1]);
+      const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+      return Scene.screenOf(cx, cy, top ? b.top : Scene.meshAt(cx, cy));
+    };
+    const groundPt = (x, y) => Scene.screenOf(x, y, Scene.meshAt(x, y));
+    const canvasEl = () => document.querySelector('#canvasHost canvas');
+    /** pointerdown + pointerup as a finger would send them. They go to the canvas host (the parent of the canvas): OrbitControls listens on the canvas itself
+        and would throw on a pointer id that the browser does not know. A real mouse click on the canvas reaches the same listener by bubbling. */
+    const tapAt = (from, to = from) => {
+      const mk = (type, p) => new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 41, pointerType: 'touch', isPrimary: true, button: 0, clientX: p.x, clientY: p.y });
+      const c = $('canvasHost');
+      c.dispatchEvent(mk('pointerdown', from));
+      c.dispatchEvent(mk('pointerup', to));
+    };
+    const lineObjects = () => Scene.groups().buildings.children.filter((o) => o.userData.kind === 'removed');
+    const cardText = () => ($('selCard').hidden ? '' : $('selCard').textContent);
+    /** Runs fn in a closed project with the synthetic site in the scene and an empty removed list; puts it all back. */
+    const withRemove = (fn) => inProject(async (mem, urls) => {
+      Scene.setModel(model);
+      Object.assign(App.state, { removed: new Set(), removedKey: null, selected: null });
+      App.renderCard(); App.renderMetrics();
+      try { return await fn(mem, urls); } finally {
+        Object.assign(App.state, { removed: new Set(), removedKey: null, selected: null });
+        Scene.setModel(model);
+        App.renderCard(); App.renderMetrics();
+      }
+    });
+    const runFnFor = (lat = LAT) => async () => ({ ...fakeResult(), loc: { lat, lon: LON, label: 'Test Address' }, failed: [], timings: {} });
+
+    await t('remove: Scene.pick at the roof of b-data returns b-data; at empty ground it returns null', () => withRemove(() => {
+      const hit = Scene.pick(ptOf('b-data').x, ptOf('b-data').y), e = groundPt(900, 500), none = Scene.pick(e.x, e.y);
+      const hit2 = Scene.pick(ptOf('b-court').x - 1, ptOf('b-court').y);
+      return eq([hit && hit.id, hit && hit.building.rule, hit && hit.removed, none, hit2 && hit2.id], ['b-data', 'data', false, null, 'b-court']);
+    }));
+    await t('remove: the estimate mesh is picked too (b-est)', () => withRemove(() => {
+      const p = ptOf('b-est'), hit = Scene.pick(p.x, p.y);
+      return eq(hit && hit.id, 'b-est');
+    }));
+    await t('remove: a tap on a building opens the card (Building, 98.4 ft, rule, id, Remove); a 20 px drag does not', () => withRemove(() => {
+      const p = ptOf('b-data');
+      tapAt({ x: p.x, y: p.y }, { x: p.x + 20, y: p.y });
+      const afterDrag = $('selCard').hidden;
+      tapAt(p);
+      const txt = cardText();
+      return eq([afterDrag, txt.includes('Building'), txt.includes('98.4 ft'), txt.includes('height from the data'), txt.includes('b-data'), $('selAction').textContent, Scene.selection(), Scene.groups().site.children.some((g) => g.children && g.children.length > 0)],
+        [true, true, true, true, true, 'Remove', 'b-data', true]);
+    }));
+    await t('remove: Escape and a tap on empty ground close the card', () => withRemove(() => {
+      const p = ptOf('b-data'), e = groundPt(900, 500);
+      tapAt(p);
+      const open = !$('selCard').hidden;
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      const afterEsc = [$('selCard').hidden, Scene.selection()];
+      tapAt(p); tapAt(e);
+      return eq([open, afterEsc, $('selCard').hidden, Scene.selection()], [true, [true, null], true, null]);
+    }));
+    await t('remove: Remove flags b-data (buildings 3, removed 1, one dashed outline, panel line) and the card says Restore', () => withRemove(() => {
+      tapAt(ptOf('b-data'));
+      $('selAction').click();
+      const i = Scene.info(), line = lineObjects()[0];
+      return eq([i.buildings, i.removed, lineObjects().length, line && line.material.isLineDashedMaterial, line && !!line.geometry.getAttribute('lineDistance'), $('removedText') && $('removedText').textContent, $('selAction').textContent, App.state.selected.id, [...App.state.removed]],
+        [3, 1, 1, true, true, 'Removed buildings: 1', 'Restore', 'b-data', ['b-data']]);
+    }));
+    await t('remove: a removed building cannot be hit as a solid; the roof point is empty and no solid mesh holds it', () => withRemove(() => {
+      App.removeBuilding('b-data');
+      const p = ptOf('b-data'), hit = Scene.pick(p.x, p.y);
+      return eq([hit === null || hit.removed === true || hit.id !== 'b-data', Scene.info().buildingMeshes], [true, 2]);
+    }));
+    await t('remove: a tap on the dashed footprint selects the removed building and the card opens with Restore', () => withRemove(() => {
+      App.removeBuilding('b-data');
+      App.selectHit(null);
+      const g = ptOf('b-data', false), hit = Scene.pick(g.x, g.y);
+      tapAt(g);
+      return eq([hit && hit.id, hit && hit.removed, $('selCard').hidden, $('selAction') && $('selAction').textContent, cardText().includes('Removed')], ['b-data', true, false, 'Restore', true]);
+    }));
+    await t('remove: Restore brings the solid back and hides the panel line', () => withRemove(() => {
+      tapAt(ptOf('b-data')); $('selAction').click();
+      $('selAction').click();
+      const i = Scene.info();
+      return eq([i.buildings, i.removed, lineObjects().length, !!$('removedLine'), $('selAction').textContent, Scene.pick(ptOf('b-data').x, ptOf('b-data').y).id], [4, 0, 0, false, 'Remove', 'b-data']);
+    }));
+    await t('remove: two buildings, then Restore all clears both', () => withRemove(() => {
+      App.removeBuilding('b-data'); App.removeBuilding('b-court');
+      const two = [Scene.info().buildings, Scene.info().removed, $('removedText').textContent, Scene.removedIds()];
+      $('restoreAll').click();
+      return eq([two, Scene.info().buildings, Scene.info().removed, !!$('removedLine'), [...App.state.removed]], [[2, 2, 'Removed buildings: 2', ['b-court', 'b-data']], 4, 0, false, []]);
+    }));
+    await t('remove: setRemoved rebuilds only the buildings (camera and ground stay, still 2 meshes, courtyard outline has the hole)', () => withRemove(() => {
+      const cam = Scene.camera(), before = cam.position.toArray(), ground = Scene.groups().ground.children[0];
+      App.removeBuilding('b-court');
+      const line = lineObjects()[0], n = line.geometry.getAttribute('position').count / 2;
+      const r = [cam.position.toArray().join() === before.join(), Scene.groups().ground.children[0] === ground, Scene.info().buildingMeshes, n > 20];
+      return eq(r, [true, true, 2, true]);
+    }));
+    await t('remove: the outline hides when the Buildings layer is off, and nothing is picked then', () => withRemove(() => {
+      App.removeBuilding('b-data');
+      Scene.setLayer('buildings', false);
+      const p = ptOf('b-court'), g = ptOf('b-data', false), r = [Scene.groups().buildings.visible, Scene.pick(p.x, p.y), Scene.pick(g.x, g.y)];
+      Scene.setLayer('buildings', true);
+      return eq(r, [false, null, null]);
+    }));
+    await t('remove: Remove on the card writes the removed list to meta, the DXF and the notes', () => withRemove(() => {
+      App.removeBuilding('b-data');
+      const m = App.metaOf(), dxf = App.fileFor('dxf').text, md = App.fileFor('notes').text, poly = (layer) => (dxf.match(new RegExp(`POLYLINE\\n\\s*8\\n${layer}\\n`, 'g')) || []).length;
+      return eq([m.removed, poly('BLDG-DATA'), poly('BLDG-REMOVED'), md.includes('Removed buildings: 1')], [['b-data'], 2, 1, true]);
+    }));
+    await t('remove: no removal, no BLDG-REMOVED layer content in the DXF', () => withRemove(() => {
+      const dxf = App.fileFor('dxf').text;
+      return eq([(dxf.match(/POLYLINE\n\s*8\nBLDG-REMOVED\n/g) || []).length, (dxf.match(/POLYLINE\n\s*8\nBLDG-DATA\n/g) || []).length], [0, 3]);
+    }));
+    await t('remove: with a project open, Remove writes site.state.removed and derived.buildings[].removed after the save delay', () => withRemove(async (mem) => {
+      const doc = App.projectCreate('Remove test', { quiet: true });
+      tapAt(ptOf('b-data'));
+      $('selAction').click();
+      const at0 = ProjectMod.getSection(ProjectMod.loadProject(mem, doc.id), 'site').state.removed;
+      await new Promise((r) => setTimeout(r, CONFIG.projectSaveMs + 300));
+      const sec = ProjectMod.getSection(ProjectMod.loadProject(mem, doc.id), 'site');
+      const flags = Object.fromEntries(sec.derived.buildings.map((b) => [b.id, 'removed' in b ? b.removed : 'none']));
+      return eq([at0, sec.state.removed, sec.derived.buildings.length, flags], [[], ['b-data'], 4, { 'b-data': true, 'b-floors': 'none', 'b-court': 'none', 'b-est': 'none' }]);
+    }));
+    await t('remove: Restore all writes an empty list and no removed keys', () => withRemove(async (mem) => {
+      const doc = App.projectCreate('Remove test 2', { quiet: true });
+      App.removeBuilding('b-data'); App.removeBuilding('b-est');
+      App.restoreAll();
+      App.flushProject();
+      const sec = ProjectMod.getSection(ProjectMod.loadProject(mem, doc.id), 'site');
+      return eq([sec.state.removed, sec.derived.buildings.some((b) => 'removed' in b)], [[], false]);
+    }));
+    await t('remove: Send to the Tower carries the removed list in the project', () => withRemove(async (mem, urls) => {
+      App.state.typed = 'Test Address';
+      App.removeBuilding('b-court');
+      await App.projectSend('tower');
+      const sec = ProjectMod.getSection(ProjectMod.loadProject(mem, App.project.doc.id), 'site');
+      return eq([urls.length, sec.state.removed, sec.derived.buildings.filter((b) => b.removed).map((b) => b.id)], [1, ['b-court'], ['b-court']]);
+    }));
+    await t('remove: reopening a project restores state.removed and the outline; an id that no longer exists is dropped', () => withRemove(async () => {
+      const doc = siteProjectDoc({ removed: ['b-data', 'gone-id'] });
+      App.openProjectDoc(doc);
+      const req = App.siteRequest(doc);
+      const before = [...App.state.removed].sort();
+      await App.go({ ...req, runFn: runFnFor() });
+      App.flushProject();
+      const i = Scene.info();
+      return eq([before, [...App.state.removed], i.buildings, i.removed, lineObjects().length, $('removedText').textContent, ProjectMod.getSection(App.project.doc, 'site').state.removed], [['b-data', 'gone-id'], ['b-data'], 3, 1, 1, 'Removed buildings: 1', ['b-data']]);
+    }));
+    await t('remove: loading the same address again keeps the removed list', () => withRemove(async () => {
+      await App.go({ text: 'Test Address', size: SIZE, runFn: runFnFor() });
+      App.removeBuilding('b-data');
+      await App.go({ text: 'Test Address', size: SIZE, runFn: runFnFor() });
+      return eq([[...App.state.removed], Scene.info().removed], [['b-data'], 1]);
+    }));
+    await t('remove: a new address clears the removed list', () => withRemove(async () => {
+      await App.go({ text: 'Test Address', size: SIZE, runFn: runFnFor() });
+      App.removeBuilding('b-data');
+      await App.go({ text: 'Other Address', size: SIZE, runFn: runFnFor(LAT + 0.01) });
+      return eq([[...App.state.removed], Scene.info().buildings, Scene.info().removed, !!$('removedLine')], [[], 4, 0, false]);
+    }));
+    await t('remove: a piece id (x~2) removes every piece of the feature', () => withRemove(() => {
+      App.removeBuilding('b-data~2');
+      return eq([[...App.state.removed], Scene.info().removed], [['b-data'], 1]);
+    }));
+    await t('remove: the help block has the Remove buildings paragraph', () => eq([!!$('helpSec'), $('helpRemove').textContent.startsWith('Click a building in the 3D view'), $('helpRemove').textContent.includes('BLDG-REMOVED')], [true, true, true]));
+    await t('remove: the scene renders with outlines and a selection without a GL error', () => withRemove(() => {
+      App.removeBuilding('b-data');
+      App.selectHit({ id: 'b-court', building: bById('b-court') });
+      Scene.renderNow();
+      const gl = canvasEl().getContext('webgl2');
+      return !gl || gl.getError() === 0 || `gl error ${gl.getError()}`;
     }));
 
     return results;

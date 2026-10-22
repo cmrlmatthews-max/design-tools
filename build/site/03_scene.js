@@ -31,10 +31,17 @@ const Scene = (() => {
   let site = null;                          // { model, S, gmin, gmax, top, meshAt }
   let vscale = 1, contour = 0;
   const cameraListeners = [];
+  const pickListeners = [];
+  const TAP_PX = 6, TAP_MS = 500;           // a click selects only when it travels under 6 px and lasts under 500 ms
+  let removedSet = new Set();               // ids of removed buildings (base ids, no ~n suffix)
+  let pickSets = [];                        // [{ mesh, unit, ranges: [{ b, start, count }] }] for the two merged building meshes
+  let removedBuildings = [];                // model buildings that are removed (footprints for picking the outlines)
+  let groundMesh = null, selGroup = null, selected = null;
+  const raycaster = new THREE.Raycaster();
   const layerVisible = { ground: true, buildings: true, roads: true, walks: false, trees: true, water: true };
   const G = {};                             // layer groups
   const M = {};                             // materials
-  const info = { buildings: 0, buildingMeshes: 0, trees: 0, waterAreas: 0, roadTriangles: 0, walkTriangles: 0, triangles: 0 };
+  const info = { buildings: 0, removed: 0, buildingMeshes: 0, trees: 0, waterAreas: 0, roadTriangles: 0, walkTriangles: 0, triangles: 0 };
   const contourU = { uInterval: { value: 2 }, uOn: { value: 0 }, uContourColor: { value: new THREE.Color('#3a424a') } };
 
   const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -77,6 +84,9 @@ const Scene = (() => {
     M.canopy = std({ flatShading: true });
     M.trunk = std();
     M.site = new THREE.LineBasicMaterial();
+    M.removed = new THREE.LineDashedMaterial({ dashSize: 8, gapSize: 5 });
+    M.selFill = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.35, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+    M.selLine = new THREE.LineBasicMaterial();
   }
   function applyTheme() {
     if (!scene) return;
@@ -92,6 +102,9 @@ const Scene = (() => {
     M.canopy.color.copy(cssColor('--scene-tree'));
     M.trunk.color.copy(cssColor('--scene-trunk'));
     M.site.color.copy(cssColor('--scene-site'));
+    M.removed.color.copy(cssColor('--scene-edge'));
+    M.selFill.color.copy(cssColor('--accent'));
+    M.selLine.color.copy(cssColor('--accent'));
     contourU.uContourColor.value.copy(cssColor('--scene-contour'));
     M.ground.color.set(0xffffff);
     paintGround();
@@ -158,6 +171,7 @@ const Scene = (() => {
     groundGeo = geo;
     const mesh = new THREE.Mesh(geo, M.ground);
     mesh.userData.kind = 'ground';
+    groundMesh = mesh;
     return mesh;
   }
 
@@ -225,33 +239,189 @@ const Scene = (() => {
   }
 
   /* ---- buildings ------------------------------------------------------------------ */
+  const baseId = (id) => String(id).replace(/~\d+$/, '');       // a piece id "x~2" belongs to the feature "x"
+  const isRemoved = (b) => removedSet.has(baseId(b.id));
+
+  /** The solid of one building, in world space (null for a bad ring). */
+  function buildingGeometry(b) {
+    if (!b.ring || b.ring.length < 3) return null;
+    const shape = new THREE.Shape(b.ring.map((q) => new THREE.Vector2(q[0], q[1])));
+    for (const hole of b.holes || []) if (hole.length >= 3) shape.holes.push(new THREE.Path(hole.map((q) => new THREE.Vector2(q[0], q[1]))));
+    const geo = new THREE.ExtrudeGeometry(shape, { depth: b.height + 1, bevelEnabled: false, steps: 1, curveSegments: 1 });
+    geo.deleteAttribute('uv');
+    geo.applyMatrix4(planMatrix(b.base - 1));
+    return geo;
+  }
+
+  /** Dashed or plain line segments for the rings of buildings, draped on the ground every 10 ft. `lineDistance` runs along each ring so dashes are even. */
+  function drapedRings(list, lift, mat) {
+    const pos = [], dist = [];
+    for (const b of list) {
+      for (const ring of [b.ring, ...(b.holes || [])]) {
+        if (!ring || ring.length < 3) continue;
+        const pts = densifyRing(trimRing(ring), 10);
+        let d = 0;
+        for (let i = 0; i < pts.length; i++) {
+          const p = pts[i], q = pts[(i + 1) % pts.length], L = Math.hypot(q[0] - p[0], q[1] - p[1]);
+          pos.push(p[0], site.meshAt(p[0], p[1]) + lift, -p[1], q[0], site.meshAt(q[0], q[1]) + lift, -q[1]);
+          dist.push(d, d + L);
+          d += L;
+        }
+      }
+    }
+    if (!pos.length) return null;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    if (mat.isLineDashedMaterial) g.setAttribute('lineDistance', new THREE.Float32BufferAttribute(dist, 1));
+    return new THREE.LineSegments(g, mat);
+  }
+
+  /** Solids for every building that is not removed (two merged meshes with per-building ranges) and one dashed outline object for the removed ones. */
   function buildBuildings(buildings) {
     const data = [], est = [];
+    const gone = [];
+    pickSets = [];
     let count = 0;
     for (const b of buildings) {
       try {
-        if (!b.ring || b.ring.length < 3) continue;
-        const shape = new THREE.Shape(b.ring.map((q) => new THREE.Vector2(q[0], q[1])));
-        for (const hole of b.holes || []) if (hole.length >= 3) shape.holes.push(new THREE.Path(hole.map((q) => new THREE.Vector2(q[0], q[1]))));
-        const geo = new THREE.ExtrudeGeometry(shape, { depth: b.height + 1, bevelEnabled: false, steps: 1, curveSegments: 1 });
-        geo.deleteAttribute('uv');
-        geo.applyMatrix4(planMatrix(b.base - 1));
-        (b.rule === 'estimate' ? est : data).push(geo);
+        if (isRemoved(b)) { if (b.ring && b.ring.length >= 3) gone.push(b); continue; }
+        const geo = buildingGeometry(b);
+        if (!geo) continue;
+        (b.rule === 'estimate' ? est : data).push({ geo, b });
         count++;
       } catch (e) { console.warn('building skipped', b && b.id, e); }
     }
     const out = [];
-    for (const [list, mat] of [[data, M.building], [est, M.estimate]]) {
-      if (!list.length) continue;
+    for (const [items, mat] of [[data, M.building], [est, M.estimate]]) {
+      if (!items.length) continue;
+      const list = items.map((it) => it.geo);
+      const unit = list[0].index ? 'index' : 'vertex';
+      const ranges = [];
+      let at = 0;
+      for (const it of items) {
+        const n = it.geo.index ? it.geo.index.count : it.geo.getAttribute('position').count;
+        ranges.push({ b: it.b, start: at, count: n });
+        at += n;
+      }
       const merged = list.length === 1 ? list[0] : BufferGeometryUtils.mergeGeometries(list, false);
       if (list.length > 1) list.forEach((g) => g.dispose());
       const mesh = new THREE.Mesh(merged, mat);
       mesh.userData.kind = 'buildings';
+      pickSets.push({ mesh, unit, ranges });
       out.push(mesh, new THREE.LineSegments(new THREE.EdgesGeometry(merged, EDGE_ANGLE), M.edge));
     }
+    removedBuildings = gone;
+    if (gone.length) {
+      const lines = drapedRings(gone, 0.4, M.removed);
+      if (lines) { lines.userData.kind = 'removed'; out.push(lines); }
+    }
     info.buildings = count;
+    info.removed = gone.length;
     info.buildingMeshes = out.filter((o) => o.isMesh).length;
     return out;
+  }
+
+  /* ---- picking and selection ------------------------------------------------------- */
+  function inRing(x, y, ring) {
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const a = ring[i], b = ring[j];
+      if ((a[1] > y) !== (b[1] > y) && x < ((b[0] - a[0]) * (y - a[1])) / (b[1] - a[1]) + a[0]) inside = !inside;
+    }
+    return inside;
+  }
+  function rangeAt(set, k) {
+    const r = set.ranges;
+    let lo = 0, hi = r.length - 1;
+    while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (r[mid].start <= k) lo = mid; else hi = mid - 1; }
+    return r[lo];
+  }
+
+  /**
+   * The building under a screen point (client coordinates), or null.
+   * A solid building gives { id, building, removed: false }. A removed building is found by its dashed footprint on the
+   * ground (point in polygon on the ground hit) and gives removed: true. The nearer of the two wins.
+   */
+  function pick(clientX, clientY) {
+    if (!renderer || !site || !layerVisible.buildings) return null;
+    const rc = renderer.domElement.getBoundingClientRect();
+    if (!rc.width || !rc.height) return null;
+    scene.updateMatrixWorld(true);
+    cam.updateMatrixWorld();
+    raycaster.setFromCamera(new THREE.Vector2(((clientX - rc.left) / rc.width) * 2 - 1, -(((clientY - rc.top) / rc.height) * 2 - 1)), cam);
+    let best = null;
+    if (pickSets.length) {
+      const hits = raycaster.intersectObjects(pickSets.map((p) => p.mesh), false);
+      if (hits.length) {
+        const hit = hits[0], set = pickSets.find((p) => p.mesh === hit.object);
+        if (set && hit.faceIndex != null) {
+          const range = rangeAt(set, hit.faceIndex * 3);
+          best = { id: range.b.id, building: range.b, removed: false, distance: hit.distance };
+        }
+      }
+    }
+    if (removedBuildings.length && groundMesh && layerVisible.ground) {
+      const gh = raycaster.intersectObject(groundMesh, false)[0];
+      if (gh && (!best || gh.distance < best.distance)) {
+        const p = root.worldToLocal(gh.point.clone()), x = p.x, y = -p.z;
+        const found = removedBuildings.find((b) => inRing(x, y, b.ring));
+        if (found) best = { id: found.id, building: found, removed: true, distance: gh.distance };
+      }
+    }
+    return best ? { id: best.id, building: best.building, removed: best.removed } : null;
+  }
+
+  /** Client coordinates of a plan point (x, y, elevation), for tests and overlays. */
+  function screenOf(x, y, elev = 0) {
+    const rc = renderer.domElement.getBoundingClientRect();
+    scene.updateMatrixWorld(true);
+    cam.updateMatrixWorld();
+    const v = new THREE.Vector3(x, elev, -y).applyMatrix4(root.matrixWorld).project(cam);
+    return { x: rc.left + ((v.x + 1) / 2) * rc.width, y: rc.top + ((1 - v.y) / 2) * rc.height };
+  }
+
+  function clearSelection() {
+    if (!selGroup) return;
+    for (const o of [...selGroup.children]) { selGroup.remove(o); if (o.geometry) o.geometry.dispose(); }
+  }
+  /** Highlights the building with this id (every piece of it), or clears with null. A removed building gets an accent ring on the ground. */
+  function select(id) {
+    clearSelection();
+    selected = id == null ? null : baseId(id);
+    if (selected != null && site && selGroup) {
+      const mine = site.model.buildings.filter((b) => baseId(b.id) === selected);
+      if (!mine.length) selected = null;
+      for (const b of mine) {
+        if (isRemoved(b)) {
+          const ring = drapedRings([b], 0.8, M.selLine);
+          if (ring) { ring.userData.kind = 'select'; selGroup.add(ring); }
+        } else {
+          const geo = buildingGeometry(b);
+          if (!geo) continue;
+          const fill = new THREE.Mesh(geo, M.selFill);
+          fill.userData.kind = 'select';
+          fill.renderOrder = 3;
+          const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo, EDGE_ANGLE), M.selLine);
+          edges.userData.kind = 'select';
+          edges.renderOrder = 4;
+          selGroup.add(fill, edges);
+        }
+      }
+    }
+    needsRender = true;
+    return selected;
+  }
+
+  /** Rebuilds only the buildings layer with a new removed set. The camera stays. */
+  function setRemoved(ids) {
+    removedSet = new Set([...(ids || [])].map(baseId));
+    if (!site) return 0;
+    clearGroup(G.buildings);
+    for (const o of buildBuildings(site.model.buildings)) G.buildings.add(o);
+    if (selected != null) select(selected);
+    info.triangles = countTriangles();
+    needsRender = true;
+    return info.removed;
   }
 
   /* ---- draped polygons (roads, walks) and flat polygons (water) ------------------------ */
@@ -363,23 +533,27 @@ const Scene = (() => {
   function countTriangles() {
     let t = 0;
     root.traverse((o) => {
-      if (!o.visible || !o.geometry) return;
+      if (!o.visible || !o.geometry || o.userData.kind === 'select') return;
       const g = o.geometry, n = g.index ? g.index.count : g.getAttribute('position').count;
       if (o.isInstancedMesh) t += (n / 3) * o.count; else if (o.isMesh) t += n / 3;
     });
     return Math.round(t);
   }
 
-  function setModel(model) {
+  function setModel(model, removed = []) {
     for (const k of Object.keys(G)) clearGroup(G[k]);
+    removedSet = new Set([...(removed || [])].map(baseId));
+    selected = null; groundMesh = null; pickSets = []; removedBuildings = [];
     const ground = model.ground;
     let top = ground.max;
     for (const b of model.buildings) top = Math.max(top, b.top);
     for (const t of model.trees) top = Math.max(top, t.z + t.height);
     site = { model, S: model.frame.size, gmin: ground.min, gmax: ground.max, top, meshAt: makeMeshAt(ground) };
-    for (const k of ['buildings', 'trees', 'waterAreas', 'roadTriangles', 'walkTriangles']) info[k] = 0;
+    for (const k of ['buildings', 'removed', 'trees', 'waterAreas', 'roadTriangles', 'walkTriangles']) info[k] = 0;
     G.ground.add(buildGroundMesh(ground), buildSkirt(ground));
     G.site.add(buildOutline(ground, site.meshAt));
+    selGroup = new THREE.Group();
+    G.site.add(selGroup);
     for (const o of buildBuildings(model.buildings)) G.buildings.add(o);
     for (const o of buildPavement(model.roads.pavement, M.road, 0.3, 'roadTriangles')) G.roads.add(o);
     for (const o of buildPavement(model.roads.walks, M.walk, 0.4, 'walkTriangles')) G.walks.add(o);
@@ -407,6 +581,7 @@ const Scene = (() => {
 
   function applyLayers() {
     for (const k of Object.keys(layerVisible)) if (G[k]) G[k].visible = !!layerVisible[k];
+    if (selGroup) selGroup.visible = !!layerVisible.buildings;
     if (site) info.triangles = countTriangles();
     needsRender = true;
   }
@@ -564,6 +739,29 @@ const Scene = (() => {
     finally { capturing = false; needsRender = true; }
   }
 
+  /** Tap to select: pointerdown then pointerup within 6 px and 500 ms. An orbit drag, a pinch or a long press selects nothing. */
+  function wirePointer() {
+    const down = new Set();
+    let tap = null;
+    host.addEventListener('pointerdown', (e) => {
+      down.add(e.pointerId);
+      tap = down.size === 1 && (e.pointerType !== 'mouse' || e.button === 0) ? { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now() } : null;
+    });
+    host.addEventListener('pointermove', (e) => {
+      if (tap && tap.id === e.pointerId && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) >= TAP_PX) tap = null;
+    });
+    host.addEventListener('pointerup', (e) => {
+      down.delete(e.pointerId);
+      const k = tap;
+      tap = null;
+      if (!k || k.id !== e.pointerId) return;
+      if (Math.hypot(e.clientX - k.x, e.clientY - k.y) >= TAP_PX || performance.now() - k.t >= TAP_MS) return;
+      const hit = pick(e.clientX, e.clientY);
+      pickListeners.forEach((fn) => fn(hit, { x: e.clientX, y: e.clientY }));
+    });
+    host.addEventListener('pointercancel', (e) => { down.delete(e.pointerId); tap = null; });
+  }
+
   function init(hostEl) {
     host = hostEl;
     try {
@@ -589,6 +787,7 @@ const Scene = (() => {
     controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
     controls.addEventListener('start', () => { tween = null; if (preset) setPreset(null); });
     controls.addEventListener('change', () => { needsRender = true; });
+    wirePointer();
     new ResizeObserver(resize).observe(host);
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
     if (mq.addEventListener) mq.addEventListener('change', applyTheme); else if (mq.addListener) mq.addListener(applyTheme);
@@ -601,9 +800,14 @@ const Scene = (() => {
   }
 
   return {
-    init, setModel, setWalks, setLayer, setVScale, setContour, fit, planView, capture,
+    init, setModel, setRemoved, setWalks, pick, select, screenOf, setLayer, setVScale, setContour, fit, planView, capture,
     onCamera: (fn) => cameraListeners.push(fn),
     onPreset: (fn) => presetListeners.push(fn),
+    /** fn(hit | null, { x, y }) after every tap (see pick for hit). null = a tap on empty ground. */
+    onPick: (fn) => pickListeners.push(fn),
+    selection: () => selected,
+    removedIds: () => [...removedSet].sort(),
+    canvas: () => (renderer ? renderer.domElement : null),
     camera: () => cam,
     ready: () => !!renderer,
     hasSite: () => !!site,

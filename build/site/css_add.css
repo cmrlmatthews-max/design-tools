@@ -171,6 +171,34 @@
 .kv dd small { color: var(--ink-3); font-weight: 400; font-size: 11.5px; }
 .credits { padding: 12px 16px 4px; color: var(--ink-3); font-size: 11.5px; line-height: 1.5; }
 
+/* remove buildings: the selection card, the panel line, the help section */
+.sel-card {
+  position: absolute; z-index: 4; left: 12px; top: 12px; width: min(292px, calc(100% - 96px)); padding: 10px 12px 12px;
+  background: var(--hud-bg); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+}
+.status-chip:not([hidden]) ~ .sel-card { top: 52px; }
+.sc-head { display: flex; align-items: flex-start; gap: 8px; }
+.sc-titles { flex: 1 1 auto; min-width: 0; display: grid; gap: 2px; padding-top: 2px; }
+.sc-title { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.sc-tag { flex: none; padding: 1px 7px; border-radius: 999px; background: var(--surface-2); color: var(--ink-2); font-size: 11px; font-weight: 600; }
+.sc-sub { font-size: 12.5px; color: var(--ink-2); line-height: 1.35; }
+.sc-id { font-size: 11px; color: var(--ink-3); overflow-wrap: anywhere; }
+.sc-close { flex: none; min-width: 36px; min-height: 36px; margin: -4px -6px 0 0; font-size: 22px; line-height: 1; color: var(--ink-2); }
+.sc-actions { display: grid; margin-top: 10px; }
+.sc-actions .btn { justify-content: center; font-weight: 600; }
+.removed-line { display: flex; align-items: center; gap: 6px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink-2); }
+.removed-line .dot { color: var(--ink-3); }
+.link-btn { min-height: 32px; padding: 0 2px; border: 0; background: transparent; color: var(--accent); font-size: 13px; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+.help-sec { padding-bottom: 8px; }
+.help-sec > summary { display: flex; align-items: center; min-height: 40px; cursor: pointer; list-style: none; }
+.help-sec > summary::-webkit-details-marker { display: none; }
+.help-sec .chev { width: 12px; height: 12px; fill: none; stroke: var(--ink-3); stroke-width: 2; transform: rotate(-90deg); transition: transform .15s; }
+.help-sec[open] .chev { transform: none; }
+.help-sec .sec-title { display: inline-flex; align-items: center; gap: 6px; }
+.help-text { margin: 2px 0 8px; color: var(--ink-2); font-size: 12.5px; line-height: 1.5; }
+@media (max-width: 899px), (orientation: portrait) { .sel-card { width: min(300px, calc(100% - 80px)); } }
+
 /* in-page tests */
 .test-panel {
   position: absolute; z-index: 30; left: 12px; right: 12px; top: 12px; max-height: calc(100% - 24px); overflow: auto;
