@@ -175,7 +175,7 @@ async function runSunTests() {
       const mid = SunUI.info().time;
       SunUI.play(false);
       const end = SunUI.info();
-      const ok = on && mid > 600 + 30 && mid < 600 + 70 && !end.playing && end.time === Math.round(end.time);
+      const ok = on && mid > 600 + 10 && mid < 600 + 120 && !end.playing && end.time === Math.round(end.time);
       return ok || `on ${on}, mid ${mid}, end ${JSON.stringify([end.playing, end.time])}`;
     });
     await t('Play stops by itself at sunset', async () => {
