@@ -19,7 +19,17 @@ PlacementGizmo.init({   // 06y_placement.js: drag the building to place it, turn
 ProjectUI.start();
 
 const optionInfo = (o) => ({ id: o.id, name: o.name, updatedAt: o.updatedAt });
+// First-visit tip (build/shared/08x_tip.js): one short card the first time this tool opens. Never shows on ?test.
+FirstTip.init({
+  tool: "parking",
+  title: "Parking Deck",
+  purpose: "The Parking Deck lays out stalls, bays, ramps, and columns for a deck.",
+  tries: ["Select a ramp type in the Ramp tab.", "With a project open, turn on Column overlay in the View tab."],
+  help: () => Help.toggle(),
+});
+
 window.__parking = {
+  firstTip: FirstTip,
   placementGizmo: PlacementGizmo,
   getState: () => Store.snapshot(),
   setState: (path, value) => { Store.set(path, value, { live: false }); },
