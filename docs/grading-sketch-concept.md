@@ -415,6 +415,11 @@ The technical plan computes each expected value by hand.
 10. **Names:** Generic names only in presets, tests, ids, and notes.
 11. **Project file:** Part of version 1. The tool writes its section and keeps the others unchanged.
 12. **Role:** A sketch for early coordination with the civil engineer. Never a grading plan.
+13. **Pad depth:** 1.0 ft below the FFE by default. (October 22, 2026)
+14. **Pad offset:** 5 ft past the footprint by default. (October 22, 2026)
+15. **Automatic walls:** On by default; shown dashed until accepted. (October 22, 2026)
+16. **Bulking factor:** 1.00 (off) by default. (October 22, 2026)
+17. **Lot slopes:** 2 percent along and 1 percent across by default; warnings below 1 percent and above 5 percent. (October 22, 2026)
 
 ---
 
@@ -485,8 +490,4 @@ The project file is the shared JSON file that carries one project between the to
 
 ## 15. Open questions for Cade
 
-1. **Pad depth:** Is 1.0 ft (a 4 in slab on 8 in of stone) the right default? **Recommended:** yes, 1.0 ft, editable per building.
-2. **Pad offset:** Is 5 ft past the footprint the right default for the pad? **Recommended:** yes, 5 ft, so the daylight slope starts clear of the foundation.
-3. **Auto walls:** Should automatic walls at the property line be on by default? **Recommended:** yes, shown dashed until you accept them, so no slope leaves the site unseen.
-4. **Bulking factor:** Should the tool apply a factor to the cut for swell? **Recommended:** keep it at 1.00 (off) by default, editable, because soil data is not known this early.
-5. **Lot slopes:** Are 2 percent along and 1 percent across the right lot defaults? **Recommended:** yes, with a warning below 1 percent (ponding) and above 5 percent.
+All five questions were answered on October 22, 2026. See decisions 13 to 17 in section 12.
