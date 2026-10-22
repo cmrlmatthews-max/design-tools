@@ -67,6 +67,7 @@ const ICONS = {
   folder: '<svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
   tower: '<svg viewBox="0 0 24 24"><path d="M8 21V4h8v17"/><path d="M5 21h14"/><path d="M11 8h2M11 12h2M11 16h2"/></svg>',
   midrise: '<svg viewBox="0 0 24 24"><path d="M4 21V9h16v12"/><path d="M2 21h20"/><path d="M8 13h2M14 13h2M8 17h2M14 17h2"/></svg>',
+  grading: '<svg viewBox="0 0 24 24"><path d="M2 19h6l4-5h4l6-6"/><path d="M2 21h20"/></svg>',
 };
 
 /** Reads and writes that never throw (private mode, blocked storage). */

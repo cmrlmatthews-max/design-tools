@@ -757,7 +757,8 @@ const UI = (() => {
         h('div', { class: 'pop-sep' }), h('div', { class: 'label pop-label' }, 'Send to'),
         item('miSendPlate', 'Send to Plate Planner', 'Save the project and open the Plate Planner', () => ProjectUI.send('plate')),
         item('miSendParking', 'Send to Parking Deck', 'Save the project and open the Parking Deck', () => ProjectUI.send('parking')),
-        item('miSendFacade', 'Send to Facade Studio', 'Save the project and open the Facade Studio', () => ProjectUI.send('facade')));
+        item('miSendFacade', 'Send to Facade Studio', 'Save the project and open the Facade Studio', () => ProjectUI.send('facade')),
+        item('miSendGrading', 'Send to Grading Sketch', 'Save the project and open the Grading Sketch', () => ProjectUI.send('grading')));
     };
     const overlay = () => {
       el.textContent = '';

@@ -2128,7 +2128,7 @@ function validateDoc(doc) {
   if (!doc || typeof doc !== "object") return { ok: false, errors: ["document: not an object"], counts };
   if (doc.format !== FORMAT) err("format", `must be "${FORMAT}"`);
   if (doc.version !== VERSION) err("version", `must be ${VERSION}`);
-  if (!["tower", "site", "midrise"].includes(doc.source)) err("source", "must be tower, site, or midrise");
+  if (!["tower", "site", "midrise", "parking", "facade", "grading"].includes(doc.source)) err("source", "must be tower, site, midrise, parking, facade, or grading");
   if (doc.units !== "feet") err("units", "must be feet");
   if (!Number.isFinite(doc.zShift)) err("zShift", "must be a number");
   const tagNames = new Set(), matNames = new Set();
@@ -3925,6 +3925,7 @@ const ICONS = {
   folder: '<svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
   tower: '<svg viewBox="0 0 24 24"><path d="M8 21V4h8v17"/><path d="M5 21h14"/><path d="M11 8h2M11 12h2M11 16h2"/></svg>',
   midrise: '<svg viewBox="0 0 24 24"><path d="M4 21V9h16v12"/><path d="M2 21h20"/><path d="M8 13h2M14 13h2M8 17h2M14 17h2"/></svg>',
+  grading: '<svg viewBox="0 0 24 24"><path d="M2 19h6l4-5h4l6-6"/><path d="M2 21h20"/></svg>',
 };
 
 /** Reads and writes that never throw (private mode, blocked storage). */
@@ -5003,6 +5004,8 @@ const App = (() => {
     els.btnSendTower.title = canSend ? 'Save this site in a project and open the Tower Generator' : 'Load a site first';
     els.btnSendMid.disabled = !canSend;
     els.btnSendMid.title = canSend ? 'Save this site in a project and open the Mid-Rise Generator' : 'Load a site first';
+    els.btnSendGrading.disabled = !canSend;
+    els.btnSendGrading.title = canSend ? 'Save this site in a project and open the Grading Sketch' : 'Load a site first';
   }
 
   /* ---- project file (docs/project-file-spec.md, sections 8 and 12) ----------------------------------------------
@@ -5182,7 +5185,7 @@ const App = (() => {
   async function projectSend(toolId) {
     Pop.close();
     const r = state.result;
-    if ((toolId !== 'tower' && toolId !== 'midrise') || !r || state.busy) return false;
+    if (!['tower', 'midrise', 'grading'].includes(toolId) || !r || state.busy) return false;
     if (project.readOnly) { noticeOnce('readonly', READ_ONLY_TEXT); return false; }
     if (!project.doc) {
       if (!projectCreate(defaultProjectName(), { quiet: true })) return false;
@@ -5312,7 +5315,8 @@ const App = (() => {
     els.btnProject.append(h('span', { html: ICONS.chev, style: 'display:contents' }));
     els.btnSendTower = tbBtn('btnSendTower', ICONS.tower, 'Send to Tower Generator', 'Load a site first', () => projectSend('tower'), { class: 'btn has-text send', disabled: true });
     els.btnSendMid = tbBtn('btnSendMidrise', ICONS.midrise, 'Send to Mid-Rise Generator', 'Load a site first', () => projectSend('midrise'), { class: 'btn has-text send', disabled: true });
-    $('tbActions').append(els.btnMaps, els.btnDl, els.btnShot, h('span', { class: 'tb-sep', 'aria-hidden': 'true' }), els.btnProject, els.btnSendTower, els.btnSendMid);
+    els.btnSendGrading = tbBtn('btnSendGrading', ICONS.grading, 'Send to Grading Sketch', 'Load a site first', () => projectSend('grading'), { class: 'btn has-text send', disabled: true });
+    $('tbActions').append(els.btnMaps, els.btnDl, els.btnShot, h('span', { class: 'tb-sep', 'aria-hidden': 'true' }), els.btnProject, els.btnSendTower, els.btnSendMid, els.btnSendGrading);
   }
 
   function toggleRow(key, label) {

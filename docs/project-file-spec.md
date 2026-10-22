@@ -89,7 +89,8 @@ zp = z + placement.baseZ
 - The site section's placement is the identity: `{ x: 0, y: 0, rotation: 0, baseZ: 0 }`.
 - The tower's local frame is its own: the site rectangle is centered on the origin and north is +y. Its state keeps working unchanged. The placement tells where that origin sits in the project.
 - The Mid-Rise Generator, the Plate Planner, the Parking Deck, and the Facade Studio use the massing's local frame. They copy the massing placement when they first write, and keep it in step after that.
-- `baseZ` is the finished floor elevation (FFE) of the ground floor, in project z. FFE means the elevation of the top of the floor you walk on. When a tool first sends a massing into a site project, it sets `baseZ` to the site ground elevation at the placement point. The Grading tool may set it later.
+- `baseZ` is the finished floor elevation (FFE) of the ground floor, in project z. FFE means the elevation of the top of the floor you walk on. When a tool first sends a massing into a site project, it sets `baseZ` to the site ground elevation at the placement point.
+- The ground-floor FFE of a massing or a deck is `sections.grading.derived.ffe` when that section exists and holds a tier for that source (`source` = `massing` or `parking`; the lowest tier when there are several). Otherwise it is `placement.baseZ`. The Grading Sketch never edits another section's placement.
 - Sun and grading use the project frame directly. Their placement is the identity.
 
 ## 5. State, derived, and ownership
@@ -255,9 +256,29 @@ Optional keys (added with the Facade Studio, October 22, 2026):
 - Azimuth is a compass bearing: 0 = north, clockwise. Altitude is degrees above the horizon. This is the convention the tower's `view.sun` already uses.
 - The sun math lives in `src/shared/solar.js`, pure, with tests: `sunPosition(lat, lon, dateUTC) → { azimuth, altitude }` and `dayPath(lat, lon, localDate, tzOffset, stepMin) → [{ time, azimuth, altitude }]`. The tower sets `view.sun.azimuth` and `view.sun.altitude` from it. The Facade Studio and a later View Study reuse the module.
 
-### 6.7 `grading.derived` and 6.8 `egress.derived`
+### 6.7 `grading.derived` (writer: Grading Sketch)
 
-Reserved. Each is defined with its tool, in that tool's concept document, and added here as a new subsection. Until then a reader treats them as empty.
+```jsonc
+{
+  "ffe": [ { "id": "massing-T1", "source": "massing" | "parking" | "<typed id>", "tier": 1,
+             "outer": Ring,                          // the tier footprint, project frame
+             "ffe": 1001.0, "padTop": 1000.0, "existingMin": 998.375, "existingMax": 1001.625 } ],
+  "ground": { "spacing": 10.5, "n": 96, "points": [[x, y, z], …] },   // proposed grade, same nodes as site.derived.ground (or the typed-plane grid)
+  "walls": [ { "id": "W1", "kind": "drawn" | "pad-step" | "auto", "line": [[x, y, z], …],   // the wall top
+               "heightMax": 1.63, "heightAvg": 1.63, "length": 300, "auto": false, "accepted": true } ],
+  "routes": [ { "id": "R1", "kind": "walk" | "ramp" | "fail", "line": [[x, y, z], …], "maxSlope": 0.045, "maxCross": 0.015 } ],
+  "metrics": { "cutCy": 325.1, "fillCy": 348.2, "netCy": 23.1, "balance": 0.934, "bulkedNetCy": 23.1,
+               "wallLength": 0, "wallHeightMax": 0, "wallHeightAvg": 0, "padArea": 19500, "disturbedArea": 0, "steepestRoute": 0 }
+}
+```
+
+- The placement is the identity: everything is in the project frame.
+- Elevations are NAVD88 feet with a site, local feet without one. Ground points round to 0.01 ft.
+- Earthwork is a conceptual estimate (about ±5 to 10 percent). It is a sketch for early coordination with the civil engineer, never a grading plan.
+
+### 6.8 `egress.derived`
+
+Reserved. It is defined with the Egress Sketch, in its concept document, and added here as a new subsection. Until then a reader treats it as empty.
 
 ## 7. Size
 
@@ -365,7 +386,7 @@ Tower Generator (work session, with the Sun Study):
 
 1. Add `src/tower/derived.js` with `towerDerived(state, built)` → `massing.derived` (section 6.2). Test it against the presets: GFA from `derived.levels` equals `computeMetrics(...).gfa` within 0.1 sf.
 2. Accept `?project=`; autosave the `massing` section; Project menu in the top bar.
-3. Export menu: "Send to Plate Planner" and "Send to Facade Studio" (`sendTo(storage, doc, "facade", "tower")`). The Facade Studio reads tower faces from `massing.derived.levels`; until item 1 exists it shows a note and uses its standalone massing.
+3. Export menu: "Send to Plate Planner", "Send to Facade Studio", and "Send to Grading Sketch" (`sendTo(storage, doc, "grading", "tower")`). "Send to Facade Studio" (`sendTo(storage, doc, "facade", "tower")`). The Facade Studio reads tower faces from `massing.derived.levels`; until item 1 exists it shows a note and uses its standalone massing.
 4. Site context: when the project has a site, offer "Context from site" in the Site tab. It calls `siteContextFor(doc, placement, radius)` and replaces `state.context.blocks` with the returned `blocks`. Keep the manual blocks when the user says no.
 5. Sun Study: build on `src/shared/solar.js` (section 6.6). Write the `sun` section with `tool: "tower"`. Set `view.sun` from the chosen date and time.
 6. Placement: when the project has a site, show the placement (x, y, rotation, baseZ) in the Site tab, with a "Center on site" button that sets x and y to the site center and baseZ to the ground there.

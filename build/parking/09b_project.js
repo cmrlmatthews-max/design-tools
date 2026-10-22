@@ -288,7 +288,7 @@ const ProjectUI = (() => {
   /** Send to Facade Studio: save the project, then open ../facade/?project=<id>. With no project open, one is made first. */
   async function send(toolId) {
     Pop.close();
-    if (toolId !== 'facade') return false;
+    if (toolId !== 'facade' && toolId !== 'grading') return false;
     if (!project.doc && !create(defaultName(), { quiet: true })) return false;
     if (project.readOnly) { noticeOnce('readonly', READ_ONLY_TEXT); return false; }
     project.dirty = true;

@@ -42,7 +42,7 @@ async function runProjectTests() {
   try {
     fresh();
     await t('no project: the standalone massing is the default and the project line is empty', () => eq([ProjectUI.has(), Store.get('source'), ProjectUI.massingInfo().has], [false, 'standalone', false]));
-    await t('there is no Send item in the Project or Export code (version 1)', () => eq([typeof ProjectUI.send, /Send to/.test($('btnExport') ? $('btnExport').title : '')], ['undefined', false]));
+    await t('ProjectUI.send goes to the Grading Sketch only', async () => eq([typeof ProjectUI.send, await ProjectUI.send('nowhere')], ['function', false]));
 
     await t('opening a project with a massing makes the source "project" and takes its placement', () => {
       open();

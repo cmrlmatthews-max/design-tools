@@ -261,6 +261,28 @@ const ProjectUI = (() => {
     return true;
   }
 
+  const SEND_TO = ['grading'];
+  /** Send to another tool: save the project, then open ../<tool>/?project=<id>. With no project open, one is made first. */
+  async function send(toolId) {
+    Pop.close();
+    if (!SEND_TO.includes(toolId)) return false;
+    if (!project.doc && !create(defaultName(), { quiet: true })) return false;
+    if (project.readOnly) { noticeOnce('readonly', READ_ONLY_TEXT); return false; }
+    project.dirty = true;
+    const saved = flush();
+    if (saved && saved.ok === false) return false;
+    let url = null;
+    try { url = ProjectMod.sendTo(storageOf(), project.doc, toolId, CONFIG.tool, storageNotice()); } catch (e) {
+      console.error(e);
+      Toast.show(`The project could not be sent. ${e && e.message ? e.message : ''}`.trim(), 'bad', 8000);
+      return false;
+    }
+    if (!url) { Toast.show('The project could not be sent.', 'bad', 8000); return false; }
+    try { project.doc = ProjectMod.loadProject(storageOf(), project.doc.id, storageNotice()) || project.doc; } catch (e) { /* keep the copy in memory */ }
+    project.dirty = false;
+    project.navigate(url);
+    return url;
+  }
   function openById(id) { flush(); project.navigate(`${location.pathname}?project=${encodeURIComponent(id)}`); }
   async function exportFile() {
     const doc = project.doc;
@@ -387,7 +409,7 @@ const ProjectUI = (() => {
 
   return {
     has, hasMassing, massingInfo, placement, useProject, useStandalone, contextPolys, dataDoc, dataKey, massingPlacement,
-    start, openDoc, close, create, rename, flush, openMenu, exportFile, importFile, nameControl, reloadData,
+    start, openDoc, close, create, rename, flush, openMenu, exportFile, importFile, nameControl, reloadData, send,
     markDirty, renderPill,
     doc: () => project.doc,
     status: () => ({ open: !!project.doc, id: project.doc && project.doc.id, name: project.doc && project.doc.name, dirty: project.dirty, readOnly: project.readOnly }),

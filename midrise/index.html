@@ -1733,7 +1733,7 @@ function validateDoc(doc) {
   if (!doc || typeof doc !== "object") return { ok: false, errors: ["document: not an object"], counts };
   if (doc.format !== FORMAT) err("format", `must be "${FORMAT}"`);
   if (doc.version !== VERSION) err("version", `must be ${VERSION}`);
-  if (!["tower", "site", "midrise", "parking", "facade"].includes(doc.source)) err("source", "must be tower, site, midrise, parking, or facade");
+  if (!["tower", "site", "midrise", "parking", "facade", "grading"].includes(doc.source)) err("source", "must be tower, site, midrise, parking, facade, or grading");
   if (doc.units !== "feet") err("units", "must be feet");
   if (!Number.isFinite(doc.zShift)) err("zShift", "must be a number");
   const tagNames = new Set(), matNames = new Set();
@@ -11803,7 +11803,8 @@ const UI = (() => {
         h('div', { class: 'pop-sep' }), h('div', { class: 'label pop-label' }, 'Send to'),
         item('miSendPlate', 'Send to Plate Planner', 'Save the project and open the Plate Planner', () => ProjectUI.send('plate')),
         item('miSendParking', 'Send to Parking Deck', 'Save the project and open the Parking Deck', () => ProjectUI.send('parking')),
-        item('miSendFacade', 'Send to Facade Studio', 'Save the project and open the Facade Studio', () => ProjectUI.send('facade')));
+        item('miSendFacade', 'Send to Facade Studio', 'Save the project and open the Facade Studio', () => ProjectUI.send('facade')),
+        item('miSendGrading', 'Send to Grading Sketch', 'Save the project and open the Grading Sketch', () => ProjectUI.send('grading')));
     };
     const overlay = () => {
       el.textContent = '';
@@ -13383,7 +13384,7 @@ const ProjectUI = (() => {
   /** Send: the project holds this massing (a project is made now when none is open), then the next tool opens with ?project=<id>. */
   async function send(toolId) {
     Pop.close();
-    if (toolId !== 'plate' && toolId !== 'parking' && toolId !== 'facade') return false;
+    if (!['plate', 'parking', 'facade', 'grading'].includes(toolId)) return false;
     if (!project.doc && !create(defaultName(), { quiet: true })) return false;
     if (project.readOnly && !(project.replaceNeeded && !project.confirmed)) { noticeOnce('readonly', READ_ONLY_TEXT); return false; }
     if (project.replaceNeeded && !project.confirmed) { const ok = await askReplace(); if (!ok) return false; }
@@ -14213,7 +14214,7 @@ async function runUiTests() {
       click($('btnExport'));
       const got = ids(document.querySelectorAll('#exportMenu .pop-item'));
       Pop.close();
-      const want = ['miImage', 'miAiReady', 'miAiPrompts', 'miOverlay', 'miSketchup', 'miExportJson', 'miImportJson', 'miSendPlate', 'miSendParking', 'miSendFacade'];
+      const want = ['miImage', 'miAiReady', 'miAiPrompts', 'miOverlay', 'miSketchup', 'miExportJson', 'miImportJson', 'miSendPlate', 'miSendParking', 'miSendFacade', 'miSendGrading'];
       return eq(got, want);
     });
     await t('Export > Image overlay shows the choices and goes back', () => {
