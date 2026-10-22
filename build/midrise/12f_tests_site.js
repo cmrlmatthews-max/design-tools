@@ -120,6 +120,25 @@ async function runSiteLayerTests() {
       return eq([Render.themeEpoch() === epoch + 1, after !== before, mesh2 !== mesh, SiteLayer.info().shown], [true, true, true, true]);
     });
 
+    await t('6b. Axon and Plan frame the building plus a margin of max(150 ft, 0.6 x its span), clamped to the site square: smaller than the site, holding the building (the elevations keep the building box)', async () => {
+      if (!live) return true;
+      const out = [];
+      for (const id of ['axon', 'plan', 'e']) {
+        Store.set('view.site', false, { live: false });
+        await wait(150);
+        const off = Render.framedBox(id);
+        Store.set('view.site', true, { live: false });
+        await wait(150);
+        const on = Render.framedBox(id), sb = SiteLayer.frameBounds();
+        const m = Math.max(150, 0.6 * Math.max(off.maxX - off.minX, off.maxY - off.minY));
+        const holds = on.minX <= off.minX && on.maxX >= off.maxX && on.minY <= off.minY && on.maxY >= off.maxY;
+        const smaller = on.maxX - on.minX < sb.maxX - sb.minX - 1 && on.maxY - on.minY < sb.maxY - sb.minY - 1;
+        const margin = [on.minX - Math.min(off.minX, Math.max(off.minX - m, sb.minX)), on.maxX - Math.max(off.maxX, Math.min(off.maxX + m, sb.maxX)), on.minY - Math.min(off.minY, Math.max(off.minY - m, sb.minY)), on.maxY - Math.max(off.maxY, Math.min(off.maxY + m, sb.maxY))].every((v) => Math.abs(v) < 1e-6);
+        out.push(id === 'e' ? [holds, on.maxX - on.minX === off.maxX - off.minX] : [holds, smaller, margin, m >= 150]);
+      }
+      return eq(out, [[true, true, true, true], [true, true, true, true], [true, true]]);
+    });
+
     await t('7a. a live placement drag moves the built layer as a solid without rebuilding it; the commit rebuilds it', async () => {
       if (!live) return true;
       await wait(400);                                   // a frame may still be rebuilding the layer after the earlier tests

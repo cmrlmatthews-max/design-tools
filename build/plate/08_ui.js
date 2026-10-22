@@ -411,6 +411,8 @@ const UI = (() => {
         choice('Style', 'view.style', [['model', 'Model'], ['diagram', 'Diagram']], { id: 'styleChips' }),
         Controls.toggle({ label: 'Site', bind: v('site') }),
         Controls.help('The ground, roads, water, trees, and neighbors of the project site. From the Site Model.'),
+        Controls.toggle({ label: 'Massing', bind: v('massing') }),
+        Controls.help('The whole project massing as a solid, with the level group you are filling highlighted and its plate drawn at its own height. Plan shows the massing as outlines.'),
         Controls.toggle({ label: 'Unit labels', bind: v('labels') }),
         Controls.toggle({ label: 'Corridor wall lines', bind: v('walls') }),
         Controls.toggle({ label: 'Bay lines (drag to move)', bind: v('bays') }),

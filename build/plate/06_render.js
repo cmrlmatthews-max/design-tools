@@ -139,7 +139,7 @@ const Render = (() => {
     scene.add(selOverlay);
 
     layers = {};
-    for (const id of ['site', 'model', 'context', 'overlay']) {     // site: SiteLayer (06c_site.js)
+    for (const id of ['site', 'massing', 'model', 'context', 'overlay']) {     // site: SiteLayer (06c_site.js); massing: the project massing volume (Plate3D.massingObjects)
       const group = new THREE.Group();
       scene.add(group);
       layers[id] = { group, key: null };
@@ -165,9 +165,10 @@ const Render = (() => {
   function syncMain(d, disp, state) {
     const v = state.view;
     let changed = false;
-    const mk = [disp.key, v.style, v.labels, v.walls, v.bays, v.levels3d].join('|');
+    const atZ = Plate3D.editingAtZ(state);
+    const mk = [disp.key, v.style, v.labels, v.walls, v.bays, v.levels3d, atZ].join('|');
     if (layers.model.key !== mk) {
-      const built = Plate3D.build(d, state, disp);
+      const built = Plate3D.build(d, state, disp, { atZ });
       clearGroup(layers.model.group); clearGroup(layers.overlay.group);
       layers.model.key = mk; layers.overlay.key = mk;
       for (const o of built.model) layers.model.group.add(o);
@@ -175,10 +176,13 @@ const Render = (() => {
       overlayVis = null; changed = true;
     }
     changed = SiteLayer.update(layers.site, state, d, { syncLayer, clearGroup, cssColor, themeEpoch: () => themeEpoch }) || changed;     // the project site (06c_site.js)
+    // the project massing: every level as a solid, the active group highlighted; cached by the massing data, the active group and the editing level
+    const foot = SiteLayer.massingFoot();
+    changed = syncLayer(layers.massing, atZ ? ['m', ProjectUI.dataKey(), v.levels3d, d.group && d.group.id, d.editing && d.editing.index, d.ok, foot, themeEpoch].join('|') : 'off', () => (atZ ? Plate3D.massingObjects(d, state, { foot }) : [])) || changed;
     // the ghost of the site neighbors would double the solid ones of the site layer, so it draws only without them (the outlines of other level groups stay)
     const solidNeighbors = SiteLayer.info().buildings > 0;
-    changed = syncLayer(layers.context, [v.context, disp.key, ProjectUI.dataKey(), state.source, solidNeighbors].join('|'), () => {
-      const list = Plate3D.contextObjects(d, state);
+    changed = syncLayer(layers.context, [v.context, disp.key, ProjectUI.dataKey(), state.source, solidNeighbors, atZ].join('|'), () => {
+      const list = Plate3D.contextObjects(d, state, { massing: atZ });
       if (!solidNeighbors) return list;
       return list.filter((o) => {
         if (!o.userData.context) return true;
@@ -188,6 +192,21 @@ const Render = (() => {
       });
     }) || changed;
     if (changed) { viewVersion = -1; needsRender = true; }
+    syncMassingMode();
+  }
+  /** True when the camera looks straight down (Plan, or close to it). */
+  function lookingDown() {
+    const off = cam.position.clone().sub(controls.target), len = off.length();
+    return len > 1e-6 && off.y / len > 0.96;
+  }
+  /** The massing shows as solids, and as footprint outlines only when the camera looks down: the massing below the active plate must not hide it. */
+  function syncMassingMode() {
+    if (!layers.massing || cmp) return;
+    const down = lookingDown();
+    for (const o of layers.massing.group.children) {
+      const want = o.userData.massingKind === 'outline' ? down : !down;
+      if (o.visible !== want) { o.visible = want; needsRender = true; }
+    }
   }
   /** The unit labels show when the plan is drawn large enough to read them, and never while a handle or a slider moves. */
   let overlayVis = null;
@@ -323,8 +342,15 @@ const Render = (() => {
       };
     }
     const b = boxOf(Derived.get());
-    const sb = withSite ? SiteLayer.frameBox(Store.raw()) : null;       // Axon fits the whole site; the elevations and the plan keep the plate
-    if (sb) { b.minX = Math.min(b.minX, sb.minX); b.maxX = Math.max(b.maxX, sb.maxX); b.minY = Math.min(b.minY, sb.minY); b.maxY = Math.max(b.maxY, sb.maxY); }
+    const state = Store.raw();
+    if (Plate3D.editingAtZ(state)) {         // the massing is on screen: it is part of the building box, and the Plan looks at the plate where it stands
+      const mb = ProjectUI.massingBox();
+      if (mb) { b.minX = Math.min(b.minX, mb.minX); b.maxX = Math.max(b.maxX, mb.maxX); b.minY = Math.min(b.minY, mb.minY); b.maxY = Math.max(b.maxY, mb.maxY); b.height = Math.max(b.height, mb.height); }
+      const ed = Derived.get().editing;
+      b.planZ = ed && !state.view.levels3d ? ed.z : 0;
+    }
+    const sb = withSite ? SiteLayer.frameBox(Store.raw()) : null;       // Axon frames the building with a margin of max(150 ft, 0.6 x its larger plan span), clamped to the site square; the elevations and the plan keep the building box
+    if (sb) Object.assign(b, SiteLayer3D.frameAround(b, sb));
     return b;
   }
 
@@ -377,9 +403,10 @@ const Render = (() => {
     if (id === 'plan') {
       const vis = Math.max(ey / fit, ex / (aspect * fit), 30);
       const e = 0.0008;     // tiny tilt toward the south keeps "north up" without a degenerate up-vector
+      const pz = box.planZ || 0;       // the plate stands at its level's z inside the massing: the camera looks at that height and stays above the top of the massing
       return {
-        type: 'ortho', zoom: (2 * ORTHO_HALF) / vis, minDist: reach,
-        target: worldVec(cx, cy, 0),
+        type: 'ortho', zoom: (2 * ORTHO_HALF) / vis, minDist: Math.max(reach, H - pz + 40),
+        target: worldVec(cx, cy, pz),
         dir: new THREE.Vector3(...planToWorld(0, -Math.sin(e), Math.cos(e))).normalize(),
       };
     }
@@ -544,6 +571,7 @@ const Render = (() => {
     cmp = { entries: list, key: null, reserve, bounds: combineBounds(list.map((e) => e.d)) };
     layers.model.group.visible = layers.context.group.visible = layers.overlay.group.visible = false;
     layers.site.group.visible = false;
+    layers.massing.group.visible = false;
     selOverlay.visible = false;
     figure.visible = false;
     applyViewOffset();
@@ -558,6 +586,7 @@ const Render = (() => {
     cmp = null;
     layers.model.group.visible = layers.context.group.visible = layers.overlay.group.visible = true;
     layers.site.group.visible = true;
+    layers.massing.group.visible = true;
     selOverlay.visible = true;
     overlayVis = null;
     resetLayers();
@@ -594,11 +623,12 @@ const Render = (() => {
       geomIdSeen = d.geomId;
     }
     derived = d;
-    const sfk = SiteLayer.frameKey(Store.raw());
+    const sfk = `${SiteLayer.frameKey(Store.raw())}|${Plate3D.editingAtZ(state)}`;       // the massing switching on or off moves the plate and the plan target
     if (siteFrameSeen !== null && sfk !== siteFrameSeen) refitPending = true;     // the site layer switched on or off: it is part of the framed box
     siteFrameSeen = sfk;
     syncMain(d, disp, state);
     syncOverlayVisibility(disp.quality === 'draft');
+    if (moved || tween) syncMassingMode();
     if (first && !preset) setView('plan', false);
     if (rebuildNotified !== d) { rebuildNotified = d; rebuildListeners.forEach((fn) => fn(d)); }
     if (refitPending && !Store.gestureActive()) { refitPending = false; if (preset) setView(preset, true); }
@@ -695,6 +725,7 @@ const Render = (() => {
       const cnt = (g, f) => g.children.reduce((a, o) => { const k = f(o); a[k] = (a[k] || 0) + 1; return a; }, {});
       return { overlay: cnt(layers.overlay.group, kind), model: cnt(layers.model.group, role) };
     },
+    framedBox: (id = 'axon') => framingBox(id === 'axon'),       // tests: the box a preset frames
     info: () => ({ camera: camType, preset, meshes: layers ? layers.model.group.children.length : 0, tweening: !!tween, distance: cam ? cam.position.distanceTo(controls.target) : 0, zoom: cam ? cam.zoom : 0, compare: !!cmp, drawQuality: derived ? Derived.display().quality : null }),
     ready: () => !!renderer,
     comparing: () => !!cmp,
@@ -706,6 +737,17 @@ const Render = (() => {
     canvas: () => (renderer ? renderer.domElement : null),
     themeChanged: () => { themeEpoch++; viewVersion = -1; needsRender = true; },        // tests: what a light/dark switch does
     sceneObjects: () => { const out = []; scene.traverse((o) => out.push(o)); return out; },        // tests
+    /** Tests: the massing layer. { solids, edges, rings, outlines, foot, active, visibleSolids, visibleOutlines, levels: [index of each solid] } */
+    massingInfo: () => {
+      const kids = layers.massing.group.children;
+      const solids = kids.filter((o) => o.userData.massingMesh), outl = kids.filter((o) => o.userData.massingKind === 'outline');
+      return {
+        solids: solids.length, edges: kids.filter((o) => o.userData.massingEdges).length, rings: kids.filter((o) => o.userData.massingRing).length, outlines: outl.length, foot: kids.some((o) => o.userData.massingFoot),
+        active: solids.filter((o) => o.userData.active).map((o) => o.userData.level), levels: solids.map((o) => o.userData.level), podium: solids.filter((o) => o.userData.podium).length,
+        visibleSolids: solids.filter((o) => o.visible).length, visibleOutlines: outl.filter((o) => o.visible).length, groupVisible: layers.massing.group.visible,
+        topY: solids.length ? Math.max(...solids.map((o) => { o.geometry.computeBoundingBox(); return o.geometry.boundingBox.max.y; })) : null,
+      };
+    },
     contextMeshes: () => layers.context.group.children.filter((o) => o.isMesh).length,       // tests: the ghost of the site neighbors
     setOrbitEnabled: (on) => { if (controls) { controls.enabled = !!on; if (!on) tween = null; } },
     orbitEnabled: () => !!controls && controls.enabled,

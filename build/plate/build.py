@@ -180,6 +180,7 @@ PARTS = [
     '12c_tests_select.js',
     '12d_tests_project.js',
     '12e_tests_site.js',
+    '12f_tests_massing.js',
     '13_start.js',
 ]
 missing = [p for p in PARTS if not os.path.isfile(os.path.join(HERE, p))]

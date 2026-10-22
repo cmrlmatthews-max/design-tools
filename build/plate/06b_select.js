@@ -229,7 +229,7 @@ const Select = (() => {
   }
   /** The elevation the editing level is drawn at (the top of its slab). */
   function topZ() {
-    const L = editing(), stack = !!Store.raw().view.levels3d;
+    const L = editing(), stack = !!Store.raw().view.levels3d || Plate3D.editingAtZ(Store.raw());
     if (!L) return 0;
     return (stack ? L.z : 0) + (stack ? Math.max(1, L.ftf - 1) : CONFIG.slabHeight) + 0.08;
   }

@@ -12,7 +12,7 @@
 const SiteLayer = (() => {
   const OFF = { shown: false, ground: false, buildings: 0, roads: 0, walks: 0, waterAreas: 0, trees: 0, key: 'off' };
   let drawn = { ...OFF };
-  let mesh = null, zBottom = 0, drop = 0;
+  let mesh = null, zBottom = 0, drop = 0, foot = 0;
 
   /** site.derived of the open project, or null (no project, no site section, or nothing in it). */
   function siteDerived() {
@@ -34,6 +34,19 @@ const SiteLayer = (() => {
       if (Number.isFinite(z) && z > top) top = z;
     }
     return top > -Infinity ? Math.max(0, top + 0.5) : 0;
+  }
+
+  /** ft the massing continues below its base so the lowest levels meet the lowest ground under them (the layer is dropped, so the building would float): 0 on flat ground, at most 80. */
+  function footFor(dv, pl, dropNow) {
+    const b = ProjectUI.massingBox();
+    if (!b) return 0;
+    let low = Infinity;
+    for (let i = 0; i <= 8; i++) for (let j = 0; j <= 8; j++) {
+      let z = null;
+      try { z = SiteLayerMod.groundZLocal(dv, pl, b.minX + (b.maxX - b.minX) * i / 8, b.minY + (b.maxY - b.minY) * j / 8); } catch (e) { z = null; }
+      if (Number.isFinite(z) && z < low) low = z;
+    }
+    return low < Infinity ? Math.min(80, Math.max(0, dropNow - low)) : 0;
   }
 
   /** Called by Render.syncMain on every frame of the main view (never in Compare).
@@ -62,10 +75,13 @@ const SiteLayer = (() => {
       return res.objects;
     });
     const next = dv ? dropFor(d, dv, pl) : 0;
+    foot = dv ? Math.round(footFor(dv, pl, next) * 4) / 4 : 0;
     if (Math.abs(next - drop) > 1e-6 || layer.group.position.y !== -next) { drop = next; layer.group.position.y = -next; return true; }
     return changed;
   }
 
+  /** The depth the massing continues below its base (see footFor); 0 without a drawn ground. */
+  function massingFoot() { return mesh ? foot : 0; }
   /** For tests: { shown, ground, buildings, roads, walks, waterAreas, trees, key }. */
   function info() { return { ...drawn }; }
   /** The site ground mesh now on screen (shadows, the drag hit test), or null. */
@@ -102,5 +118,5 @@ const SiteLayer = (() => {
     try { sec = ProjectMod.getSection(ProjectUI.doc(), 'site'); } catch (e) { sec = null; }
     return `on|${ProjectUI.doc().id}|${(sec && sec.updatedAt) || ''}`;
   }
-  return { update, info, groundMesh, frameKey, groundBottom, groundZ, frameBox };
+  return { update, info, groundMesh, frameKey, groundBottom, groundZ, frameBox, massingFoot };
 })();

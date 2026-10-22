@@ -100,13 +100,15 @@ const Plate3D = (() => {
   };
 
   /** Context rings: the plates of the other level groups as a faint outline. */
-  function contextObjects(D, state) {
+  function contextObjects(D, state, opts = {}) {
     const out = [];
     if (!state.view.context || !D.scene) return out;
-    const pos = [];
-    for (const rings of D.scene.contextRings || []) for (const r of rings) ringSegs(pos, r, 0.02);
-    const f = fat(pos, '#8a949f', 1, { opacity: 0.55, order: 3 });
-    if (f) out.push(f);
+    if (!opts.massing) {        // with the massing drawn, the other level groups are solids and the faint outlines would only repeat them
+      const pos = [];
+      for (const rings of D.scene.contextRings || []) for (const r of rings) ringSegs(pos, r, 0.02);
+      const f = fat(pos, '#8a949f', 1, { opacity: 0.55, order: 3 });
+      if (f) out.push(f);
+    }
     // site neighbors (a ghost)
     const geos = [];
     for (const p of ProjectUI.contextPolys()) {
@@ -198,10 +200,10 @@ const Plate3D = (() => {
   }
 
   /** The unit labels and the accessible marks of the editing level (flat text, scaled with the plan). */
-  function labelObjects(D, state, overlay) {
+  function labelObjects(D, state, overlay, atZ) {
     const L = D.scene && D.scene.levels.find((x) => x.editing);
     if (!L) return;
-    const stack = !!state.view.levels3d;
+    const stack = !!state.view.levels3d || !!atZ;
     const z = (stack ? L.z + Math.max(1, L.ftf - 1) : CONFIG.slabHeight) + 0.2;
     const ub = D.bounds.union, unit = clamp(Math.max(ub.maxX - ub.minX, ub.maxY - ub.minY) / 300, 1, 2.2);
     const add = (text, x, y, o, tag) => {
@@ -235,14 +237,97 @@ const Plate3D = (() => {
     const model = [], overlay = [];
     if (!D.scene) return { model, overlay };
     const stack = !!state.view.levels3d;
+    const atZ = !!opts.atZ;              // the editing level stands at its own z (inside the massing volume)
     const levels = stack ? D.scene.levels : D.scene.levels.filter((l) => l.editing);
     for (const L of levels) {
-      try { levelObjects(L, state, stack, model, overlay); } catch (e) { console.error(e); }
+      try { levelObjects(L, state, stack || atZ, model, overlay); } catch (e) { console.error(e); }
     }
     if (opts.clean) return { model, overlay: overlay.filter((o) => !o.userData.flags) };
-    try { labelObjects(D, state, overlay); } catch (e) { console.error(e); }
+    try { labelObjects(D, state, overlay, atZ); } catch (e) { console.error(e); }
     return { model, overlay };
   }
 
-  return { build, contextObjects, mapper, fat, hatch, treads };
+  /** True when the editing level is drawn at its own z inside the massing volume: a project source, View > Massing on, a massing with levels. */
+  function editingAtZ(state) {
+    return !!state && state.source === 'project' && state.view.massing !== false && ProjectUI.massingSolids().length > 0;
+  }
+
+  /* ---- the project massing (the whole building as solids) -----------------------------------------------------
+     Every massing level is an extrusion (plates with holes, from z to z + ftf) in the massing frame, in the model color with dark edges (the
+     look of the Tower and of the site neighbors, white against their grey). Podium levels are softer (a little grey, fainter edges). The levels of
+     the active group carry a slight accent (a tint and an accent ring on the top). The editing level is not in the volume: its fill stands there at its z
+     (with "Levels in 3D" every filled level does). A "foot" extends the lowest levels down to the lowest ground under them.
+     Each object has userData.massingKind: 'solid' (the volumes and their edges) or 'outline' (the footprint rings the Plan shows instead). */
+  function massingObjects(D, state, opts = {}) {
+    const out = [];
+    const list = ProjectUI.massingSolids();
+    if (!list.length || !D.ok) return out;
+    const modelC = css('--scene-model', '#f6f6f3');
+    const edgeHex = getComputedStyle(document.documentElement).getPropertyValue('--scene-edge').trim() || CONFIG.lineColor;
+    const accent = col(CONFIG.accentColor);
+    const active = new Set(D.group ? D.group.levels : []);
+    const skip = new Set(state.view.levels3d ? D.scene.levels.map((l) => l.index) : D.editing ? [D.editing.index] : []);
+    const podiumC = modelC.clone().lerp(col('#b9c0c8'), 0.22), activeC = modelC.clone().lerp(accent, 0.24);
+    const mat = (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.94, metalness: 0, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+    const mark = (o, kind, extra = {}) => { o.userData.massing = true; o.userData.massingKind = kind; o.userData.ownMat = true; Object.assign(o.userData, extra); return o; };
+    const lowZ = Math.min(...list.map((l) => l.z));
+    const ringsTop = new Map();       // footprint ring → { ring, z, active } for the outline (one ring per footprint, at the highest level)
+    const ringKey = (r) => r.map((p) => `${Math.round(p[0] * 10)},${Math.round(p[1] * 10)}`).join(';');
+    for (const L of list) {
+      const isActive = active.has(L.index), podium = L.zone === 'podium';
+      const top = L.z + L.ftf;
+      for (const p of L.plates) for (const r of [p.outer, ...(p.holes || [])]) {
+        if (!r || r.length < 3) continue;
+        const k = ringKey(r), cur = ringsTop.get(k);
+        if (!cur || top > cur.z) ringsTop.set(k, { ring: r, z: top, active: isActive || (cur && cur.active) });
+        else if (isActive) cur.active = true;
+      }
+      if (skip.has(L.index)) continue;
+      const geos = [];
+      for (const p of L.plates) { const g = slabGeo(p.outer, p.holes, L.z, L.ftf); if (g) geos.push(g); }
+      const list2 = geos.map((g) => (g.index ? g.toNonIndexed() : g));
+      if (!list2.length) continue;
+      for (const g of list2) if (g.getAttribute('uv')) g.deleteAttribute('uv');
+      const geo = list2.length === 1 ? list2[0] : BufferGeometryUtils.mergeGeometries(list2, false);
+      if (!geo) continue;
+      if (list2.length > 1) list2.forEach((g) => g.dispose());
+      geo.computeVertexNormals();
+      const mesh = mark(new THREE.Mesh(geo, mat(isActive ? activeC : podium ? podiumC : modelC)), 'solid', { level: L.index, zone: L.zone, active: isActive, podium, massingMesh: true });
+      mesh.renderOrder = 1;
+      out.push(mesh);
+      const em = new THREE.LineBasicMaterial({ color: col(edgeHex), transparent: podium, opacity: podium ? 0.6 : 1 });
+      out.push(mark(new THREE.LineSegments(new THREE.EdgesGeometry(geo, 30), em), 'solid', { level: L.index, massingEdges: true }));
+      if (isActive) {
+        const pos = [];
+        for (const p of L.plates) { ringSegs(pos, p.outer, top + 0.05); for (const h2 of p.holes || []) ringSegs(pos, h2, top + 0.05); }
+        const ring = fat(pos, CONFIG.accentColor, 1.6, { order: 6, opacity: 0.9 });
+        if (ring) out.push(mark(ring, 'solid', { level: L.index, massingRing: true }));
+      }
+    }
+    // the foot: the lowest levels continue down to the lowest ground under them
+    const foot = Math.max(0, opts.foot || 0);
+    if (foot > 0.05) {
+      const geos = [];
+      for (const L of list) if (Math.abs(L.z - lowZ) < 0.01) for (const p of L.plates) { const g = slabGeo(p.outer, p.holes, lowZ - foot, foot); if (g) geos.push(g); }
+      const list2 = geos.map((g) => (g.index ? g.toNonIndexed() : g));
+      if (list2.length) {
+        for (const g of list2) if (g.getAttribute('uv')) g.deleteAttribute('uv');
+        const geo = list2.length === 1 ? list2[0] : BufferGeometryUtils.mergeGeometries(list2, false);
+        if (geo) {
+          if (list2.length > 1) list2.forEach((g) => g.dispose());
+          geo.computeVertexNormals();
+          out.push(mark(new THREE.Mesh(geo, mat(podiumC)), 'solid', { massingFoot: true }));
+          out.push(mark(new THREE.LineSegments(new THREE.EdgesGeometry(geo, 30), new THREE.LineBasicMaterial({ color: col(edgeHex), transparent: true, opacity: 0.6 })), 'solid', { massingFoot: true }));
+        }
+      }
+    }
+    // the outline the Plan shows instead of the volume: one ring per footprint, accent for the active group
+    const plain = [], act = [];
+    for (const { ring, z, active: a } of ringsTop.values()) ringSegs(a ? act : plain, ring, z);
+    const o1 = fat(plain, edgeHex, 1.2, { order: 3, opacity: 0.8 }), o2 = fat(act, CONFIG.accentColor, 1.8, { order: 3, opacity: 0.95 });
+    for (const o of [o1, o2]) if (o) out.push(mark(o, 'outline', { massingOutline: true }));
+    return out;
+  }
+
+  return { build, contextObjects, massingObjects, editingAtZ, mapper, fat, hatch, treads };
 })();
