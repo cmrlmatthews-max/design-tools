@@ -36,6 +36,8 @@ Both tools export a `.sketchup.json` file. Install the extension `dist/cmrlm-des
 | `midrise/` | The Mid-Rise Generator. Do not edit `index.html` by hand. Rebuild with `python3 build/midrise/build.py` (or `npm run build:midrise`). |
 | `build/tower/` | Source parts. Edit these, then run `python3 build/tower/build.py` (or `npm run build:tower`) to rebuild `tower/index.html`. |
 | `build/site/` | Source parts for the Site Model. Edit these, then run `python3 build/site/build.py` (or `npm run build:site`) to rebuild `site/index.html`. |
+| `assets/tour/` | Pictures for the first-visit tour. When a tool changes its look, run `npm run shots:tour` and commit the pictures. |
+| `tools/` | Dev scripts. `tour-shots.mjs` makes the tour pictures (needs `npm install` and `npx playwright install chromium` once). |
 | `src/` | Tested modules. `src/tower/` (geometry, envelope, presets, test cases), `src/site/` (geo, geocode, pmtiles, mvt, tiff, model, exports), `src/shared/` (storage, screenshot). |
 | `test/` | Module tests. Run `npm install`, then `npm test`. |
 | `docs/` | Suite roadmap, project-file spec, concepts, technical plans, module contracts, integration notes. |
