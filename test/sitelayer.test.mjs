@@ -231,6 +231,48 @@ test("buildings: maxBuildings keeps the nearest to the local origin, in input or
   assert.equal(buildSiteLayerData(sd, { x: 0, y: 0, rotation: 0, baseZ: 1000 }, { maxBuildings: 0 }).counts.buildings, 0);
 });
 
+test("buildings: a removed building is skipped; includeRemoved returns it with removed: true", () => {
+  const sd = synthSite();
+  const pl = { x: 0, y: 0, rotation: 0, baseZ: 1000 };
+  const before = buildSiteLayerData(sd, pl);
+  sd.buildings = sd.buildings.map((b) => (b.id === "court" ? { ...b, removed: true } : b));
+  const snap = JSON.stringify(sd);
+  const d = buildSiteLayerData(sd, pl);
+  assert.equal(d.counts.buildings, before.counts.buildings - 1);
+  assert.equal(d.counts.removed, 1);
+  assert.deepEqual(d.buildings.map((b) => b.id), ["a", "est"]);
+  assert.ok(d.buildings.every((b) => !("removed" in b)), "the drawn buildings have no removed key");
+  assert.equal(buildSiteLayerData(sd, pl, { includeRemoved: false }).buildings.length, 2);
+  const all = buildSiteLayerData(sd, pl, { includeRemoved: true });
+  assert.deepEqual(all.buildings.map((b) => b.id), ["a", "court", "est"], "list order");
+  assert.equal(all.counts.buildings, 2, "counts.buildings counts the drawn solids only");
+  assert.equal(all.counts.removed, 1);
+  const court = all.buildings.find((b) => b.id === "court");
+  assert.equal(court.removed, true);
+  assert.deepEqual(court, { ...before.buildings.find((b) => b.id === "court"), removed: true }, "the same record as before, plus the flag");
+  assert.ok(!("removed" in all.buildings[0]) && !("removed" in all.buildings[2]));
+  assert.equal(JSON.stringify(sd), snap, "the input is not changed");
+  // removed: false or a value that is not true is not removed
+  sd.buildings = sd.buildings.map((b) => (b.id === "court" ? { ...b, removed: false } : b.id === "a" ? { ...b, removed: "yes" } : b));
+  assert.deepEqual(buildSiteLayerData(sd, pl).counts.removed, 0);
+  assert.equal(buildSiteLayerData(sd, pl).counts.buildings, 3);
+});
+
+test("buildings: removed ones never take a place under maxBuildings; contextIds still skip", () => {
+  const sd = synthSite();
+  sd.buildings = sd.buildings.map((b) => (b.id === "est" ? { ...b, removed: true } : b));
+  // origin at (85, 20): est is the nearest, but it is removed, so court (30 ft) is kept
+  const pl = { x: 85, y: 20, rotation: 0, baseZ: 1000 };
+  assert.deepEqual(buildSiteLayerData(sd, pl, { maxBuildings: 1 }).buildings.map((b) => b.id), ["court"]);
+  const all = buildSiteLayerData(sd, pl, { maxBuildings: 1, includeRemoved: true });
+  assert.deepEqual(all.buildings.map((b) => [b.id, b.removed === true]), [["court", false], ["est", true]]);
+  assert.deepEqual([all.counts.buildings, all.counts.removed], [1, 1]);
+  const ctx = buildSiteLayerData(sd, pl, { contextIds: ["est"], includeRemoved: true });
+  assert.deepEqual(ctx.buildings.map((b) => b.id), ["a", "court"]);
+  assert.equal(ctx.counts.removed, 0);
+  assert.equal(buildSiteLayerData(null, pl).counts.removed, 0);
+});
+
 test("buildings: a missing base sits on the ground at the footprint centroid; height from top - base", () => {
   const sd = synthSite();
   sd.buildings = [
@@ -248,7 +290,7 @@ test("roads, walks, water areas, water lines and trees transform and count; wate
   const sd = synthSite();
   const pl = { x: 10, y: 20, rotation: 0, baseZ: 1000 };
   const d = buildSiteLayerData(sd, pl);
-  assert.deepEqual(d.counts, { buildings: 3, roads: 1, walks: 1, waterAreas: 1, trees: 1, groundNodes: 121 });
+  assert.deepEqual(d.counts, { buildings: 3, removed: 0, roads: 1, walks: 1, waterAreas: 1, trees: 1, groundNodes: 121 });
   assert.deepEqual(d.roads[0].outer, [[-10, 15], [90, 15], [90, 25], [-10, 25]]);
   assert.deepEqual(d.roads[0].holes, []);
   assert.deepEqual(d.walks[0].outer, [[-10, 26], [90, 26], [90, 29], [-10, 29]]);
@@ -347,7 +389,7 @@ test("the Tower fixture (11 × 11 at 100 ft, two buildings) goes through without
   assert.equal(d.ok, true);
   assert.equal(d.counts.buildings, 2);
   assert.equal(d.counts.groundNodes, 121);
-  assert.deepEqual(d.counts, { buildings: 2, roads: 0, walks: 0, waterAreas: 0, trees: 0, groundNodes: 121 });
+  assert.deepEqual(d.counts, { buildings: 2, removed: 0, roads: 0, walks: 0, waterAreas: 0, trees: 0, groundNodes: 121 });
   near(d.buildings[0].base, -5);
   near(groundZAt(derived, 500, 500), 1015);
   noNaN(d);

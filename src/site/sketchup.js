@@ -21,12 +21,15 @@
      (or class) of the centerlines inside it.
    - Walks (when the model has them) go in a "Walks" group, draped + 0.12 ft.
    - A building solid starts at its base elevation (no 1 ft skirt, unlike the DXF).
+   - Removed buildings (meta.removed: an array or a Set of ids, matched without the piece suffix "~n") are left
+     out: no solid, no hidden group. The other buildings keep their "Building 0001" numbers (the number is the
+     place of the building in the model list).
    - Draped faces: x and y are rounded to 0.001 ft, z to 0.00001 ft, so each polygon stays flat
      (rounding z to 0.001 ft would bend a quad by up to about 0.001 ft).
    ========================================================================== */
 
 import { cleanRing2, cleanRing3, makeDoc } from "../shared/sketchup-format.js";
-import { CREDITS } from "./exports.js";
+import { CREDITS, removedIds, isRemovedId } from "./exports.js";
 
 const K = 1000;                       // Clipper scale: 0.001 ft
 const BIG = 100000;                   // ft: "infinity" for the outer cells
@@ -315,7 +318,7 @@ function facesNode(name, pieces, ground, offset, extra) {
 /**
  * SketchUp document for a site model.
  * @param model  { frame, ground, buildings, roads, trees, water } from model.js (trees are ignored)
- * @param meta   { address, lat, lon, size, release, date }
+ * @param meta   { address, lat, lon, size, release, date, removed }  removed: a Set (or an array) of building ids to leave out
  */
 export function siteToSketchup(model, meta = {}) {
   const { frame, ground } = model;
@@ -342,8 +345,9 @@ export function siteToSketchup(model, meta = {}) {
   const children = [{ type: "mesh", name: "Ground", tag: "Ground", material: "Ground", vertices, triangles, soft: true, closed: false }];
 
   // ---- buildings
-  const bnodes = [];
+  const bnodes = [], gone = removedIds(meta.removed);
   buildings.forEach((b, k) => {
+    if (isRemovedId(b.id, gone)) return;
     const outer = cleanRing2(b.ring);
     if (!outer) return;
     const holes = (b.holes || []).map((h) => cleanRing2(h, { hole: true })).filter(Boolean);

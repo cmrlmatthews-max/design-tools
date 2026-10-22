@@ -19,16 +19,42 @@
      water. Holes are separate closed polylines.
    - The topo mesh is one polyface mesh unless n*n > 32,000 vertices; then it
      is cut into bands of rows that share one boundary row.
+   - Removed buildings (opts.removed / meta.removed: an array or a Set of ids)
+     leave the BLDG-DATA and BLDG-ESTIMATE polyfaces. The DXF draws each one as
+     its ground outline on BLDG-REMOVED (a closed 2D polyline at b.base for the
+     outer ring and every hole, dashed linetype). The id match ignores the piece
+     suffix "~n" on both sides (the same rule as derived.js removedSet).
+     removedIds and isRemovedId are exported here because sketchup.js imports
+     from this module (the page bundle places exports before derived).
    ========================================================================== */
 
 import { summarize } from "./model.js";
 
+/** [name, ACI color, linetype (CONTINUOUS when left out)] */
 export const DXF_LAYERS = [
-  ["SITE-BOUNDARY", 1], ["TOPO-MESH", 8], ["BLDG-DATA", 7], ["BLDG-ESTIMATE", 30], ["ROAD-PAVEMENT", 8],
+  ["SITE-BOUNDARY", 1], ["TOPO-MESH", 8], ["BLDG-DATA", 7], ["BLDG-ESTIMATE", 30], ["BLDG-REMOVED", 6, "DASHED"], ["ROAD-PAVEMENT", 8],
   ["WALK-PAVEMENT", 9], ["ROAD-CL", 2], ["WATER", 5], ["WATER-LINE", 4], ["TREE", 3],
 ];
 
 export const CREDITS = "Elevation: USGS 3D Elevation Program. Buildings, roads, trees, water: Overture Maps Foundation, © OpenStreetMap contributors (ODbL), Microsoft ML Buildings. Geocoding: Nominatim / OpenStreetMap.";
+
+/* ---------------- removed buildings ---------------- */
+
+const featureOf = (id) => String(id ?? "").replace(/~\d+$/, "");
+
+/** The removed ids (an array or a Set) as a Set of feature ids: the piece suffix "~n" is dropped. */
+export function removedIds(removed) {
+  const out = new Set();
+  if (removed instanceof Set || Array.isArray(removed)) {
+    for (const id of removed) if (id !== undefined && id !== null && String(id) !== "") out.add(featureOf(id));
+  }
+  return out;
+}
+
+/** True when a building id (with or without the piece suffix) is in a set from removedIds(). */
+export function isRemovedId(id, set) {
+  return !!set && set.size > 0 && set.has(featureOf(id));
+}
 
 /* ---------------- CSV ---------------- */
 
@@ -194,9 +220,12 @@ function buildingMesh(b) {
 /**
  * DXF R12 text for every layer except the ground CSV points; the topo is also written as a polyface mesh.
  * @param model  { frame, ground, buildings, roads, trees, water }
+ * @param opts   { removed }  removed: a Set (or an array) of building ids. Those buildings go to BLDG-REMOVED as
+ *               ground outlines, not to the polyface layers.
  */
-export function siteDxf(model) {
+export function siteDxf(model, opts = {}) {
   const { frame, ground, buildings, roads, trees, water } = model;
+  const gone = removedIds(opts && opts.removed);
   const D = new Dxf();
   const S = frame.size;
 
@@ -218,6 +247,11 @@ export function siteDxf(model) {
 
   for (const b of buildings) {
     if (b.ring.length < 3) continue;
+    if (isRemovedId(b.id, gone)) {
+      D.closed2d("BLDG-REMOVED", b.ring, b.base);
+      for (const h of b.holes || []) if (h.length >= 3) D.closed2d("BLDG-REMOVED", h, b.base);
+      continue;
+    }
     const { verts, faces } = buildingMesh(b);
     D.polyface(b.rule === "estimate" ? "BLDG-ESTIMATE" : "BLDG-DATA", verts, faces);
   }
@@ -237,12 +271,14 @@ export function siteDxf(model) {
   head.g(9, "$EXTMAX"); head.g(10, D.max[0]); head.g(20, D.max[1]); head.g(30, D.max[2]);
   head.g(0, "ENDSEC");
   head.g(0, "SECTION"); head.g(2, "TABLES");
-  head.g(0, "TABLE"); head.g(2, "LTYPE"); head.g(70, 1);
+  head.g(0, "TABLE"); head.g(2, "LTYPE"); head.g(70, 2);
   head.g(0, "LTYPE"); head.g(2, "CONTINUOUS"); head.g(70, 0); head.g(3, "Solid line"); head.g(72, 65); head.g(73, 0); head.g(40, 0);
+  head.g(0, "LTYPE"); head.g(2, "DASHED"); head.g(70, 0); head.g(3, "Dashed __ __ __"); head.g(72, 65); head.g(73, 2); head.g(40, 6);
+  head.g(49, 4); head.g(49, -2);
   head.g(0, "ENDTAB");
   head.g(0, "TABLE"); head.g(2, "LAYER"); head.g(70, DXF_LAYERS.length + 1);
   head.g(0, "LAYER"); head.g(2, "0"); head.g(70, 0); head.g(62, 7); head.g(6, "CONTINUOUS");
-  for (const [name, color] of DXF_LAYERS) { head.g(0, "LAYER"); head.g(2, name); head.g(70, 0); head.g(62, color); head.g(6, "CONTINUOUS"); }
+  for (const [name, color, ltype] of DXF_LAYERS) { head.g(0, "LAYER"); head.g(2, name); head.g(70, 0); head.g(62, color); head.g(6, ltype || "CONTINUOUS"); }
   head.g(0, "ENDTAB");
   head.g(0, "ENDSEC");
   head.g(0, "SECTION"); head.g(2, "ENTITIES");
@@ -258,15 +294,19 @@ const n1 = (v) => (Math.round(v * 10) / 10).toFixed(1);
 /**
  * Notes file in Markdown (ASD-STE100 style: short sentences, active voice).
  * @param model  { frame, ground, buildings, roads, trees, water }
- * @param meta  { address, lat, lon, size, release, date }
+ * @param meta  { address, lat, lon, size, release, date, removed }  removed: a Set (or an array) of building ids.
+ *              Building counts leave the removed buildings out; one line gives their count when there are any.
  */
 export function notesMarkdown(model, meta) {
   const s = summarize(model), g = model.ground, fr = model.frame;
+  const gone = removedIds(meta && meta.removed);
+  const kept = model.buildings.filter((b) => !isRemovedId(b.id, gone));
+  const removedN = new Set(model.buildings.filter((b) => isRemovedId(b.id, gone)).map((b) => featureOf(b.id))).size;   // one per feature, like the page
   const lat = meta.lat ?? fr.lat0, lon = meta.lon ?? fr.lon0, size = meta.size ?? fr.size;
   const [oLon, oLat] = fr.toLonLat(0, 0);
   const date = meta.date || new Date().toISOString().slice(0, 10);
   const rules = { data: 0, floors: 0, estimate: 0 };
-  for (const b of model.buildings) rules[b.rule]++;
+  for (const b of kept) rules[b.rule]++;
   const skShift = Math.round(-g.min * 100) / 100 || 0, skN = Math.abs(skShift).toFixed(2);       // same rounding as sketchup.js
   const skNote = skShift <= 0
     ? `SketchUp: use Extensions > CMRLM > Import Design Tools file. The model is lowered by ${skN} ft so the lowest ground point is 0 ft. Add ${skN} ft to return to NAVD88 elevations.`
@@ -284,7 +324,8 @@ export function notesMarkdown(model, meta) {
     "",
     "## What the model holds",
     "",
-    `- Buildings: ${s.buildings}`,
+    `- Buildings: ${kept.length}`,
+    ...(removedN > 0 ? [`- Removed buildings: ${removedN} (on layer BLDG-REMOVED in the DXF; not in the SketchUp file)`] : []),
     `- Road centerlines: ${n0(s.roadsFt)} ft in ${model.roads.segments.length} segments`,
     `- Pavement areas: ${model.roads.pavement.length}`,
     `- Walk areas: ${model.roads.walks ? model.roads.walks.length : "not included"}`,

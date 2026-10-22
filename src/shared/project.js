@@ -348,8 +348,11 @@ export function transformMultiPoly(section, mp, dir) {
  *     polygons: [{ id, name, outer, holes, base, height }] }    the building rings, in the local frame
  * where base is the building base minus placement.baseZ. Numbers are rounded to 0.01 ft (rings to 0.001).
  * Empty lists when the project has no site section.
+ * A building with `removed: true` (the user removed it in the Site Model) is skipped from both lists, unless
+ * opts.includeRemoved is true; then it is kept and its block and polygon carry `removed: true`.
  */
-export function siteContextFor(doc, placement, radiusFt) {
+export function siteContextFor(doc, placement, radiusFt, opts) {
+  const includeRemoved = !!(isObj(opts) && opts.includeRemoved);
   const out = { blocks: [], polygons: [] };
   const site = getSection(doc, "site");
   const list = site && isObj(site.derived) && Array.isArray(site.derived.buildings) ? site.derived.buildings : [];
@@ -357,6 +360,8 @@ export function siteContextFor(doc, placement, radiusFt) {
   const radius = Number.isFinite(radiusFt) ? radiusFt : Infinity;
   for (const b of list) {
     if (!isObj(b) || !Array.isArray(b.outer) || b.outer.length < 3) continue;
+    const removed = b.removed === true;
+    if (removed && !includeRemoved) continue;
     const outer = mapRing(pl, b.outer, false);
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     for (const [x, y] of outer) {
@@ -371,8 +376,11 @@ export function siteContextFor(doc, placement, radiusFt) {
     const name = typeof b.name === "string" ? b.name : "";
     const height = Number.isFinite(b.height) ? b.height : (Number.isFinite(b.top) && Number.isFinite(b.base) ? b.top - b.base : 0);
     const base = r2((Number.isFinite(b.base) ? b.base : pl.baseZ) - pl.baseZ);
-    out.blocks.push({ id: b.id, name, x: r2((minX + maxX) / 2), y: r2((minY + maxY) / 2), w: r2(maxX - minX), d: r2(maxY - minY), h: r2(height), base });
-    out.polygons.push({ id: b.id, name, outer, holes: (Array.isArray(b.holes) ? b.holes : []).map((h) => mapRing(pl, h, false)), base, height: r2(height) });
+    const block = { id: b.id, name, x: r2((minX + maxX) / 2), y: r2((minY + maxY) / 2), w: r2(maxX - minX), d: r2(maxY - minY), h: r2(height), base };
+    const polygon = { id: b.id, name, outer, holes: (Array.isArray(b.holes) ? b.holes : []).map((h) => mapRing(pl, h, false)), base, height: r2(height) };
+    if (removed) { block.removed = true; polygon.removed = true; }
+    out.blocks.push(block);
+    out.polygons.push(polygon);
   }
   return out;
 }

@@ -231,6 +231,34 @@ t("5d. siteContextFor: no site section, or no buildings, gives empty lists", () 
   eq(siteContextFor(null, PL(), 500), { blocks: [], polygons: [] });
 });
 
+t("5e. siteContextFor: a removed building is skipped from blocks and polygons; includeRemoved keeps it", () => {
+  const doc = ctxDoc();
+  const site = getSection(doc, "site");
+  const derived = clone(site.derived);
+  derived.buildings[2].removed = true;                                    // "onsite": the old building on the new plate
+  const doc2 = writeSection(doc, "site", { ...site, derived });
+  const snap = JSON.stringify(doc2);
+  const pl = PL({ x: 500, y: 500, baseZ: 1000 });
+  const r = siteContextFor(doc2, pl, 120);
+  eq(r.blocks.map((b) => b.id), ["b1", "edge", "holey"]);
+  eq(r.polygons.map((p) => p.id), ["b1", "edge", "holey"]);
+  ok(r.blocks.every((b) => !("removed" in b)) && r.polygons.every((p) => !("removed" in p)), "kept ones have no removed key");
+  eq(siteContextFor(doc2, pl).blocks.length, 4);
+  eq(siteContextFor(doc2, pl, 0).blocks, []);
+  eq(siteContextFor(doc2, pl, 120, {}).blocks.map((b) => b.id), ["b1", "edge", "holey"]);
+  eq(siteContextFor(doc2, pl, 120, { includeRemoved: false }).polygons.length, 3);
+  const all = siteContextFor(doc2, pl, 120, { includeRemoved: true });
+  eq(all.blocks.map((b) => b.id), ["b1", "onsite", "edge", "holey"]);
+  eq(all.polygons.map((p) => p.id), ["b1", "onsite", "edge", "holey"]);
+  eq(all.blocks[1], { id: "onsite", name: "", x: 0, y: 0, w: 40, d: 40, h: 30, base: 12, removed: true });
+  eq(all.polygons[1].removed, true);
+  ok(!("removed" in all.blocks[0]) && !("removed" in all.polygons[0]), "only the removed one is flagged");
+  eq(JSON.stringify(doc2), snap);
+  // removed: false, or a truthy value that is not true, does not count as removed
+  const d3 = clone(derived); d3.buildings[2].removed = false; d3.buildings[3].removed = "yes";
+  eq(siteContextFor(writeSection(doc, "site", { ...site, derived: d3 }), pl, 120).blocks.length, 4);
+});
+
 /* ---------- size ---------- */
 
 t("6. saveProject warns above SIZE_WARN and refuses above SIZE_MAX, naming the largest section", () => {

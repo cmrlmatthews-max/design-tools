@@ -21,6 +21,9 @@
      the rounding changes. A point that repeats after the rounding is dropped.
    - walks is null when the model has no walk layer, and a MultiPoly (maybe empty) when it has one.
    - latitude and longitude are copied as they are. They are not feet.
+   - Removed buildings (meta.removed, an array or a Set of ids): every building stays in the section, and a removed
+     one gets `removed: true`. A building that is not removed has no `removed` key. The match ignores the piece
+     suffix on both sides ("b", "b~2" and "b~3" are one Overture feature), so one feature is removed as one building.
    ========================================================================== */
 
 import { cleanRing2 } from "../shared/sketchup-format.js";
@@ -70,6 +73,28 @@ function uniqueIds(items) {
   return items;
 }
 
+/** The Overture feature id of a building id: the id without the piece suffix ("b~2" gives "b"). */
+export function featureId(id) {
+  return String(id ?? "").replace(/~\d+$/, "");
+}
+
+/**
+ * The removed ids as a Set of feature ids (piece suffix dropped). Takes an array, a Set, or nothing.
+ * Empty, null and undefined entries are dropped.
+ */
+export function removedSet(removed) {
+  const out = new Set();
+  if (removed instanceof Set || Array.isArray(removed)) {
+    for (const id of removed) if (id !== undefined && id !== null && String(id) !== "") out.add(featureId(id));
+  }
+  return out;
+}
+
+/** True when the building id (with or without a piece suffix) is in the set from removedSet(). */
+export function isRemovedId(id, set) {
+  return !!set && set.size > 0 && set.has(featureId(id));
+}
+
 /** Every grid node, row-major from the south (index j * n + i is node (xs[i], ys[j])), rounded to 0.01 ft. */
 function groundGrid(g) {
   const { n, spacing, xs, ys, z } = g;
@@ -88,8 +113,10 @@ function groundGrid(g) {
 /**
  * The `derived` half of the "site" section (spec 6.1).
  * @param model  { frame, ground, buildings, roads, trees, water } from model.js
- * @param meta   { address, lat, lon, size, release }  (lat, lon, size fall back to the frame of the model)
+ * @param meta   { address, lat, lon, size, release, removed }  (lat, lon, size fall back to the frame of the model;
+ *               removed is an array or a Set of building ids)
  * @returns {object} plain JSON data: { address, lat, lon, size, release, boundary, ground, buildings, roads, walks, trees, water }
+ *               A building whose id is in meta.removed carries `removed: true`; the others have no `removed` key.
  */
 export function siteDerived(model, meta = {}) {
   const fr = model.frame || {};
@@ -99,6 +126,7 @@ export function siteDerived(model, meta = {}) {
   if (!fin(lat) || !fin(lon)) throw new Error("siteDerived: the site center is missing.");
   const S = r3(size), roads = model.roads || {}, water = model.water || {};
 
+  const gone = removedSet(meta.removed);
   const buildings = [];
   for (const b of model.buildings || []) {
     const outer = ring(b.ring, false);
@@ -108,6 +136,7 @@ export function siteDerived(model, meta = {}) {
       id: String(b.id), outer, holes: holesOf(b.holes), base, height, top: r3(base + height),
       floors: fin(b.floors) ? b.floors : Math.max(1, Math.round(height / 12)), rule: b.rule, name: String(b.name || ""),
     });
+    if (isRemovedId(b.id, gone)) buildings[buildings.length - 1].removed = true;
   }
 
   const segments = [];
@@ -143,14 +172,22 @@ export function siteDerived(model, meta = {}) {
 
 /**
  * The `state` half of the "site" section (spec 6.1): the fetch parameters. With them the page loads the site again.
- * @param meta  { address, lat, lon, size, release, walks }  (address is the text the user typed)
+ * @param meta  { address, lat, lon, size, release, walks, removed }  (address is the text the user typed; removed is an
+ *              array or a Set of building ids)
+ * @returns {{ query, lat, lon, size, release, walks, removed: string[] }}  removed: the ids as given, strings, unique,
+ *              sorted; [] when meta has none.
  */
 export function siteState(meta = {}) {
+  const ids = new Set();
+  if (meta.removed instanceof Set || Array.isArray(meta.removed)) {
+    for (const id of meta.removed) if (id !== undefined && id !== null && String(id) !== "") ids.add(String(id));
+  }
   return {
     query: String(meta.address ?? ""),
     lat: meta.lat, lon: meta.lon, size: meta.size,
     release: meta.release ? String(meta.release) : null,
     walks: !!meta.walks,
+    removed: [...ids].sort(),
   };
 }
 
