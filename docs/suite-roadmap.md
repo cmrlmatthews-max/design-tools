@@ -16,8 +16,8 @@ This file is the one place that lists every tool in the suite, who builds it, an
 | Id | Tool | Folder | Status | Built by |
 |---|---|---|---|---|
 | `site` | Site Model | `site/` | Version 1 live | Home |
-| `tower` | Tower Generator | `tower/` | Version 1.1 live | Home |
-| `sun` | Sun Study (inside the Tower Generator) | `tower/` | Next: plan in progress | Home |
+| `tower` | Tower Generator | `tower/` | Version 1.2 built, in review (project file, Sun Study) | Home |
+| `sun` | Sun Study (inside the Tower Generator) | `tower/` | Version 1 built, in review | Home |
 | `plate` | Plate Planner | `plate/` | Next: plan in progress | Home |
 | — | Project file (`src/shared/project.js`), Workspace page, Site Model handoff | `index.html`, `src/shared/`, `site/` | Version 1 live | Home |
 | `midrise` | Mid-Rise Generator | `midrise/` | Version 1 live | Home |

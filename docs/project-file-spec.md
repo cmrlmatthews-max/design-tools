@@ -382,7 +382,7 @@ Tests, `test/project.test.mjs` (Node, no DOM, run by `npm test`):
 
 Build order: the home session builds `src/shared/project.js`, its tests, and the Workspace page first, on its own branch (`project-file`), before the Mid-Rise Generator. The Site Model changes below ride on the same branch. The work session downloads `main` after that merge, then makes the Tower Generator changes below together with the Sun Study. Until then, the work session codes against the API in section 10.
 
-Tower Generator (work session, with the Sun Study):
+Tower Generator (done October 22, 2026 by the home session; see `docs/tower-project-sun-plan.md`):
 
 1. Add `src/tower/derived.js` with `towerDerived(state, built)` → `massing.derived` (section 6.2). Test it against the presets: GFA from `derived.levels` equals `computeMetrics(...).gfa` within 0.1 sf.
 2. Accept `?project=`; autosave the `massing` section; Project menu in the top bar.
