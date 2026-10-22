@@ -11915,8 +11915,15 @@ const ProjectUI = (() => {
    * Returns true when the project has a massing.
    */
   function useProject({ quiet = false } = {}) {
-    if (!project.doc || !hasMassing()) { if (!quiet) Toast.show('Open a project that has a massing first (Project menu). The massing comes from the Mid-Rise Generator.', 'warn', 6000); return false; }
+    if (!project.doc || !hasMassing()) { if (!quiet) Toast.show('Open a project that has a massing first (Project menu). The massing comes from the Tower Generator or the Mid-Rise Generator.', 'warn', 6000); return false; }
     const next = deepClone(Store.raw());
+    // From a drawn plate, the corridor follows the massing (plan 3.2 "auto": massing spines give bars, a core with no spine
+    // gives a point corridor). The drawn plate's own corridor kind and spine stay behind.
+    // The drawn plate's core goes too: the massing core (if any) governs.
+    if (next.source !== 'project') {
+      if (next.corridor) { next.corridor.kind = 'auto'; next.corridor.spine = null; }
+      if (next.core) next.core.rect = null;
+    }
     next.source = 'project';
     Store.replace(fillDefaults(next));
     if (!quiet) {
@@ -13259,6 +13266,18 @@ async function runProjectTests() {
       Store.set('extWall', 1.5, { live: false });
       await wait(1300);
       return eq([ProjectUI.status().readOnly, stored(doc.id).sections.plates.schema], [true, 99]);
+    });
+    await t('a Tower massing (90 ft square plates, a 40 ft core, no spines) fills with a point corridor and units on every level', () => {
+      const sq = (h) => [[-h, -h], [h, -h], [h, h], [-h, h]];
+      const lv = (index, h) => ({ index, name: `Level ${index}`, zone: 'tower', z: (index - 1) * 11, ftf: 11, program: 'residential', plates: [{ outer: sq(h), holes: [] }], core: sq(20.125), spines: [], seeds: [] });
+      let doc = ProjectMod.newProject({ name: 'Tower fixture' });
+      doc = ProjectMod.writeSection(doc, 'massing', { tool: 'tower', schema: 2, placement: { x: 0, y: 0, rotation: 0, baseZ: 0 }, state: {}, derived: { levels: [lv(3, 45), lv(4, 45), lv(5, 44)] } });
+      ProjectMod.saveProject(mem, doc);
+      fresh();
+      ProjectUI.openDoc(doc);
+      const d = Derived.get();
+      const fills = d.built.groups.map((g) => g.fill);
+      return eq([Store.get('corridor.kind'), d.groups.length, fills.every((f) => f && f.kind === 'point' && f.units.length > 0), d.hud.building.floors], ['auto', 2, true, 3]);
     });
     await t('a project with no massing keeps the drawn plate', () => {
       const doc = ProjectFixture.project({ name: 'Empty', withMassing: false });

@@ -121,6 +121,18 @@ async function runProjectTests() {
       await wait(1300);
       return eq([ProjectUI.status().readOnly, stored(doc.id).sections.plates.schema], [true, 99]);
     });
+    await t('a Tower massing (90 ft square plates, a 40 ft core, no spines) fills with a point corridor and units on every level', () => {
+      const sq = (h) => [[-h, -h], [h, -h], [h, h], [-h, h]];
+      const lv = (index, h) => ({ index, name: `Level ${index}`, zone: 'tower', z: (index - 1) * 11, ftf: 11, program: 'residential', plates: [{ outer: sq(h), holes: [] }], core: sq(20.125), spines: [], seeds: [] });
+      let doc = ProjectMod.newProject({ name: 'Tower fixture' });
+      doc = ProjectMod.writeSection(doc, 'massing', { tool: 'tower', schema: 2, placement: { x: 0, y: 0, rotation: 0, baseZ: 0 }, state: {}, derived: { levels: [lv(3, 45), lv(4, 45), lv(5, 44)] } });
+      ProjectMod.saveProject(mem, doc);
+      fresh();
+      ProjectUI.openDoc(doc);
+      const d = Derived.get();
+      const fills = d.built.groups.map((g) => g.fill);
+      return eq([Store.get('corridor.kind'), d.groups.length, fills.every((f) => f && f.kind === 'point' && f.units.length > 0), d.hud.building.floors], ['auto', 2, true, 3]);
+    });
     await t('a project with no massing keeps the drawn plate', () => {
       const doc = ProjectFixture.project({ name: 'Empty', withMassing: false });
       ProjectMod.saveProject(mem, doc);

@@ -97,8 +97,15 @@ const ProjectUI = (() => {
    * Returns true when the project has a massing.
    */
   function useProject({ quiet = false } = {}) {
-    if (!project.doc || !hasMassing()) { if (!quiet) Toast.show('Open a project that has a massing first (Project menu). The massing comes from the Mid-Rise Generator.', 'warn', 6000); return false; }
+    if (!project.doc || !hasMassing()) { if (!quiet) Toast.show('Open a project that has a massing first (Project menu). The massing comes from the Tower Generator or the Mid-Rise Generator.', 'warn', 6000); return false; }
     const next = deepClone(Store.raw());
+    // From a drawn plate, the corridor follows the massing (plan 3.2 "auto": massing spines give bars, a core with no spine
+    // gives a point corridor). The drawn plate's own corridor kind and spine stay behind.
+    // The drawn plate's core goes too: the massing core (if any) governs.
+    if (next.source !== 'project') {
+      if (next.corridor) { next.corridor.kind = 'auto'; next.corridor.spine = null; }
+      if (next.core) next.core.rect = null;
+    }
     next.source = 'project';
     Store.replace(fillDefaults(next));
     if (!quiet) {
