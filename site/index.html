@@ -2128,7 +2128,7 @@ function validateDoc(doc) {
   if (!doc || typeof doc !== "object") return { ok: false, errors: ["document: not an object"], counts };
   if (doc.format !== FORMAT) err("format", `must be "${FORMAT}"`);
   if (doc.version !== VERSION) err("version", `must be ${VERSION}`);
-  if (!["tower", "site", "midrise", "parking", "facade", "grading"].includes(doc.source)) err("source", "must be tower, site, midrise, parking, facade, or grading");
+  if (!["tower", "site", "midrise", "parking", "facade", "grading", "plate"].includes(doc.source)) err("source", "must be tower, site, midrise, parking, facade, grading, or plate");
   if (doc.units !== "feet") err("units", "must be feet");
   if (!Number.isFinite(doc.zShift)) err("zShift", "must be a number");
   const tagNames = new Set(), matNames = new Set();

@@ -12,11 +12,12 @@ A small toolkit of browser-based design tools for early-stage architectural work
 | Mid-Rise Generator | `midrise/index.html` | Version 1: garden, corridor, bar, courtyard, wrap, and podium buildings from straight bars; units estimate, parking required against provided, envelope, presets, saved options, compare view, SketchUp export, project file handoff |
 | Parking Deck Generator | `parking/index.html` | Version 1: standalone, wrap, and podium decks; 90-degree two-way bays; single helix, double helix, speed ramp, split-level, and sloped floor; long or short span; accessible, EV, and bike counts; slope, clear height, and barrier checks; column overlay against the unit walls; DXF, SketchUp, stall CSV, project file |
 | Facade Studio | `facade/index.html` | Version 1: punched windows, window wall, curtain wall, storefront, and solid systems by zone and orientation on any project massing or a standalone shape; balconies, fins, shades, bands, glass corners; window-to-wall ratio by orientation, ground transparency, envelope note, sun exposure; four-sheet elevation DXF, SketchUp, AI-ready images, project file |
+| Plate Planner | `plate/index.html` | Version 1: counted test fit of every floor plate of a project massing, or a drawn plate; bar, L, U, courtyard, and point plates; multifamily mix or hotel keys (a suite is one key and two bays); corridor, stairs at corridor ends, core, corner units, pockets; drag bay lines, lock, re-fill; net rentable area (to the corridor face and the inside face of the exterior wall) and efficiency by level; rooms CSV, DXF, SketchUp, notes; project file; Send to Parking Deck and Facade Studio |
 | Grading Sketch | `grading/index.html` | Version 1: buildings and decks on the Site Model ground or a typed plane; balanced or typed finished floor elevations, tiers and stepping suggestions; pads, drives, lots, routes, drawn, pad-step, and automatic walls; daylight slopes; cut and fill in cubic yards, wall heights, accessible route slopes; Revit CSV toposolid, DXF contours, SketchUp, notes; project file. A sketch for early coordination with the civil engineer, never a grading plan |
 
 ## Suite
 
-The toolkit grows into a suite that shares one project file (`name.cmrlm.json`). Start with `docs/suite-roadmap.md` (tools, order, who builds what) and `docs/project-file-spec.md` (the shared file and `src/shared/project.js`). Planned next: Plate Planner (`docs/plate-planner-notes.md`, work session), View Study, Egress Sketch.
+The toolkit grows into a suite that shares one project file (`name.cmrlm.json`). Start with `docs/suite-roadmap.md` (tools, order, who builds what) and `docs/project-file-spec.md` (the shared file and `src/shared/project.js`). Planned next: View Study, Egress Sketch.
 
 ## SketchUp
 
@@ -28,6 +29,7 @@ Both tools export a `.sketchup.json` file. Install the extension `dist/cmrlm-des
 |---|---|
 | `tower/` | The finished tool. Do not edit `index.html` by hand. |
 | `site/` | The Site Model tool. Do not edit `index.html` by hand. |
+| `plate/` | The Plate Planner. Do not edit `index.html` by hand. Rebuild with `python3 build/plate/build.py` (or `npm run build:plate`). |
 | `grading/` | The Grading Sketch. Do not edit `index.html` by hand. Rebuild with `python3 build/grading/build.py` (or `npm run build:grading`). |
 | `facade/` | The Facade Studio. Do not edit `index.html` by hand. Rebuild with `python3 build/facade/build.py` (or `npm run build:facade`). |
 | `parking/` | The Parking Deck Generator. Do not edit `index.html` by hand. Rebuild with `python3 build/parking/build.py` (or `npm run build:parking`). |

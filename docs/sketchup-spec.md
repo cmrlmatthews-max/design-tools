@@ -18,7 +18,7 @@ All lengths are **feet**. Plan `(x, y)`: x = east, y = north. `z` is up.
 {
   "format": "cmrlm-design-tools/sketchup",
   "version": 1,
-  "source": "tower" | "site" | "midrise" | "parking" | "facade" | "grading",
+  "source": "tower" | "site" | "midrise" | "parking" | "facade" | "grading" | "plate",
   "name": "Option A",                       // root group name
   "createdAt": "2026-10-21T16:05:00Z",
   "units": "feet",

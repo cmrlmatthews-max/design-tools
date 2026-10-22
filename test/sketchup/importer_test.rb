@@ -383,6 +383,15 @@ class SiteImportTest < ImporterTestCase
     refute_nil result
     assert_empty model.shadow_info
   end
+
+  def test_every_suite_source_imports
+    %w[tower site midrise parking facade grading plate].each do |src|
+      doc = mini_doc([solid_node('Unit 1', 0, 0, 30, 40, 0, 10)], source: src)
+      _model, ui, result = import_doc(doc)
+      refute_nil result, "source #{src} must import"
+      assert_empty ui.messages, "source #{src}: no message"
+    end
+  end
 end
 
 # ------------------------------------------------------------------------------

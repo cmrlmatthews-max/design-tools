@@ -199,6 +199,14 @@ Shared types:
 - `bay.from` and `bay.to` are distances in feet along the facade ring that the unit faces, counter-clockwise from the ring's first vertex. An optional `ring` on the unit names that ring: 0 = the outer ring, k = hole ring k.
 - Optional keys the Plate Planner also writes (see `docs/plate-planner-notes.md`, section 9): `massingUpdatedAt` on `derived`; `support: [{ id, outer, kind }]` on each level; `demising` (the two cut lines) on each unit.
 - `exposures` lists the compass sides of the unit with a facade, in the local frame after the massing rotation. The Facade Studio and the Egress Sketch read `units`, `corridor`, and `core`.
+- Version 1 of the Plate Planner (October 2026) writes these keys too. Readers must accept them and must not need them:
+  - On `derived`: `massingUpdatedAt` (the `massing.updatedAt` that the fill used; a newer massing makes the plates stale).
+  - On each level: `name`, `z` (floor surface, ft above `baseZ`), `ftf`, and `support: [{ id, outer, kind }]`.
+  - On each unit: `ring`, `demising` (the cut lines, each `[[x, y], [x, y]]`), and `accessible` (`false`, `true`, or a type such as `"type-a"`).
+  - On `metrics`: `bays` (hotel mode only: the keys times the bays per key).
+- Unit `type` is the type NAME (for example `"1BR"`), not the internal id.
+- Area rule: unit `area` is measured to the centerline of the demising walls, to the corridor face of the corridor wall, and to the inside face of the exterior wall. The 0.5 ft corridor wall counts in the unit; the plate edge is the outside face, so the fill takes a 1.0 ft exterior wall allowance off the plate first. `nrsf` is the sum of unit areas, so it is a planning number, not a leasing number.
+- Every coordinate is in the massing local frame (the frame of `massing.derived.levels[].footprint`).
 
 ### 6.4 `parking.derived` (writer: Parking Deck)
 

@@ -109,20 +109,26 @@ function fromPlates(project, frame) {
   const byIndex = (a, b) => a.index - b.index;
   const pick = withLines.filter((lv) => program(lv.index) === "residential").sort(byIndex)[0] || withLines.slice().sort(byIndex)[0];
 
-  const xs = [];
+  const xs = [], widths = [];
   for (const u of pick.units) {
+    const own = [];
     for (const line of u.demising || []) {
       if (!Array.isArray(line) || line.length < 2) continue;
       const a = frame.toLayout(line[0]), b = frame.toLayout(line[1]);
       const dx = Math.abs(b[0] - a[0]), dy = Math.abs(b[1] - a[1]);
       if (dy < 5 || dx > TAN5 * dy) continue;
       xs.push((a[0] + b[0]) / 2);
+      own.push((a[0] + b[0]) / 2);
     }
+    if (own.length >= 2) widths.push(Math.max(...own) - Math.min(...own));
   }
   if (!xs.length) return null;
   xs.sort((p, q) => p - q);
   const merged = mergeClose(xs, 0.25).map(r3);
-  return { source: "plates", xs: merged, unitWidth: unitWidthOf(merged), footprint: mpToLayout(pick.plate, frame), level: pick.index };
+  // Unit width: the median of each unit's own width between its two cuts. On a double-loaded bar the north and
+  // south cuts interleave, so the spacing between neighbouring lines would read about half the true width.
+  const unitWidth = widths.length ? r3(median(widths)) : unitWidthOf(merged);
+  return { source: "plates", xs: merged, unitWidth, footprint: mpToLayout(pick.plate, frame), level: pick.index };
 }
 
 function fromMidrise(project, frame) {
