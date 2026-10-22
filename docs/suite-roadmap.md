@@ -39,6 +39,7 @@ This file is the one place that lists every tool in the suite, who builds it, an
 | SketchUp export | `src/shared/sketchup-format.js`, `sketchup/` | Same `.sketchup.json` format. |
 | Sun position | `src/shared/solar.js` (home session, with the Sun Study) | API in the project-file spec, section on the `sun` section. |
 | Look and controls | `build/tower/` parts | New tools copy the tower shell. Same tokens, top bar, tabs, CMRLM mark. |
+| Site layer | `src/shared/sitelayer.js`, `build/shared/06x_sitelayer.js`, `build/shared/06y_placement.js` | Every tool draws the project site from `site.derived`. Drag placement only in the Tower Generator, the Mid-Rise Generator, and a standalone Parking Deck. The Grading Sketch keeps its own ground. |
 
 ## 4. Pipeline order
 

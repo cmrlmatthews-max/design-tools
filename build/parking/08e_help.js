@@ -30,6 +30,9 @@ const Help = (() => {
       'The deck reads the levels and plates of the massing and writes a parking section back. It saves by itself a second after each change.',
       'Send to Facade Studio is planned and not available yet.',
     ]],
+    ['Site', [
+      'The Site toggle in the View tab shows the project site from the Site Model. It shows the real ground, roads, water, and trees. Neighbor buildings are solid grey blocks with dark edges. In a standalone deck, drag the deck on the ground to move it. Use the rotation handle to turn it. A wrap or podium deck follows its massing and does not drag.',
+    ]],
     ['Files', [
       'Option menu > Save keeps the design in this browser. Export > Export JSON downloads all saved options. Import JSON adds them back.',
       'Export > SketchUp (.json) opens in SketchUp with the CMRLM extension. DXF has the slabs, stalls, ramp faces and columns for Revit. Stall list (.csv) has one row per stall.',
