@@ -603,8 +603,10 @@ if (existsSync(new URL("../src/plate/fill.js", import.meta.url))) {
     });
     let built = null;
     t("real 8.1: buildPlates → computeMetrics runs and the numbers sit near section 8.1", () => {
-      built = FL.buildPlates(draw({}), { project: null });
-      const m = MT.computeMetrics(draw({}), built);
+      // Plan 3.2: "auto" with a core and no spine resolves to a point corridor, so 8.1 names the bar kind (as presets.js does).
+      const bar = draw({ corridor: { ...baseState().corridor, kind: "bar" } });
+      built = FL.buildPlates(bar, { project: null });
+      const m = MT.computeMetrics(bar, built);
       const row = m.groups[0].row;
       console.log(`       units ${row.units}, nrsf ${row.nrsf}, eff ${row.efficiency}, corridor ${row.corridor.lengthFt}, path ${row.stairDoors.pathFt}, dead ${row.stairDoors.deadEndMax}, closure ${JSON.stringify(row.closure)}`);
       console.log(`       mix ${JSON.stringify(row.byType)} warnings ${m.warnings.map((w) => w.code).join(",")}`);

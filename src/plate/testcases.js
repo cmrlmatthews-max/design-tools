@@ -124,10 +124,11 @@ export const TEST_CASES = [
     // east 150.96 less the 30 ft core, two runs of 60.48 (120.96); west 150.96. Outer total 611.84.
     // Court runs (area line 122 × 92): south and north 122 less the 11 ft stair, two runs of 55.5 per side (222 total);
     // east and west 92 each. Court total 406. ΣL = 611.84 + 406 = 1,017.84. NRSF = 1,017.84 × 28.665 + 4 × 1,100.0 = 33,576.5. GSF = 44,200. Efficiency = 0.7596.
-    // Units: studio 6, 1BR 16, den 4, 2BR 11 (including the 4 corners), 3BR 2.
+    // Units: studio 7, 1BR 15, den 4, 2BR 11 (including the 4 corners), 3BR 2. (The plan said studio 6, 1BR 16. On a 55.5 ft
+    // court run, after the 2BR the last slot must be 15.5 to 20.61 ft wide, and only a studio fits; the fill rule decides.)
     expect: {
       units: 39,
-      counts: { studio: 6, '1br': 16, '1brden': 4, '2br': 11, '3br': 2 },
+      counts: { studio: 7, '1br': 15, '1brden': 4, '2br': 11, '3br': 2 },
       corners: 4,
       pockets: 4,
       nrsf: 33576.5,
