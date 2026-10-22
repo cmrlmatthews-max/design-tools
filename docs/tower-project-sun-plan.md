@@ -355,9 +355,9 @@ Sunrise and sunset (tolerance 2 minutes):
 
 | Date | Sunrise | Sunset | Day length |
 |---|---|---|---|
-| 2026-03-20 | 7:37 EDT | 19:53 EDT | 12 h 15.7 min |
-| 2026-06-21 | 6:23 EDT | 20:56 EDT | 14 h 32.6 min |
-| 2026-12-21 | 7:34 EST | 17:37 EST | 10 h 03.2 min |
+| 2026-03-20 | 7:41 EDT | 19:49 EDT | 12 h 08.1 min |
+| 2026-06-21 | 6:27 EDT | 20:51 EDT | 14 h 24 min |
+| 2026-12-21 | 7:38 EST | 17:33 EST | 9 h 55 min |
 
 Solar noon on 2026-03-20: 13:45 EDT, altitude 56.30°.
 
@@ -370,7 +370,7 @@ A 100 × 100 ft square tower, 10 floors of 10 ft (100 ft tall), flat crown, on f
 - Shadow length north of the north face: `100 ÷ tan 56.30° = 66.70 ft`.
 - `isLit` at 60 ft north of the north face, on the center line: false. At 72 ft: true.
 - `sunHours` with one sample at that time on a 5 ft grid: the shaded nodes north of the tower reach 65 ft and stop before 70 ft.
-- A node 500 ft south of the tower, full day, 30-minute step: hours = the day length, 12.26 h (±0.03).
+- A node 500 ft south of the tower, full day, 30-minute step: hours = the day length, 12.14 h (±0.03). (Corrected October 22, 2026: the first table was about 4 minutes early at sunrise and 4 minutes late at sunset; these values match published Atlanta tables.)
 
 ---
 
@@ -394,7 +394,7 @@ A 100 × 100 ft square tower, 10 floors of 10 ft (100 ft tall), flat crown, on f
 | 12 | same | `localBearing` | 180 with rotation 90 → 270 |
 | 13 | `test/tower.sunhours.test.mjs` | Section 8.3 shadow edge | Lit and shaded points as listed |
 | 14 | same | `shadowPolygon` against `isLit` | 2,000 random nodes agree for a convex and an L-shaped caster |
-| 15 | same | Full-day node | 12.26 h ± 0.03 |
+| 15 | same | Full-day node | 12.14 h ± 0.03 |
 | 16 | same | Rotation | A placement rotation of 90 turns the shadow with the frame |
 | 17 | same | Cancel | `shouldStop` returning true stops with `cancelled: true` |
 | 18 | `test/tower.presets.test.mjs` | Presets at schema 2 | Every preset has `placement`, `context.fromSite`, `sun`; GFA unchanged from section 8.1 |
