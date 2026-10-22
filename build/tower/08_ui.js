@@ -160,6 +160,8 @@ const UI = (() => {
   }
 
   /* ---- panel sections ------------------------------------------------------------- */
+  const NO_SITE_HELP = 'Unlimited: no site line, setbacks, or site checks. Pick Rectangle or Polygon to test a real site.';
+  const hasSiteNow = () => get('site.shape') !== 'none';
   function buildSite() {
     const shapeBind = {
       get: () => get('site.shape'),
@@ -176,8 +178,9 @@ const UI = (() => {
     };
     return {
       children: els([
-        sel('Shape', null, opts([['rect', 'Rectangle'], ['polygon', 'Polygon']]), shapeBind),
-        Controls.when(() => get('site.shape') !== 'polygon', [lenS('Width', 'site.width', 50, 600), lenS('Depth', 'site.depth', 50, 600)]),
+        sel('Shape', null, opts([['none', 'Unlimited'], ['rect', 'Rectangle'], ['polygon', 'Polygon']]), shapeBind),
+        Controls.when(() => get('site.shape') === 'none', [Controls.help(NO_SITE_HELP)]),
+        Controls.when(() => get('site.shape') === 'rect', [lenS('Width', 'site.width', 50, 600), lenS('Depth', 'site.depth', 50, 600)]),
         Controls.when(() => get('site.shape') === 'polygon', [Controls.points({ label: 'Site corners (x, y in feet)', bind: bs('site.points'), need: 3, needText: 'Needs at least 3 points. Until then the rectangle is used.' })]),
       ]),
     };
@@ -203,10 +206,12 @@ const UI = (() => {
           label: 'Height limit (0 = none)', bind: limitBind, min: 0, max: 800, step: 5, hardMin: 0, hardMax: 5000,
           format: (v) => (v > 0 ? Units.formatFeetInches(v) : 'None'), parse: (t) => (/^\s*(none|off)\s*$/i.test(t) ? 0 : Units.parseLength(t)), inputMode: 'text',
         }),
-        Controls.label('Stepback'),
-        Controls.toggle({ label: 'Stepback above a height', bind: bs('site.stepback.on') }),
-        Controls.when(() => get('site.stepback.on'), [lenS('Above height', 'site.stepback.aboveHeight', 20, 400), lenS('Step in by', 'site.stepback.distance', 5, 60)]),
-        Controls.help('Above the stepback height the allowed footprint shrinks by the step-in distance on every side.'),
+        Controls.when(hasSiteNow, [
+          Controls.label('Stepback'),
+          Controls.toggle({ label: 'Stepback above a height', bind: bs('site.stepback.on') }),
+          Controls.when(() => get('site.stepback.on'), [lenS('Above height', 'site.stepback.aboveHeight', 20, 400), lenS('Step in by', 'site.stepback.distance', 5, 60)]),
+          Controls.help('Above the stepback height the allowed footprint shrinks by the step-in distance on every side.'),
+        ]),
       ]),
     };
   }
@@ -231,7 +236,7 @@ const UI = (() => {
         h('div', { class: 'add-row' }, Controls.button('Surround', () => {
           Store.set('context.blocks', surroundBlocks(Store.raw()), { live: false });
           if (!get('context.show')) Store.set('context.show', true, { live: false });
-        }), h('span', { class: 'help', style: 'margin:0' }, 'One block on each side of the site.')),
+        }), h('span', { class: 'help', style: 'margin:0' }, 'One block on each side of the site (around the building when there is no site).')),
       ]),
     };
   }
@@ -495,7 +500,7 @@ const UI = (() => {
     // Project site (09b_project.js): the first Site section, shown only while a project is open.
     { id: 'project', tab: 'site', title: 'Project site', open: true, build: () => ProjectUI.buildSite({ bs, els, lenF, degS, get }), when: () => ProjectUI.has() },
     { id: 'site', tab: 'site', title: 'Site', open: true, build: buildSite },
-    { id: 'setbacks', tab: 'site', title: 'Setbacks', open: true, build: buildSetbacks },
+    { id: 'setbacks', tab: 'site', title: 'Setbacks', open: true, build: buildSetbacks, when: hasSiteNow },
     { id: 'height', tab: 'site', title: 'Height limit and stepback', open: true, build: buildHeight },
     { id: 'context', tab: 'site', title: 'Context blocks', build: buildContext },
   ];
@@ -807,15 +812,23 @@ const UI = (() => {
     if (!!prefs.hudOpen !== open) { prefs.hudOpen = open; saveUiPrefs(prefs); }
   }
   function setText(id, text) { const el = $(id); if (el.firstChild && el.firstChild.nodeType === 3) el.firstChild.nodeValue = text; else el.prepend(document.createTextNode(text)); }
+  /** A metric that needs the site: "—" with a small "no site" note while the site is Unlimited, the number otherwise. */
+  function siteMetric(id, text, hasSite) {
+    setText(id, hasSite ? text : '—');
+    const el = $(id);
+    const note = el.querySelector('small.nosite');
+    if (hasSite) { if (note) note.remove(); } else if (!note) el.append(h('small', { class: 'nosite' }, 'no site'));
+  }
   function updateHud(d) {
     const m = d.metrics;
+    const site = m.hasSite !== false;
     setText('mGfa', Units.formatArea(m.gfa));
-    setText('mFar', Units.formatRatio(m.far));
+    siteMetric('mFar', Units.formatRatio(m.far), site);
     setText('mHeight', Units.formatFeetInches(m.totalHeight));
     setText('mFloors', Units.formatInt(m.floorCount));
     $('mFloorsSub').textContent = floorsText(m);
-    setText('mSite', Units.formatArea(m.siteArea));
-    setText('mCover', pct1(m.siteCoverage));
+    siteMetric('mSite', Units.formatArea(m.siteArea), site);
+    siteMetric('mCover', pct1(m.siteCoverage), site);
     setText('mEff', pct1(m.efficiencyAvg));
     setText('mNet', Units.formatArea(m.netArea));
     setText('mCore', Units.formatArea(m.coreArea));
@@ -849,7 +862,7 @@ const UI = (() => {
         h('dd', { class: t.diff > 0 ? 'tgt-pos' : 'tgt-neg' }, `${signed(t.diff, fmt)} (${signed(t.pct, (v) => `${v.toFixed(1)}%`)})`));
     };
     addTarget('GFA', m.target.gfa, (v) => Units.formatArea(v));
-    addTarget('FAR', m.target.far, (v) => Units.formatRatio(v, 2));
+    if (site) addTarget('FAR', m.target.far, (v) => Units.formatRatio(v, 2));
     $('hudTargets').hidden = !tl.children.length;
 
     const list = $('warnList');

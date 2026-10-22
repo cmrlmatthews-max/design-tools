@@ -17,6 +17,8 @@ function computeBounds(state, plates, height) {
     for (const poly of p.polygons) for (const q of poly.outer) add(model, q[0], q[1]);
   }
   for (const q of sitePolygon(state)) add(site, q[0], q[1]);
+  // No site (Unlimited): the site box is the building box plus a margin, so framing, the figure and the sun grid still have an extent.
+  if (!isFinite(site.minX) && isFinite(model.minX)) { const m = 30; Object.assign(site, { minX: model.minX - m, maxX: model.maxX + m, minY: model.minY - m, maxY: model.maxY + m }); }
   if (!isFinite(site.minX)) Object.assign(site, { minX: -50, maxX: 50, minY: -50, maxY: 50 });
   if (!isFinite(model.minX)) Object.assign(model, site);
   const union = {

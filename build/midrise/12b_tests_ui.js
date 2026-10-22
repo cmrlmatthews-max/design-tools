@@ -212,7 +212,8 @@ async function runUiTests() {
 
     /* ---- metrics card ---- */
     await t('metrics card: four core numbers and the warning badge stay visible', () => {
-      Store.replace(fillDefaults(defaultState()));
+      const rectSite = fillDefaults(defaultState()); rectSite.site.shape = 'rect';          // the density number needs a site
+      Store.replace(rectSite);
       UI.setHudOpen(false);
       UI.updateHud(Derived.get());
       const vis = ['mUnits', 'mDensity', 'mParkRatio', 'mHeight', 'hudBadge'].map((id) => visible($(id)));

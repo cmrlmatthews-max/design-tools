@@ -104,7 +104,7 @@ async function runProjectTests() {
       return ok || `buttons ${labels}, first ${first && first.dataset.section}, fields ${fields}`;
     });
     await t('the site boundary is given in the tower frame (centered on the tower)', () => eq(ProjectUI.boundaryLocal(), [[-500, -500], [500, -500], [500, 500], [-500, 500]]));
-    await t('the site layer draws the boundary and the north arrow', async () => {
+    await t('the site layer draws the boundary and the north arrow (the design itself has an Unlimited site: the layer is separate)', async () => {
       if (!Render.ready()) return true;
       await wait(250);
       const i = SiteLayer.info();

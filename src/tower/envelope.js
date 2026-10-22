@@ -155,6 +155,12 @@ function setbacksOf(state) {
   return { front: g("front"), back: g("back"), left: g("left"), right: g("right") };
 }
 
+/** False when the design has no site (site.shape === "none", "Unlimited"): there is no site ring, no setbacks and no stepback,
+ *  and allowedFootprint / envelopeWireframe return []. The height limit (when above 0) still applies. */
+export function hasSite(state) {
+  return !state || !state.site || state.site.shape !== "none";
+}
+
 function usePolygonSite(state) {
   const s = state.site || {};
   return s.shape === "polygon" && Array.isArray(s.points) && s.points.length >= 3;
@@ -167,6 +173,7 @@ function rectRing(w, d) {
 /** Site ring, counter-clockwise, cleaned of duplicate and collinear points. */
 function siteRing(state) {
   const s = state.site || {};
+  if (!hasSite(state)) return [];
   if (!usePolygonSite(state)) return rectRing(Math.max(0, num(s.width, 0)), Math.max(0, num(s.depth, 0)));
   let ring = s.points.map((p) => [num(p[0]), num(p[1])]);
   if (ringSignedArea(ring) < 0) ring.reverse();
@@ -226,6 +233,7 @@ function offsetRingPerEdge(ring, dist) {
 
 /** Base allowed footprint: site minus side setbacks. Returns MultiPoly. */
 function baseFootprint(state) {
+  if (!hasSite(state)) return [];
   const sb = setbacksOf(state);
   const s = state.site || {};
   if (!usePolygonSite(state)) {
@@ -263,6 +271,7 @@ function stepFootprint(state, base) {
 
 /** MultiPoly allowed at elevation z. Stepback applies for z strictly above aboveHeight. */
 export function allowedFootprint(state, z) {
+  if (!hasSite(state)) return [];
   const base = baseFootprint(state);
   const sb = stepbackOf(state);
   if (sb.on && z > sb.aboveHeight + STEP_EPS) return stepFootprint(state, base);
@@ -273,6 +282,7 @@ export function allowedFootprint(state, z) {
 
 /** Prisms to draw. Height = heightLimit if set, else topZ. */
 export function envelopeWireframe(state, topZ) {
+  if (!hasSite(state)) return [];                  // no site: nothing to draw
   const limit = Math.max(0, num(state.site && state.site.heightLimit, 0));
   const top = limit > 0 ? limit : num(topZ, 0);
   if (!(top > 0)) return [];
@@ -339,8 +349,9 @@ function copyPlate(p) {
  */
 export function checkEnvelope(state, plates, solids = []) {
   const limit = Math.max(0, num(state.site && state.site.heightLimit, 0));
-  const sb = stepbackOf(state);
-  const base = baseFootprint(state);
+  const free = !hasSite(state);                     // no site: no setback or stepback checks, only the height limit
+  const sb = free ? { on: false, aboveHeight: 0, distance: 0 } : stepbackOf(state);
+  const base = free ? [] : baseFootprint(state);
   const step = sb.on ? stepFootprint(state, base) : base;
 
   const outside = new Map();
@@ -354,7 +365,7 @@ export function checkEnvelope(state, plates, solids = []) {
     const stepped = sb.on && top > sb.aboveHeight + H_TOL;
     const allowed = stepped ? step : base;
 
-    const area = differenceArea(p.polygons, allowed);
+    const area = free ? 0 : differenceArea(p.polygons, allowed);
     p.outsideEnvelopeArea = area;
     outside.set(p.n, area);
 

@@ -271,5 +271,15 @@ t("performance: collectSnapTargets + snapMove, 6 segments + 8 context blocks < 2
   ok(ms < 2, `took ${ms} ms`);
 });
 
+t("Unlimited site (shape none): no site or setback lines; the other lines stay", () => {
+  const s = makeState();
+  s.site.shape = "none";
+  const kinds = new Set(collectSnapTargets(s, buildPlates(s).plates).lines.map((l) => l.kind));
+  ok(!kinds.has("site") && !kinds.has("setback"), "no site lines: " + [...kinds].join());
+  ok(kinds.has("segment"), "segment lines stay");
+  const r = snapMove(collectSnapTargets(s, []).lines, { minX: 118, maxX: 218, minY: -40, maxY: 40 }, { grid: 5 });
+  ok(r && typeof r.dx === "number" && isFinite(r.dx), "snapMove still works");
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

@@ -213,5 +213,25 @@ t("missing inputs throw a clear error", () => {
   ok(/missing input "state"/.test(msg), msg);
 });
 
+/* ---------- Unlimited site (shape none) ---------- */
+console.log("Unlimited site");
+t("shape none: metrics say no site (hasSite false, FAR, coverage and area 0), no NaN, and derived validates", () => {
+  const s = preset("point-tower");
+  s.site.shape = "none"; s.site.heightLimit = 0;
+  const { metrics, derived: d } = run(s);
+  eq([metrics.hasSite, metrics.siteArea, metrics.far, metrics.siteCoverage], [false, 0, 0, 0]);
+  ok(metrics.gfa > 0 && metrics.totalHeight > 0, "the building still has numbers");
+  eq([d.metrics.far, d.metrics.siteCoverage], [0, 0]);
+  ok(!/NaN|Infinity/.test(JSON.stringify(d)) && !/NaN|Infinity/.test(JSON.stringify(metrics)), "no NaN or Infinity");
+  const doc = writeSection(newProject({ name: "No site" }), "massing", { tool: "tower", schema: 1, placement: { x: 0, y: 0, rotation: 0, baseZ: 0 }, state: s, derived: d });
+  const v = validate(doc);
+  ok(v.ok, v.errors && v.errors.join("; "));
+  eq(getSection(doc, "massing").state.site.shape, "none");
+});
+t("shape none: the same building on a rectangle keeps its site numbers", () => {
+  const { metrics } = run(preset("point-tower"));
+  eq(metrics.hasSite, true); ok(metrics.far > 15 && metrics.siteArea === 22500);
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -178,6 +178,7 @@ function usePolygonSite(site) {
 
 function siteLines(out, state) {
   const site = (state && state.site) || {};
+  if (site.shape === "none") return;                 // Unlimited: no site line to snap to
   if (usePolygonSite(site)) {
     const pts = site.points.map((p) => [num(p[0]), num(p[1])]);
     const b = growRing(emptyBox(), pts);
@@ -204,7 +205,7 @@ function siteLines(out, state) {
 }
 
 function setbackLines(out, state) {
-  if (!state || !state.site) return;
+  if (!state || !state.site || state.site.shape === "none") return;
   let mp;
   try { mp = allowedFootprint(state, 0); } catch (e) { return; }   // polygon site without Clipper
   const b = mpBox(mp);

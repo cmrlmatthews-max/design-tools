@@ -16,13 +16,13 @@ const Compare = (() => {
   const parkingSpaces = (m) => { const ub = unitBreakdown(m); return ub.spaces.length ? ub.spaces.reduce((a, r) => a + r.count, 0) : null; };
   const ROWS = [
     { label: 'GFA', get: (e) => e.d.metrics.gfa, fmt: Units.formatArea, higher: true },
-    { label: 'FAR', get: (e) => e.d.metrics.far, fmt: (v) => Units.formatRatio(v, 2), higher: true },
+    { label: 'FAR', get: (e) => (e.d.metrics.hasSite === false ? null : e.d.metrics.far), fmt: (v) => Units.formatRatio(v, 2), higher: true },
     { label: 'Units + keys (estimate)', get: (e) => totalUnits(e.d.metrics), fmt: Units.formatInt, higher: true },
     { label: 'Parking spaces (estimate)', get: (e) => parkingSpaces(e.d.metrics), fmt: Units.formatInt },
     { label: 'Efficiency (avg)', get: (e) => e.d.metrics.efficiencyAvg, fmt: (v) => `${(v * 100).toFixed(1)}%`, higher: true },
     { label: 'Floors', get: (e) => e.d.metrics.floorCount, fmt: Units.formatInt },
     { label: 'Total height', get: (e) => e.d.metrics.totalHeight, fmt: Units.formatFeetInches },
-    { label: 'Site coverage', get: (e) => e.d.metrics.siteCoverage, fmt: (v) => `${(v * 100).toFixed(1)}%` },
+    { label: 'Site coverage', get: (e) => (e.d.metrics.hasSite === false ? null : e.d.metrics.siteCoverage), fmt: (v) => `${(v * 100).toFixed(1)}%` },
     { label: 'Tower plate (avg)', get: (e) => e.d.metrics.plateAvg, fmt: Units.formatArea },
     { label: 'Net area', get: (e) => e.d.metrics.netArea, fmt: Units.formatArea },
     { label: 'Warnings', get: (e) => e.d.warnings.length, fmt: Units.formatInt },

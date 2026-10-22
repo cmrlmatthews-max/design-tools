@@ -320,5 +320,20 @@ t("SketchUp: podium, split plates, and screen", () => {
   eq(d.root.children[1].children[1].name, "Screen");
 });
 
+t("Unlimited site (shape none): derived has no site numbers, no NaN, and passes validate", () => {
+  const s = JSON.parse(JSON.stringify(state));
+  s.site.shape = "none";
+  const none = midriseDerived(s, built, { ...metrics, far: 0, siteCoverage: 0 });
+  eq([none.metrics.far, none.metrics.siteCoverage], [0, 0]);
+  const fb = midriseDerived(s, built, {});                         // no metrics given: the fallbacks must not divide by the old width x depth
+  eq([fb.metrics.far, fb.metrics.siteCoverage], [0, 0]);
+  const nums = JSON.stringify(none).match(/NaN|Infinity/);
+  ok(!nums, "no NaN or Infinity");
+  const doc = writeSection(newProject({ name: "No site" }), "massing", { tool: "midrise", schema: 1, placement: { x: 0, y: 0, rotation: 0, baseZ: 0 }, state: s, derived: none });
+  const v = validate(doc);
+  ok(v.ok, v.errors && v.errors.join("; "));
+  eq(doc.sections.massing.state.site.shape, "none");
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

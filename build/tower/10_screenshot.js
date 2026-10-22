@@ -18,10 +18,10 @@ const Shots = (() => {
     const ub = unitBreakdown(m);      // residential units + hotel keys; parking spaces are not counted
     return [
       ['GFA', Units.formatArea(m.gfa)],
-      ['FAR', Units.formatRatio(m.far)],
+      ['FAR', m.hasSite === false ? '—' : Units.formatRatio(m.far)],
       ['Height', Units.formatFeetInches(m.totalHeight)],
       ['Floors', Units.formatInt(m.floorCount)],
-      ub.hasTotal ? [ub.label, Units.formatInt(ub.total)] : ['Site coverage', `${(m.siteCoverage * 100).toFixed(1)}%`],
+      ub.hasTotal ? [ub.label, Units.formatInt(ub.total)] : ['Site coverage', m.hasSite === false ? '—' : `${(m.siteCoverage * 100).toFixed(1)}%`],
       ['Efficiency', `${(m.efficiencyAvg * 100).toFixed(1)}%`],
     ];
   }

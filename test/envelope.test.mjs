@@ -12,6 +12,7 @@ function t(name, fn) {
   catch (e) { fail++; console.log("  FAIL " + name + "\n       " + e.message); }
 }
 const eq = (a, b, m = "") => { if (a !== b) throw new Error(`${m} expected ${JSON.stringify(b)}, got ${JSON.stringify(a)}`); };
+const ok = (c, m = "assertion failed") => { if (!c) throw new Error(m); };
 const near = (a, b, tol = 0.01, m = "") => { if (Math.abs(a - b) > tol) throw new Error(`${m} expected ${b}, got ${a}`); };
 
 function mpArea(mp) {
@@ -279,6 +280,36 @@ t("performance: 150 plates check quickly", () => {
   const ms = Date.now() - t0;
   console.log("       150 plates: " + ms + " ms");
   if (ms > 500) throw new Error("slow: " + ms);
+});
+
+/* ---- Unlimited site (site.shape "none"): no site ring, setbacks or stepback; the height limit still applies ---- */
+const { hasSite } = await import("../src/tower/envelope.js");
+console.log("Unlimited site");
+t("shape none: hasSite is false; allowedFootprint and envelopeWireframe are empty", () => {
+  const s = baseState({ shape: "none", heightLimit: 400, stepback: { on: true, aboveHeight: 85, distance: 15 } });
+  eq(hasSite(s), false); eq(hasSite(baseState()), true);
+  eq(allowedFootprint(s, 0).length, 0); eq(allowedFootprint(s, 300).length, 0);
+  eq(envelopeWireframe(s, 300).length, 0);
+});
+t("shape none: far-away plates give no setback, stepback or outside area, and no warnings", () => {
+  const s = baseState({ shape: "none", setbacks: { front: 500, back: 500, left: 500, right: 500 }, stepback: { on: true, aboveHeight: 20, distance: 400 } });
+  const r = checkEnvelope(s, [plate(1, 0, 10, rectPoly(1000, 1000, 1100, 1100)), plate(2, 10, 10, rectPoly(-900, -900, -800, -800))]);
+  eq(r.warnings.length, 0); eq(r.outside.get(1), 0); eq(r.outside.get(2), 0);
+  ok(r.plates.every((p) => p.outsideEnvelopeArea === 0), "outsideEnvelopeArea");
+});
+t("shape none: the height limit still warns when above 0, and 0 means no limit", () => {
+  const plates = [plate(1, 0, 10, rectPoly(-10, -10, 10, 10)), plate(2, 590, 20, rectPoly(-10, -10, 10, 10))];
+  const lim = checkEnvelope(baseState({ shape: "none", heightLimit: 500 }), plates);
+  eq(lim.warnings.map((w) => w.code).join(), "height");
+  eq(lim.warnings[0].floors.join(), "2");
+  eq(checkEnvelope(baseState({ shape: "none", heightLimit: 0 }), plates).warnings.length, 0, "limit 0 = none");
+  eq(checkEnvelope(baseState({ shape: "rect", heightLimit: 0 }), plates.slice(1)).warnings.filter((w) => w.code === "height").length, 0, "rect with limit 0");
+  const roof = checkEnvelope(baseState({ shape: "none", heightLimit: 500 }), [], [{ kind: "prism", z0: 480, z1: 520 }]);
+  eq(roof.warnings.map((w) => w.code).join(), "crown-height");
+});
+t("a state with a site and no shape stays a rectangle (old files)", () => {
+  const s = baseState(); delete s.site.shape;
+  eq(hasSite(s), true); near(mpArea(allowedFootprint(s, 0)), 230 * 180);
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -255,6 +255,7 @@ export function seedBlocks(state, built, units) {
 
 function siteArea(state) {
   const s = (state && state.site) || {};
+  if (s.shape === "none") return 0;                 // Unlimited: no site, so the fallbacks give far 0 and coverage 0
   if (s.shape === "polygon" && Array.isArray(s.points) && s.points.length >= 3) return Math.abs(ringArea(s.points));
   return (s.width || 0) * (s.depth || 0);
 }

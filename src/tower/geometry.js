@@ -1062,6 +1062,7 @@ export function buildPlates(state, { quality = "full" } = {}) {
 
 function siteAreaOf(state) {
   const s = state.site || {};
+  if (s.shape === "none") return 0;                 // Unlimited: no site, so no site area
   if (s.shape === "polygon" && Array.isArray(s.points) && s.points.length >= 3) {
     return Math.abs(ringArea(s.points.map((p) => [+p[0], +p[1]])));
   }
@@ -1137,6 +1138,7 @@ export function computeMetrics(state, plates) {
     plateMax: towerAreas.length ? Math.max(...towerAreas) : 0,
     plateAvg: towerAreas.length ? towerArea / towerAreas.length : 0,
     siteArea,
+    hasSite: !(state.site && state.site.shape === "none"),   // false: siteArea, far and siteCoverage are 0 and mean "no site"
     far,
     floor1Area,
     siteCoverage: siteArea > 0 ? floor1Area / siteArea : 0,

@@ -15,15 +15,15 @@ const Compare = (() => {
   const pct = (v) => `${(v * 100).toFixed(1)}%`;
   const ROWS = [
     { label: 'Units', get: (e) => e.d.metrics.units, fmt: Units.formatInt, higher: true },
-    { label: 'Density (per acre)', get: (e) => e.d.metrics.density, fmt: (v) => Units.formatRatio(v, 1), higher: true },
+    { label: 'Density (per acre)', get: (e) => (e.d.metrics.hasSite === false ? null : e.d.metrics.density), fmt: (v) => Units.formatRatio(v, 1), higher: true },
     { label: 'Parking provided', get: (e) => e.d.metrics.parking.provided, fmt: Units.formatInt, higher: true },
     { label: 'Parking required', get: (e) => e.d.metrics.parking.required, fmt: Units.formatInt },
     { label: 'Parking ratio (per unit)', get: (e) => e.d.metrics.parking.ratioProvided, fmt: (v) => Units.formatRatio(v, 2) },
     { label: 'GFA', get: (e) => e.d.metrics.gfa, fmt: Units.formatArea, higher: true },
-    { label: 'FAR', get: (e) => e.d.metrics.far, fmt: (v) => Units.formatRatio(v, 2), higher: true },
+    { label: 'FAR', get: (e) => (e.d.metrics.hasSite === false ? null : e.d.metrics.far), fmt: (v) => Units.formatRatio(v, 2), higher: true },
     { label: 'Height', get: (e) => e.d.metrics.height, fmt: Units.formatFeetInches },
     { label: 'Floors', get: (e) => e.d.metrics.floors, fmt: Units.formatInt },
-    { label: 'Site coverage', get: (e) => e.d.metrics.siteCoverage, fmt: pct },
+    { label: 'Site coverage', get: (e) => (e.d.metrics.hasSite === false ? null : e.d.metrics.siteCoverage), fmt: pct },
     { label: 'Efficiency (est.)', get: (e) => e.d.metrics.efficiency, fmt: pct, higher: true },
     { label: 'Warnings', get: (e) => e.d.warnings.length, fmt: Units.formatInt },
   ];

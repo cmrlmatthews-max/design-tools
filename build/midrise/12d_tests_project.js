@@ -281,7 +281,8 @@ async function runAllTests() {
   const ui = await runUiTests();
   const select = await runSelectTests();
   const project = await runProjectTests();
-  const all = [...base, ...ui, ...select, ...project];
+  const nosite = await runNoSiteTests();        // 12e_tests_nosite.js
+  const all = [...base, ...ui, ...select, ...project, ...nosite];
   const failed = all.filter((r) => !r.ok);
   window.__midriseTestResults = { total: all.length, passed: all.length - failed.length, failed, results: all };
   return window.__midriseTestResults;

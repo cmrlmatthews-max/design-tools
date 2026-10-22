@@ -92,6 +92,7 @@ export function constructionHint(state) {
 export function siteAreaOf(state) {
   const s = state && state.site;
   need("computeMetrics", s, "state.site");
+  if (s.shape === "none") return 0;                 // Unlimited: no site, so no site area
   if (s.shape === "polygon" && Array.isArray(s.points) && s.points.length >= 3) {
     return Math.abs(ringArea(s.points.map((p) => [+p[0], +p[1]])));
   }
@@ -237,6 +238,7 @@ export function computeMetrics(state, built, units, parking) {
   const far = siteArea > 0 ? gfa / siteArea : 0;
   const tg = state.targets || {};
   const site = state.site || {};
+  const hasSite = site.shape !== "none";            // false: siteArea, acres, density, FAR, coverage and open space mean "no site"
 
   const surplus = provTotal - reqTotal;
   const ratioProvided = totalUnits > 0 ? provTotal / totalUnits : 0;
@@ -244,16 +246,17 @@ export function computeMetrics(state, built, units, parking) {
   if (surplus < 0) {
     warnings.push({ code: "parking-deficit", severity: "warn", floors: [], message: `Parking provided is ${-surplus} stalls short of the ${reqTotal} required.` });
   }
-  if (isNum(site.densityCap) && site.densityCap > 0 && density > site.densityCap + 1e-9) {
+  if (hasSite && isNum(site.densityCap) && site.densityCap > 0 && density > site.densityCap + 1e-9) {
     warnings.push({ code: "density-cap", severity: "warn", floors: [], message: `Density ${formatDensity(density)} is over the cap of ${site.densityCap} per acre.` });
   }
-  if (isNum(site.openSpaceShare) && site.openSpaceShare > 0 && openRatio < site.openSpaceShare - 1e-9) {
+  if (hasSite && isNum(site.openSpaceShare) && site.openSpaceShare > 0 && openRatio < site.openSpaceShare - 1e-9) {
     warnings.push({ code: "open-space", severity: "warn", floors: [], message: `Open space ${r1(openRatio * 100)} percent is under the ${r1(site.openSpaceShare * 100)} percent rule.` });
   }
 
   return {
     units: totalUnits,
     unitsDetail: { total: units.total, byBar: units.byBar, byProgram: units.byProgram },
+    hasSite,
     siteArea: r1(siteArea),
     siteAcres: r3(acres),
     density: r3(density),
@@ -296,7 +299,7 @@ export function computeMetrics(state, built, units, parking) {
       area: r1(openArea),
       ratio: r3(openRatio),
       required: isNum(site.openSpaceShare) ? site.openSpaceShare : 0,
-      ok: !(isNum(site.openSpaceShare) && site.openSpaceShare > 0 && openRatio < site.openSpaceShare - 1e-9),
+      ok: !(hasSite && isNum(site.openSpaceShare) && site.openSpaceShare > 0 && openRatio < site.openSpaceShare - 1e-9),
     },
     target: {
       units: check(tg.units, totalUnits),

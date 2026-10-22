@@ -166,6 +166,7 @@ Shared types:
 
 - Zones `podium`, `tower`, `mechanical`, and `crown` come from the Tower Generator (`buildPlates` plates plus the crown). Zones `bar` and `deck` come from the Mid-Rise Generator. A crown level has `ftf` = the crown height and its plates = the crown footprint.
 - A void floor (full carve) is written with `plates: []`.
+- A design with no site (`state.site.shape` = `"none"`, "Unlimited": the default for new Tower and Mid-Rise designs) has no site ring in `derived`; `derived` never holds one. `metrics.far` and `metrics.siteCoverage` are written as `0`, and a reader treats them as "no site", not as a real zero. `state.site` keeps its width, depth, setbacks and stepback so the tool can switch back to Rectangle. A saved state whose `site` has no `shape` is a rectangle (older files); a reader must not read it as `"none"`.
 - `index` is an id in list order, not an elevation order. The Mid-Rise Generator lists podium levels, then bar floors, then deck levels (deck indices come after the building levels). A reader that needs elevation order sorts by `z`.
 - The Tower Generator needs one new pure function, `towerDerived(state, built)` in `src/tower/derived.js`, that maps `buildPlates(state)` plates to this shape. The Mid-Rise Generator writes the same shape from its own geometry.
 - `metrics.units` repeats the tool's unit estimate. The Plate Planner replaces it with a real count.
