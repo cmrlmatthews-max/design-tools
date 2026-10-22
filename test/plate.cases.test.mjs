@@ -13,6 +13,7 @@ for (const tc of TEST_CASES) {
     const m = computeMetrics(tc.state, built);
     const row = m.groups[0].row;
     const e = tc.expect || {};
+    assert.ok(row.closure.ok, `area closure: strip ${row.closure.strip} vs ${row.closure.expected}`);
     if (e.units != null) assert.equal(row.units, e.units, "units");
     if (e.nrsf != null) assert.ok(Math.abs(row.nrsf - e.nrsf) <= (e.tolerance ?? 0.5), `nrsf ${row.nrsf} vs ${e.nrsf}`);
     if (e.counts) {

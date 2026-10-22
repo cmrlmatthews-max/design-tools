@@ -392,6 +392,39 @@ function supportRows(fill) {
   return { count, areaSf: r1(areaSf), byKind };
 }
 
+/** Uncovered convex corners minus uncovered reflex corners of the plate (outer rings and holes). */
+function cornerSquares(plate, blocks) {
+  const polys = Array.isArray(plate) ? plate : [];
+  const signedArea = (r) => { let a = 0; for (let i = 0; i < r.length; i++) { const p = r[i], q = r[(i + 1) % r.length]; a += p[0] * q[1] - q[0] * p[1]; } return a / 2; };
+  const near = (p, a, b) => {
+    const dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy;
+    const t = L2 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L2)) : 0;
+    return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy)) < 0.01;
+  };
+  const covered = (p) => blocks.some((r) => {
+    let inside = false;
+    for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+      if (near(p, r[j], r[i])) return true;
+      const a = r[i], b = r[j];
+      if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < ((b[0] - a[0]) * (p[1] - a[1])) / (b[1] - a[1]) + a[0]) inside = !inside;
+    }
+    return inside;
+  });
+  let n = 0;
+  const walk = (ring, hole) => {
+    if (!Array.isArray(ring) || ring.length < 3) return;
+    const s = Math.sign(signedArea(ring)) * (hole ? -1 : 1);   // material sits to the left after this sign
+    for (let i = 0; i < ring.length; i++) {
+      const a = ring[(i + ring.length - 1) % ring.length], v = ring[i], b = ring[(i + 1) % ring.length];
+      const cross = (v[0] - a[0]) * (b[1] - v[1]) - (v[1] - a[1]) * (b[0] - v[0]);
+      if (Math.abs(cross) < 1e-9 || covered(v)) continue;
+      n += cross * s > 0 ? 1 : -1;
+    }
+  };
+  for (const poly of polys) { if (!poly) continue; walk(poly.outer, false); for (const h of poly.holes || []) walk(h, true); }
+  return n;
+}
+
 /** Plan 3.12 "Area closure". */
 function closureRows(state, fill, nrsf, gsf) {
   const corridor = Array.isArray(fill.corridor) ? fill.corridor : [];
@@ -416,7 +449,12 @@ function closureRows(state, fill, nrsf, gsf) {
   const ext = isNum(state.extWall) ? state.extWall : 1.0;
   const runs = Array.isArray(fill.runs) ? fill.runs : [];
   const legs = Array.isArray(fill.corners) ? fill.corners.reduce((s, c) => s + 2 * (isNum(c.e) ? c.e : 0), 0) : 0;
-  const expected = ext * (runs.reduce((s, r) => s + (isNum(r.length) ? r.length : 0), 0) + legs);
+  // Corner squares: the strip along the runs and legs is measured on the area line, so each plate corner that no block
+  // covers adds one ext × ext square (convex corner) or takes one away (reflex corner). A point tower has four convex ones.
+  const blocks = [core, ...stairsOf(fill).map((s) => ringOf(s.outer)), ...elevatorsOf(fill).map((s) => ringOf(s.outer)),
+    ...(fill.support || []).map((s) => ringOf(s && s.outer))].filter((r) => r && r.length >= 3);
+  const cornerSq = runs.length ? cornerSquares(fill.plate, blocks) : 0;
+  const expected = ext * (runs.reduce((s, r) => s + (isNum(r.length) ? r.length : 0), 0) + legs) + ext * ext * cornerSq;
   return {
     gsf: r1(gsf), nrsf: r1(nrsf), corridor: r1(corridorSf), core: r1(coreSf), stairs: r1(stairsSf), elevators: r1(elevSf), support: r1(supportSf),
     strip: r1(strip), expected: r1(expected), diff: r1(strip - expected), ok: runs.length === 0 || Math.abs(strip - expected) <= 1,
