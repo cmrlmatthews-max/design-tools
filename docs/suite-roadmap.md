@@ -18,7 +18,7 @@ This file is the one place that lists every tool in the suite, who builds it, an
 | `site` | Site Model | `site/` | Version 1 live | Home |
 | `tower` | Tower Generator | `tower/` | Version 1.2 built, in review (project file, Sun Study) | Home |
 | `sun` | Sun Study (inside the Tower Generator) | `tower/` | Version 1 built, in review | Home |
-| `plate` | Plate Planner | `plate/` | Next: plan in progress | Home |
+| `plate` | Plate Planner | `plate/` | Version 1 built, in review | Home |
 | — | Project file (`src/shared/project.js`), Workspace page, Site Model handoff | `index.html`, `src/shared/`, `site/` | Version 1 live | Home |
 | `midrise` | Mid-Rise Generator | `midrise/` | Version 1 live | Home |
 | `parking` | Parking Deck Generator | `parking/` | Version 1 live | Home |
@@ -52,7 +52,7 @@ Caution: the work session cannot push to GitHub. It works on a download. Merge b
 
 1. The home session pushes one branch per tool and opens a pull request. Cade merges it.
 2. The work session downloads `main` after each merge, before it starts new work.
-3. The work session keeps its changes inside its own folders: `plate/`, `build/plate/`, `src/plate/`, `test/plate*`, and the tower files it owns for the Sun Study (`build/tower/`, `src/tower/`, `src/shared/solar.js`).
+3. The work session keeps its changes inside the folders of the tool it builds. (The home session built the Plate Planner and the Sun Study in October 2026, so those folders now belong to the home session.)
 4. The home session does not edit those folders while the work session has them open.
 5. Both sessions write `derived` data in the exact shape of the project-file spec. A change to the spec goes through this repo first.
 6. Every tool keeps the in-page `?test` suite and the module tests green before a merge.
@@ -62,7 +62,7 @@ Caution: the work session cannot push to GitHub. It works on a download. Merge b
 | Document | Content |
 |---|---|
 | `docs/project-file-spec.md` | The shared project file and `project.js` contract |
-| `docs/plate-planner-notes.md` | Design notes for the Plate Planner (work session) |
+| `docs/plate-planner-notes.md`, `docs/plate-planner-technical-plan.md` | Plate Planner |
 | `docs/mid-rise-generator-concept.md`, `docs/mid-rise-generator-technical-plan.md` | Mid-Rise Generator |
 | `docs/parking-deck-concept.md`, `docs/parking-deck-technical-plan.md` | Parking Deck Generator |
 | `docs/tower-generator-concept.md`, `docs/tower-generator-technical-plan.md`, `docs/v1.1-spec.md` | Tower Generator |
