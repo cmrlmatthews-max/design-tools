@@ -10,6 +10,12 @@ Compare.init();
 Options.syncDirty();
 if (!Render.init(document.getElementById('canvasHost'))) Store.subscribe(() => UI.updateHud(Derived.get()));
 Select.init();
+PlacementGizmo.init({   // 06y_placement.js: drag the building to place it, turn it with the ring (a project must be open)
+  enabled: () => !Render.comparing(),
+  bounds: () => Derived.get().bounds.model,
+  path: 'placement',
+  onCommit: () => {},   // 09b_project.js re-runs Context from site on the commit notification (one undo step)
+});
 SunUI.init();          // 08d_sun.js: the study driver (before the project loads, so a loaded sun section drives it)
 ProjectUI.start();     // 09b_project.js: ?project= load and autosave
 
@@ -79,6 +85,7 @@ window.__tower = {
   projectGroundAt: (x, y) => ProjectUI.groundAt(x, y),
   projectBoundary: () => ProjectUI.boundaryLocal(),
   projectAskReplace: () => ProjectUI.askReplace(),
+  placementGizmo: PlacementGizmo,
   siteLayerInfo: () => SiteLayer.info(),
   // sun study (SunUI 08d_sun.js, SunLayer 06d_sunhours.js, SunStudy 10b_sunstudy.js)
   sunInfo: () => SunUI.info(),

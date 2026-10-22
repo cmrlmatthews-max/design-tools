@@ -112,6 +112,7 @@ function defaultState() {
       figure: true,
       ticks: true,                 // unit module ticks in plan
       envelope: true,
+      site: true,                  // the project site (ground, boundary, neighbors, roads, water, trees) while a project with a site is open
       warnParking: true,           // the parking deficit counts as a warning (it can be turned off)
       snap: { on: true, grid: 5 },
       shot: { title: true, date: true, metrics: true, mark: true },

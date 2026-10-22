@@ -439,3 +439,7 @@ textarea.ai-preview {
 #hud .hint-text { margin: 0; font-size: 12.5px; }
 #hud .hint-text + .help { margin: 4px 0 0; }
 .tb-group:empty { display: none; }
+
+/* ---- placement gizmo: rotation grip (06y_placement.js, phase C) ---- */
+.hdl-rotate .hdl-glyph { background: var(--accent); }
+.hdl-rotate .hdl-glyph svg { stroke: var(--accent-ink); }

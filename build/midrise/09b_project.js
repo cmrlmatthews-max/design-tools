@@ -71,15 +71,8 @@ const ProjectUI = (() => {
 
   /** The ground elevation (project frame, ft) at a project point: bilinear on the site grid. null without a grid. */
   function groundAt(xp, yp) {
-    const info = siteInfo();
-    const g = info && info.ground;
-    if (!g || !Array.isArray(g.points) || !(g.n >= 2) || !(g.spacing > 0) || g.points.length !== g.n * g.n) return null;
-    const x0 = g.points[0][0], y0 = g.points[0][1];
-    const fi = clamp((xp - x0) / g.spacing, 0, g.n - 1), fj = clamp((yp - y0) / g.spacing, 0, g.n - 1);
-    const i = Math.min(Math.floor(fi), g.n - 2), j = Math.min(Math.floor(fj), g.n - 2);
-    const tx = fi - i, ty = fj - j;
-    const z = (a, b) => g.points[b * g.n + a][2];
-    return z(i, j) * (1 - tx) * (1 - ty) + z(i + 1, j) * tx * (1 - ty) + z(i, j + 1) * (1 - tx) * ty + z(i + 1, j + 1) * tx * ty;
+    const sec = sectionOf('site');
+    return sec && isObjP(sec.derived) ? SiteLayerMod.groundZAt(sec.derived, xp, yp) : null;
   }
 
   /** The site boundary in the building's own (local) frame, for the renderer. null without a site. */
@@ -118,7 +111,7 @@ const ProjectUI = (() => {
     const r = Number.isFinite(radius) && radius > 0 ? radius : num(Store.get('context.radius'), CONFIG.contextRadius);
     let res;
     try { res = ProjectMod.siteContextFor(project.doc, placement(), r); } catch (e) { console.error(e); Toast.show('The neighbors could not be read from the site.', 'bad'); return -1; }
-    let blocks = res.blocks.map((b) => ({ x: b.x, y: b.y, w: b.w, d: b.d, h: b.h, base: b.base }));
+    let blocks = res.blocks.map((b) => ({ x: b.x, y: b.y, w: b.w, d: b.d, h: b.h, base: b.base, site: true }));
     let trimmed = 0;
     if (blocks.length > MAX_CONTEXT) {
       blocks.sort((a, b) => Math.hypot(a.x, a.y) - Math.hypot(b.x, b.y));

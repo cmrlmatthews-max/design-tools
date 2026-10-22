@@ -14,6 +14,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.normpath(os.path.join(HERE, '..', '..', 'src'))
+SHARED = os.path.normpath(os.path.join(HERE, '..', 'shared'))      # page parts shared by the tools (docs/site-layer-technical-plan.md section 7)
 OUT = os.path.normpath(os.path.join(HERE, '..', '..', 'midrise', 'index.html'))
 
 # key -> (global name, path under src). The order here does not matter: imports set the order.
@@ -39,6 +40,8 @@ MODS = {
     'sketchup': ('SkMid', 'midrise/sketchup.js'),
     'presets': ('PresetsMod', 'midrise/presets.js'),
     'testcases': ('TestCasesMod', 'midrise/testcases.js'),
+    # the shared site layer (docs/site-layer-technical-plan.md): data only
+    'sitelayer': ('SiteLayerMod', 'shared/sitelayer.js'),
 }
 BY_PATH = {rel: key for key, (_, rel) in MODS.items()}
 
@@ -157,7 +160,10 @@ PARTS = [
     '05_envelope.js',
     '05b_overlays.js',
     '06_render.js',
+    os.path.join(SHARED, '06x_sitelayer.js'),     # SiteLayer3D (shared)
     '06b_select.js',
+    os.path.join(SHARED, '06y_placement.js'),     # PlacementGizmo (shared; phase C)
+    '06c_site.js',                                # SiteLayer (the adapter of SiteLayer3D)
     '07_controls.js',
     '08_ui.js',
     '08b_prompts.js',
@@ -173,8 +179,16 @@ PARTS = [
     '12c_tests_select.js',
     '12d_tests_project.js',
     '12e_tests_nosite.js',
+    '12f_tests_site.js',      # the site layer (tests 1 to 6)
+    '12j_tests_gizmo.js',     # placement gizmo tests (phase C)
     '13_start.js',
 ]
+# parts another build phase writes: left out until the file exists
+OPTIONAL_PARTS = {os.path.join(SHARED, '06y_placement.js'), '12j_tests_gizmo.js'}
+for _p in sorted(OPTIONAL_PARTS):
+    if _p in PARTS and not os.path.isfile(os.path.join(HERE, _p)):
+        print('warning: optional part not written yet, left out:', os.path.basename(_p))
+        PARTS.remove(_p)
 missing = [p for p in PARTS if not os.path.isfile(os.path.join(HERE, p))]
 if missing:
     raise SystemExit('missing parts: ' + ', '.join(missing))

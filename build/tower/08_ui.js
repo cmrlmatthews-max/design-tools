@@ -461,6 +461,8 @@ const UI = (() => {
   function buildScene() {
     return {
       children: els([
+        Controls.toggle({ label: 'Site', bind: bs('view.site') }),
+        Controls.help('The ground, roads, water, trees, and neighbors of the project site. From the Site Model.'),
         Controls.toggle({ label: 'Show zoning envelope', bind: bs('view.envelope') }),
         Controls.toggle({ label: 'Show context blocks', bind: bs('context.show') }),
         Controls.help('Edit the context blocks in the Site tab.'),

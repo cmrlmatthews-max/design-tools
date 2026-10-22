@@ -48,7 +48,7 @@ const Render = (() => {
   const frameListeners = [];            // v1.1: called once per drawn frame, just before the render (handles follow the camera)
   let layers = null;                    // { model, context, envelope } each { group, key }
   let derived = null;
-  let needsRender = true, tween = null, preset = null, refitPending = false, capturing = false, envSeen = null;
+  let needsRender = true, tween = null, preset = null, refitPending = false, capturing = false, envSeen = null, siteFrameSeen = null;
   let viewVersion = -1, sunKey = '', styleApplied = null, themeEpoch = 0, themeApplied = -1, geomIdSeen = -1;
   let sceneRadius = 200, rebuildNotified = null;
   let insetProvider = () => ({ right: 0 });
@@ -198,7 +198,7 @@ const Render = (() => {
     scene.add(selOverlay);
 
     layers = {};
-    for (const id of ['model', 'context', 'envelope', 'overlay']) {
+    for (const id of ['model', 'context', 'envelope', 'site', 'overlay']) {     // site: SiteLayer (06c_site.js)
       const group = new THREE.Group();
       scene.add(group);
       layers[id] = { group, key: null };
@@ -283,11 +283,12 @@ const Render = (() => {
   }
 
   /** Context blocks: light gray 60% boxes (model) or outlines only (diagram). */
-  function buildContextObjects(state) {
+  function buildContextObjects(state, skipSite = false) {
     const out = [];
     if (!state.context || !state.context.show) return out;
     const diagram = state.view.style === 'diagram';
     for (const b of state.context.blocks || []) {
+      if (skipSite && b.site) continue;                // drawn by the site layer instead (solid, with edges)
       const w = num(b.w, 0), d = num(b.d, 0), hgt = num(b.h, 0);
       if (!(w > 0 && d > 0 && hgt > 0)) continue;
       const geo = new THREE.BoxGeometry(w, d, hgt);          // plan x, y, elevation
@@ -351,14 +352,18 @@ const Render = (() => {
     const v = state.view;
     let changed = false;
     changed = syncLayer(layers.model, [disp.key, v.floorLines, v.style, v.colorBy, colorsKey(state)].join('|'), () => buildFloorObjects(state, disp)) || changed;
-    changed = syncLayer(layers.context, [v.style, JSON.stringify(state.context)].join('|'), () => buildContextObjects(state)) || changed;
+    const siteOn = SiteLayer.isOn(state);        // the site layer draws the site buildings; their context blocks stay in the state but are not drawn
+    changed = syncLayer(layers.context, [v.style, JSON.stringify(state.context), siteOn].join('|'), () => buildContextObjects(state, siteOn)) || changed;
     changed = syncLayer(layers.envelope, [d.geomId, v.envelope].join('|'), () => buildEnvelopeObjects(state, d.wire)) || changed;
+    const kit = { syncLayer, clearGroup, materialFor, lineMaterial, themeEpoch: () => themeEpoch };
+    changed = SiteLayer.update(layers.site, state, d, kit) || changed;     // project site: ground, boundary, neighbors, roads, water, trees (06c_site.js)
     const dragging = disp.quality === 'draft';
     if (!dragging) {
       const proj = ProjectUI.boundaryKey();
-      const key = ['o', d.id, v.ticks, v.style, JSON.stringify(state.courts), JSON.stringify(state.surface.lot), proj].join('|');
+      const siteShown = SiteLayer.info().shown;        // the site layer draws the boundary and the north arrow itself
+      const key = ['o', d.id, v.ticks, v.style, JSON.stringify(state.courts), JSON.stringify(state.surface.lot), proj, siteShown].join('|');
       if (syncLayer(layers.overlay, key, () => {
-        const o = Overlays.build(state, d, { projectBoundary: ProjectUI.boundaryLocal() });
+        const o = Overlays.build(state, d, { projectBoundary: siteShown ? null : ProjectUI.boundaryLocal() });
         o.plan.forEach((x) => { x.userData.plan = true; });
         return [...o.ground, ...o.plan];
       })) { overlayVis = null; changed = true; }
@@ -423,11 +428,23 @@ const Render = (() => {
     // While a slider moves: casters off (no shadow pass work). Sun drags keep shadows so you can see them move.
     const dragging = Store.gestureActive() && !Store.gesturePath().startsWith('view.sun');
     const cast = shadowsOn && !dragging;
-    shadowPlane.visible = shadowsOn;
+    // With the site layer's ground on screen (docs/site-layer-technical-plan.md section 2): the flat slab drops 4 ft under the lowest ground
+    // node, the grid fades to 40% (it stays at the base elevation), the 8,000 ft shadow plane hides and shadows fall on the site ground mesh.
+    const siteInfo = SiteLayer.info();
+    const siteGround = !cmp && layers.site.group.visible && siteInfo.ground && !!siteInfo.bounds;
+    ground.position.y = siteGround ? siteInfo.bounds.zMin - 4 : 0;
+    gridUniforms.uMinorA.value = siteGround ? 0.42 * 0.4 : 0.42;
+    gridUniforms.uMajorA.value = siteGround ? 0.8 * 0.4 : 0.8;
+    shadowPlane.visible = shadowsOn && !siteGround;
     eachModelMesh((m) => { m.castShadow = cast; m.receiveShadow = shadowsOn; });
+    SiteLayer.applyShadows(cast, shadowsOn);
     figure.traverse((o) => { if (o.isMesh) o.castShadow = cast; });
-    // The figure stands near the front-left corner of the site (front = south, plan -y).
-    if (derived) figure.position.copy(worldVec(derived.bounds.site.minX + 14, derived.bounds.site.minY + 14, 0));
+    // The figure stands near the front-left corner of the site (front = south, plan -y), on the site ground when it shows.
+    if (derived) {
+      const fx = derived.bounds.site.minX + 14, fy = derived.bounds.site.minY + 14;
+      const fz = !cmp && layers.site.group.visible ? SiteLayer.groundZ(fx, fy) : null;
+      figure.position.copy(worldVec(fx, fy, fz == null ? 0 : fz));
+    }
     updateSun(v);
     needsRender = true;
   }
@@ -493,7 +510,7 @@ const Render = (() => {
     if (showEnv) for (const prism of d.wire || []) for (const poly of prism.polygons) for (const q of poly.outer) add(q[0], q[1], prism.z1);
     return b;
   }
-  function framingBox() {
+  function framingBox(id) {
     const showEnv = !!Store.raw().view.envelope;
     if (cmp) {
       const bs = cmp.entries.map((e) => boxOf(e.d, showEnv));
@@ -503,13 +520,22 @@ const Render = (() => {
         height: Math.max(...bs.map((x) => x.height)),
       };
     }
-    return boxOf(Derived.get(), showEnv);
+    const box = boxOf(Derived.get(), showEnv);
+    // Axon and Plan fit the whole project site when the site layer shows; the elevations keep the building box.
+    const sb = id === 'axon' || id === 'plan' ? SiteLayer.frameBounds() : null;
+    if (sb) {
+      box.minX = Math.min(box.minX, sb.minX); box.maxX = Math.max(box.maxX, sb.maxX);
+      box.minY = Math.min(box.minY, sb.minY); box.maxY = Math.max(box.maxY, sb.maxY);
+      box.minZ = Math.min(0, sb.zMin); box.height = Math.max(box.height, sb.zMax);
+    }
+    return box;
   }
 
   /** Perspective: the nearest distance (and the look-at point) that puts all box corners inside the visible area. */
   function fitPersp(box, dir, aspect, H) {
     const corners = [];
-    for (const x of [box.minX, box.maxX]) for (const y of [box.minY, box.maxY]) for (const z of [0, H]) corners.push(worldVec(x, y, z));
+    const z0 = box.minZ || 0;
+    for (const x of [box.minX, box.maxX]) for (const y of [box.minY, box.maxY]) for (const z of [z0, H]) corners.push(worldVec(x, y, z));
     const fwd = dir.clone().negate();
     const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0)).normalize();
     const up = new THREE.Vector3().crossVectors(right, fwd).normalize();
@@ -583,7 +609,7 @@ const Render = (() => {
 
   function setView(id, animate = true) {
     if (!renderer) return;
-    const goal = viewTarget(id, framingBox(), framingAspect());
+    const goal = viewTarget(id, framingBox(id), framingAspect());
     preset = id;
     overlayVis = null;
     tween = null;
@@ -719,6 +745,7 @@ const Render = (() => {
     const list = entries.map((e, i) => ({ ...e, uid: `${i}:${e.uid || e.name}`, group: null }));
     cmp = { entries: list, key: null, reserve, bounds: combineBounds(list.map((e) => e.d)) };
     layers.model.group.visible = layers.context.group.visible = layers.envelope.group.visible = layers.overlay.group.visible = false;
+    layers.site.group.visible = false;
     selOverlay.visible = false;
     figure.visible = false;
     applyViewOffset();
@@ -732,6 +759,7 @@ const Render = (() => {
     for (const e of cmp.entries) if (e.group) { clearGroup(e.group); scene.remove(e.group); }
     cmp = null;
     layers.model.group.visible = layers.context.group.visible = layers.envelope.group.visible = layers.overlay.group.visible = true;
+    layers.site.group.visible = true;
     selOverlay.visible = true;
     overlayVis = null;
     resetLayers();
@@ -765,6 +793,9 @@ const Render = (() => {
     const envOn = !!state.view.envelope;
     if (envSeen !== null && envOn !== envSeen) refitPending = true;     // the envelope is part of the framed box
     envSeen = envOn;
+    const sfk = SiteLayer.frameKey();
+    if (siteFrameSeen !== null && sfk !== siteFrameSeen) refitPending = true;     // the site layer switched on or off: it is part of the framed box
+    siteFrameSeen = sfk;
     syncMain(d, disp, state);
     syncOverlayVisibility(disp.quality === 'draft');
     if (first && !preset) setView('axon', false);
@@ -827,6 +858,7 @@ const Render = (() => {
     const prev = {
       bg: scene.background, ground: ground.material.color.clone(), grid: gridMesh.visible, fig: figure.visible,
       model: layers.model.group.visible, ctx: layers.context.group.visible, env: layers.envelope.group.visible, ov: layers.overlay.group.visible, shadow: shadowPlane.visible,
+      site: layers.site.group.visible, groundY: ground.position.y,
     };
     const restore = () => {
       scene.remove(cap);
@@ -836,6 +868,8 @@ const Render = (() => {
       ground.material.color.copy(prev.ground);
       gridMesh.visible = prev.grid; figure.visible = prev.fig; shadowPlane.visible = prev.shadow;
       layers.model.group.visible = prev.model; layers.context.group.visible = prev.ctx; layers.envelope.group.visible = prev.env; layers.overlay.group.visible = prev.ov;
+      layers.site.group.visible = prev.site;
+      ground.position.y = prev.groundY;
       viewVersion = -1;
     };
     capturing = true;
@@ -849,7 +883,9 @@ const Render = (() => {
         scene.background = new THREE.Color('#f3f5f7');
         ground.material.color.set('#e4e7ea');
         gridMesh.visible = false; figure.visible = false; shadowPlane.visible = shadowsOn;
+        ground.position.y = 0;
         layers.model.group.visible = layers.context.group.visible = layers.envelope.group.visible = layers.overlay.group.visible = false;
+        layers.site.group.visible = false;
         for (const c of [persp, ortho]) c.clearViewOffset();
         pending = ShotMod.captureView({ renderer, scene, camera: cam, scale });
       } finally { restore(); }
@@ -933,5 +969,13 @@ const Render = (() => {
     canvas: () => (renderer ? renderer.domElement : null),
     setOrbitEnabled: (on) => { if (controls) { controls.enabled = !!on; if (!on) tween = null; } },
     orbitEnabled: () => !!controls && controls.enabled,
+    // the massing meshes only (not context blocks or the site layer): the placement gizmo's hit test (docs/site-layer-technical-plan.md section 6)
+    // moves the camera and its target as a solid (the placement gizmo keeps the view still while the building moves in the project frame)
+    shiftView: (rotDeg, dx, dy, dz = 0) => { if (!controls || !cam) return; const m = new THREE.Matrix4().makeRotationY(rotDeg * Math.PI / 180); m.setPosition(dx, dz, -dy); cam.position.applyMatrix4(m); controls.target.applyMatrix4(m); controls.update(); needsRender = true; },
+    modelMeshes: () => { const out = []; if (!cmp && layers) layers.model.group.children.forEach((o) => { if (o.isMesh && o.userData.model) out.push(o); }); return out; },
+    // the site layer's effect on the flat ground, for tests; the theme epoch moves with the color scheme (bumpTheme: tests)
+    siteFlags: () => ({ slabY: ground.position.y, shadowPlane: shadowPlane.visible, gridMinorA: gridUniforms.uMinorA.value, siteVisible: layers.site.group.visible, contextMeshes: layers.context.group.children.length, figureY: figure.position.y }),
+    themeEpoch: () => themeEpoch,
+    bumpTheme: () => { themeEpoch++; viewVersion = -1; needsRender = true; },
   };
 })();
