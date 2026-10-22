@@ -63,6 +63,21 @@ async function runSiteTests() {
       return eq([i.shown, i.ground, i.buildings, i.roads, i.walks, i.waterAreas, i.trees, f.site, Math.round(f.gridA * 1000) / 1000, errors.length],
         [true, true, 2, 1, 1, 1, 3, true, 0.32, 0]);
     });
+    await t('2d a building removed in the Site Model (removed: true) is not drawn: 1 neighbor, counts.removed 1', async () => {
+      const doc = SiteFixture.siteProject({ massing: massing() });
+      const site = ProjectMod.getSection(doc, 'site');
+      const d2 = JSON.parse(JSON.stringify(site.derived));
+      d2.buildings[0].removed = true;
+      const doc2 = ProjectMod.writeSection(doc, 'site', { ...site, state: { ...site.state, removed: ['near'] }, derived: d2 });
+      ProjectMod.saveProject(mem, doc2);
+      ProjectUI.openDoc(doc2);
+      await frames(4);
+      const i = SiteLayer.info();
+      const data = SiteLayerMod.buildSiteLayerData(d2, ProjectUI.placement(), {});
+      open();
+      await frames(4);
+      return eq([i.buildings, data.counts.buildings, data.counts.removed, SiteLayer.info().buildings], [1, 1, 1, 2]);
+    });
     await t('3 the View Site toggle switches the layer off and on again', async () => {
       UI.setTab('view');
       const row = viewRow();

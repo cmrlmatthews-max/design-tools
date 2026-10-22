@@ -140,6 +140,20 @@ async function runProjectTests() {
       return eq([a, near1[0].x, near1[0].y, near1[0].h, b, first && first.base, Store.get('context.radius'), Store.get('context.fromSite')], [1, 20, -100, 40, 2, -5, 2000, true]);
     });
     await t('Context from site is one undo step', () => eq(steps(() => ProjectUI.contextFromSite(150, { quiet: true })), 1));
+    await t('Context from site skips a building removed in the Site Model (removed: true): only the far one at 2000 ft', () => {
+      const cur = ProjectUI.doc();
+      const site = ProjectMod.getSection(cur, 'site');
+      const d2 = JSON.parse(JSON.stringify(site.derived));
+      d2.buildings[0].removed = true;
+      const doc2 = ProjectMod.writeSection(cur, 'site', { ...site, state: { ...site.state, removed: ['near'] }, derived: d2 });
+      ProjectMod.saveProject(mem, doc2);
+      ProjectUI.openDoc(doc2);
+      const n = ProjectUI.contextFromSite(2000, { quiet: true });
+      const blocks = Store.get('context.blocks');
+      ProjectMod.saveProject(mem, cur);          // the later tests expect the original fixture
+      ProjectUI.openDoc(cur);
+      return eq([n, blocks.length, Math.abs(blocks[0].w - 40) < 0.1], [1, 1, true]);
+    });
     await t('Context from site replaces the manual blocks; with Keep manual blocks it adds to them', () => {
       Store.set('context.blocks', [{ x: 5, y: 5, w: 10, d: 10, h: 10 }], { live: false });
       ProjectUI.contextFromSite(100, { quiet: true, keepManual: false });

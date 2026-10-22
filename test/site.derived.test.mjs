@@ -183,6 +183,58 @@ t("buildings: ids that repeat get a suffix and every id is unique", () => {
   assert.deepStrictEqual(d.buildings.map((b) => b.id), ["same", "same~2", "same~3"]);
 });
 
+console.log("removed buildings");
+t("removed: the removed building has removed: true, the others have no removed key", () => {
+  const d = D.siteDerived(model, { ...meta, removed: ["b-court"] });
+  eq(d.buildings.length, 3, "every building stays");
+  const by = Object.fromEntries(d.buildings.map((b) => [b.id, b]));
+  eq(by["b-court"].removed, true);
+  ok(!("removed" in by["b-data"]) && !("removed" in by["b-est"]), "no removed key on the others");
+  eq(Object.keys(by["b-court"]).join(), "id,outer,holes,base,height,top,floors,rule,name,removed");
+});
+t("removed: no meta.removed (or an empty list) gives no removed key anywhere, the same data as before", () => {
+  for (const m of [meta, { ...meta, removed: [] }, { ...meta, removed: new Set() }, { ...meta, removed: null }]) {
+    const d = D.siteDerived(model, m);
+    ok(d.buildings.every((b) => !("removed" in b)), "no removed key");
+    eq(JSON.stringify(d), JSON.stringify(derived));
+  }
+});
+t("removed: a Set works the same as an array; an unknown id changes nothing", () => {
+  const a = D.siteDerived(model, { ...meta, removed: ["b-court", "gone-id"] }), b = D.siteDerived(model, { ...meta, removed: new Set(["b-court"]) });
+  eq(JSON.stringify(a), JSON.stringify(b));
+});
+t("removed: every piece of a removed feature is flagged (b, b~2, b~3); uniqueIds keeps the flag", () => {
+  const pieces = { ...model, buildings: [
+    ...[0, 1, 2].map((k) => ({ ...model.buildings[0], id: "b", ring: rect(10 + k * 30, 10, 30 + k * 30, 30) })),
+    { ...model.buildings[0], id: "bb", ring: rect(200, 10, 220, 30) },
+  ] };
+  const d = D.siteDerived(pieces, { ...meta, removed: ["b"] });
+  assert.deepStrictEqual(d.buildings.map((x) => [x.id, x.removed === true]), [["b", true], ["b~2", true], ["b~3", true], ["bb", false]]);
+  ok(!("removed" in d.buildings[3]), "bb (a longer id that starts with b) is not removed");
+  const d2 = D.siteDerived(pieces, { ...meta, removed: ["b~2"] });          // a piece id removes its whole feature
+  assert.deepStrictEqual(d2.buildings.map((x) => x.removed === true), [true, true, true, false]);
+});
+t("removed: featureId, removedSet, isRemovedId", () => {
+  eq(D.featureId("b~2"), "b"); eq(D.featureId("b"), "b"); eq(D.featureId("a~b"), "a~b"); eq(D.featureId(5), "5");
+  const set = D.removedSet(["b~3", "x", null, ""]);
+  assert.deepStrictEqual([...set].sort(), ["b", "x"]);
+  ok(D.isRemovedId("b", set) && D.isRemovedId("b~7", set) && D.isRemovedId("x", set), "matches");
+  ok(!D.isRemovedId("bb", set) && !D.isRemovedId("y", set) && !D.isRemovedId("b", new Set()) && !D.isRemovedId("b", null), "no match");
+  eq(D.removedSet(undefined).size, 0);
+});
+t("removed: the exports module uses the same id rule (removedIds, isRemovedId)", () => {
+  for (const ids of [["b~3", "x"], new Set(["b"]), [], null]) {
+    assert.deepStrictEqual([...X.removedIds(ids)].sort(), [...D.removedSet(ids)].sort());
+    for (const id of ["b", "b~2", "x", "bb", "y"]) eq(X.isRemovedId(id, X.removedIds(ids)), D.isRemovedId(id, D.removedSet(ids)), id);
+  }
+});
+t("removed: siteState and siteDerived agree on the same meta (what the page writes)", () => {
+  const m = { ...meta, removed: new Set(["b-est", "b-court"]) };
+  const st = D.siteState(m), d = D.siteDerived(model, m);
+  assert.deepStrictEqual(st.removed, ["b-court", "b-est"]);
+  assert.deepStrictEqual(d.buildings.filter((b) => b.removed).map((b) => b.id).sort(), st.removed);
+});
+
 /* ---------- roads, walks, trees, water ---------- */
 console.log("site derived: roads, walks, trees, water");
 t("roads: one segment with a draped Line3 and a counter-clockwise pavement", () => {
@@ -242,14 +294,24 @@ t("the model is not changed", () => {
 
 /* ---------- state and size ---------- */
 console.log("site state");
-t("siteState: query, lat, lon, size, release, walks", () => {
+t("siteState: query, lat, lon, size, release, walks, removed", () => {
   const st = D.siteState({ ...meta, walks: true });
-  assert.deepStrictEqual(st, { query: "Ravinia Dr, Dunwoody, GA", lat: LAT, lon: LON, size: 300, release: "2026-09-24.0", walks: true });
-  eq(Object.keys(st).join(), "query,lat,lon,size,release,walks");
+  assert.deepStrictEqual(st, { query: "Ravinia Dr, Dunwoody, GA", lat: LAT, lon: LON, size: 300, release: "2026-09-24.0", walks: true, removed: [] });
+  eq(Object.keys(st).join(), "query,lat,lon,size,release,walks,removed");
 });
-t("siteState: walks defaults to false, release to null", () => {
+t("siteState: walks defaults to false, release to null, removed to []", () => {
   const st = D.siteState({ address: "x", lat: 1, lon: 2, size: 500 });
   eq(st.walks, false); eq(st.release, null); eq(st.query, "x");
+  assert.deepStrictEqual(st.removed, []);
+  assert.deepStrictEqual(D.siteState().removed, []);
+  assert.deepStrictEqual(D.siteState({ removed: null }).removed, []);
+});
+t("siteState: removed is the ids as strings, unique and sorted (an array or a Set)", () => {
+  assert.deepStrictEqual(D.siteState({ removed: ["b-court", "x"] }).removed, ["b-court", "x"]);
+  assert.deepStrictEqual(D.siteState({ removed: ["x", "b-court", "x", "", null, undefined] }).removed, ["b-court", "x"]);
+  assert.deepStrictEqual(D.siteState({ removed: new Set(["z", "a~2", 7]) }).removed, ["7", "a~2", "z"]);
+  const st = D.siteState({ ...meta, removed: ["b-court"] });
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(st)), st);
 });
 t("derivedBytes: the length of the JSON text in bytes (UTF-8)", () => {
   eq(D.derivedBytes(derived), Buffer.byteLength(JSON.stringify(derived)));

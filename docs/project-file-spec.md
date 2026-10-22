@@ -127,7 +127,8 @@ Shared types:
   "release": "2026-09-24.0",          // Overture release used
   "boundary": Ring,                   // the site square: [[0,0],[S,0],[S,S],[0,S]]
   "ground": { "spacing": 10, "n": 101, "points": [[x, y, z], …] },   // every grid node, row-major from the south
-  "buildings": [ { "id": "…", "outer": Ring, "holes": [Ring], "base": 1010.2, "height": 48, "top": 1058.2, "floors": 4, "rule": "data" | "floors" | "estimate", "name": "" } ],
+  "buildings": [ { "id": "…", "outer": Ring, "holes": [Ring], "base": 1010.2, "height": 48, "top": 1058.2, "floors": 4, "rule": "data" | "floors" | "estimate", "name": "",
+                   "removed": true } ],   // optional; the user removed this building in the Site Model. Readers skip it unless they draw demolition.
   "roads": { "segments": [ { "id": "…", "cls": "primary", "name": "…", "width": 36, "line": Line3 } ], "pavement": MultiPoly },
   "walks": MultiPoly | null,
   "trees": [ { "x": 0, "y": 0, "z": 0, "canopy": 30, "height": 40 } ],
@@ -136,7 +137,10 @@ Shared types:
 ```
 
 - `ground.points` is the same grid as the Revit CSV. The grid rule (spacing = max(10, ceil(S / 99 · 2) / 2) ft) already keeps it at 10,000 points or fewer. No further thinning.
-- `site.state` holds the fetch parameters: `{ query, lat, lon, size, release, walks }`. With them the Site Model rebuilds the full model (trees, water lines, contour shading) on demand.
+- `site.state` holds the fetch parameters: `{ query, lat, lon, size, release, walks, removed }`. With them the Site Model rebuilds the full model (trees, water lines, contour shading) on demand.
+- `site.state.removed` is the list of removed building ids (strings, unique, sorted; `[]` when there is none). A file without the key has no removed buildings. The Site Model applies the list again after a refetch and drops ids that no longer exist.
+- `removed` on a building: every building stays in `derived.buildings`, and a removed one carries `removed: true`. A building that is not removed has no `removed` key. Pieces of one Overture feature (`b`, `b~2`, `b~3`) are removed together.
+- Reader rule: `siteContextFor` and `buildSiteLayerData` skip removed buildings (no context block, no site-layer solid, no shadow, no sun-hours blocker); `opts.includeRemoved: true` returns them flagged. The Site Model exports draw them only as ground outlines on DXF layer `BLDG-REMOVED` and leave them out of the SketchUp file.
 - Elevations are true NAVD88 feet, never shifted.
 
 ### 6.2 `massing.derived` (writers: Tower Generator and Mid-Rise Generator, same shape)

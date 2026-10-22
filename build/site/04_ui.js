@@ -11,13 +11,21 @@ const App = (() => {
   const { sketchupFilename, docToBlob } = SkFmt;
   const { siteDerived, siteState, derivedBytes } = SiteDerivedMod;
 
+  const HELP_REMOVE = 'Click a building in the 3D view to open its card. Select Remove on the card to take the building out of the site. A dashed outline stays on the ground where the building stood. Select Restore on the card to put the building back. Select Restore all in the panel to put back every removed building. The list of removed buildings stays when you load the same address again. Every other tool and every export leaves out a removed building. The DXF file draws its ground outline on the layer BLDG-REMOVED. A removed building casts no shadow.';
+
   const state = {
     size: CONFIG.defaultSize,
     layers: { ground: true, buildings: true, roads: true, walks: false, trees: true, water: true },
     vscale: 1, contour: 0,
     busy: false, runId: 0, t0: 0, timer: 0,
     result: null, typed: '', elapsed: null,
+    removed: new Set(),         // ids of the buildings the user removed (base ids, no ~n suffix); saved as meta.removed in the project
+    removedKey: null,           // the site (lat, lon, size) the list belongs to; null = it adopts the next site that loads
+    selected: null,             // { id, building } of the building in the selection card, or null
   };
+  const baseId = (id) => String(id).replace(/~\d+$/, '');
+  const removedList = () => [...state.removed].sort();
+  const siteKeyOf = (r) => `${Number(r.loc.lat).toFixed(5)},${Number(r.loc.lon).toFixed(5)},${r.frame.size}`;
   const els = {};
   /* The open project (docs/project-file-spec.md). The injectable parts (storage, navigate, updateUrl) are for the in-page tests. */
   const project = {
@@ -41,7 +49,7 @@ const App = (() => {
   }
   const todayIso = () => { const d = new Date(), p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; };
   function metaOf(r = state.result) {
-    return { address: state.typed || r.loc.label, lat: r.loc.lat, lon: r.loc.lon, size: r.frame.size, release: r.release, date: todayIso() };
+    return { address: state.typed || r.loc.label, lat: r.loc.lat, lon: r.loc.lon, size: r.frame.size, release: r.release, date: todayIso(), removed: removedList() };
   }
   /** metaOf plus the walks flag: the model has a walk layer. Used for the project file. */
   function projectMeta(r = state.result) { return { ...metaOf(r), walks: !!(r.model.roads && r.model.roads.walks) }; }
@@ -82,7 +90,55 @@ const App = (() => {
       row('Grid spacing', fmtFt(g.spacing, 1)),
       row('Grid points', grouped(g.n * g.n), `${g.n} by ${g.n}`),
     ));
+    if (state.removed.size) {
+      box.append(h('div', { class: 'removed-line', id: 'removedLine' },
+        h('span', { id: 'removedText' }, `Removed buildings: ${state.removed.size}`),
+        h('span', { class: 'dot', 'aria-hidden': 'true' }, '·'),
+        h('button', { class: 'link-btn', type: 'button', id: 'restoreAll', onclick: restoreAll }, 'Restore all')));
+    }
   }
+
+  /* ---- remove and restore buildings ------------------------------------------------------------
+     Click a building in the 3D view (Scene.onPick) to open the selection card. Remove takes it out of the solids
+     (a dashed outline stays on the ground), Restore puts it back. Click its outline to select it again. The list is
+     state.removed; it goes into the project as meta.removed on every project write (metaOf). */
+  const RULE_TEXT = { data: 'height from the data', floors: 'height from the floor count', estimate: 'height estimated' };
+  function renderCard() {
+    const box = els.selCard, sel = state.selected;
+    if (!box) return;
+    box.textContent = '';
+    box.hidden = !sel;
+    if (!sel) return;
+    const b = sel.building, gone = state.removed.has(baseId(sel.id));
+    const floors = Math.max(1, Math.round(b.floors || b.height / 12));
+    box.append(
+      h('div', { class: 'sc-head' },
+        h('div', { class: 'sc-titles' },
+          h('div', { class: 'sc-title', id: 'selTitle' }, b.name || 'Building', gone ? h('span', { class: 'sc-tag' }, 'Removed') : null),
+          h('div', { class: 'sc-sub', id: 'selSub' }, `Height ${fmtFt(b.height, 1)} · ${floors} ${floors === 1 ? 'floor' : 'floors'} · ${RULE_TEXT[b.rule] || b.rule}`),
+          h('div', { class: 'sc-id', id: 'selId' }, `ID ${sel.id}`)),
+        h('button', { class: 'btn icon sc-close', type: 'button', id: 'selClose', title: 'Close (Escape)', 'aria-label': 'Close the building card', onclick: () => selectHit(null) }, '×')),
+      h('div', { class: 'sc-actions' },
+        h('button', { class: gone ? 'btn outline' : 'btn solid', type: 'button', id: 'selAction', onclick: () => (gone ? restoreBuilding(sel.id) : removeBuilding(sel.id)) }, gone ? 'Restore' : 'Remove')));
+  }
+  /** Opens the card for a hit of Scene.pick (or closes it with null). */
+  function selectHit(hit) {
+    if (hit && state.busy) return;
+    state.selected = hit ? { id: baseId(hit.id), building: hit.building } : null;
+    Scene.select(state.selected ? state.selected.id : null);
+    renderCard();
+  }
+  /** Replaces the removed set: rebuilds the buildings, redraws the panel line and the card, and writes the open project. */
+  function setRemoved(ids) {
+    state.removed = new Set([...(ids || [])].map(baseId));
+    Scene.setRemoved(state.removed);
+    renderMetrics();
+    renderCard();
+    if (state.result && project.doc && !project.readOnly && projectWrite(state.result)) scheduleProjectSave();
+  }
+  const removeBuilding = (id) => setRemoved([...state.removed, baseId(id)]);
+  const restoreBuilding = (id) => setRemoved([...state.removed].filter((x) => x !== baseId(id)));
+  const restoreAll = () => setRemoved([]);
 
   /* ---- recent sites ----------------------------------------------------------------------- */
   const loadRecents = () => { const v = Local.get(CONFIG.recentKey, []); return Array.isArray(v) ? v.filter((e) => e && e.text && e.size && Number.isFinite(e.lat) && Number.isFinite(e.lon)) : []; };
@@ -134,7 +190,8 @@ const App = (() => {
     tick();
     let r = null, failure = null;
     try {
-      r = await Pipeline.run({ text, size, loc: req.loc }, (step, st, msg) => { if (id === state.runId) setStep(step, st, msg); }, { walks: !!state.layers.walks, fetchFn: req.fetchFn });
+      const runner = req.runFn || Pipeline.run;                       // runFn: the in-page tests give a result without the network
+      r = await runner({ text, size, loc: req.loc }, (step, st, msg) => { if (id === state.runId) setStep(step, st, msg); }, { walks: !!state.layers.walks, fetchFn: req.fetchFn });
     } catch (e) { failure = e; }
     clearInterval(state.timer);
     const dt = performance.now() - state.t0;
@@ -152,13 +209,21 @@ const App = (() => {
     state.elapsed = dt;
     r.uiMs = Math.round(dt);
     if (!r.failed.length) setProgressOpen(false);          // all done: fold the list, one tap opens it
+    // The removed list belongs to one site: another site clears it. On the same site, ids that no longer exist are dropped without a message.
+    const key = siteKeyOf(r);
+    if (state.removedKey && state.removedKey !== key) state.removed = new Set();
+    state.removedKey = key;
+    const have = new Set(r.model.buildings.map((b) => baseId(b.id)));
+    state.removed = new Set([...state.removed].filter((x) => have.has(x)));
+    state.selected = null;
+    renderCard();
     const t1 = performance.now();
-    Scene.setModel(r.model);
+    Scene.setModel(r.model, state.removed);
     r.timings.scene = Math.round(performance.now() - t1);
     els.empty.hidden = true;
     renderMetrics();
     syncActions();
-    saveRecent(r);
+    if (!req.runFn) saveRecent(r);
     if (project.doc && (!id0 || id0 === project.doc.id) && projectWrite(r)) scheduleProjectSave();      // a project is open: the site goes into it
     const bad = r.failed.map((k) => CONFIG.steps.find((s) => s[0] === k)[1]);
     chip(bad.length ? `Loaded in ${secs(dt)}. Not loaded: ${bad.join(', ')}` : `Loaded in ${secs(dt)}`, bad.length ? 'bad' : '');
@@ -194,7 +259,7 @@ const App = (() => {
   /* ---- downloads and screenshot -------------------------------------------------------------------- */
   const FILES = {
     csv: { suffix: 'topo.csv', type: 'text/csv', make: (r) => revitCsv(r.model.ground) },
-    dxf: { suffix: 'site.dxf', type: 'application/dxf', make: (r) => siteDxf(r.model) },
+    dxf: { suffix: 'site.dxf', type: 'application/dxf', make: (r) => siteDxf(r.model, { removed: new Set(state.removed) }) },
     notes: { suffix: 'notes.md', type: 'text/markdown', make: (r) => notesMarkdown(r.model, metaOf(r)) },
     // SketchUp: the name comes from sketchupFilename (slug + date) and the file is a Blob made by docToBlob
     sketchup: { type: 'application/json', name: (r) => sketchupFilename(slugOf(r), new Date()), blob: (r) => docToBlob(siteToSketchup(r.model, metaOf(r))) },
@@ -505,6 +570,8 @@ const App = (() => {
     if (!st || typeof st.query !== 'string' || !st.query.trim() || !(size > 0)) return null;
     els.addr.value = st.query;
     setSize(size);
+    state.removed = new Set(Array.isArray(st.removed) ? st.removed.filter((x) => typeof x === 'string').map(baseId) : []);     // applied when the model lands (go prunes it)
+    state.removedKey = null;
     if (st.walks && !state.layers.walks) {                    // the run builds the walks; the layer only has to be on
       state.layers.walks = true;
       for (const b of els.toggles.querySelectorAll('[data-layer="walks"]')) b.setAttribute('aria-checked', 'true');
@@ -515,7 +582,7 @@ const App = (() => {
     return { text: st.query, size, loc };
   }
   /** On start: with ?project=<id> open that project and run its saved site. Returns true when a project was opened. */
-  function startProject({ fetchFn } = {}) {
+  function startProject({ fetchFn, runFn } = {}) {
     let id = null;
     try { id = ProjectMod.projectIdFromUrl(location); } catch (e) { id = null; }
     if (!id) return false;
@@ -527,7 +594,7 @@ const App = (() => {
     }
     openProjectDoc(doc);
     const req = siteRequest(doc);
-    if (req) go({ ...req, fetchFn });
+    if (req) go({ ...req, fetchFn, runFn });
     return true;
   }
 
@@ -639,6 +706,12 @@ const App = (() => {
     sections.append(h('div', { class: 'sec' }, h('div', { class: 'label' }, 'Site data'), els.metrics));
     renderMetrics();
 
+    // Help: remove buildings (copy in docs/site-remove-copy.md)
+    els.help = h('details', { class: 'sec help-sec', id: 'helpSec' },
+      h('summary', { class: 'label' }, h('span', { class: 'sec-title' }, h('span', { html: ICONS.chev, style: 'display:contents' }), 'Remove buildings')),
+      h('p', { class: 'help-text', id: 'helpRemove' }, HELP_REMOVE));
+    sections.append(els.help);
+
     sections.append(h('p', { class: 'credits' }, CREDITS));
   }
 
@@ -711,7 +784,7 @@ const App = (() => {
   }
 
   function init() {
-    els.viewport = $('viewport'); els.chip = $('statusChip'); els.empty = $('emptyState'); els.projPill = $('projPill');
+    els.viewport = $('viewport'); els.chip = $('statusChip'); els.empty = $('emptyState'); els.projPill = $('projPill'); els.selCard = $('selCard');
     buildTopbar();
     buildPanel();
     buildViews();
@@ -725,11 +798,19 @@ const App = (() => {
       if (file) await projectImport(file);
     });
     wireProjectEvents();
+    Scene.onPick((hit) => selectHit(hit));
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || !state.selected) return;
+      const t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA')) return;
+      selectHit(null);
+    });
     return true;
   }
 
   return {
     init, go, buildCompass, screenshot, download, fileFor, sketchupDoc, openDownloads, toggleLayer, setVScale, setContour, setSize, openMaps, syncActions,
+    setRemoved, removeBuilding, restoreBuilding, restoreAll, selectHit, renderCard,
     state, els, metaOf, slugOf, renderMetrics, setStep,
     project, startProject, openProjectDoc, projectClose, projectCreate, projectWrite, projectSend, scheduleProjectSave, flushProject, siteRequest, openProjectMenu, projectMeta,
   };

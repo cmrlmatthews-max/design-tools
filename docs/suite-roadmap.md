@@ -15,7 +15,7 @@ This file is the one place that lists every tool in the suite, who builds it, an
 
 | Id | Tool | Folder | Status | Built by |
 |---|---|---|---|---|
-| `site` | Site Model | `site/` | Version 1 live | Home |
+| `site` | Site Model | `site/` | Version 1 live. Remove existing buildings in review | Home |
 | `tower` | Tower Generator | `tower/` | Version 1.2 built, in review (project file, Sun Study) | Home |
 | `sun` | Sun Study (inside the Tower Generator) | `tower/` | Version 1 built, in review | Home |
 | `plate` | Plate Planner | `plate/` | Version 1 built, in review | Home |

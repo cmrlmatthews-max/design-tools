@@ -411,6 +411,34 @@ button { cursor: pointer; }
 .kv dd small { color: var(--ink-3); font-weight: 400; font-size: 11.5px; }
 .credits { padding: 12px 16px 4px; color: var(--ink-3); font-size: 11.5px; line-height: 1.5; }
 
+/* remove buildings: the selection card, the panel line, the help section */
+.sel-card {
+  position: absolute; z-index: 4; left: 12px; top: 12px; width: min(292px, calc(100% - 96px)); padding: 10px 12px 12px;
+  background: var(--hud-bg); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+}
+.status-chip:not([hidden]) ~ .sel-card { top: 52px; }
+.sc-head { display: flex; align-items: flex-start; gap: 8px; }
+.sc-titles { flex: 1 1 auto; min-width: 0; display: grid; gap: 2px; padding-top: 2px; }
+.sc-title { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.sc-tag { flex: none; padding: 1px 7px; border-radius: 999px; background: var(--surface-2); color: var(--ink-2); font-size: 11px; font-weight: 600; }
+.sc-sub { font-size: 12.5px; color: var(--ink-2); line-height: 1.35; }
+.sc-id { font-size: 11px; color: var(--ink-3); overflow-wrap: anywhere; }
+.sc-close { flex: none; min-width: 36px; min-height: 36px; margin: -4px -6px 0 0; font-size: 22px; line-height: 1; color: var(--ink-2); }
+.sc-actions { display: grid; margin-top: 10px; }
+.sc-actions .btn { justify-content: center; font-weight: 600; }
+.removed-line { display: flex; align-items: center; gap: 6px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink-2); }
+.removed-line .dot { color: var(--ink-3); }
+.link-btn { min-height: 32px; padding: 0 2px; border: 0; background: transparent; color: var(--accent); font-size: 13px; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+.help-sec { padding-bottom: 8px; }
+.help-sec > summary { display: flex; align-items: center; min-height: 40px; cursor: pointer; list-style: none; }
+.help-sec > summary::-webkit-details-marker { display: none; }
+.help-sec .chev { width: 12px; height: 12px; fill: none; stroke: var(--ink-3); stroke-width: 2; transform: rotate(-90deg); transition: transform .15s; }
+.help-sec[open] .chev { transform: none; }
+.help-sec .sec-title { display: inline-flex; align-items: center; gap: 6px; }
+.help-text { margin: 2px 0 8px; color: var(--ink-2); font-size: 12.5px; line-height: 1.5; }
+@media (max-width: 899px), (orientation: portrait) { .sel-card { width: min(300px, calc(100% - 80px)); } }
+
 /* in-page tests */
 .test-panel {
   position: absolute; z-index: 30; left: 12px; right: 12px; top: 12px; max-height: calc(100% - 24px); overflow: auto;
@@ -449,6 +477,7 @@ button { cursor: pointer; }
       <div class="canvas-host" id="canvasHost"></div>
       <div class="empty" id="emptyState"><div><strong>No site yet</strong><span>Type an address in the panel, then tap Go.</span></div></div>
       <div class="status-chip" id="statusChip" hidden></div>
+      <div class="sel-card" id="selCard" role="region" aria-label="Selected building" aria-live="polite" hidden></div>
       <div class="compass" id="compass" aria-label="North arrow" role="img"><svg viewBox="0 0 48 48" aria-hidden="true"><g id="compassRose"><circle cx="24" cy="24" r="21.5" class="c-ring"/><path d="M24 10.5l3.6 13.5h-7.2z" class="c-n"/><path d="M24 37.5l-3.6-13.5h7.2z" class="c-s"/></g><text id="compassN" x="24" y="10.2" text-anchor="middle" class="c-t">N</text></svg></div>
       <nav class="views" id="views" aria-label="Camera views"></nav>
       <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
@@ -1720,16 +1749,42 @@ const ExportsMod = (() => {
      water. Holes are separate closed polylines.
    - The topo mesh is one polyface mesh unless n*n > 32,000 vertices; then it
      is cut into bands of rows that share one boundary row.
+   - Removed buildings (opts.removed / meta.removed: an array or a Set of ids)
+     leave the BLDG-DATA and BLDG-ESTIMATE polyfaces. The DXF draws each one as
+     its ground outline on BLDG-REMOVED (a closed 2D polyline at b.base for the
+     outer ring and every hole, dashed linetype). The id match ignores the piece
+     suffix "~n" on both sides (the same rule as derived.js removedSet).
+     removedIds and isRemovedId are exported here because sketchup.js imports
+     from this module (the page bundle places exports before derived).
    ========================================================================== */
 
 const { summarize } = ModelMod;
 
+/** [name, ACI color, linetype (CONTINUOUS when left out)] */
 const DXF_LAYERS = [
-  ["SITE-BOUNDARY", 1], ["TOPO-MESH", 8], ["BLDG-DATA", 7], ["BLDG-ESTIMATE", 30], ["ROAD-PAVEMENT", 8],
+  ["SITE-BOUNDARY", 1], ["TOPO-MESH", 8], ["BLDG-DATA", 7], ["BLDG-ESTIMATE", 30], ["BLDG-REMOVED", 6, "DASHED"], ["ROAD-PAVEMENT", 8],
   ["WALK-PAVEMENT", 9], ["ROAD-CL", 2], ["WATER", 5], ["WATER-LINE", 4], ["TREE", 3],
 ];
 
 const CREDITS = "Elevation: USGS 3D Elevation Program. Buildings, roads, trees, water: Overture Maps Foundation, © OpenStreetMap contributors (ODbL), Microsoft ML Buildings. Geocoding: Nominatim / OpenStreetMap.";
+
+/* ---------------- removed buildings ---------------- */
+
+const featureOf = (id) => String(id ?? "").replace(/~\d+$/, "");
+
+/** The removed ids (an array or a Set) as a Set of feature ids: the piece suffix "~n" is dropped. */
+function removedIds(removed) {
+  const out = new Set();
+  if (removed instanceof Set || Array.isArray(removed)) {
+    for (const id of removed) if (id !== undefined && id !== null && String(id) !== "") out.add(featureOf(id));
+  }
+  return out;
+}
+
+/** True when a building id (with or without the piece suffix) is in a set from removedIds(). */
+function isRemovedId(id, set) {
+  return !!set && set.size > 0 && set.has(featureOf(id));
+}
 
 /* ---------------- CSV ---------------- */
 
@@ -1895,9 +1950,12 @@ function buildingMesh(b) {
 /**
  * DXF R12 text for every layer except the ground CSV points; the topo is also written as a polyface mesh.
  * @param model  { frame, ground, buildings, roads, trees, water }
+ * @param opts   { removed }  removed: a Set (or an array) of building ids. Those buildings go to BLDG-REMOVED as
+ *               ground outlines, not to the polyface layers.
  */
-function siteDxf(model) {
+function siteDxf(model, opts = {}) {
   const { frame, ground, buildings, roads, trees, water } = model;
+  const gone = removedIds(opts && opts.removed);
   const D = new Dxf();
   const S = frame.size;
 
@@ -1919,6 +1977,11 @@ function siteDxf(model) {
 
   for (const b of buildings) {
     if (b.ring.length < 3) continue;
+    if (isRemovedId(b.id, gone)) {
+      D.closed2d("BLDG-REMOVED", b.ring, b.base);
+      for (const h of b.holes || []) if (h.length >= 3) D.closed2d("BLDG-REMOVED", h, b.base);
+      continue;
+    }
     const { verts, faces } = buildingMesh(b);
     D.polyface(b.rule === "estimate" ? "BLDG-ESTIMATE" : "BLDG-DATA", verts, faces);
   }
@@ -1938,12 +2001,14 @@ function siteDxf(model) {
   head.g(9, "$EXTMAX"); head.g(10, D.max[0]); head.g(20, D.max[1]); head.g(30, D.max[2]);
   head.g(0, "ENDSEC");
   head.g(0, "SECTION"); head.g(2, "TABLES");
-  head.g(0, "TABLE"); head.g(2, "LTYPE"); head.g(70, 1);
+  head.g(0, "TABLE"); head.g(2, "LTYPE"); head.g(70, 2);
   head.g(0, "LTYPE"); head.g(2, "CONTINUOUS"); head.g(70, 0); head.g(3, "Solid line"); head.g(72, 65); head.g(73, 0); head.g(40, 0);
+  head.g(0, "LTYPE"); head.g(2, "DASHED"); head.g(70, 0); head.g(3, "Dashed __ __ __"); head.g(72, 65); head.g(73, 2); head.g(40, 6);
+  head.g(49, 4); head.g(49, -2);
   head.g(0, "ENDTAB");
   head.g(0, "TABLE"); head.g(2, "LAYER"); head.g(70, DXF_LAYERS.length + 1);
   head.g(0, "LAYER"); head.g(2, "0"); head.g(70, 0); head.g(62, 7); head.g(6, "CONTINUOUS");
-  for (const [name, color] of DXF_LAYERS) { head.g(0, "LAYER"); head.g(2, name); head.g(70, 0); head.g(62, color); head.g(6, "CONTINUOUS"); }
+  for (const [name, color, ltype] of DXF_LAYERS) { head.g(0, "LAYER"); head.g(2, name); head.g(70, 0); head.g(62, color); head.g(6, ltype || "CONTINUOUS"); }
   head.g(0, "ENDTAB");
   head.g(0, "ENDSEC");
   head.g(0, "SECTION"); head.g(2, "ENTITIES");
@@ -1959,15 +2024,19 @@ const n1 = (v) => (Math.round(v * 10) / 10).toFixed(1);
 /**
  * Notes file in Markdown (ASD-STE100 style: short sentences, active voice).
  * @param model  { frame, ground, buildings, roads, trees, water }
- * @param meta  { address, lat, lon, size, release, date }
+ * @param meta  { address, lat, lon, size, release, date, removed }  removed: a Set (or an array) of building ids.
+ *              Building counts leave the removed buildings out; one line gives their count when there are any.
  */
 function notesMarkdown(model, meta) {
   const s = summarize(model), g = model.ground, fr = model.frame;
+  const gone = removedIds(meta && meta.removed);
+  const kept = model.buildings.filter((b) => !isRemovedId(b.id, gone));
+  const removedN = new Set(model.buildings.filter((b) => isRemovedId(b.id, gone)).map((b) => featureOf(b.id))).size;   // one per feature, like the page
   const lat = meta.lat ?? fr.lat0, lon = meta.lon ?? fr.lon0, size = meta.size ?? fr.size;
   const [oLon, oLat] = fr.toLonLat(0, 0);
   const date = meta.date || new Date().toISOString().slice(0, 10);
   const rules = { data: 0, floors: 0, estimate: 0 };
-  for (const b of model.buildings) rules[b.rule]++;
+  for (const b of kept) rules[b.rule]++;
   const skShift = Math.round(-g.min * 100) / 100 || 0, skN = Math.abs(skShift).toFixed(2);       // same rounding as sketchup.js
   const skNote = skShift <= 0
     ? `SketchUp: use Extensions > CMRLM > Import Design Tools file. The model is lowered by ${skN} ft so the lowest ground point is 0 ft. Add ${skN} ft to return to NAVD88 elevations.`
@@ -1985,7 +2054,8 @@ function notesMarkdown(model, meta) {
     "",
     "## What the model holds",
     "",
-    `- Buildings: ${s.buildings}`,
+    `- Buildings: ${kept.length}`,
+    ...(removedN > 0 ? [`- Removed buildings: ${removedN} (on layer BLDG-REMOVED in the DXF; not in the SketchUp file)`] : []),
     `- Road centerlines: ${n0(s.roadsFt)} ft in ${model.roads.segments.length} segments`,
     `- Pavement areas: ${model.roads.pavement.length}`,
     `- Walk areas: ${model.roads.walks ? model.roads.walks.length : "not included"}`,
@@ -2031,7 +2101,7 @@ function notesMarkdown(model, meta) {
   return lines.join("\n");
 }
 
-return { DXF_LAYERS, CREDITS, revitCsv, triangulate, siteDxf, notesMarkdown };
+return { DXF_LAYERS, CREDITS, removedIds, isRemovedId, revitCsv, triangulate, siteDxf, notesMarkdown };
 })();
 
 const SkFmt = (() => {
@@ -2228,12 +2298,15 @@ const SkSite = (() => {
      (or class) of the centerlines inside it.
    - Walks (when the model has them) go in a "Walks" group, draped + 0.12 ft.
    - A building solid starts at its base elevation (no 1 ft skirt, unlike the DXF).
+   - Removed buildings (meta.removed: an array or a Set of ids, matched without the piece suffix "~n") are left
+     out: no solid, no hidden group. The other buildings keep their "Building 0001" numbers (the number is the
+     place of the building in the model list).
    - Draped faces: x and y are rounded to 0.001 ft, z to 0.00001 ft, so each polygon stays flat
      (rounding z to 0.001 ft would bend a quad by up to about 0.001 ft).
    ========================================================================== */
 
 const { cleanRing2, cleanRing3, makeDoc } = SkFmt;
-const { CREDITS } = ExportsMod;
+const { CREDITS, removedIds, isRemovedId } = ExportsMod;
 
 const K = 1000;                       // Clipper scale: 0.001 ft
 const BIG = 100000;                   // ft: "infinity" for the outer cells
@@ -2522,7 +2595,7 @@ function facesNode(name, pieces, ground, offset, extra) {
 /**
  * SketchUp document for a site model.
  * @param model  { frame, ground, buildings, roads, trees, water } from model.js (trees are ignored)
- * @param meta   { address, lat, lon, size, release, date }
+ * @param meta   { address, lat, lon, size, release, date, removed }  removed: a Set (or an array) of building ids to leave out
  */
 function siteToSketchup(model, meta = {}) {
   const { frame, ground } = model;
@@ -2549,8 +2622,9 @@ function siteToSketchup(model, meta = {}) {
   const children = [{ type: "mesh", name: "Ground", tag: "Ground", material: "Ground", vertices, triangles, soft: true, closed: false }];
 
   // ---- buildings
-  const bnodes = [];
+  const bnodes = [], gone = removedIds(meta.removed);
   buildings.forEach((b, k) => {
+    if (isRemovedId(b.id, gone)) return;
     const outer = cleanRing2(b.ring);
     if (!outer) return;
     const holes = (b.holes || []).map((h) => cleanRing2(h, { hole: true })).filter(Boolean);
@@ -2996,8 +3070,11 @@ function transformMultiPoly(section, mp, dir) {
  *     polygons: [{ id, name, outer, holes, base, height }] }    the building rings, in the local frame
  * where base is the building base minus placement.baseZ. Numbers are rounded to 0.01 ft (rings to 0.001).
  * Empty lists when the project has no site section.
+ * A building with `removed: true` (the user removed it in the Site Model) is skipped from both lists, unless
+ * opts.includeRemoved is true; then it is kept and its block and polygon carry `removed: true`.
  */
-function siteContextFor(doc, placement, radiusFt) {
+function siteContextFor(doc, placement, radiusFt, opts) {
+  const includeRemoved = !!(isObj(opts) && opts.includeRemoved);
   const out = { blocks: [], polygons: [] };
   const site = getSection(doc, "site");
   const list = site && isObj(site.derived) && Array.isArray(site.derived.buildings) ? site.derived.buildings : [];
@@ -3005,6 +3082,8 @@ function siteContextFor(doc, placement, radiusFt) {
   const radius = Number.isFinite(radiusFt) ? radiusFt : Infinity;
   for (const b of list) {
     if (!isObj(b) || !Array.isArray(b.outer) || b.outer.length < 3) continue;
+    const removed = b.removed === true;
+    if (removed && !includeRemoved) continue;
     const outer = mapRing(pl, b.outer, false);
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     for (const [x, y] of outer) {
@@ -3019,8 +3098,11 @@ function siteContextFor(doc, placement, radiusFt) {
     const name = typeof b.name === "string" ? b.name : "";
     const height = Number.isFinite(b.height) ? b.height : (Number.isFinite(b.top) && Number.isFinite(b.base) ? b.top - b.base : 0);
     const base = r2((Number.isFinite(b.base) ? b.base : pl.baseZ) - pl.baseZ);
-    out.blocks.push({ id: b.id, name, x: r2((minX + maxX) / 2), y: r2((minY + maxY) / 2), w: r2(maxX - minX), d: r2(maxY - minY), h: r2(height), base });
-    out.polygons.push({ id: b.id, name, outer, holes: (Array.isArray(b.holes) ? b.holes : []).map((h) => mapRing(pl, h, false)), base, height: r2(height) });
+    const block = { id: b.id, name, x: r2((minX + maxX) / 2), y: r2((minY + maxY) / 2), w: r2(maxX - minX), d: r2(maxY - minY), h: r2(height), base };
+    const polygon = { id: b.id, name, outer, holes: (Array.isArray(b.holes) ? b.holes : []).map((h) => mapRing(pl, h, false)), base, height: r2(height) };
+    if (removed) { block.removed = true; polygon.removed = true; }
+    out.blocks.push(block);
+    out.polygons.push(polygon);
   }
   return out;
 }
@@ -3409,6 +3491,9 @@ const SiteDerivedMod = (() => {
      the rounding changes. A point that repeats after the rounding is dropped.
    - walks is null when the model has no walk layer, and a MultiPoly (maybe empty) when it has one.
    - latitude and longitude are copied as they are. They are not feet.
+   - Removed buildings (meta.removed, an array or a Set of ids): every building stays in the section, and a removed
+     one gets `removed: true`. A building that is not removed has no `removed` key. The match ignores the piece
+     suffix on both sides ("b", "b~2" and "b~3" are one Overture feature), so one feature is removed as one building.
    ========================================================================== */
 
 const { cleanRing2 } = SkFmt;
@@ -3458,6 +3543,28 @@ function uniqueIds(items) {
   return items;
 }
 
+/** The Overture feature id of a building id: the id without the piece suffix ("b~2" gives "b"). */
+function featureId(id) {
+  return String(id ?? "").replace(/~\d+$/, "");
+}
+
+/**
+ * The removed ids as a Set of feature ids (piece suffix dropped). Takes an array, a Set, or nothing.
+ * Empty, null and undefined entries are dropped.
+ */
+function removedSet(removed) {
+  const out = new Set();
+  if (removed instanceof Set || Array.isArray(removed)) {
+    for (const id of removed) if (id !== undefined && id !== null && String(id) !== "") out.add(featureId(id));
+  }
+  return out;
+}
+
+/** True when the building id (with or without a piece suffix) is in the set from removedSet(). */
+function isRemovedId(id, set) {
+  return !!set && set.size > 0 && set.has(featureId(id));
+}
+
 /** Every grid node, row-major from the south (index j * n + i is node (xs[i], ys[j])), rounded to 0.01 ft. */
 function groundGrid(g) {
   const { n, spacing, xs, ys, z } = g;
@@ -3476,8 +3583,10 @@ function groundGrid(g) {
 /**
  * The `derived` half of the "site" section (spec 6.1).
  * @param model  { frame, ground, buildings, roads, trees, water } from model.js
- * @param meta   { address, lat, lon, size, release }  (lat, lon, size fall back to the frame of the model)
+ * @param meta   { address, lat, lon, size, release, removed }  (lat, lon, size fall back to the frame of the model;
+ *               removed is an array or a Set of building ids)
  * @returns {object} plain JSON data: { address, lat, lon, size, release, boundary, ground, buildings, roads, walks, trees, water }
+ *               A building whose id is in meta.removed carries `removed: true`; the others have no `removed` key.
  */
 function siteDerived(model, meta = {}) {
   const fr = model.frame || {};
@@ -3487,6 +3596,7 @@ function siteDerived(model, meta = {}) {
   if (!fin(lat) || !fin(lon)) throw new Error("siteDerived: the site center is missing.");
   const S = r3(size), roads = model.roads || {}, water = model.water || {};
 
+  const gone = removedSet(meta.removed);
   const buildings = [];
   for (const b of model.buildings || []) {
     const outer = ring(b.ring, false);
@@ -3496,6 +3606,7 @@ function siteDerived(model, meta = {}) {
       id: String(b.id), outer, holes: holesOf(b.holes), base, height, top: r3(base + height),
       floors: fin(b.floors) ? b.floors : Math.max(1, Math.round(height / 12)), rule: b.rule, name: String(b.name || ""),
     });
+    if (isRemovedId(b.id, gone)) buildings[buildings.length - 1].removed = true;
   }
 
   const segments = [];
@@ -3531,14 +3642,22 @@ function siteDerived(model, meta = {}) {
 
 /**
  * The `state` half of the "site" section (spec 6.1): the fetch parameters. With them the page loads the site again.
- * @param meta  { address, lat, lon, size, release, walks }  (address is the text the user typed)
+ * @param meta  { address, lat, lon, size, release, walks, removed }  (address is the text the user typed; removed is an
+ *              array or a Set of building ids)
+ * @returns {{ query, lat, lon, size, release, walks, removed: string[] }}  removed: the ids as given, strings, unique,
+ *              sorted; [] when meta has none.
  */
 function siteState(meta = {}) {
+  const ids = new Set();
+  if (meta.removed instanceof Set || Array.isArray(meta.removed)) {
+    for (const id of meta.removed) if (id !== undefined && id !== null && String(id) !== "") ids.add(String(id));
+  }
   return {
     query: String(meta.address ?? ""),
     lat: meta.lat, lon: meta.lon, size: meta.size,
     release: meta.release ? String(meta.release) : null,
     walks: !!meta.walks,
+    removed: [...ids].sort(),
   };
 }
 
@@ -3548,7 +3667,7 @@ function derivedBytes(derived) {
   return typeof TextEncoder !== "undefined" ? new TextEncoder().encode(text).length : text.length;
 }
 
-return { siteDerived, siteState, derivedBytes };
+return { featureId, removedSet, isRemovedId, siteDerived, siteState, derivedBytes };
 })();
 
 const ShotMod = (() => {
@@ -4149,10 +4268,17 @@ const Scene = (() => {
   let site = null;                          // { model, S, gmin, gmax, top, meshAt }
   let vscale = 1, contour = 0;
   const cameraListeners = [];
+  const pickListeners = [];
+  const TAP_PX = 6, TAP_MS = 500;           // a click selects only when it travels under 6 px and lasts under 500 ms
+  let removedSet = new Set();               // ids of removed buildings (base ids, no ~n suffix)
+  let pickSets = [];                        // [{ mesh, unit, ranges: [{ b, start, count }] }] for the two merged building meshes
+  let removedBuildings = [];                // model buildings that are removed (footprints for picking the outlines)
+  let groundMesh = null, selGroup = null, selected = null;
+  const raycaster = new THREE.Raycaster();
   const layerVisible = { ground: true, buildings: true, roads: true, walks: false, trees: true, water: true };
   const G = {};                             // layer groups
   const M = {};                             // materials
-  const info = { buildings: 0, buildingMeshes: 0, trees: 0, waterAreas: 0, roadTriangles: 0, walkTriangles: 0, triangles: 0 };
+  const info = { buildings: 0, removed: 0, buildingMeshes: 0, trees: 0, waterAreas: 0, roadTriangles: 0, walkTriangles: 0, triangles: 0 };
   const contourU = { uInterval: { value: 2 }, uOn: { value: 0 }, uContourColor: { value: new THREE.Color('#3a424a') } };
 
   const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -4195,6 +4321,9 @@ const Scene = (() => {
     M.canopy = std({ flatShading: true });
     M.trunk = std();
     M.site = new THREE.LineBasicMaterial();
+    M.removed = new THREE.LineDashedMaterial({ dashSize: 8, gapSize: 5 });
+    M.selFill = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.35, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+    M.selLine = new THREE.LineBasicMaterial();
   }
   function applyTheme() {
     if (!scene) return;
@@ -4210,6 +4339,9 @@ const Scene = (() => {
     M.canopy.color.copy(cssColor('--scene-tree'));
     M.trunk.color.copy(cssColor('--scene-trunk'));
     M.site.color.copy(cssColor('--scene-site'));
+    M.removed.color.copy(cssColor('--scene-edge'));
+    M.selFill.color.copy(cssColor('--accent'));
+    M.selLine.color.copy(cssColor('--accent'));
     contourU.uContourColor.value.copy(cssColor('--scene-contour'));
     M.ground.color.set(0xffffff);
     paintGround();
@@ -4276,6 +4408,7 @@ const Scene = (() => {
     groundGeo = geo;
     const mesh = new THREE.Mesh(geo, M.ground);
     mesh.userData.kind = 'ground';
+    groundMesh = mesh;
     return mesh;
   }
 
@@ -4343,33 +4476,189 @@ const Scene = (() => {
   }
 
   /* ---- buildings ------------------------------------------------------------------ */
+  const baseId = (id) => String(id).replace(/~\d+$/, '');       // a piece id "x~2" belongs to the feature "x"
+  const isRemoved = (b) => removedSet.has(baseId(b.id));
+
+  /** The solid of one building, in world space (null for a bad ring). */
+  function buildingGeometry(b) {
+    if (!b.ring || b.ring.length < 3) return null;
+    const shape = new THREE.Shape(b.ring.map((q) => new THREE.Vector2(q[0], q[1])));
+    for (const hole of b.holes || []) if (hole.length >= 3) shape.holes.push(new THREE.Path(hole.map((q) => new THREE.Vector2(q[0], q[1]))));
+    const geo = new THREE.ExtrudeGeometry(shape, { depth: b.height + 1, bevelEnabled: false, steps: 1, curveSegments: 1 });
+    geo.deleteAttribute('uv');
+    geo.applyMatrix4(planMatrix(b.base - 1));
+    return geo;
+  }
+
+  /** Dashed or plain line segments for the rings of buildings, draped on the ground every 10 ft. `lineDistance` runs along each ring so dashes are even. */
+  function drapedRings(list, lift, mat) {
+    const pos = [], dist = [];
+    for (const b of list) {
+      for (const ring of [b.ring, ...(b.holes || [])]) {
+        if (!ring || ring.length < 3) continue;
+        const pts = densifyRing(trimRing(ring), 10);
+        let d = 0;
+        for (let i = 0; i < pts.length; i++) {
+          const p = pts[i], q = pts[(i + 1) % pts.length], L = Math.hypot(q[0] - p[0], q[1] - p[1]);
+          pos.push(p[0], site.meshAt(p[0], p[1]) + lift, -p[1], q[0], site.meshAt(q[0], q[1]) + lift, -q[1]);
+          dist.push(d, d + L);
+          d += L;
+        }
+      }
+    }
+    if (!pos.length) return null;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    if (mat.isLineDashedMaterial) g.setAttribute('lineDistance', new THREE.Float32BufferAttribute(dist, 1));
+    return new THREE.LineSegments(g, mat);
+  }
+
+  /** Solids for every building that is not removed (two merged meshes with per-building ranges) and one dashed outline object for the removed ones. */
   function buildBuildings(buildings) {
     const data = [], est = [];
+    const gone = [];
+    pickSets = [];
     let count = 0;
     for (const b of buildings) {
       try {
-        if (!b.ring || b.ring.length < 3) continue;
-        const shape = new THREE.Shape(b.ring.map((q) => new THREE.Vector2(q[0], q[1])));
-        for (const hole of b.holes || []) if (hole.length >= 3) shape.holes.push(new THREE.Path(hole.map((q) => new THREE.Vector2(q[0], q[1]))));
-        const geo = new THREE.ExtrudeGeometry(shape, { depth: b.height + 1, bevelEnabled: false, steps: 1, curveSegments: 1 });
-        geo.deleteAttribute('uv');
-        geo.applyMatrix4(planMatrix(b.base - 1));
-        (b.rule === 'estimate' ? est : data).push(geo);
+        if (isRemoved(b)) { if (b.ring && b.ring.length >= 3) gone.push(b); continue; }
+        const geo = buildingGeometry(b);
+        if (!geo) continue;
+        (b.rule === 'estimate' ? est : data).push({ geo, b });
         count++;
       } catch (e) { console.warn('building skipped', b && b.id, e); }
     }
     const out = [];
-    for (const [list, mat] of [[data, M.building], [est, M.estimate]]) {
-      if (!list.length) continue;
+    for (const [items, mat] of [[data, M.building], [est, M.estimate]]) {
+      if (!items.length) continue;
+      const list = items.map((it) => it.geo);
+      const unit = list[0].index ? 'index' : 'vertex';
+      const ranges = [];
+      let at = 0;
+      for (const it of items) {
+        const n = it.geo.index ? it.geo.index.count : it.geo.getAttribute('position').count;
+        ranges.push({ b: it.b, start: at, count: n });
+        at += n;
+      }
       const merged = list.length === 1 ? list[0] : BufferGeometryUtils.mergeGeometries(list, false);
       if (list.length > 1) list.forEach((g) => g.dispose());
       const mesh = new THREE.Mesh(merged, mat);
       mesh.userData.kind = 'buildings';
+      pickSets.push({ mesh, unit, ranges });
       out.push(mesh, new THREE.LineSegments(new THREE.EdgesGeometry(merged, EDGE_ANGLE), M.edge));
     }
+    removedBuildings = gone;
+    if (gone.length) {
+      const lines = drapedRings(gone, 0.4, M.removed);
+      if (lines) { lines.userData.kind = 'removed'; out.push(lines); }
+    }
     info.buildings = count;
+    info.removed = gone.length;
     info.buildingMeshes = out.filter((o) => o.isMesh).length;
     return out;
+  }
+
+  /* ---- picking and selection ------------------------------------------------------- */
+  function inRing(x, y, ring) {
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const a = ring[i], b = ring[j];
+      if ((a[1] > y) !== (b[1] > y) && x < ((b[0] - a[0]) * (y - a[1])) / (b[1] - a[1]) + a[0]) inside = !inside;
+    }
+    return inside;
+  }
+  function rangeAt(set, k) {
+    const r = set.ranges;
+    let lo = 0, hi = r.length - 1;
+    while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (r[mid].start <= k) lo = mid; else hi = mid - 1; }
+    return r[lo];
+  }
+
+  /**
+   * The building under a screen point (client coordinates), or null.
+   * A solid building gives { id, building, removed: false }. A removed building is found by its dashed footprint on the
+   * ground (point in polygon on the ground hit) and gives removed: true. The nearer of the two wins.
+   */
+  function pick(clientX, clientY) {
+    if (!renderer || !site || !layerVisible.buildings) return null;
+    const rc = renderer.domElement.getBoundingClientRect();
+    if (!rc.width || !rc.height) return null;
+    scene.updateMatrixWorld(true);
+    cam.updateMatrixWorld();
+    raycaster.setFromCamera(new THREE.Vector2(((clientX - rc.left) / rc.width) * 2 - 1, -(((clientY - rc.top) / rc.height) * 2 - 1)), cam);
+    let best = null;
+    if (pickSets.length) {
+      const hits = raycaster.intersectObjects(pickSets.map((p) => p.mesh), false);
+      if (hits.length) {
+        const hit = hits[0], set = pickSets.find((p) => p.mesh === hit.object);
+        if (set && hit.faceIndex != null) {
+          const range = rangeAt(set, hit.faceIndex * 3);
+          best = { id: range.b.id, building: range.b, removed: false, distance: hit.distance };
+        }
+      }
+    }
+    if (removedBuildings.length && groundMesh && layerVisible.ground) {
+      const gh = raycaster.intersectObject(groundMesh, false)[0];
+      if (gh && (!best || gh.distance < best.distance)) {
+        const p = root.worldToLocal(gh.point.clone()), x = p.x, y = -p.z;
+        const found = removedBuildings.find((b) => inRing(x, y, b.ring));
+        if (found) best = { id: found.id, building: found, removed: true, distance: gh.distance };
+      }
+    }
+    return best ? { id: best.id, building: best.building, removed: best.removed } : null;
+  }
+
+  /** Client coordinates of a plan point (x, y, elevation), for tests and overlays. */
+  function screenOf(x, y, elev = 0) {
+    const rc = renderer.domElement.getBoundingClientRect();
+    scene.updateMatrixWorld(true);
+    cam.updateMatrixWorld();
+    const v = new THREE.Vector3(x, elev, -y).applyMatrix4(root.matrixWorld).project(cam);
+    return { x: rc.left + ((v.x + 1) / 2) * rc.width, y: rc.top + ((1 - v.y) / 2) * rc.height };
+  }
+
+  function clearSelection() {
+    if (!selGroup) return;
+    for (const o of [...selGroup.children]) { selGroup.remove(o); if (o.geometry) o.geometry.dispose(); }
+  }
+  /** Highlights the building with this id (every piece of it), or clears with null. A removed building gets an accent ring on the ground. */
+  function select(id) {
+    clearSelection();
+    selected = id == null ? null : baseId(id);
+    if (selected != null && site && selGroup) {
+      const mine = site.model.buildings.filter((b) => baseId(b.id) === selected);
+      if (!mine.length) selected = null;
+      for (const b of mine) {
+        if (isRemoved(b)) {
+          const ring = drapedRings([b], 0.8, M.selLine);
+          if (ring) { ring.userData.kind = 'select'; selGroup.add(ring); }
+        } else {
+          const geo = buildingGeometry(b);
+          if (!geo) continue;
+          const fill = new THREE.Mesh(geo, M.selFill);
+          fill.userData.kind = 'select';
+          fill.renderOrder = 3;
+          const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo, EDGE_ANGLE), M.selLine);
+          edges.userData.kind = 'select';
+          edges.renderOrder = 4;
+          selGroup.add(fill, edges);
+        }
+      }
+    }
+    needsRender = true;
+    return selected;
+  }
+
+  /** Rebuilds only the buildings layer with a new removed set. The camera stays. */
+  function setRemoved(ids) {
+    removedSet = new Set([...(ids || [])].map(baseId));
+    if (!site) return 0;
+    clearGroup(G.buildings);
+    for (const o of buildBuildings(site.model.buildings)) G.buildings.add(o);
+    if (selected != null) select(selected);
+    info.triangles = countTriangles();
+    needsRender = true;
+    return info.removed;
   }
 
   /* ---- draped polygons (roads, walks) and flat polygons (water) ------------------------ */
@@ -4481,23 +4770,27 @@ const Scene = (() => {
   function countTriangles() {
     let t = 0;
     root.traverse((o) => {
-      if (!o.visible || !o.geometry) return;
+      if (!o.visible || !o.geometry || o.userData.kind === 'select') return;
       const g = o.geometry, n = g.index ? g.index.count : g.getAttribute('position').count;
       if (o.isInstancedMesh) t += (n / 3) * o.count; else if (o.isMesh) t += n / 3;
     });
     return Math.round(t);
   }
 
-  function setModel(model) {
+  function setModel(model, removed = []) {
     for (const k of Object.keys(G)) clearGroup(G[k]);
+    removedSet = new Set([...(removed || [])].map(baseId));
+    selected = null; groundMesh = null; pickSets = []; removedBuildings = [];
     const ground = model.ground;
     let top = ground.max;
     for (const b of model.buildings) top = Math.max(top, b.top);
     for (const t of model.trees) top = Math.max(top, t.z + t.height);
     site = { model, S: model.frame.size, gmin: ground.min, gmax: ground.max, top, meshAt: makeMeshAt(ground) };
-    for (const k of ['buildings', 'trees', 'waterAreas', 'roadTriangles', 'walkTriangles']) info[k] = 0;
+    for (const k of ['buildings', 'removed', 'trees', 'waterAreas', 'roadTriangles', 'walkTriangles']) info[k] = 0;
     G.ground.add(buildGroundMesh(ground), buildSkirt(ground));
     G.site.add(buildOutline(ground, site.meshAt));
+    selGroup = new THREE.Group();
+    G.site.add(selGroup);
     for (const o of buildBuildings(model.buildings)) G.buildings.add(o);
     for (const o of buildPavement(model.roads.pavement, M.road, 0.3, 'roadTriangles')) G.roads.add(o);
     for (const o of buildPavement(model.roads.walks, M.walk, 0.4, 'walkTriangles')) G.walks.add(o);
@@ -4525,6 +4818,7 @@ const Scene = (() => {
 
   function applyLayers() {
     for (const k of Object.keys(layerVisible)) if (G[k]) G[k].visible = !!layerVisible[k];
+    if (selGroup) selGroup.visible = !!layerVisible.buildings;
     if (site) info.triangles = countTriangles();
     needsRender = true;
   }
@@ -4682,6 +4976,29 @@ const Scene = (() => {
     finally { capturing = false; needsRender = true; }
   }
 
+  /** Tap to select: pointerdown then pointerup within 6 px and 500 ms. An orbit drag, a pinch or a long press selects nothing. */
+  function wirePointer() {
+    const down = new Set();
+    let tap = null;
+    host.addEventListener('pointerdown', (e) => {
+      down.add(e.pointerId);
+      tap = down.size === 1 && (e.pointerType !== 'mouse' || e.button === 0) ? { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now() } : null;
+    });
+    host.addEventListener('pointermove', (e) => {
+      if (tap && tap.id === e.pointerId && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) >= TAP_PX) tap = null;
+    });
+    host.addEventListener('pointerup', (e) => {
+      down.delete(e.pointerId);
+      const k = tap;
+      tap = null;
+      if (!k || k.id !== e.pointerId) return;
+      if (Math.hypot(e.clientX - k.x, e.clientY - k.y) >= TAP_PX || performance.now() - k.t >= TAP_MS) return;
+      const hit = pick(e.clientX, e.clientY);
+      pickListeners.forEach((fn) => fn(hit, { x: e.clientX, y: e.clientY }));
+    });
+    host.addEventListener('pointercancel', (e) => { down.delete(e.pointerId); tap = null; });
+  }
+
   function init(hostEl) {
     host = hostEl;
     try {
@@ -4707,6 +5024,7 @@ const Scene = (() => {
     controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
     controls.addEventListener('start', () => { tween = null; if (preset) setPreset(null); });
     controls.addEventListener('change', () => { needsRender = true; });
+    wirePointer();
     new ResizeObserver(resize).observe(host);
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
     if (mq.addEventListener) mq.addEventListener('change', applyTheme); else if (mq.addListener) mq.addListener(applyTheme);
@@ -4719,9 +5037,14 @@ const Scene = (() => {
   }
 
   return {
-    init, setModel, setWalks, setLayer, setVScale, setContour, fit, planView, capture,
+    init, setModel, setRemoved, setWalks, pick, select, screenOf, setLayer, setVScale, setContour, fit, planView, capture,
     onCamera: (fn) => cameraListeners.push(fn),
     onPreset: (fn) => presetListeners.push(fn),
+    /** fn(hit | null, { x, y }) after every tap (see pick for hit). null = a tap on empty ground. */
+    onPick: (fn) => pickListeners.push(fn),
+    selection: () => selected,
+    removedIds: () => [...removedSet].sort(),
+    canvas: () => (renderer ? renderer.domElement : null),
     camera: () => cam,
     ready: () => !!renderer,
     hasSite: () => !!site,
@@ -4747,13 +5070,21 @@ const App = (() => {
   const { sketchupFilename, docToBlob } = SkFmt;
   const { siteDerived, siteState, derivedBytes } = SiteDerivedMod;
 
+  const HELP_REMOVE = 'Click a building in the 3D view to open its card. Select Remove on the card to take the building out of the site. A dashed outline stays on the ground where the building stood. Select Restore on the card to put the building back. Select Restore all in the panel to put back every removed building. The list of removed buildings stays when you load the same address again. Every other tool and every export leaves out a removed building. The DXF file draws its ground outline on the layer BLDG-REMOVED. A removed building casts no shadow.';
+
   const state = {
     size: CONFIG.defaultSize,
     layers: { ground: true, buildings: true, roads: true, walks: false, trees: true, water: true },
     vscale: 1, contour: 0,
     busy: false, runId: 0, t0: 0, timer: 0,
     result: null, typed: '', elapsed: null,
+    removed: new Set(),         // ids of the buildings the user removed (base ids, no ~n suffix); saved as meta.removed in the project
+    removedKey: null,           // the site (lat, lon, size) the list belongs to; null = it adopts the next site that loads
+    selected: null,             // { id, building } of the building in the selection card, or null
   };
+  const baseId = (id) => String(id).replace(/~\d+$/, '');
+  const removedList = () => [...state.removed].sort();
+  const siteKeyOf = (r) => `${Number(r.loc.lat).toFixed(5)},${Number(r.loc.lon).toFixed(5)},${r.frame.size}`;
   const els = {};
   /* The open project (docs/project-file-spec.md). The injectable parts (storage, navigate, updateUrl) are for the in-page tests. */
   const project = {
@@ -4777,7 +5108,7 @@ const App = (() => {
   }
   const todayIso = () => { const d = new Date(), p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; };
   function metaOf(r = state.result) {
-    return { address: state.typed || r.loc.label, lat: r.loc.lat, lon: r.loc.lon, size: r.frame.size, release: r.release, date: todayIso() };
+    return { address: state.typed || r.loc.label, lat: r.loc.lat, lon: r.loc.lon, size: r.frame.size, release: r.release, date: todayIso(), removed: removedList() };
   }
   /** metaOf plus the walks flag: the model has a walk layer. Used for the project file. */
   function projectMeta(r = state.result) { return { ...metaOf(r), walks: !!(r.model.roads && r.model.roads.walks) }; }
@@ -4818,7 +5149,55 @@ const App = (() => {
       row('Grid spacing', fmtFt(g.spacing, 1)),
       row('Grid points', grouped(g.n * g.n), `${g.n} by ${g.n}`),
     ));
+    if (state.removed.size) {
+      box.append(h('div', { class: 'removed-line', id: 'removedLine' },
+        h('span', { id: 'removedText' }, `Removed buildings: ${state.removed.size}`),
+        h('span', { class: 'dot', 'aria-hidden': 'true' }, '·'),
+        h('button', { class: 'link-btn', type: 'button', id: 'restoreAll', onclick: restoreAll }, 'Restore all')));
+    }
   }
+
+  /* ---- remove and restore buildings ------------------------------------------------------------
+     Click a building in the 3D view (Scene.onPick) to open the selection card. Remove takes it out of the solids
+     (a dashed outline stays on the ground), Restore puts it back. Click its outline to select it again. The list is
+     state.removed; it goes into the project as meta.removed on every project write (metaOf). */
+  const RULE_TEXT = { data: 'height from the data', floors: 'height from the floor count', estimate: 'height estimated' };
+  function renderCard() {
+    const box = els.selCard, sel = state.selected;
+    if (!box) return;
+    box.textContent = '';
+    box.hidden = !sel;
+    if (!sel) return;
+    const b = sel.building, gone = state.removed.has(baseId(sel.id));
+    const floors = Math.max(1, Math.round(b.floors || b.height / 12));
+    box.append(
+      h('div', { class: 'sc-head' },
+        h('div', { class: 'sc-titles' },
+          h('div', { class: 'sc-title', id: 'selTitle' }, b.name || 'Building', gone ? h('span', { class: 'sc-tag' }, 'Removed') : null),
+          h('div', { class: 'sc-sub', id: 'selSub' }, `Height ${fmtFt(b.height, 1)} · ${floors} ${floors === 1 ? 'floor' : 'floors'} · ${RULE_TEXT[b.rule] || b.rule}`),
+          h('div', { class: 'sc-id', id: 'selId' }, `ID ${sel.id}`)),
+        h('button', { class: 'btn icon sc-close', type: 'button', id: 'selClose', title: 'Close (Escape)', 'aria-label': 'Close the building card', onclick: () => selectHit(null) }, '×')),
+      h('div', { class: 'sc-actions' },
+        h('button', { class: gone ? 'btn outline' : 'btn solid', type: 'button', id: 'selAction', onclick: () => (gone ? restoreBuilding(sel.id) : removeBuilding(sel.id)) }, gone ? 'Restore' : 'Remove')));
+  }
+  /** Opens the card for a hit of Scene.pick (or closes it with null). */
+  function selectHit(hit) {
+    if (hit && state.busy) return;
+    state.selected = hit ? { id: baseId(hit.id), building: hit.building } : null;
+    Scene.select(state.selected ? state.selected.id : null);
+    renderCard();
+  }
+  /** Replaces the removed set: rebuilds the buildings, redraws the panel line and the card, and writes the open project. */
+  function setRemoved(ids) {
+    state.removed = new Set([...(ids || [])].map(baseId));
+    Scene.setRemoved(state.removed);
+    renderMetrics();
+    renderCard();
+    if (state.result && project.doc && !project.readOnly && projectWrite(state.result)) scheduleProjectSave();
+  }
+  const removeBuilding = (id) => setRemoved([...state.removed, baseId(id)]);
+  const restoreBuilding = (id) => setRemoved([...state.removed].filter((x) => x !== baseId(id)));
+  const restoreAll = () => setRemoved([]);
 
   /* ---- recent sites ----------------------------------------------------------------------- */
   const loadRecents = () => { const v = Local.get(CONFIG.recentKey, []); return Array.isArray(v) ? v.filter((e) => e && e.text && e.size && Number.isFinite(e.lat) && Number.isFinite(e.lon)) : []; };
@@ -4870,7 +5249,8 @@ const App = (() => {
     tick();
     let r = null, failure = null;
     try {
-      r = await Pipeline.run({ text, size, loc: req.loc }, (step, st, msg) => { if (id === state.runId) setStep(step, st, msg); }, { walks: !!state.layers.walks, fetchFn: req.fetchFn });
+      const runner = req.runFn || Pipeline.run;                       // runFn: the in-page tests give a result without the network
+      r = await runner({ text, size, loc: req.loc }, (step, st, msg) => { if (id === state.runId) setStep(step, st, msg); }, { walks: !!state.layers.walks, fetchFn: req.fetchFn });
     } catch (e) { failure = e; }
     clearInterval(state.timer);
     const dt = performance.now() - state.t0;
@@ -4888,13 +5268,21 @@ const App = (() => {
     state.elapsed = dt;
     r.uiMs = Math.round(dt);
     if (!r.failed.length) setProgressOpen(false);          // all done: fold the list, one tap opens it
+    // The removed list belongs to one site: another site clears it. On the same site, ids that no longer exist are dropped without a message.
+    const key = siteKeyOf(r);
+    if (state.removedKey && state.removedKey !== key) state.removed = new Set();
+    state.removedKey = key;
+    const have = new Set(r.model.buildings.map((b) => baseId(b.id)));
+    state.removed = new Set([...state.removed].filter((x) => have.has(x)));
+    state.selected = null;
+    renderCard();
     const t1 = performance.now();
-    Scene.setModel(r.model);
+    Scene.setModel(r.model, state.removed);
     r.timings.scene = Math.round(performance.now() - t1);
     els.empty.hidden = true;
     renderMetrics();
     syncActions();
-    saveRecent(r);
+    if (!req.runFn) saveRecent(r);
     if (project.doc && (!id0 || id0 === project.doc.id) && projectWrite(r)) scheduleProjectSave();      // a project is open: the site goes into it
     const bad = r.failed.map((k) => CONFIG.steps.find((s) => s[0] === k)[1]);
     chip(bad.length ? `Loaded in ${secs(dt)}. Not loaded: ${bad.join(', ')}` : `Loaded in ${secs(dt)}`, bad.length ? 'bad' : '');
@@ -4930,7 +5318,7 @@ const App = (() => {
   /* ---- downloads and screenshot -------------------------------------------------------------------- */
   const FILES = {
     csv: { suffix: 'topo.csv', type: 'text/csv', make: (r) => revitCsv(r.model.ground) },
-    dxf: { suffix: 'site.dxf', type: 'application/dxf', make: (r) => siteDxf(r.model) },
+    dxf: { suffix: 'site.dxf', type: 'application/dxf', make: (r) => siteDxf(r.model, { removed: new Set(state.removed) }) },
     notes: { suffix: 'notes.md', type: 'text/markdown', make: (r) => notesMarkdown(r.model, metaOf(r)) },
     // SketchUp: the name comes from sketchupFilename (slug + date) and the file is a Blob made by docToBlob
     sketchup: { type: 'application/json', name: (r) => sketchupFilename(slugOf(r), new Date()), blob: (r) => docToBlob(siteToSketchup(r.model, metaOf(r))) },
@@ -5241,6 +5629,8 @@ const App = (() => {
     if (!st || typeof st.query !== 'string' || !st.query.trim() || !(size > 0)) return null;
     els.addr.value = st.query;
     setSize(size);
+    state.removed = new Set(Array.isArray(st.removed) ? st.removed.filter((x) => typeof x === 'string').map(baseId) : []);     // applied when the model lands (go prunes it)
+    state.removedKey = null;
     if (st.walks && !state.layers.walks) {                    // the run builds the walks; the layer only has to be on
       state.layers.walks = true;
       for (const b of els.toggles.querySelectorAll('[data-layer="walks"]')) b.setAttribute('aria-checked', 'true');
@@ -5251,7 +5641,7 @@ const App = (() => {
     return { text: st.query, size, loc };
   }
   /** On start: with ?project=<id> open that project and run its saved site. Returns true when a project was opened. */
-  function startProject({ fetchFn } = {}) {
+  function startProject({ fetchFn, runFn } = {}) {
     let id = null;
     try { id = ProjectMod.projectIdFromUrl(location); } catch (e) { id = null; }
     if (!id) return false;
@@ -5263,7 +5653,7 @@ const App = (() => {
     }
     openProjectDoc(doc);
     const req = siteRequest(doc);
-    if (req) go({ ...req, fetchFn });
+    if (req) go({ ...req, fetchFn, runFn });
     return true;
   }
 
@@ -5375,6 +5765,12 @@ const App = (() => {
     sections.append(h('div', { class: 'sec' }, h('div', { class: 'label' }, 'Site data'), els.metrics));
     renderMetrics();
 
+    // Help: remove buildings (copy in docs/site-remove-copy.md)
+    els.help = h('details', { class: 'sec help-sec', id: 'helpSec' },
+      h('summary', { class: 'label' }, h('span', { class: 'sec-title' }, h('span', { html: ICONS.chev, style: 'display:contents' }), 'Remove buildings')),
+      h('p', { class: 'help-text', id: 'helpRemove' }, HELP_REMOVE));
+    sections.append(els.help);
+
     sections.append(h('p', { class: 'credits' }, CREDITS));
   }
 
@@ -5447,7 +5843,7 @@ const App = (() => {
   }
 
   function init() {
-    els.viewport = $('viewport'); els.chip = $('statusChip'); els.empty = $('emptyState'); els.projPill = $('projPill');
+    els.viewport = $('viewport'); els.chip = $('statusChip'); els.empty = $('emptyState'); els.projPill = $('projPill'); els.selCard = $('selCard');
     buildTopbar();
     buildPanel();
     buildViews();
@@ -5461,11 +5857,19 @@ const App = (() => {
       if (file) await projectImport(file);
     });
     wireProjectEvents();
+    Scene.onPick((hit) => selectHit(hit));
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || !state.selected) return;
+      const t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA')) return;
+      selectHit(null);
+    });
     return true;
   }
 
   return {
     init, go, buildCompass, screenshot, download, fileFor, sketchupDoc, openDownloads, toggleLayer, setVScale, setContour, setSize, openMaps, syncActions,
+    setRemoved, removeBuilding, restoreBuilding, restoreAll, selectHit, renderCard,
     state, els, metaOf, slugOf, renderMetrics, setStep,
     project, startProject, openProjectDoc, projectClose, projectCreate, projectWrite, projectSend, scheduleProjectSave, flushProject, siteRequest, openProjectMenu, projectMeta,
   };
@@ -5783,7 +6187,7 @@ const SiteTests = (() => {
         [true, true, true, 1, null, true, true, true]);
     });
     await t('project: siteState has query, lat, lon, size, release and walks', () => eq(siteState({ ...pmeta, walks: true }),
-      { query: 'Test Address', lat: LAT, lon: LON, size: SIZE, release: '2026-10-14.0', walks: true }));
+      { query: 'Test Address', lat: LAT, lon: LON, size: SIZE, release: '2026-10-14.0', walks: true, removed: [] }));
     await t('project: writeSection, validate, saveProject and loadProject keep the site section (in memory)', () => {
       const mem = memStorage(), doc = siteProjectDoc();
       const v = ProjectMod.validate(doc);
@@ -5878,6 +6282,179 @@ const SiteTests = (() => {
       return eq([at0, !!mem.getItem(key), CONFIG.projectSaveMs], [null, true, 1000]);
     }));
 
+    /* ---- remove existing buildings (docs/site-remove-technical-plan.md, section 7.2) ---- */
+    const bById = (id) => model.buildings.find((b) => b.id === id);
+    const ptOf = (id, top = true) => {                       // client point of the middle of a building (roof or ground)
+      const b = bById(id), xs = b.ring.map((q) => q[0]), ys = b.ring.map((q) => q[1]);
+      const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+      return Scene.screenOf(cx, cy, top ? b.top : Scene.meshAt(cx, cy));
+    };
+    const groundPt = (x, y) => Scene.screenOf(x, y, Scene.meshAt(x, y));
+    const canvasEl = () => document.querySelector('#canvasHost canvas');
+    /** pointerdown + pointerup as a finger would send them. They go to the canvas host (the parent of the canvas): OrbitControls listens on the canvas itself
+        and would throw on a pointer id that the browser does not know. A real mouse click on the canvas reaches the same listener by bubbling. */
+    const tapAt = (from, to = from) => {
+      const mk = (type, p) => new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 41, pointerType: 'touch', isPrimary: true, button: 0, clientX: p.x, clientY: p.y });
+      const c = $('canvasHost');
+      c.dispatchEvent(mk('pointerdown', from));
+      c.dispatchEvent(mk('pointerup', to));
+    };
+    const lineObjects = () => Scene.groups().buildings.children.filter((o) => o.userData.kind === 'removed');
+    const cardText = () => ($('selCard').hidden ? '' : $('selCard').textContent);
+    /** Runs fn in a closed project with the synthetic site in the scene and an empty removed list; puts it all back. */
+    const withRemove = (fn) => inProject(async (mem, urls) => {
+      Scene.setModel(model);
+      Object.assign(App.state, { removed: new Set(), removedKey: null, selected: null });
+      App.renderCard(); App.renderMetrics();
+      try { return await fn(mem, urls); } finally {
+        Object.assign(App.state, { removed: new Set(), removedKey: null, selected: null });
+        Scene.setModel(model);
+        App.renderCard(); App.renderMetrics();
+      }
+    });
+    const runFnFor = (lat = LAT) => async () => ({ ...fakeResult(), loc: { lat, lon: LON, label: 'Test Address' }, failed: [], timings: {} });
+
+    await t('remove: Scene.pick at the roof of b-data returns b-data; at empty ground it returns null', () => withRemove(() => {
+      const hit = Scene.pick(ptOf('b-data').x, ptOf('b-data').y), e = groundPt(900, 500), none = Scene.pick(e.x, e.y);
+      const hit2 = Scene.pick(ptOf('b-court').x - 1, ptOf('b-court').y);
+      return eq([hit && hit.id, hit && hit.building.rule, hit && hit.removed, none, hit2 && hit2.id], ['b-data', 'data', false, null, 'b-court']);
+    }));
+    await t('remove: the estimate mesh is picked too (b-est)', () => withRemove(() => {
+      const p = ptOf('b-est'), hit = Scene.pick(p.x, p.y);
+      return eq(hit && hit.id, 'b-est');
+    }));
+    await t('remove: a tap on a building opens the card (Building, 98.4 ft, rule, id, Remove); a 20 px drag does not', () => withRemove(() => {
+      const p = ptOf('b-data');
+      tapAt({ x: p.x, y: p.y }, { x: p.x + 20, y: p.y });
+      const afterDrag = $('selCard').hidden;
+      tapAt(p);
+      const txt = cardText();
+      return eq([afterDrag, txt.includes('Building'), txt.includes('98.4 ft'), txt.includes('height from the data'), txt.includes('b-data'), $('selAction').textContent, Scene.selection(), Scene.groups().site.children.some((g) => g.children && g.children.length > 0)],
+        [true, true, true, true, true, 'Remove', 'b-data', true]);
+    }));
+    await t('remove: Escape and a tap on empty ground close the card', () => withRemove(() => {
+      const p = ptOf('b-data'), e = groundPt(900, 500);
+      tapAt(p);
+      const open = !$('selCard').hidden;
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      const afterEsc = [$('selCard').hidden, Scene.selection()];
+      tapAt(p); tapAt(e);
+      return eq([open, afterEsc, $('selCard').hidden, Scene.selection()], [true, [true, null], true, null]);
+    }));
+    await t('remove: Remove flags b-data (buildings 3, removed 1, one dashed outline, panel line) and the card says Restore', () => withRemove(() => {
+      tapAt(ptOf('b-data'));
+      $('selAction').click();
+      const i = Scene.info(), line = lineObjects()[0];
+      return eq([i.buildings, i.removed, lineObjects().length, line && line.material.isLineDashedMaterial, line && !!line.geometry.getAttribute('lineDistance'), $('removedText') && $('removedText').textContent, $('selAction').textContent, App.state.selected.id, [...App.state.removed]],
+        [3, 1, 1, true, true, 'Removed buildings: 1', 'Restore', 'b-data', ['b-data']]);
+    }));
+    await t('remove: a removed building cannot be hit as a solid; the roof point is empty and no solid mesh holds it', () => withRemove(() => {
+      App.removeBuilding('b-data');
+      const p = ptOf('b-data'), hit = Scene.pick(p.x, p.y);
+      return eq([hit === null || hit.removed === true || hit.id !== 'b-data', Scene.info().buildingMeshes], [true, 2]);
+    }));
+    await t('remove: a tap on the dashed footprint selects the removed building and the card opens with Restore', () => withRemove(() => {
+      App.removeBuilding('b-data');
+      App.selectHit(null);
+      const g = ptOf('b-data', false), hit = Scene.pick(g.x, g.y);
+      tapAt(g);
+      return eq([hit && hit.id, hit && hit.removed, $('selCard').hidden, $('selAction') && $('selAction').textContent, cardText().includes('Removed')], ['b-data', true, false, 'Restore', true]);
+    }));
+    await t('remove: Restore brings the solid back and hides the panel line', () => withRemove(() => {
+      tapAt(ptOf('b-data')); $('selAction').click();
+      $('selAction').click();
+      const i = Scene.info();
+      return eq([i.buildings, i.removed, lineObjects().length, !!$('removedLine'), $('selAction').textContent, Scene.pick(ptOf('b-data').x, ptOf('b-data').y).id], [4, 0, 0, false, 'Remove', 'b-data']);
+    }));
+    await t('remove: two buildings, then Restore all clears both', () => withRemove(() => {
+      App.removeBuilding('b-data'); App.removeBuilding('b-court');
+      const two = [Scene.info().buildings, Scene.info().removed, $('removedText').textContent, Scene.removedIds()];
+      $('restoreAll').click();
+      return eq([two, Scene.info().buildings, Scene.info().removed, !!$('removedLine'), [...App.state.removed]], [[2, 2, 'Removed buildings: 2', ['b-court', 'b-data']], 4, 0, false, []]);
+    }));
+    await t('remove: setRemoved rebuilds only the buildings (camera and ground stay, still 2 meshes, courtyard outline has the hole)', () => withRemove(() => {
+      const cam = Scene.camera(), before = cam.position.toArray(), ground = Scene.groups().ground.children[0];
+      App.removeBuilding('b-court');
+      const line = lineObjects()[0], n = line.geometry.getAttribute('position').count / 2;
+      const r = [cam.position.toArray().join() === before.join(), Scene.groups().ground.children[0] === ground, Scene.info().buildingMeshes, n > 20];
+      return eq(r, [true, true, 2, true]);
+    }));
+    await t('remove: the outline hides when the Buildings layer is off, and nothing is picked then', () => withRemove(() => {
+      App.removeBuilding('b-data');
+      Scene.setLayer('buildings', false);
+      const p = ptOf('b-court'), g = ptOf('b-data', false), r = [Scene.groups().buildings.visible, Scene.pick(p.x, p.y), Scene.pick(g.x, g.y)];
+      Scene.setLayer('buildings', true);
+      return eq(r, [false, null, null]);
+    }));
+    await t('remove: Remove on the card writes the removed list to meta, the DXF and the notes', () => withRemove(() => {
+      App.removeBuilding('b-data');
+      const m = App.metaOf(), dxf = App.fileFor('dxf').text, md = App.fileFor('notes').text, poly = (layer) => (dxf.match(new RegExp(`POLYLINE\\n\\s*8\\n${layer}\\n`, 'g')) || []).length;
+      return eq([m.removed, poly('BLDG-DATA'), poly('BLDG-REMOVED'), md.includes('Removed buildings: 1')], [['b-data'], 2, 1, true]);
+    }));
+    await t('remove: no removal, no BLDG-REMOVED layer content in the DXF', () => withRemove(() => {
+      const dxf = App.fileFor('dxf').text;
+      return eq([(dxf.match(/POLYLINE\n\s*8\nBLDG-REMOVED\n/g) || []).length, (dxf.match(/POLYLINE\n\s*8\nBLDG-DATA\n/g) || []).length], [0, 3]);
+    }));
+    await t('remove: with a project open, Remove writes site.state.removed and derived.buildings[].removed after the save delay', () => withRemove(async (mem) => {
+      const doc = App.projectCreate('Remove test', { quiet: true });
+      tapAt(ptOf('b-data'));
+      $('selAction').click();
+      const at0 = ProjectMod.getSection(ProjectMod.loadProject(mem, doc.id), 'site').state.removed;
+      await new Promise((r) => setTimeout(r, CONFIG.projectSaveMs + 300));
+      const sec = ProjectMod.getSection(ProjectMod.loadProject(mem, doc.id), 'site');
+      const flags = Object.fromEntries(sec.derived.buildings.map((b) => [b.id, 'removed' in b ? b.removed : 'none']));
+      return eq([at0, sec.state.removed, sec.derived.buildings.length, flags], [[], ['b-data'], 4, { 'b-data': true, 'b-floors': 'none', 'b-court': 'none', 'b-est': 'none' }]);
+    }));
+    await t('remove: Restore all writes an empty list and no removed keys', () => withRemove(async (mem) => {
+      const doc = App.projectCreate('Remove test 2', { quiet: true });
+      App.removeBuilding('b-data'); App.removeBuilding('b-est');
+      App.restoreAll();
+      App.flushProject();
+      const sec = ProjectMod.getSection(ProjectMod.loadProject(mem, doc.id), 'site');
+      return eq([sec.state.removed, sec.derived.buildings.some((b) => 'removed' in b)], [[], false]);
+    }));
+    await t('remove: Send to the Tower carries the removed list in the project', () => withRemove(async (mem, urls) => {
+      App.state.typed = 'Test Address';
+      App.removeBuilding('b-court');
+      await App.projectSend('tower');
+      const sec = ProjectMod.getSection(ProjectMod.loadProject(mem, App.project.doc.id), 'site');
+      return eq([urls.length, sec.state.removed, sec.derived.buildings.filter((b) => b.removed).map((b) => b.id)], [1, ['b-court'], ['b-court']]);
+    }));
+    await t('remove: reopening a project restores state.removed and the outline; an id that no longer exists is dropped', () => withRemove(async () => {
+      const doc = siteProjectDoc({ removed: ['b-data', 'gone-id'] });
+      App.openProjectDoc(doc);
+      const req = App.siteRequest(doc);
+      const before = [...App.state.removed].sort();
+      await App.go({ ...req, runFn: runFnFor() });
+      App.flushProject();
+      const i = Scene.info();
+      return eq([before, [...App.state.removed], i.buildings, i.removed, lineObjects().length, $('removedText').textContent, ProjectMod.getSection(App.project.doc, 'site').state.removed], [['b-data', 'gone-id'], ['b-data'], 3, 1, 1, 'Removed buildings: 1', ['b-data']]);
+    }));
+    await t('remove: loading the same address again keeps the removed list', () => withRemove(async () => {
+      await App.go({ text: 'Test Address', size: SIZE, runFn: runFnFor() });
+      App.removeBuilding('b-data');
+      await App.go({ text: 'Test Address', size: SIZE, runFn: runFnFor() });
+      return eq([[...App.state.removed], Scene.info().removed], [['b-data'], 1]);
+    }));
+    await t('remove: a new address clears the removed list', () => withRemove(async () => {
+      await App.go({ text: 'Test Address', size: SIZE, runFn: runFnFor() });
+      App.removeBuilding('b-data');
+      await App.go({ text: 'Other Address', size: SIZE, runFn: runFnFor(LAT + 0.01) });
+      return eq([[...App.state.removed], Scene.info().buildings, Scene.info().removed, !!$('removedLine')], [[], 4, 0, false]);
+    }));
+    await t('remove: a piece id (x~2) removes every piece of the feature', () => withRemove(() => {
+      App.removeBuilding('b-data~2');
+      return eq([[...App.state.removed], Scene.info().removed], [['b-data'], 1]);
+    }));
+    await t('remove: the help block has the Remove buildings paragraph', () => eq([!!$('helpSec'), $('helpRemove').textContent.startsWith('Click a building in the 3D view'), $('helpRemove').textContent.includes('BLDG-REMOVED')], [true, true, true]));
+    await t('remove: the scene renders with outlines and a selection without a GL error', () => withRemove(() => {
+      App.removeBuilding('b-data');
+      App.selectHit({ id: 'b-court', building: bById('b-court') });
+      Scene.renderNow();
+      const gl = canvasEl().getContext('webgl2');
+      return !gl || gl.getError() === 0 || `gl error ${gl.getError()}`;
+    }));
+
     return results;
   }
 
@@ -5903,6 +6480,8 @@ Scene.init($('canvasHost'));
 App.buildCompass();
 App.startProject();                                  // with ?project=<id>: open that project and load its saved site
 
+const removedIdsNow = () => [...App.state.removed].sort();
+
 window.__site = {
   go: (text, size) => { if (text != null) $('addr').value = text; if (size) App.setSize(size); return App.go(); },
   state: () => App.state,
@@ -5916,9 +6495,26 @@ window.__site = {
   timings: () => (App.state.result ? { ...App.state.result.timings, ui: App.state.result.uiMs } : null),
   steps: () => [...document.querySelectorAll('#steps li')].map((li) => ({ step: li.dataset.step, status: li.dataset.s, message: li.querySelector('.ms').textContent })),
   screenshot: () => App.screenshot({ deliver: false }),
+  /** Removed buildings: the ids, the building under a screen point (client x, y), and the actions the card buttons call. */
+  removed: () => removedIdsNow(),
+  pick: (x, y) => Scene.pick(x, y),
+  screenOf: (x, y, elev) => Scene.screenOf(x, y, elev),
+  remove: (id) => App.removeBuilding(id),
+  restore: (id) => App.restoreBuilding(id),
+  restoreAll: () => App.restoreAll(),
+  select: (id) => { const b = App.state.result && App.state.result.model.buildings.find((q) => q.id === id); App.selectHit(b ? { id, building: b } : null); },
   runTests: () => SiteTests.run(),
   /** Shows the synthetic test site (with trees, a pond and a courtyard building) in the 3D view. */
-  loadSynthetic: () => { const d = SiteTests.synthetic(); const m = ModelMod.buildModel(d.frame, { dem: d.dem, tiles: d.tiles }); Scene.setModel(m); $('emptyState').hidden = true; return ModelMod.summarize(m); },
+  loadSynthetic: () => {
+    const d = SiteTests.synthetic(), m = ModelMod.buildModel(d.frame, { dem: d.dem, tiles: d.tiles });
+    const [lon, lat] = d.frame.toLonLat(d.frame.size / 2, d.frame.size / 2);
+    // a result on screen too (panel data, Send buttons, removed buildings), so the screenshots and hooks work without the network
+    Object.assign(App.state, { result: { loc: { lat, lon, label: 'Test Address' }, frame: d.frame, model: m, release: 'test', failed: [], timings: {} }, typed: 'Test Address', removed: new Set(), removedKey: null, selected: null });
+    Scene.setModel(m, []);
+    $('emptyState').hidden = true;
+    App.renderCard(); App.renderMetrics(); App.syncActions();
+    return ModelMod.summarize(m);
+  },
 };
 
 if (TEST_MODE) {
