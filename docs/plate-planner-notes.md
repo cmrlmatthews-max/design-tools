@@ -1,6 +1,6 @@
 # Plate Planner — Design Notes for the Work Build
 
-Version 0.1 · October 21, 2026 · Author: Claude (home session) for Cade (CMRLM)
+Version 0.2 · October 22, 2026 · Author: Claude (home session) for Cade (CMRLM) · Decisions in section 14
 
 These notes are the design lead for the Plate Planner build on the work computer. They stand on their own. Each major choice is marked **Recommended**, with one alternative. Keep what you have already built when it is equivalent to the recommended choice. Decisions from Cade that bind this build:
 
@@ -105,7 +105,7 @@ Support blocks are small boxes that hold no units: trash, electrical, storage, a
 
 ### 3.5 Area rule
 
-**Recommended:** measure unit area to the center of demising walls and corridor walls, and to the inside face of the exterior wall. In version 1 the tool does this with one setting: exterior wall allowance, default 1.0 ft. The unit polygon stops 1.0 ft inside the plate edge. Demising walls have zero thickness. State this rule in the notes export.
+**Decided (October 22, 2026):** measure unit area to the center of demising walls, to the corridor face of the corridor wall, and to the inside face of the exterior wall. Two settings: exterior wall allowance, default 1.0 ft (the unit polygon stops 1.0 ft inside the plate edge), and corridor wall thickness, default 0.5 ft (the unit polygon reaches the corridor edge; the wall belongs to the unit). Demising walls have zero thickness. State this rule in the notes export.
 
 *Alternative:* measure to the outside face with no allowance. It is simpler, and it reads 3 to 4 percent high.
 
@@ -429,10 +429,12 @@ Module tests under `test/plate.*.test.mjs`, plus the same cases in the page unde
 
 ---
 
-## 14. Open questions for Cade
+## 14. Decisions (October 22, 2026)
 
-1. Area rule: center of demising walls and corridor walls, inside face of the exterior wall, with a 1.0 ft allowance. Is this the firm's convention?
-2. Stairs at the corridor ends by default for bar plates. Is this the firm's usual layout?
-3. The default mix shares in section 4.1. Do you want the firm's typical shares instead?
-4. A suite counts as one key and two bays. Agree?
-5. Podium levels stay out of the fill in version 1. Agree?
+Cade answered the open questions. The home session builds the Plate Planner (the work session does not).
+
+1. **Area rule:** measure units to the centerline of demising walls, to the corridor face of the corridor wall, and to the inside face of the exterior wall. The corridor wall thickness (default 0.5 ft, editable) counts in the unit, not in the corridor. Section 3.5 changes to match.
+2. **Stairs:** at the corridor ends by default for bar plates.
+3. **Unit mix:** the section 4.1 default shares, fully editable (shares, widths, and areas per type).
+4. **Hotel suite:** one key, two bays.
+5. **Podium levels:** out of the fill by default.

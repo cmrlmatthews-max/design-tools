@@ -26,10 +26,26 @@ function defaultSegment() {
     lean: { x: 0, y: 0 },
   };
 }
+/** The schema 2 sun default (plan section 2.1): "manual" keeps the azimuth and altitude sliders; Atlanta, US Eastern, the three study
+ *  dates and times. A fresh object per call. */
+function defaultSun() {
+  return {
+    mode: 'manual',
+    place: { source: 'default', lat: 33.749, lon: -84.388 },
+    tz: { zone: 'us-eastern', offset: -5 },
+    dates: ['03-20', '06-21', '12-21'],
+    date: '03-20',
+    time: 720,
+    times: [540, 720, 900],
+    play: false,
+    hours: { on: false, spacing: 10, step: 30, date: '03-20', extent: 'site' },
+  };
+}
 function defaultState() {
   return {
-    schema: 1,
+    schema: 2,
     name: 'Option A',
+    placement: null,          // { x, y, rotation, baseZ } while a project is open (ProjectUI, 09b_project.js)
 
     site: {
       shape: 'rect',
@@ -40,7 +56,7 @@ function defaultState() {
       stepback: { on: false, aboveHeight: 85, distance: 15 },
     },
 
-    context: { show: true, blocks: [{ x: 0, y: -180, w: 200, d: 120, h: 60 }] },
+    context: { show: true, fromSite: false, radius: 600, blocks: [{ x: 0, y: -180, w: 200, d: 120, h: 60 }] },
 
     podium: {
       on: false,
@@ -69,6 +85,8 @@ function defaultState() {
 
     targets: { gfa: 0, far: 0 },
 
+    sun: defaultSun(),        // Sun Study (SunUI, 08d_sun.js); view.sun below stays the light the renderer reads
+
     view: {
       style: 'model',
       colorBy: 'program',        // v1.1: new options color the Diagram by program (saved options that say "zone" keep it)
@@ -91,6 +109,22 @@ function migrateView(v) {
   if (!v.snap || typeof v.snap !== 'object') v.snap = { on: true, grid: 5 };
   v.snap = { on: v.snap.on !== false, grid: v.snap.grid === 10 ? 10 : 5 };
   return v;
+}
+
+/** Option schema 1 -> 2 (plan section 2.2). Adds placement, context.fromSite, context.radius and the sun block with mode "manual";
+ *  view.sun is kept as it is, so an old option looks the same. Passed to createStorage({ migrate }) in 09_storage.js. */
+function migrateTower(state, from) {
+  const s = state && typeof state === 'object' ? state : {};
+  if (from === 1 || !(from >= 2)) {
+    if (s.placement === undefined) s.placement = null;
+    if (!s.context || typeof s.context !== 'object' || Array.isArray(s.context)) s.context = { show: true, blocks: [] };
+    if (s.context.fromSite === undefined) s.context.fromSite = false;
+    if (s.context.radius === undefined) s.context.radius = 600;
+    if (!s.sun || typeof s.sun !== 'object') s.sun = defaultSun();
+    s.sun.mode = 'manual';
+  }
+  s.schema = 2;
+  return s;
 }
 
 /** Fill every missing field from the defaults so older or partial states (presets, imports) are complete. */
@@ -118,6 +152,8 @@ function fillDefaults(src) {
   }
   for (const key of ['setbacks', 'mechanical', 'carves', 'cuts']) if (!Array.isArray(s[key])) s[key] = [];
   if (!Array.isArray(s.context.blocks)) s.context.blocks = [];
+  if (!isObj(s.sun)) s.sun = defaultSun();
+  s.sun.play = false;                                       // the animation is never saved
   s.schema = CONFIG.schema;
   s.name = String(s.name || 'Option A').slice(0, 60);
   return s;

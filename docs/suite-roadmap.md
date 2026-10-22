@@ -16,14 +16,14 @@ This file is the one place that lists every tool in the suite, who builds it, an
 | Id | Tool | Folder | Status | Built by |
 |---|---|---|---|---|
 | `site` | Site Model | `site/` | Version 1 live | Home |
-| `tower` | Tower Generator | `tower/` | Version 1.1 live | Home |
-| `sun` | Sun Study (inside the Tower Generator) | `tower/` | In work | Work |
-| `plate` | Plate Planner | `plate/` | In work | Work |
+| `tower` | Tower Generator | `tower/` | Version 1.2 built, in review (project file, Sun Study) | Home |
+| `sun` | Sun Study (inside the Tower Generator) | `tower/` | Version 1 built, in review | Home |
+| `plate` | Plate Planner | `plate/` | Next: plan in progress | Home |
 | — | Project file (`src/shared/project.js`), Workspace page, Site Model handoff | `index.html`, `src/shared/`, `site/` | Version 1 live | Home |
 | `midrise` | Mid-Rise Generator | `midrise/` | Version 1 live | Home |
 | `parking` | Parking Deck Generator | `parking/` | Version 1 live | Home |
 | `facade` | Facade Studio | `facade/` | Version 1 live | Home |
-| `grading` | Grading Sketch | `grading/` | Version 1 built, in review | Home |
+| `grading` | Grading Sketch | `grading/` | Version 1 live | Home |
 | `view` | View Study | `view/` | Later | — |
 | `egress` | Egress Sketch | `egress/` | Later | — |
 | — | Yield Study | — | Skipped for now | — |
@@ -37,7 +37,7 @@ This file is the one place that lists every tool in the suite, who builds it, an
 | Options storage | `src/shared/storage.js` | Saved options per tool. Unchanged. |
 | Screenshots | `src/shared/screenshot.js` | Same image export in every tool. |
 | SketchUp export | `src/shared/sketchup-format.js`, `sketchup/` | Same `.sketchup.json` format. |
-| Sun position | `src/shared/solar.js` (to be written by the work session) | API in the project-file spec, section on the `sun` section. |
+| Sun position | `src/shared/solar.js` (home session, with the Sun Study) | API in the project-file spec, section on the `sun` section. |
 | Look and controls | `build/tower/` parts | New tools copy the tower shell. Same tokens, top bar, tabs, CMRLM mark. |
 
 ## 4. Pipeline order

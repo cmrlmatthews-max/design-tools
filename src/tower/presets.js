@@ -2,7 +2,8 @@
 // Source: tower-generator-technical-plan.md sections 2, 6 and 10.
 // Units: feet, square feet, degrees. ftf is floor-to-floor in decimal feet (13.5 = 13'-6").
 // unitFactor is a fraction (0.85 = 85%), or null for programs that have no unit count.
-// Each preset is a complete state object (schema 1). Consumers should deep-copy before editing.
+// Each preset is a complete state object (schema 2). Consumers should deep-copy before editing.
+// Schema 2 keys (tower-project-sun-plan.md section 2.1): placement, context.fromSite, context.radius, sun.
 
 export const PROGRAM_DEFAULTS = {
   residential: { ftf: 10,   unitSize: 850,  unitFactor: 0.85, color: '#4f7fd1' }, // blue
@@ -17,6 +18,19 @@ export const PROGRAM_DEFAULTS = {
 const copyPrograms = () =>
   Object.fromEntries(Object.entries(PROGRAM_DEFAULTS).map(([k, v]) => [k, { ...v }]));
 
+// The schema 2 sun default (plan section 2.1). A fresh object per call, so presets never share it.
+const sunDefaults = () => ({
+  mode: 'manual',                                                   // the schema 1 azimuth and altitude sliders
+  place: { source: 'default', lat: 33.749, lon: -84.388 },           // Atlanta
+  tz: { zone: 'us-eastern', offset: -5 },
+  dates: ['03-20', '06-21', '12-21'],                               // equinox, summer and winter solstice
+  date: '03-20',
+  time: 720,                                                        // minutes after local midnight (12:00)
+  times: [540, 720, 900],                                           // 9:00, 12:00, 15:00
+  play: false,
+  hours: { on: false, spacing: 10, step: 30, date: '03-20', extent: 'site' },
+});
+
 const rect = (w, d) => ({ type: 'rect', w, d, radius: 0, points: [] });
 
 const lShape = (w, d, arm) => ({ type: 'L', w, d, radius: 0, arm, points: [] });
@@ -29,7 +43,9 @@ export const PRESETS = [
     name: 'Slim residential point tower',
     description: 'A slim 45-floor residential point tower on a two-floor retail and lobby podium, tapering 10% over its height and capped by a screen crown.',
     state: {
-      schema: 1,
+      schema: 2,
+      placement: null,
+      sun: sunDefaults(),
       name: 'Slim residential point tower',
       site: {
         shape: 'rect', width: 150, depth: 150, points: [],
@@ -37,7 +53,7 @@ export const PRESETS = [
         heightLimit: 550,                       // planned tower top 503 ft (483 + 20 ft screen crown)
         stepback: { on: false, aboveHeight: 85, distance: 15 },
       },
-      context: { show: true, blocks: [{ x: 0, y: -180, w: 200, d: 120, h: 60 }] },
+      context: { show: true, fromSite: false, radius: 600, blocks: [{ x: 0, y: -180, w: 200, d: 120, h: 60 }] },
       podium: {
         on: true, floors: 2, groundFtf: 18, ftf: 15,
         shape: rect(100, 100), offset: { x: 0, y: 0 },
@@ -69,7 +85,9 @@ export const PRESETS = [
     name: 'Office slab',
     description: 'A 32-floor office slab with no podium, set back 10 feet on all sides at floors 20 and 28 under a flat roof with a 4-foot parapet.',
     state: {
-      schema: 1,
+      schema: 2,
+      placement: null,
+      sun: sunDefaults(),
       name: 'Office slab',
       site: {
         shape: 'rect', width: 260, depth: 160, points: [],
@@ -77,7 +95,7 @@ export const PRESETS = [
         heightLimit: 500,                       // planned tower top 436 ft (432 + 4 ft parapet)
         stepback: { on: false, aboveHeight: 85, distance: 15 },
       },
-      context: { show: true, blocks: [{ x: 0, y: -180, w: 200, d: 120, h: 60 }] },
+      context: { show: true, fromSite: false, radius: 600, blocks: [{ x: 0, y: -180, w: 200, d: 120, h: 60 }] },
       podium: {
         on: false, floors: 4, groundFtf: 18, ftf: 14,
         shape: rect(220, 170), offset: { x: 0, y: 0 },
@@ -113,7 +131,9 @@ export const PRESETS = [
     name: 'Hotel on a podium',
     description: 'A 24-floor hotel tower on a four-level retail and amenity podium, finished with a three-step crown.',
     state: {
-      schema: 1,
+      schema: 2,
+      placement: null,
+      sun: sunDefaults(),
       name: 'Hotel on a podium',
       site: {
         shape: 'rect', width: 250, depth: 200, points: [],
@@ -121,7 +141,7 @@ export const PRESETS = [
         heightLimit: 350,                       // planned tower top 318 ft (303 + 15 ft crown)
         stepback: { on: false, aboveHeight: 85, distance: 15 },
       },
-      context: { show: true, blocks: [{ x: 0, y: -180, w: 200, d: 120, h: 60 }] },
+      context: { show: true, fromSite: false, radius: 600, blocks: [{ x: 0, y: -180, w: 200, d: 120, h: 60 }] },
       podium: {
         on: true, floors: 4, groundFtf: 18, ftf: 15,
         shape: rect(220, 170), offset: { x: 0, y: 0 },
@@ -153,7 +173,9 @@ export const PRESETS = [
     name: 'L-shaped multifamily on podium',
     description: 'A 23-story L-shaped multifamily building on a six-level retail and parking podium, with its amenity deck on the podium roof as the first tower floor.',
     state: {
-      schema: 1,
+      schema: 2,
+      placement: null,
+      sun: sunDefaults(),
       name: 'L-shaped multifamily on podium',
       site: {
         shape: 'rect', width: 260, depth: 220, points: [],
@@ -161,7 +183,7 @@ export const PRESETS = [
         heightLimit: 0,                         // no limit, per brief; planned top 249.5 ft (245.5 + 4 ft parapet)
         stepback: { on: false, aboveHeight: 85, distance: 15 },
       },
-      context: { show: true, blocks: [{ x: 0, y: -180, w: 200, d: 120, h: 60 }] },
+      context: { show: true, fromSite: false, radius: 600, blocks: [{ x: 0, y: -180, w: 200, d: 120, h: 60 }] },
       podium: {
         on: true, floors: 6, groundFtf: 18, ftf: 10.5,
         shape: rect(240, 200), offset: { x: 0, y: 0 },
@@ -210,7 +232,9 @@ export const PRESETS = [
     name: 'U-shaped multifamily on podium',
     description: 'A 23-story U-shaped multifamily building on a six-level retail and parking podium, with its amenity deck on the podium roof as the first tower floor. The U opens toward the back of the site.',
     state: {
-      schema: 1,
+      schema: 2,
+      placement: null,
+      sun: sunDefaults(),
       name: 'U-shaped multifamily on podium',
       site: {
         shape: 'rect', width: 260, depth: 220, points: [],
@@ -218,7 +242,7 @@ export const PRESETS = [
         heightLimit: 0,                         // no limit; planned top 249.5 ft (245.5 + 4 ft parapet)
         stepback: { on: false, aboveHeight: 85, distance: 15 },
       },
-      context: { show: true, blocks: [{ x: 0, y: -180, w: 200, d: 120, h: 60 }] },
+      context: { show: true, fromSite: false, radius: 600, blocks: [{ x: 0, y: -180, w: 200, d: 120, h: 60 }] },
       podium: {
         on: true, floors: 6, groundFtf: 18, ftf: 10.5,
         shape: rect(240, 200), offset: { x: 0, y: 0 },

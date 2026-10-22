@@ -46,7 +46,7 @@ const Render = (() => {
   let ground, shadowPlane, gridMesh, figure, sun, hemi;
   let selOverlay = null;                   // v1.1: selection outline, carve outlines and snap guides (Select draws into it; never captured or saved)
   const frameListeners = [];            // v1.1: called once per drawn frame, just before the render (handles follow the camera)
-  let layers = null;                    // { model, context, envelope } each { group, key }
+  let layers = null;                    // { model, context, envelope, site, sun } each { group, key }
   let derived = null;
   let needsRender = true, tween = null, preset = null, refitPending = false, capturing = false, envSeen = null;
   let viewVersion = -1, sunKey = '', styleApplied = null, themeEpoch = 0, themeApplied = -1, geomIdSeen = -1;
@@ -194,7 +194,7 @@ const Render = (() => {
     scene.add(selOverlay);
 
     layers = {};
-    for (const id of ['model', 'context', 'envelope']) {
+    for (const id of ['model', 'context', 'envelope', 'site', 'sun']) {     // site: SiteLayer (06c), sun: SunLayer (06d)
       const group = new THREE.Group();
       scene.add(group);
       layers[id] = { group, key: null };
@@ -336,6 +336,9 @@ const Render = (() => {
     changed = syncLayer(layers.model, [disp.key, v.floorLines, v.style, v.colorBy, colorsKey(state)].join('|'), () => buildFloorObjects(state, disp)) || changed;
     changed = syncLayer(layers.context, [v.style, JSON.stringify(state.context)].join('|'), () => buildContextObjects(state)) || changed;
     changed = syncLayer(layers.envelope, [d.geomId, v.envelope].join('|'), () => buildEnvelopeObjects(state, d.wire)) || changed;
+    const kit = { syncLayer, clearGroup, materialFor, lineMaterial };
+    changed = SiteLayer.update(layers.site, state, d, kit) || changed;     // project site boundary (06c_site.js)
+    changed = SunLayer.update(layers.sun, state, d, kit) || changed;       // sun-hours heat map (06d_sunhours.js)
     if (changed) { viewVersion = -1; needsRender = true; }
   }
 
@@ -678,6 +681,7 @@ const Render = (() => {
     const list = entries.map((e, i) => ({ ...e, uid: `${i}:${e.uid || e.name}`, group: null }));
     cmp = { entries: list, key: null, reserve, bounds: combineBounds(list.map((e) => e.d)) };
     layers.model.group.visible = layers.context.group.visible = layers.envelope.group.visible = false;
+    layers.site.group.visible = layers.sun.group.visible = false;
     selOverlay.visible = false;
     figure.visible = false;
     applyViewOffset();
@@ -691,6 +695,7 @@ const Render = (() => {
     for (const e of cmp.entries) if (e.group) { clearGroup(e.group); scene.remove(e.group); }
     cmp = null;
     layers.model.group.visible = layers.context.group.visible = layers.envelope.group.visible = true;
+    layers.site.group.visible = layers.sun.group.visible = true;
     selOverlay.visible = true;
     resetLayers();
     viewVersion = -1;
@@ -784,6 +789,7 @@ const Render = (() => {
     const prev = {
       bg: scene.background, ground: ground.material.color.clone(), grid: gridMesh.visible, fig: figure.visible,
       model: layers.model.group.visible, ctx: layers.context.group.visible, env: layers.envelope.group.visible, shadow: shadowPlane.visible,
+      site: layers.site.group.visible, sun: layers.sun.group.visible,
     };
     const restore = () => {
       scene.remove(cap);
@@ -793,6 +799,7 @@ const Render = (() => {
       ground.material.color.copy(prev.ground);
       gridMesh.visible = prev.grid; figure.visible = prev.fig; shadowPlane.visible = prev.shadow;
       layers.model.group.visible = prev.model; layers.context.group.visible = prev.ctx; layers.envelope.group.visible = prev.env;
+      layers.site.group.visible = prev.site; layers.sun.group.visible = prev.sun;
       viewVersion = -1;
     };
     capturing = true;
@@ -807,6 +814,7 @@ const Render = (() => {
         ground.material.color.set('#e4e7ea');
         gridMesh.visible = false; figure.visible = false; shadowPlane.visible = shadowsOn;
         layers.model.group.visible = layers.context.group.visible = layers.envelope.group.visible = false;
+        layers.site.group.visible = layers.sun.group.visible = false;
         for (const c of [persp, ortho]) c.clearViewOffset();
         pending = ShotMod.captureView({ renderer, scene, camera: cam, scale });
       } finally { restore(); }

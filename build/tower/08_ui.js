@@ -13,6 +13,7 @@ const ICONS = {
   sparkle: '<svg viewBox="0 0 24 24"><path d="M10 3l1.8 5.2L17 10l-5.2 1.8L10 17l-1.8-5.2L3 10l5.2-1.8z"/><path d="M18 14l.9 2.1L21 17l-2.1.9L18 20l-.9-2.1L15 17l2.1-.9z"/></svg>',
   snap: '<svg viewBox="0 0 24 24"><path d="M6 3v8a6 6 0 0012 0V3h-4v8a2 2 0 01-4 0V3z"/><path d="M6 7h4M14 7h4"/></svg>',
   export: '<svg viewBox="0 0 24 24"><path d="M12 15V4"/><path d="M8 8l4-4 4 4"/><path d="M5 13v6h14v-6"/></svg>',
+  folder: '<svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>',
   chev: '<svg class="chev" viewBox="0 0 14 14" fill="none" stroke="currentColor"><path d="M3 5l4 4 4-4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
 const UI_STORAGE_KEY = 'towergen.ui.v1';
@@ -489,7 +490,10 @@ const UI = (() => {
     { id: 'targets', tab: 'program', title: 'Targets', open: true, build: buildTargets },
     { id: 'display', tab: 'view', title: 'Display', open: true, build: buildDisplay },
     { id: 'scene', tab: 'view', title: 'Context and envelope', open: true, build: buildScene },
-    { id: 'sun', tab: 'view', title: 'Sun', open: true, build: buildSun },
+    // The Sun section is SunUI's (08d_sun.js); buildSun above is its Manual mode (the schema 1 sliders).
+    { id: 'sun', tab: 'view', title: 'Sun', open: true, build: () => SunUI.build({ bs, els, degS, get, legacy: buildSun }) },
+    // Project site (09b_project.js): the first Site section, shown only while a project is open.
+    { id: 'project', tab: 'site', title: 'Project site', open: true, build: () => ProjectUI.buildSite({ bs, els, lenF, degS, get }), when: () => ProjectUI.has() },
     { id: 'site', tab: 'site', title: 'Site', open: true, build: buildSite },
     { id: 'setbacks', tab: 'site', title: 'Setbacks', open: true, build: buildSetbacks },
     { id: 'height', tab: 'site', title: 'Height limit and stepback', open: true, build: buildHeight },
@@ -518,6 +522,7 @@ const UI = (() => {
       if (s.id === 'podium') opt.headExtra = podiumSwatches();
       const sec = Controls.section(opt);
       sectionCtl[s.id] = sec;
+      if (s.when) { const sync = () => { sec.el.hidden = !s.when(); }; swatchSyncs.push(sync); sync(); }   // shown only while when() is true
       panels[s.tab].append(sec.el);
     }
   }
@@ -656,7 +661,7 @@ const UI = (() => {
     Pop.open(anchor, el, { align: 'right', onClose: off });
   }
 
-  /** The Export menu: Image, AI-ready image, AI Prompts, the image overlay choices (a sub-view), Export / Import JSON. */
+  /** The Export menu: Image, AI-ready image, AI Prompts, the image overlay choices (a sub-view), files, and Send to (ProjectUI.send). */
   function openExportMenu(anchor) {
     const el = h('div', { role: 'menu', id: 'exportMenu' });
     const item = (id, title, sub, onclick, o = {}) => h('button', { class: 'pop-item', type: 'button', role: 'menuitem', id, onclick: () => { if (!o.keep) Pop.close(); onclick(); } },
@@ -671,7 +676,11 @@ const UI = (() => {
         h('div', { class: 'pop-sep' }), h('div', { class: 'label pop-label' }, 'Files'),
         item('miSketchup', 'SketchUp (.json)', 'Import with the CMRLM SketchUp extension', () => SketchupExport.download()),
         item('miExportJson', 'Export JSON', 'Download all saved options', () => Options.exportJson()),
-        item('miImportJson', 'Import JSON', 'Add the options from a file', () => $('importFile').click()));
+        item('miImportJson', 'Import JSON', 'Add the options from a file', () => $('importFile').click()),
+        h('div', { class: 'pop-sep' }), h('div', { class: 'label pop-label' }, 'Send to'),
+        item('miSendPlate', 'Send to Plate Planner', 'Save the project and open the Plate Planner', () => ProjectUI.send('plate')),
+        item('miSendFacade', 'Send to Facade Studio', 'Save the project and open the Facade Studio', () => ProjectUI.send('facade')),
+        item('miSendGrading', 'Send to Grading Sketch', 'Save the project and open the Grading Sketch', () => ProjectUI.send('grading')));
     };
     const overlay = () => {
       el.textContent = '';
@@ -715,7 +724,11 @@ const UI = (() => {
     };
     Store.subscribe(syncSnap); syncSnap();
 
-    const exp = h('button', { class: 'btn has-text menu-btn', type: 'button', id: 'btnExport', 'aria-haspopup': 'true', 'aria-expanded': 'false', title: 'Export: image, AI-ready image, AI prompts, SketchUp, JSON', 'aria-label': 'Export menu', onclick: () => openExportMenu(exp) },
+    const proj = h('button', { class: 'btn has-text menu-btn', type: 'button', id: 'btnProject', 'aria-haspopup': 'true', 'aria-expanded': 'false', title: 'Project: new, open, import, export', 'aria-label': 'Project menu', onclick: () => ProjectUI.openMenu(proj) },
+      h('span', { html: ICONS.folder, style: 'display:contents' }), h('span', { class: 'btn-text', id: 'projLabel' }, 'Project'), h('span', { html: ICONS.chev, style: 'display:contents' }));
+    $('tbProject').append(proj);
+
+    const exp = h('button', { class: 'btn has-text menu-btn', type: 'button', id: 'btnExport', 'aria-haspopup': 'true', 'aria-expanded': 'false', title: 'Export: image, AI-ready image, AI prompts, SketchUp, JSON, send to another tool', 'aria-label': 'Export menu', onclick: () => openExportMenu(exp) },
       h('span', { html: ICONS.export, style: 'display:contents' }), h('span', { class: 'btn-text' }, 'Export'), h('span', { html: ICONS.chev, style: 'display:contents' }));
     $('tbExport').append(exp);
   }

@@ -10,6 +10,8 @@ Compare.init();
 Options.syncDirty();
 if (!Render.init(document.getElementById('canvasHost'))) Store.subscribe(() => UI.updateHud(Derived.get()));
 Select.init();
+SunUI.init();          // 08d_sun.js: the study driver (before the project loads, so a loaded sun section drives it)
+ProjectUI.start();     // 09b_project.js: ?project= load and autosave
 
 const optionInfo = (o) => ({ id: o.id, name: o.name, updatedAt: o.updatedAt });
 window.__tower = {
@@ -61,6 +63,30 @@ window.__tower = {
   units: Units,
   runTests: runAllTests,
   sketchupDoc: () => SketchupExport.doc(),                   // the SketchUp export document for the design on screen
+  // project file (ProjectUI, 09b_project.js; tests inject storage and navigation with projectConfigure)
+  getDerivedSection: () => { const d = Derived.get(); return TowerDerivedMod.towerDerived(Store.snapshot(), d, d.metrics); },
+  projectConfigure: (o) => ProjectUI.configure(o),
+  projectReset: () => ProjectUI.reset(),
+  projectOpenDoc: (doc) => ProjectUI.openDoc(doc),
+  projectStatus: () => ProjectUI.status(),
+  projectDoc: () => ProjectUI.doc(),
+  projectFlush: () => { ProjectUI.markDirty(); return ProjectUI.flush(); },
+  projectCreate: (name) => ProjectUI.create(name, { quiet: true }),
+  projectClose: () => ProjectUI.close(),
+  projectCenter: () => ProjectUI.centerOnSite({ quiet: true }),
+  projectContext: (radius, opts) => ProjectUI.contextFromSite(radius, { quiet: true, ...(opts || {}) }),
+  projectSend: (tool) => ProjectUI.send(tool),
+  projectGroundAt: (x, y) => ProjectUI.groundAt(x, y),
+  projectBoundary: () => ProjectUI.boundaryLocal(),
+  projectAskReplace: () => ProjectUI.askReplace(),
+  siteLayerInfo: () => SiteLayer.info(),
+  // sun study (SunUI 08d_sun.js, SunLayer 06d_sunhours.js, SunStudy 10b_sunstudy.js)
+  sunInfo: () => SunUI.info(),
+  sunPlay: (on) => SunUI.play(on),
+  sunComputeHours: (opts) => SunUI.compute(opts),
+  sunCancelHours: () => SunUI.cancel(),
+  sunHoursInfo: () => SunLayer.info(),
+  shadowStudy: (opts) => SunStudy.make({ deliver: false, ...(opts || {}) }),
   // v1.1 layout hooks (the same functions the selection card calls)
   openItem: (item) => UI.openItem(item),
   setProgramForItems: (items, program) => UI.setProgramForItems(items, program),

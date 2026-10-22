@@ -24,5 +24,10 @@ const CONFIG = {
   outsideColor: '#d64545',
   presets: PresetsMod.PRESETS,
   storageKey: 'towergen.options.v1',
-  schema: 1,
+  schema: 2,               // the option state (plan section 2.3); the saved options blob uses the same number
+  projectSchema: 1,        // schema of the "massing" and "sun" sections this tool writes (plan section 2.3)
+  projectSaveMs: 1000,     // project autosave delay (spec section 8)
+  projectListMax: 8,
+  contextRadius: 600,      // ft, default radius for "Context from site"
+  tool: 'tower',
 };

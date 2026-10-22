@@ -34,7 +34,7 @@ async function runLayoutTests() {
     await t('each tab shows its own sections and no others', () => {
       const want = {
         form: ['podium', 'segments', 'moves', 'carves', 'crown', 'core'], program: ['programs', 'targets'],
-        view: ['display', 'scene', 'sun'], site: ['site', 'setbacks', 'height', 'context'],
+        view: ['display', 'scene', 'sun'], site: ['project', 'site', 'setbacks', 'height', 'context'],   // project: hidden until a project opens
       };
       for (const [tab, ids] of Object.entries(want)) {
         UI.setTab(tab);
@@ -197,12 +197,16 @@ async function runAllTests() {
   const select = await runSelectTests();
   const fresh = await runNewDesignTests();
   const sketchup = await runSketchupTests();
-  const all = [...(base.results || []), ...layout, ...select, ...fresh, ...sketchup];
+  const project = await runProjectTests();     // 12f_tests_project.js
+  const sun = await runSunTests();             // 12g_tests_sun.js
+  const all = [...(base.results || []), ...layout, ...select, ...fresh, ...sketchup, ...project, ...sun];
   const failed = all.filter((r) => !r.ok);
   console.log(`[tests] layout ${layout.length - layout.filter((r) => !r.ok).length}/${layout.length} passed`, layout.filter((r) => !r.ok).length ? JSON.stringify(layout.filter((r) => !r.ok)) : '');
   console.log(`[tests] select ${select.length - select.filter((r) => !r.ok).length}/${select.length} passed`, select.filter((r) => !r.ok).length ? JSON.stringify(select.filter((r) => !r.ok)) : '');
   console.log(`[tests] new design ${fresh.length - fresh.filter((r) => !r.ok).length}/${fresh.length} passed`, fresh.filter((r) => !r.ok).length ? JSON.stringify(fresh.filter((r) => !r.ok)) : '');
   console.log(`[tests] sketchup ${sketchup.length - sketchup.filter((r) => !r.ok).length}/${sketchup.length} passed`, sketchup.filter((r) => !r.ok).length ? JSON.stringify(sketchup.filter((r) => !r.ok)) : '');
+  console.log(`[tests] project ${project.length - project.filter((r) => !r.ok).length}/${project.length} passed`, project.filter((r) => !r.ok).length ? JSON.stringify(project.filter((r) => !r.ok)) : '');
+  console.log(`[tests] sun ${sun.length - sun.filter((r) => !r.ok).length}/${sun.length} passed`, sun.filter((r) => !r.ok).length ? JSON.stringify(sun.filter((r) => !r.ok)) : '');
   window.__towerTestResults = { total: all.length, passed: all.length - failed.length, failed, results: all };
   return window.__towerTestResults;
 }
