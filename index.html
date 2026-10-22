@@ -84,6 +84,26 @@ li.warn .stl{color:var(--red)}
 .tb>div{padding:12px 14px;border-bottom:1px solid var(--ink);min-width:0}.tb .c5{margin-top:auto;border-bottom:none;border-top:2px solid var(--ink)}
 .lg{display:flex;align-items:center;gap:8px;font-size:10px;margin-top:7px}.lg svg{width:22px;height:14px;flex:none}.firm{font-size:26px;letter-spacing:.12em}.s{font-size:9.5px;color:var(--soft);margin-top:2px}
 .k{font-size:9.5px;color:var(--soft)}.v{font-size:13px;margin-top:3px;overflow-wrap:anywhere;text-transform:uppercase}.sh{font-size:40px;line-height:1;margin-top:4px}
+.howto{margin:4px 0 26px;border:1.2px solid var(--ink)}
+.howto>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:12px;min-height:44px;padding:8px 12px;background:var(--desk)}
+.howto>summary::-webkit-details-marker{display:none}
+.howto>summary .dtt{min-width:0;border-bottom-width:2px}
+.howto>summary .tog{margin-left:auto;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--soft)}
+.howto[open]>summary .tog::after{content:"Hide"}.howto:not([open])>summary .tog::after{content:"Show"}
+.hw{padding:6px 16px 14px}
+.hw h3{font-size:13px;letter-spacing:.08em;text-transform:uppercase;margin:16px 0 6px;border-bottom:1px solid var(--hair);padding-bottom:3px}
+.hw ol.steps{counter-reset:st}
+.hw ol.steps>li{counter-increment:st;position:relative;padding-left:34px;margin:0 0 9px;font-size:14px;line-height:1.5;color:var(--soft)}
+.hw ol.steps>li::before{content:counter(st);position:absolute;left:0;top:0;width:22px;height:22px;border:1.2px solid var(--ink);border-radius:50%;font-size:11px;line-height:20px;text-align:center;color:var(--ink);font-family:"RC","Arial Narrow","Roboto Condensed",sans-serif;font-weight:700}
+.hw b{color:var(--ink);font-family:"RC","Arial Narrow","Roboto Condensed",sans-serif;font-weight:700;letter-spacing:.04em;text-transform:uppercase;font-size:12.5px}
+.hw ul{margin:0 0 6px;padding-left:18px;font-size:14px;line-height:1.5;color:var(--soft)}
+.hw ul li{margin:0 0 6px}
+.hw .caution{margin:10px 0 8px;padding:8px 10px;border:2px solid var(--red);color:var(--red);font-size:12px;line-height:1.45;letter-spacing:.05em;text-transform:uppercase;font-family:"RC","Arial Narrow","Roboto Condensed",sans-serif;font-weight:700}
+.hw table{width:100%;border-collapse:collapse;border:1.2px solid var(--ink);font-size:12.5px;margin:4px 0 8px}
+.hw th{background:var(--desk);color:var(--soft);font-size:10px;letter-spacing:.06em;text-transform:uppercase;text-align:left;padding:4px 6px;border:1px solid var(--ink)}
+.hw td{padding:5px 6px;border:1px solid var(--ink);vertical-align:top;line-height:1.35;color:var(--soft)}
+.hw td:first-child{color:var(--ink);font-family:"RC","Arial Narrow","Roboto Condensed",sans-serif;font-weight:700;letter-spacing:.03em;text-transform:uppercase;font-size:12px;white-space:nowrap}
+@media (max-width:640px){.hw{padding:4px 10px 12px}.hw td:first-child{white-space:normal}}
 @media (max-width:640px){
 .sheet{margin:12px 16px;grid-template-columns:1fr;outline-offset:3px}
 .draw{padding:20px 16px 24px}h1{font-size:26px}
@@ -106,6 +126,58 @@ li.warn .stl{color:var(--red)}
 <p id="notice" class="note" role="alert" hidden>Browser storage is not available. Projects cannot be saved on this device.</p>
 <p id="modNote" class="note" hidden>Projects are not available right now. The tools below still open on their own.</p>
 <p id="testNote" class="note info" hidden>Test mode. Projects on this page are temporary. Nothing is read from or saved to the browser.</p>
+<details class="howto" id="howto" open><summary><svg viewBox="0 0 44 44" class="bub" aria-hidden="true"><circle cx="22" cy="22" r="20" fill="#fff" stroke="#1D2733" stroke-width="1.4"/><line x1="4" y1="22" x2="40" y2="22" stroke="#1D2733" stroke-width="1"/><text x="22" y="18" text-anchor="middle" class="rc" font-size="13" fill="#1D2733">?</text><text x="22" y="35" text-anchor="middle" class="rc" font-size="9.5" fill="#1D2733">G-001</text></svg><div><h2 class="dtt" style="margin:0">How projects work</h2><div class="dts">General notes · moving work from tool to tool</div></div><span class="tog" aria-hidden="true"></span></summary>
+<div class="hw">
+<p style="margin:10px 0 0;font-size:14px;line-height:1.55;color:var(--soft)">A project is one file that holds the work of every tool for one design study. Each tool adds its own part: the site, the massing, the parking, the facade. The next tool reads the parts before it.</p>
+
+<h3>1 · Start a project</h3>
+<ol class="steps">
+<li>Select <b>New project</b> below. Type a name. Select <b>Create</b>. The project becomes the open project.</li>
+<li>Or start from a site: open the <b>Site Model</b>, find an address, then select <b>Send to Mid-Rise Generator</b> in its top bar. The Site Model makes a project named after the address.</li>
+<li>Or start in any tool: open its <b>Project</b> menu in the top bar and select <b>New project</b>.</li>
+</ol>
+
+<h3>2 · Work in a tool</h3>
+<ol class="steps">
+<li>Select a project in the <b>Project schedule</b>. Its status changes to <b>Open</b>.</li>
+<li>In <b>Tools</b>, select <b>Open with project</b> on the tool you want. The tool shows the project name in its top bar.</li>
+<li>Work in the tool. The tool saves its part of the project about one second after each change. The project needs no save button.</li>
+</ol>
+
+<h3>3 · Move to the next tool</h3>
+<ol class="steps">
+<li>In the tool, open the <b>Export</b> menu and select <b>Send to</b> the next tool. In the Site Model, the <b>Send to</b> buttons are in the top bar.</li>
+<li>The tool saves the project, then opens the next tool with the same project. The next tool reads the parts it needs.</li>
+<li>Or come back to this page and select <b>Open with project</b> on the next tool. A tool with work in the project shows <b>Has data</b> and the date.</li>
+</ol>
+
+<h3>4 · What each tool reads and writes</h3>
+<table aria-label="What each tool reads and writes"><thead><tr><th>Tool</th><th>Reads from the project</th><th>Writes to the project</th><th>Send to</th></tr></thead><tbody>
+<tr><td>Site Model</td><td>Nothing</td><td>Ground, neighbor buildings, roads, trees, water</td><td>Tower Generator, Mid-Rise Generator</td></tr>
+<tr><td>Mid-Rise Generator</td><td>Site: boundary and neighbor buildings (Site tab, Context from site)</td><td>Massing: floor plates, corridors, stairs, deck and podium levels</td><td>Plate Planner, Parking Deck, Facade Studio</td></tr>
+<tr><td>Tower Generator</td><td>Not yet (update in progress)</td><td>Not yet</td><td>—</td></tr>
+<tr><td>Parking Deck</td><td>Massing: deck or podium levels, stairs and elevators</td><td>Parking: stalls, ramps, columns</td><td>Facade Studio</td></tr>
+<tr><td>Facade Studio</td><td>Massing, site roads, sun</td><td>Facade: faces, glazing, balconies</td><td>—</td></tr>
+</tbody></table>
+
+<h3>5 · Rules</h3>
+<ul>
+<li>Each tool changes only its own part. It never changes the work of another tool.</li>
+<li>After you change an earlier tool, open the later tool again. It reads the new data when it opens.</li>
+<li>A project holds one massing. The Tower Generator or the Mid-Rise Generator writes it, whichever saved last.</li>
+<li>Each tool also has its own saved options (the <b>Option</b> menu). Options stay in that tool. The project holds only the current design of each tool.</li>
+<li>Select <b>Close</b> next to the open project name to stop using it. The tools then open on their own, with no project.</li>
+<li>The Tower Generator does not read or write projects yet. Its update is in progress. Use the Mid-Rise Generator, or a standalone shape in the Facade Studio, until then.</li>
+</ul>
+
+<h3>6 · Keep a copy and move between devices</h3>
+<p class="caution">Caution: projects live in this browser on this device only. Clearing the browser data deletes them. Export a project to keep a copy.</p>
+<ol class="steps">
+<li>Select the project in the <b>Project schedule</b>, then select <b>Export</b>. A file named <b>name.cmrlm.json</b> downloads.</li>
+<li>Move the file to the other device, for example with AirDrop or the Files app.</li>
+<li>On the other device, open this page, select <b>Import</b>, and choose the file. A project that is already on that device comes in as a copy named “Name (2)”.</li>
+</ol>
+</div></details>
 <section class="sched"><div class="st">Project schedule</div>
 <table aria-label="Saved projects"><thead><tr><th>Mark</th><th>Project</th><th>Updated</th><th>Size</th><th>Status</th></tr></thead><tbody id="list"></tbody><tfoot><tr><td colspan="5" id="sum">0 projects · 0.0 KB</td></tr></tfoot></table>
 <p id="empty" class="empty" hidden>No saved projects yet. Create one or import a file.</p>
@@ -458,6 +530,13 @@ function seedSamples(s) {
 }
 const TEST = new URLSearchParams(location.search).has("test");
 store = TEST ? memStore() : probe(() => localStorage);   // test mode never touches real storage
+// "How projects work" stays open until the viewer hides it once; the choice is remembered on this device only.
+(() => {
+  const d = document.getElementById("howto"), KEY = "cmrlm.workspace.howto";
+  if (!d) return;
+  if (!TEST) { try { if (localStorage.getItem(KEY) === "closed") d.open = false; } catch (e) { /* storage blocked: keep it open */ } }
+  d.addEventListener("toggle", () => { if (TEST) return; try { localStorage.setItem(KEY, d.open ? "open" : "closed"); } catch (e) { /* ignore */ } });
+})();
 if (TEST) { $("#testNote").hidden = false; $("#testBox").hidden = false; seedSamples(store); }
 if (store) $("#newBtn").disabled = $("#impBtn").disabled = false;
 else $("#notice").hidden = false;
