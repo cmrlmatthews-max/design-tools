@@ -375,8 +375,8 @@ t("24  demisingLines on a plates section from 8.1: source plates, lines near the
   dem.xs.forEach((x, k) => near(x, merged[k], 0.002, `cut ${k}`));
   ok(dem.xs.length >= 17, "at least 17 cuts");
   // note: south and north cuts interleave on a double-loaded bar, so the median spacing is about half a unit width (here 16.5 ft)
-  ok(dem.unitWidth >= 4 && dem.unitWidth <= 60, `unit width ${dem.unitWidth}`);
-  console.log(`       note: overlay unitWidth on the double-loaded 8.1 is ${dem.unitWidth} ft (south and north cuts interleave)`);
+  ok(dem.unitWidth >= 20 && dem.unitWidth <= 50, `unit width ${dem.unitWidth} (each unit own width, median)`);
+  console.log(`       note: overlay unitWidth on the double-loaded 8.1 is ${dem.unitWidth} ft (median of each unit own width)`);
   ok(dem.footprint && dem.footprint.length === 1, "footprint is the level plate");
 });
 t("24  with a massing section, the plates source still wins and the residential level is picked", () => {
@@ -393,7 +393,7 @@ t("24  Facade Studio unitBalconies reads units[].outer: a face on the unit area 
   ok(south.length >= 8 && south.length <= 9, `south units on the face: ${south.length}`);
   eq(south, [...new Set(south)].sort((a, b) => a - b));
 });
-t("24  info: a face on the plate edge (y = -32.5) is 1.0 ft from the unit edge; unitBalconies tolerates 0.5 ft", () => {
+t("24  info: a face on the plate edge (y = -32.5) is 1.0 ft from the unit edge; unitBalconies tolerates 1.5 ft", () => {
   const lv = derived81.levels[0];
   const edge = unitBalconies({ id: "F1", a: [-150, -32.5], b: [150, -32.5], length: 300, z: 0, ftf: 10, n: 21 }, lv, 14, null);
   console.log(`       note: a face on the plate edge matches ${edge.length} units (the unit outlines stop at the area line, extWall = 1.0 ft inside)`);

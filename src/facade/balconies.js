@@ -16,7 +16,7 @@
    - spacing is rounded to a whole number of at least 1. An unknown pattern
      is stacked. Indices are sorted, unique, and inside [0, n).
    - unitBalconies: a unit edge counts as a facade edge of a face when both
-     end points lie within 0.5 ft of the face line and the edge overlaps the
+     end points lie within 1.5 ft of the face line and the edge overlaps the
      face. The edge length is the overlap length. The balcony goes at the
      centre of the overlap, in the module that holds it. When that module is
      taken by another unit, the nearest free module is used (the lower index
@@ -36,7 +36,7 @@
 const isNum = (v) => typeof v === "number" && Number.isFinite(v);
 const r3 = (v) => Math.round(v * 1000) / 1000 + 0;
 const mod = (a, b) => ((a % b) + b) % b;
-const FACE_TOL = 0.5;   // ft: a unit edge lies on a face within this distance
+const FACE_TOL = 1.5;   // ft: a unit edge lies on a face within this distance (Plate Planner units stop 1.0 ft inside the face, the exterior wall allowance)
 
 function need(cond, fn, what) {
   if (!cond) throw new Error(`${fn}: ${what} is missing or not valid`);
