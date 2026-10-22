@@ -581,6 +581,8 @@ const Store = (() => {
     const pathStr = ks.join('.');
     if (opts.live) {
       if (!gesture) gesture = { base: clone(state), path: pathStr };
+    } else if (opts.merge) {
+      if (gesture) commit();                 // opts.merge: no new undo step; it joins the one before (site neighbors follow the placement)
     } else {
       if (gesture) commit();
       pushHistory(clone(state));

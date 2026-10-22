@@ -11,7 +11,7 @@
 
 const Options = (() => {
   const storage = StorageMod.createStorage({
-    key: CONFIG.storageKey, schema: CONFIG.schema, migrate: (s) => s,
+    key: CONFIG.storageKey, schema: CONFIG.schema, migrate: migrateTower,
     onNotice: (message) => Toast.show(message, 'warn', 7000),
   });
   let currentId = null;            // the saved option the working copy came from (null = unsaved)
