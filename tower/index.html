@@ -712,6 +712,17 @@ textarea.ai-preview {
 }
 .hdl-label[hidden] { display: none; }
 .hdl-label span { font-size: 11.5px; opacity: .78; }
+
+/* ---- project file (copied from the Mid-Rise; ProjectUI in 09b_project.js fills them) ---------------- */
+.proj-pill {
+  display: inline-flex; align-items: center; max-width: 220px; height: 28px; padding: 0 10px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent); font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.proj-pill[hidden] { display: none; }
+.proj-new { padding: 4px 8px 6px; }
+.proj-new[hidden] { display: none; }
+.proj-line { margin: 4px 0 8px; font-size: 12.5px; color: var(--ink-2); line-height: 1.4; }
+.chev-r { color: var(--ink-3); }
 </style>
 </head>
 <body>
@@ -723,6 +734,8 @@ textarea.ai-preview {
       <h1 class="app-title">Tower Generator</h1>
     </div>
     <div class="tb-group" id="tbOption"></div>
+    <div class="tb-group" id="tbProject"></div>
+    <span class="proj-pill" id="projPill" hidden></span>
     <div class="tb-spacer"></div>
     <div class="tb-group" id="tbHistory"></div>
     <div class="seg" id="styleToggle" role="group" aria-label="Visual style"></div>
@@ -767,12 +780,14 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
    from the export keywords; it is wrapped in a function so its names do not
    clash with the rest of the file.
    ========================================================================== */
+/* ---- src/tower/presets.js ---- */
 const PresetsMod = (() => {
 // Program defaults and presets for the tower massing tool.
 // Source: tower-generator-technical-plan.md sections 2, 6 and 10.
 // Units: feet, square feet, degrees. ftf is floor-to-floor in decimal feet (13.5 = 13'-6").
 // unitFactor is a fraction (0.85 = 85%), or null for programs that have no unit count.
-// Each preset is a complete state object (schema 1). Consumers should deep-copy before editing.
+// Each preset is a complete state object (schema 2). Consumers should deep-copy before editing.
+// Schema 2 keys (tower-project-sun-plan.md section 2.1): placement, context.fromSite, context.radius, sun.
 
 const PROGRAM_DEFAULTS = {
   residential: { ftf: 10,   unitSize: 850,  unitFactor: 0.85, color: '#4f7fd1' }, // blue
@@ -787,6 +802,19 @@ const PROGRAM_DEFAULTS = {
 const copyPrograms = () =>
   Object.fromEntries(Object.entries(PROGRAM_DEFAULTS).map(([k, v]) => [k, { ...v }]));
 
+// The schema 2 sun default (plan section 2.1). A fresh object per call, so presets never share it.
+const sunDefaults = () => ({
+  mode: 'manual',                                                   // the schema 1 azimuth and altitude sliders
+  place: { source: 'default', lat: 33.749, lon: -84.388 },           // Atlanta
+  tz: { zone: 'us-eastern', offset: -5 },
+  dates: ['03-20', '06-21', '12-21'],                               // equinox, summer and winter solstice
+  date: '03-20',
+  time: 720,                                                        // minutes after local midnight (12:00)
+  times: [540, 720, 900],                                           // 9:00, 12:00, 15:00
+  play: false,
+  hours: { on: false, spacing: 10, step: 30, date: '03-20', extent: 'site' },
+});
+
 const rect = (w, d) => ({ type: 'rect', w, d, radius: 0, points: [] });
 
 const lShape = (w, d, arm) => ({ type: 'L', w, d, radius: 0, arm, points: [] });
@@ -799,7 +827,9 @@ const PRESETS = [
     name: 'Slim residential point tower',
     description: 'A slim 45-floor residential point tower on a two-floor retail and lobby podium, tapering 10% over its height and capped by a screen crown.',
     state: {
-      schema: 1,
+      schema: 2,
+      placement: null,
+      sun: sunDefaults(),
       name: 'Slim residential point tower',
       site: {
         shape: 'rect', width: 150, depth: 150, points: [],
@@ -807,7 +837,7 @@ const PRESETS = [
         heightLimit: 550,                       // planned tower top 503 ft (483 + 20 ft screen crown)
         stepback: { on: false, aboveHeight: 85, distance: 15 },
       },
-      context: { show: true, blocks: [{ x: 0, y: -180, w: 200, d: 120, h: 60 }] },
+      context: { show: true, fromSite: false, radius: 600, blocks: [{ x: 0, y: -180, w: 200, d: 120, h: 60 }] },
       podium: {
         on: true, floors: 2, groundFtf: 18, ftf: 15,
         shape: rect(100, 100), offset: { x: 0, y: 0 },
@@ -839,7 +869,9 @@ const PRESETS = [
     name: 'Office slab',
     description: 'A 32-floor office slab with no podium, set back 10 feet on all sides at floors 20 and 28 under a flat roof with a 4-foot parapet.',
     state: {
-      schema: 1,
+      schema: 2,
+      placement: null,
+      sun: sunDefaults(),
       name: 'Office slab',
       site: {
         shape: 'rect', width: 260, depth: 160, points: [],
@@ -847,7 +879,7 @@ const PRESETS = [
         heightLimit: 500,                       // planned tower top 436 ft (432 + 4 ft parapet)
         stepback: { on: false, aboveHeight: 85, distance: 15 },
       },
-      context: { show: true, blocks: [{ x: 0, y: -180, w: 200, d: 120, h: 60 }] },
+      context: { show: true, fromSite: false, radius: 600, blocks: [{ x: 0, y: -180, w: 200, d: 120, h: 60 }] },
       podium: {
         on: false, floors: 4, groundFtf: 18, ftf: 14,
         shape: rect(220, 170), offset: { x: 0, y: 0 },
@@ -883,7 +915,9 @@ const PRESETS = [
     name: 'Hotel on a podium',
     description: 'A 24-floor hotel tower on a four-level retail and amenity podium, finished with a three-step crown.',
     state: {
-      schema: 1,
+      schema: 2,
+      placement: null,
+      sun: sunDefaults(),
       name: 'Hotel on a podium',
       site: {
         shape: 'rect', width: 250, depth: 200, points: [],
@@ -891,7 +925,7 @@ const PRESETS = [
         heightLimit: 350,                       // planned tower top 318 ft (303 + 15 ft crown)
         stepback: { on: false, aboveHeight: 85, distance: 15 },
       },
-      context: { show: true, blocks: [{ x: 0, y: -180, w: 200, d: 120, h: 60 }] },
+      context: { show: true, fromSite: false, radius: 600, blocks: [{ x: 0, y: -180, w: 200, d: 120, h: 60 }] },
       podium: {
         on: true, floors: 4, groundFtf: 18, ftf: 15,
         shape: rect(220, 170), offset: { x: 0, y: 0 },
@@ -923,7 +957,9 @@ const PRESETS = [
     name: 'L-shaped multifamily on podium',
     description: 'A 23-story L-shaped multifamily building on a six-level retail and parking podium, with its amenity deck on the podium roof as the first tower floor.',
     state: {
-      schema: 1,
+      schema: 2,
+      placement: null,
+      sun: sunDefaults(),
       name: 'L-shaped multifamily on podium',
       site: {
         shape: 'rect', width: 260, depth: 220, points: [],
@@ -931,7 +967,7 @@ const PRESETS = [
         heightLimit: 0,                         // no limit, per brief; planned top 249.5 ft (245.5 + 4 ft parapet)
         stepback: { on: false, aboveHeight: 85, distance: 15 },
       },
-      context: { show: true, blocks: [{ x: 0, y: -180, w: 200, d: 120, h: 60 }] },
+      context: { show: true, fromSite: false, radius: 600, blocks: [{ x: 0, y: -180, w: 200, d: 120, h: 60 }] },
       podium: {
         on: true, floors: 6, groundFtf: 18, ftf: 10.5,
         shape: rect(240, 200), offset: { x: 0, y: 0 },
@@ -980,7 +1016,9 @@ const PRESETS = [
     name: 'U-shaped multifamily on podium',
     description: 'A 23-story U-shaped multifamily building on a six-level retail and parking podium, with its amenity deck on the podium roof as the first tower floor. The U opens toward the back of the site.',
     state: {
-      schema: 1,
+      schema: 2,
+      placement: null,
+      sun: sunDefaults(),
       name: 'U-shaped multifamily on podium',
       site: {
         shape: 'rect', width: 260, depth: 220, points: [],
@@ -988,7 +1026,7 @@ const PRESETS = [
         heightLimit: 0,                         // no limit; planned top 249.5 ft (245.5 + 4 ft parapet)
         stepback: { on: false, aboveHeight: 85, distance: 15 },
       },
-      context: { show: true, blocks: [{ x: 0, y: -180, w: 200, d: 120, h: 60 }] },
+      context: { show: true, fromSite: false, radius: 600, blocks: [{ x: 0, y: -180, w: 200, d: 120, h: 60 }] },
       podium: {
         on: true, floors: 6, groundFtf: 18, ftf: 10.5,
         shape: rect(240, 200), offset: { x: 0, y: 0 },
@@ -1048,6 +1086,1440 @@ const CONFIG = {
   storageKey: 'towergen.options.v1',
   schema: 1,
 };
+
+/* ---- src/shared/project.js ---- */
+const ProjectMod = (() => {
+/* ==========================================================================
+   SHARED: project
+   The shared project file ("name.cmrlm.json") that carries one design study
+   through the tools: site, massing, plates, parking, facade, sun, grading, egress.
+   Spec: docs/project-file-spec.md (the contract; change the spec first).
+
+   Units: feet, square feet, degrees. Plan (x, y): x = east, y = north. z is up.
+
+   Storage (localStorage, shared by every tool on the origin)
+     cmrlm.project.index    [{ id, name, updatedAt, bytes }], newest first
+     cmrlm.project.<id>     the project file, as JSON text
+     cmrlm.project.last     the id of the last saved project
+
+   Rules
+   - Every storage access is inside try/catch. On any failure the optional
+     `onNotice(message)` (pass it as { onNotice } in the last argument of the
+     storage functions) is called ONCE per storage object. The data stays in
+     memory with the caller, so the tool keeps working.
+   - No function mutates its inputs. writeSection returns a new project.
+   - A tool writes only its own section and keeps every other section and every
+     unknown key as it was. To avoid overwriting another tool that saved from a
+     second tab, load the project fresh, writeSection on that copy, then saveProject.
+   - Pure ES module, self-contained (no imports) so a build script can inline it.
+     No DOM access: Blob and FileReader are used only when they exist.
+   ========================================================================== */
+
+const FORMAT = "cmrlm-design-tools/project";
+const VERSION = 1;
+const SECTIONS = ["site", "massing", "plates", "parking", "facade", "sun", "grading", "egress"];
+const SIZE_WARN = 3 * 1024 * 1024;
+const SIZE_MAX = 4 * 1024 * 1024;
+
+const LOG_MAX = 200;
+const MAX_IMPORT_BYTES = 20 * 1024 * 1024;
+const KEY_PREFIX = "cmrlm.project.";
+const KEY_INDEX = "cmrlm.project.index";
+const KEY_LAST = "cmrlm.project.last";
+const PLACEMENT_KEYS = ["x", "y", "rotation", "baseZ"];
+const DEFAULT_TOOL = { site: "site", massing: "tower", plates: "plate", parking: "parking", facade: "facade", sun: "tower", grading: "grading", egress: "egress" };
+const NEWER_MSG = "This project was saved by a newer version of this tool. You can view it, but changes will not be saved.";
+
+/* ---------- small helpers ---------- */
+
+function clone(v) {
+  return v === undefined ? undefined : JSON.parse(JSON.stringify(v));
+}
+
+function isObj(v) {
+  return v !== null && typeof v === "object" && !Array.isArray(v);
+}
+
+function hasOwn(o, k) {
+  return Object.prototype.hasOwnProperty.call(o, k);
+}
+
+function newId() {
+  try {
+    if (globalThis.crypto && typeof globalThis.crypto.randomUUID === "function") return globalThis.crypto.randomUUID();
+  } catch (e) { /* fall through */ }
+  return "id" + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+}
+
+/** Round to 0.001 ft (and never return -0). */
+function r3(v) {
+  const r = Math.round(v * 1000) / 1000;
+  return r === 0 ? 0 : r;
+}
+
+/** Round to 0.01 (and never return -0). */
+function r2(v) {
+  const r = Math.round(v * 100) / 100;
+  return r === 0 ? 0 : r;
+}
+
+/** An ISO time for now that is later than every ISO time in `prev`, so updatedAt always moves forward. */
+function stamp(...prev) {
+  let t = new Date().toISOString();
+  for (const p of prev) {
+    if (typeof p !== "string") continue;
+    const ms = Date.parse(p);
+    try {
+      if (Number.isFinite(ms) && Date.parse(t) <= ms) t = new Date(ms + 1).toISOString();
+    } catch (e) { /* keep t */ }
+  }
+  return t;
+}
+
+/** A usable project id: a non-empty string that does not clash with the other storage keys. */
+function okId(id) {
+  return typeof id === "string" && id !== "" && id !== "index" && id !== "last";
+}
+
+function readOnlyError() {
+  const e = new Error(NEWER_MSG);
+  e.readOnly = true;
+  return e;
+}
+
+/* ---------- create, validate, migrate, read ---------- */
+
+/**
+ * A new empty project. `frame` is { kind, lat, lon, size, zDatum }; leave it out for a local frame
+ * (no site, zDatum "local"). Missing frame fields get their defaults; other values are kept as given.
+ */
+function newProject({ name, frame } = {}) {
+  const now = new Date().toISOString();
+  const f = isObj(frame) ? clone(frame) : {};
+  return {
+    format: FORMAT,
+    version: VERSION,
+    id: newId(),
+    name: String(name || "").trim() || "Untitled",
+    createdAt: now,
+    updatedAt: now,
+    units: "feet",
+    frame: {
+      ...f,
+      kind: f.kind === undefined ? "local" : f.kind,
+      lat: f.lat === undefined ? null : f.lat,
+      lon: f.lon === undefined ? null : f.lon,
+      size: f.size === undefined ? null : f.size,
+      zDatum: f.zDatum === undefined ? (f.kind === "site" ? "NAVD88" : "local") : f.zDatum,
+    },
+    sections: {},
+    log: [],
+  };
+}
+
+/**
+ * Checks the envelope: format, version (a newer one is an error), units, frame, every known section
+ * (six keys, numeric placement) and the log. Unknown keys and unknown sections are allowed.
+ * @returns {{ ok: boolean, errors: string[] }}
+ */
+function validate(doc) {
+  const errors = [];
+  const err = (msg) => { if (errors.length < 50) errors.push(msg); };
+  if (!isObj(doc)) return { ok: false, errors: ["project: not an object"] };
+  if (doc.format !== FORMAT) err(`format: must be "${FORMAT}"`);
+  if (!Number.isInteger(doc.version) || doc.version < 1) err("version: must be a whole number, 1 or more");
+  else if (doc.version > VERSION) err(`version: ${doc.version} is newer than this tool understands (${VERSION})`);
+  if (doc.units !== undefined && doc.units !== "feet") err('units: must be "feet"');
+  const f = doc.frame;
+  if (!isObj(f)) err("frame: missing or not an object");
+  else {
+    if (f.kind !== "site" && f.kind !== "local") err('frame.kind: must be "site" or "local"');
+    for (const k of ["lat", "lon", "size"]) {
+      if (f[k] !== null && !Number.isFinite(f[k])) err(`frame.${k}: must be a number or null`);
+    }
+    if (typeof f.zDatum !== "string" || !f.zDatum) err('frame.zDatum: must be text such as "NAVD88" or "local"');
+  }
+  if (doc.sections !== undefined && !isObj(doc.sections)) err("sections: must be an object");
+  else if (isObj(doc.sections)) {
+    for (const key of SECTIONS) {
+      if (!hasOwn(doc.sections, key)) continue;
+      const s = doc.sections[key];
+      const at = `sections.${key}`;
+      if (!isObj(s)) { err(`${at}: must be an object`); continue; }
+      if (typeof s.tool !== "string" || !s.tool) err(`${at}.tool: must be a tool id`);
+      if (!Number.isFinite(s.schema)) err(`${at}.schema: must be a number`);
+      if (typeof s.updatedAt !== "string" || !s.updatedAt) err(`${at}.updatedAt: must be a date string`);
+      if (!isObj(s.placement)) err(`${at}.placement: missing or not an object`);
+      else for (const k of PLACEMENT_KEYS) if (!Number.isFinite(s.placement[k])) err(`${at}.placement.${k}: must be a number`);
+      if (!isObj(s.state)) err(`${at}.state: must be an object`);
+      if (!isObj(s.derived)) err(`${at}.derived: must be an object`);
+    }
+  }
+  if (!Array.isArray(doc.log)) err("log: must be an array");
+  return { ok: errors.length === 0, errors };
+}
+
+/**
+ * Brings a project up to VERSION and returns it (the input itself when nothing changes, else a copy).
+ * Version 1 needs no change beyond filling a missing `log` with [] and a missing `units` with "feet".
+ * A project from a newer version is returned untouched. Section state is the tool's business.
+ */
+function migrate(doc) {
+  if (!isObj(doc)) return doc;
+  if (Number.isFinite(doc.version) && doc.version > VERSION) return doc;
+  const blank = (v) => v === undefined || v === null || v === "";
+  const older = Number.isFinite(doc.version) && doc.version < VERSION;
+  if (!older && doc.log !== undefined && doc.log !== null && !blank(doc.units)) return doc;
+  const out = clone(doc);
+  if (older) out.version = VERSION;
+  if (out.log === undefined || out.log === null) out.log = [];
+  if (blank(out.units)) out.units = "feet";
+  return out;
+}
+
+/** The section object for `key`, or null. Never throws. Treat the result as read-only. */
+function getSection(doc, key) {
+  try {
+    const secs = doc && doc.sections;
+    if (!isObj(secs) || !hasOwn(secs, key)) return null;
+    return isObj(secs[key]) ? secs[key] : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/* ---------- write one section ---------- */
+
+/** Adds one entry to the log (newest 200 kept) and moves the project updatedAt to the entry time. */
+function appendLog(doc, entry) {
+  const log = Array.isArray(doc.log) ? doc.log : [];
+  log.push(entry);
+  doc.log = log.length > LOG_MAX ? log.slice(log.length - LOG_MAX) : log;
+  doc.updatedAt = entry.at;
+}
+
+/** The four placement numbers: given values first, then the old placement, then 0. Extra given keys are kept. */
+function mergePlacement(given, old) {
+  const base = isObj(old) ? old : {};
+  const out = {};
+  for (const k of PLACEMENT_KEYS) {
+    const v = given[k] !== undefined ? given[k] : base[k] !== undefined ? base[k] : 0;
+    if (!Number.isFinite(v)) throw new Error(`writeSection: placement.${k} must be a number.`);
+    out[k] = v;
+  }
+  for (const k of Object.keys(given)) if (!hasOwn(out, k)) out[k] = clone(given[k]);
+  return out;
+}
+
+/**
+ * Writes one section and returns a NEW project; the input is not changed.
+ * Only the fields given in `patch` (tool, schema, placement, state, derived) are replaced. Unknown keys of
+ * the section and of the project stay as they were. A new section gets defaults for what is missing
+ * (the usual tool, schema 1, an identity placement, empty state and derived). Sets section.updatedAt and
+ * project.updatedAt, appends one log entry { at, tool, action: "write", note } and keeps the newest 200.
+ * Throws a plain Error when `key` is not in SECTIONS. Throws an Error with `readOnly = true` when the stored
+ * section schema is newer than `patch.schema` (or the project is from a newer version): the tool must not save.
+ */
+function writeSection(doc, key, patch) {
+  if (!SECTIONS.includes(key)) throw new Error(`Unknown section "${key}". Use one of: ${SECTIONS.join(", ")}.`);
+  if (!isObj(doc)) throw new Error("writeSection: the project must be an object.");
+  const p = isObj(patch) ? patch : {};
+  if (Number.isFinite(doc.version) && doc.version > VERSION) throw readOnlyError();
+  const stored = getSection(doc, key);
+  if (p.tool !== undefined && (typeof p.tool !== "string" || !p.tool)) throw new Error("writeSection: tool must be a tool id.");
+  if (p.schema !== undefined && !(Number.isInteger(p.schema) && p.schema >= 1)) throw new Error("writeSection: schema must be a whole number, 1 or more.");
+  for (const k of ["placement", "state", "derived"]) {
+    if (p[k] !== undefined && !isObj(p[k])) throw new Error(`writeSection: ${k} must be an object.`);
+  }
+  // Last: a stored section that is newer than the writer means the writer must not save.
+  if (stored && Number.isFinite(stored.schema) && Number.isFinite(p.schema) && stored.schema > p.schema) throw readOnlyError();
+
+  const now = stamp(doc.updatedAt, stored && stored.updatedAt);
+  const out = clone(doc);
+  if (!isObj(out.sections)) out.sections = {};
+  const s = isObj(out.sections[key]) ? out.sections[key] : {};
+  s.tool = p.tool !== undefined ? p.tool : (typeof s.tool === "string" && s.tool ? s.tool : DEFAULT_TOOL[key]);
+  s.schema = p.schema !== undefined ? p.schema : (Number.isFinite(s.schema) ? s.schema : 1);
+  s.updatedAt = now;
+  s.placement = p.placement !== undefined ? mergePlacement(p.placement, s.placement) : (isObj(s.placement) ? s.placement : mergePlacement({}, null));
+  s.state = p.state !== undefined ? clone(p.state) : (isObj(s.state) ? s.state : {});
+  s.derived = p.derived !== undefined ? clone(p.derived) : (isObj(s.derived) ? s.derived : {});
+  out.sections[key] = s;
+  appendLog(out, { at: now, tool: s.tool, action: "write", note: p.note === undefined || p.note === null ? "" : String(p.note) });
+  return out;
+}
+
+/* ---------- placement math (spec section 4) ---------- */
+
+/** The placement numbers of a section (or of a bare placement object). A missing number counts as 0. */
+function placementOf(s) {
+  const p = isObj(s) && isObj(s.placement) ? s.placement : s;
+  const n = (v) => (Number.isFinite(v) ? v : 0);
+  return isObj(p) ? { x: n(p.x), y: n(p.y), rotation: n(p.rotation), baseZ: n(p.baseZ) } : { x: 0, y: 0, rotation: 0, baseZ: 0 };
+}
+
+/** [sin, cos] of an angle in degrees, exact for the four quarter turns. */
+function sincos(deg) {
+  const d = ((deg % 360) + 360) % 360;
+  if (d === 0) return [0, 1];
+  if (d === 90) return [1, 0];
+  if (d === 180) return [0, -1];
+  if (d === 270) return [-1, 0];
+  const r = (deg * Math.PI) / 180;
+  return [Math.sin(r), Math.cos(r)];
+}
+
+function forward(pl, x, y, z) {
+  const [s, c] = sincos(pl.rotation);
+  return [x * c - y * s + pl.x, x * s + y * c + pl.y, z + pl.baseZ];
+}
+
+function inverse(pl, xp, yp, zp) {
+  const [s, c] = sincos(pl.rotation);
+  const dx = xp - pl.x, dy = yp - pl.y;
+  return [dx * c + dy * s, -dx * s + dy * c, zp - pl.baseZ];
+}
+
+function zOf(p) {
+  return Number.isFinite(p[2]) ? p[2] : 0;
+}
+
+function checkDir(dir, fn) {
+  if (dir !== "toProject" && dir !== "toLocal") throw new Error(`${fn}: dir must be "toProject" or "toLocal".`);
+}
+
+/** Maps a ring of [x, y] or [x, y, z] points. Rounds to 0.001 ft. A point keeps its length (2 or 3 numbers). */
+function mapRing(pl, ring, fwd) {
+  if (!Array.isArray(ring)) return [];
+  return ring.map((p) => {
+    const three = Array.isArray(p) && p.length >= 3 && Number.isFinite(p[2]);
+    const t = fwd ? forward(pl, p[0], p[1], zOf(p)) : inverse(pl, p[0], p[1], zOf(p));
+    return three ? [r3(t[0]), r3(t[1]), r3(t[2])] : [r3(t[0]), r3(t[1])];
+  });
+}
+
+/**
+ * Local point to project point: xp = x cos r - y sin r + placement.x, yp = x sin r + y cos r + placement.y,
+ * zp = z + placement.baseZ. `r` is placement.rotation in degrees, counter-clockwise. z is optional (0).
+ * `section` is a section object or a bare placement. Returns [xp, yp, zp], not rounded.
+ */
+function toProject(section, point) {
+  return forward(placementOf(section), point[0], point[1], zOf(point));
+}
+
+/** The inverse of toProject: project point to local point [x, y, z]. z is optional (0). Not rounded. */
+function toLocal(section, point) {
+  return inverse(placementOf(section), point[0], point[1], zOf(point));
+}
+
+/**
+ * Transforms a ring (or a 3D line) of points. dir is "toProject" or "toLocal". Returns a new array
+ * rounded to 0.001 ft; 2D points stay 2D, 3D points stay 3D (z moves with baseZ).
+ */
+function transformRing(section, ring, dir) {
+  checkDir(dir, "transformRing");
+  return mapRing(placementOf(section), ring, dir === "toProject");
+}
+
+/** Transforms a MultiPoly [{ outer, holes }] the same way. Other keys of each polygon are kept. */
+function transformMultiPoly(section, mp, dir) {
+  checkDir(dir, "transformMultiPoly");
+  const pl = placementOf(section), fwd = dir === "toProject";
+  return (Array.isArray(mp) ? mp : []).map((poly) => {
+    const q = isObj(poly) ? poly : {};
+    return { ...q, outer: mapRing(pl, q.outer, fwd), holes: (Array.isArray(q.holes) ? q.holes : []).map((h) => mapRing(pl, h, fwd)) };
+  });
+}
+
+/**
+ * Site buildings near a massing, in that massing LOCAL frame. `placement` is the massing placement.
+ * Includes a building when its local plan bounding box touches the circle of radiusFt around the local
+ * origin (a missing radius means no limit). Returns
+ *   { blocks:   [{ id, name, x, y, w, d, h, base }],            axis-aligned box of each building (x, y = box center)
+ *     polygons: [{ id, name, outer, holes, base, height }] }    the building rings, in the local frame
+ * where base is the building base minus placement.baseZ. Numbers are rounded to 0.01 ft (rings to 0.001).
+ * Empty lists when the project has no site section.
+ */
+function siteContextFor(doc, placement, radiusFt) {
+  const out = { blocks: [], polygons: [] };
+  const site = getSection(doc, "site");
+  const list = site && isObj(site.derived) && Array.isArray(site.derived.buildings) ? site.derived.buildings : [];
+  const pl = placementOf(placement);
+  const radius = Number.isFinite(radiusFt) ? radiusFt : Infinity;
+  for (const b of list) {
+    if (!isObj(b) || !Array.isArray(b.outer) || b.outer.length < 3) continue;
+    const outer = mapRing(pl, b.outer, false);
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const [x, y] of outer) {
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    if (!(Number.isFinite(minX) && Number.isFinite(minY))) continue;
+    const gapX = Math.max(minX, 0, -maxX), gapY = Math.max(minY, 0, -maxY);
+    if (Math.hypot(gapX, gapY) > radius) continue;
+    const name = typeof b.name === "string" ? b.name : "";
+    const height = Number.isFinite(b.height) ? b.height : (Number.isFinite(b.top) && Number.isFinite(b.base) ? b.top - b.base : 0);
+    const base = r2((Number.isFinite(b.base) ? b.base : pl.baseZ) - pl.baseZ);
+    out.blocks.push({ id: b.id, name, x: r2((minX + maxX) / 2), y: r2((minY + maxY) / 2), w: r2(maxX - minX), d: r2(maxY - minY), h: r2(height), base });
+    out.polygons.push({ id: b.id, name, outer, holes: (Array.isArray(b.holes) ? b.holes : []).map((h) => mapRing(pl, h, false)), base, height: r2(height) });
+  }
+  return out;
+}
+
+/* ---------- size ---------- */
+
+let encoder = null;
+
+/** Bytes of a text when written as UTF-8 (TextEncoder when present, else the string length). */
+function utf8Length(text) {
+  if (typeof text !== "string") return 0;
+  try {
+    if (typeof TextEncoder !== "undefined") {
+      if (!encoder) encoder = new TextEncoder();
+      return encoder.encode(text).length;
+    }
+  } catch (e) { /* fall through */ }
+  return text.length;
+}
+
+/** UTF-8 byte length of the project JSON (what saveProject counts against SIZE_WARN and SIZE_MAX). */
+function projectBytes(doc) {
+  try {
+    return utf8Length(JSON.stringify(doc));
+  } catch (e) {
+    return 0;
+  }
+}
+
+/** The section with the most JSON bytes: { key, bytes }. { key: null, bytes: 0 } when there are none. */
+function largestSection(doc) {
+  let best = { key: null, bytes: 0 };
+  const secs = isObj(doc) && isObj(doc.sections) ? doc.sections : {};
+  for (const key of Object.keys(secs)) {
+    const bytes = projectBytes(secs[key]);
+    if (bytes > best.bytes) best = { key, bytes };
+  }
+  return best;
+}
+
+function fmtSize(bytes) {
+  return bytes >= 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+/** The text shown when a project is over SIZE_WARN (saved) or over SIZE_MAX (refused). Names the largest section. */
+function sizeMessage(doc, bytes, refused) {
+  const big = largestSection(doc);
+  const part = big.key ? ` The largest part is "${big.key}" (${fmtSize(big.bytes)}).` : "";
+  return refused
+    ? `This project is ${fmtSize(bytes)}, which is over the ${fmtSize(SIZE_MAX)} limit, so it was not saved.${part} Delete old projects or simplify that part.`
+    : `This project is ${fmtSize(bytes)}. Browsers keep about 5 MB for all projects together.${part} Delete old projects to make room.`;
+}
+
+/* ---------- storage access (every call inside try/catch, one notice per storage object) ---------- */
+
+const noticed = new WeakSet();
+let noticedDefault = false;
+
+/** Calls opts.onNotice(message) once per storage object (the default localStorage counts as one object). */
+function notice(storage, opts, message) {
+  if (!opts || typeof opts.onNotice !== "function") return;
+  if (storage && typeof storage === "object") {
+    if (noticed.has(storage)) return;
+    noticed.add(storage);
+  } else {
+    if (noticedDefault) return;
+    noticedDefault = true;
+  }
+  try { opts.onNotice(message); } catch (e) { /* ignore */ }
+}
+
+const NO_STORE = "Saving is unavailable in this browser, so projects will only be kept until you close this page.";
+const NO_WRITE = "Saving is unavailable in this browser (storage is blocked or full). The project will only be kept until you close this page.";
+
+function backend(storage) {
+  // Reading globalThis.localStorage itself can throw (blocked site data).
+  return storage || globalThis.localStorage;
+}
+
+/** The stored text for a key, or null when missing or when storage fails. */
+function readRaw(storage, opts, key) {
+  try {
+    const raw = backend(storage).getItem(key);
+    return raw === undefined || raw === null ? null : String(raw);
+  } catch (e) {
+    notice(storage, opts, NO_STORE);
+    return null;
+  }
+}
+
+function writeRaw(storage, opts, key, value) {
+  try {
+    backend(storage).setItem(key, value);
+    return true;
+  } catch (e) {
+    notice(storage, opts, NO_WRITE);
+    return false;
+  }
+}
+
+function removeRaw(storage, opts, key) {
+  try {
+    backend(storage).removeItem(key);
+    return true;
+  } catch (e) {
+    notice(storage, opts, NO_WRITE);
+    return false;
+  }
+}
+
+const keyFor = (id) => KEY_PREFIX + id;
+const byNewest = (a, b) => (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0);
+
+/** The index entries [{ id, name, updatedAt, bytes }], newest first. A corrupt index is backed up and read as empty. */
+function readIndex(storage, opts) {
+  const raw = readRaw(storage, opts, KEY_INDEX);
+  if (raw === null) return [];
+  let arr = null;
+  try { arr = JSON.parse(raw); } catch (e) { arr = null; }
+  if (!Array.isArray(arr)) {
+    notice(storage, opts, "The project list could not be read and was reset. A backup copy of the old list was kept.");
+    try { backend(storage).setItem(KEY_INDEX + ".corrupt", raw); } catch (e) { /* ignore */ }
+    return [];
+  }
+  const seen = new Set(), out = [];
+  for (const e of arr) {
+    if (!isObj(e) || !okId(e.id) || seen.has(e.id)) continue;
+    seen.add(e.id);
+    out.push({
+      id: e.id,
+      name: typeof e.name === "string" && e.name ? e.name : "Untitled",
+      updatedAt: typeof e.updatedAt === "string" ? e.updatedAt : "",
+      bytes: Number.isFinite(e.bytes) ? e.bytes : 0,
+    });
+  }
+  return out.sort(byNewest);
+}
+
+function writeIndex(storage, opts, entries) {
+  return writeRaw(storage, opts, KEY_INDEX, JSON.stringify(entries.slice().sort(byNewest)));
+}
+
+/* ---------- saved projects ---------- */
+
+/**
+ * The saved projects as index entries [{ id, name, updatedAt, bytes }], newest first (copies).
+ * `storage` is a Storage-like object (getItem, setItem, removeItem); the default is localStorage.
+ * `opts` is optional: { onNotice(message) }, called once when storage fails.
+ */
+function listProjects(storage, opts) {
+  return readIndex(storage, opts);
+}
+
+/**
+ * Loads, migrates and validates a saved project. Returns null when it is missing, unreadable, invalid,
+ * or from a newer version of the tools (opts.onNotice then says why). Does not write anything.
+ */
+function loadProject(storage, id, opts) {
+  if (!okId(id)) return null;
+  const raw = readRaw(storage, opts, keyFor(id));
+  if (raw === null) return null;
+  let obj;
+  try {
+    obj = JSON.parse(raw);
+  } catch (e) {
+    notice(storage, opts, "This project could not be read, so it was not opened.");
+    return null;
+  }
+  if (isObj(obj) && Number.isFinite(obj.version) && obj.version > VERSION) {
+    notice(storage, opts, "This project was made by a newer version of the design tools, so it cannot be opened here.");
+    return null;
+  }
+  const doc = migrate(obj);
+  return validate(doc).ok ? doc : null;
+}
+
+/**
+ * Saves a project and updates the index (newest first) and cmrlm.project.last. The project is validated
+ * first, so a file that loadProject would reject is never stored. Returns { ok, bytes, warning }:
+ *   - over SIZE_MAX: ok false, nothing written, warning names the largest section
+ *   - over SIZE_WARN: ok true, warning set (also names the largest section)
+ *   - storage failure or an invalid project: ok false, warning says why
+ * `warning` is null when there is nothing to say. The project object itself is not changed.
+ */
+function saveProject(storage, doc, opts) {
+  const m = migrate(doc);
+  if (isObj(m) && Number.isFinite(m.version) && m.version > VERSION) return { ok: false, bytes: 0, warning: NEWER_MSG };
+  const check = validate(m);
+  if (!check.ok || !okId(m.id)) {
+    const why = !check.ok ? check.errors[0] : 'id: must be text other than "index" or "last"';
+    return { ok: false, bytes: 0, warning: `This project could not be saved because it is not valid (${why}).` };
+  }
+  let text;
+  try {
+    text = JSON.stringify(m);
+  } catch (e) {
+    return { ok: false, bytes: 0, warning: "This project could not be saved because it could not be written as text." };
+  }
+  const bytes = utf8Length(text);
+  if (bytes > SIZE_MAX) return { ok: false, bytes, warning: sizeMessage(m, bytes, true) };
+  if (!writeRaw(storage, opts, keyFor(m.id), text)) return { ok: false, bytes, warning: NO_WRITE };
+  const entry = {
+    id: m.id,
+    name: typeof m.name === "string" && m.name ? m.name : "Untitled",
+    updatedAt: typeof m.updatedAt === "string" ? m.updatedAt : (typeof m.createdAt === "string" ? m.createdAt : ""),
+    bytes,
+  };
+  const index = readIndex(storage, opts).filter((e) => e.id !== m.id);
+  index.unshift(entry);
+  if (!writeIndex(storage, opts, index)) return { ok: false, bytes, warning: NO_WRITE };
+  writeRaw(storage, opts, KEY_LAST, m.id);
+  return { ok: true, bytes, warning: bytes > SIZE_WARN ? sizeMessage(m, bytes, false) : null };
+}
+
+/**
+ * Removes a saved project: its file, its index entry, and cmrlm.project.last when it points at it.
+ * Returns true when something was removed.
+ */
+function deleteProject(storage, id, opts) {
+  if (!okId(id)) return false;
+  const existed = readRaw(storage, opts, keyFor(id)) !== null;
+  const entries = readIndex(storage, opts);
+  const listed = entries.some((e) => e.id === id);
+  removeRaw(storage, opts, keyFor(id));
+  if (listed) writeIndex(storage, opts, entries.filter((e) => e.id !== id));
+  if (readRaw(storage, opts, KEY_LAST) === id) removeRaw(storage, opts, KEY_LAST);
+  return existed || listed;
+}
+
+/* ---------- export, import, handoff ---------- */
+
+/** "Ravinia test" -> "ravinia-test": lowercase, spaces to dashes, only letters, digits and dashes. */
+function slug(name) {
+  return String(name || "").toLowerCase().normalize("NFKD").replace(/[^\w\s-]/g, "").trim()
+    .replace(/[\s_]+/g, "-").replace(/-+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "project";
+}
+
+/** "Name" -> "Name (2)", "Name (3)" ... the first one not in `taken` (case-insensitive). */
+function copyName(name, taken) {
+  const lower = new Set(taken.map((n) => String(n).trim().toLowerCase()));
+  const base = String(name || "").trim() || "Untitled";
+  for (let n = 2; n < 100000; n++) {
+    const candidate = `${base} (${n})`;
+    if (!lower.has(candidate.toLowerCase())) return candidate;
+  }
+  return `${base} (${newId()})`;
+}
+
+function readWithReader(file) {
+  return new Promise((resolve, reject) => {
+    if (typeof FileReader === "undefined") { reject(new Error("No file reader.")); return; }
+    const fr = new FileReader();
+    fr.onload = () => resolve(String(fr.result));
+    fr.onerror = () => reject(fr.error);
+    fr.readAsText(file);
+  });
+}
+
+/**
+ * The project as a download: { filename: "<name>.cmrlm.json", blob } (an application/json Blob).
+ * Where Blob does not exist (Node before 18) it returns { filename, text } instead.
+ */
+function exportProject(doc) {
+  const filename = `${slug(isObj(doc) ? doc.name : "")}.cmrlm.json`;
+  const text = JSON.stringify(doc);
+  if (typeof Blob !== "undefined") return { filename, blob: new Blob([text], { type: "application/json" }) };
+  return { filename, text };
+}
+
+/**
+ * Imports a project file, then saves it. `file` is a File or Blob (anything with .text()) or a string of JSON.
+ * Validates and migrates it. When its id is already in the list, the copy gets a new id and the name
+ * "Name (2)" (the first free number). Resolves { doc, renamed } (plus `warning` when the saved file is over
+ * SIZE_WARN). Rejects with an Error whose message can be shown to the user.
+ */
+async function importProject(file, storage, opts) {
+  if (file === undefined || file === null) throw new Error("No file was chosen.");
+  if (typeof file !== "string" && typeof file.size === "number" && file.size > MAX_IMPORT_BYTES) {
+    throw new Error("That file is too large to be a project file.");
+  }
+  let text;
+  try {
+    text = typeof file === "string" ? file : typeof file.text === "function" ? await file.text() : await readWithReader(file);
+  } catch (e) {
+    throw new Error("The file could not be read.");
+  }
+  if (typeof text !== "string") throw new Error("The file could not be read.");
+  let obj;
+  try {
+    obj = JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text);
+  } catch (e) {
+    throw new Error("This file is not valid JSON, so it is not a project file.");
+  }
+  if (!isObj(obj) || obj.format !== FORMAT) throw new Error("This file is not a design tools project file.");
+  if (Number.isFinite(obj.version) && obj.version > VERSION) {
+    throw new Error("This file was made by a newer version of the design tools. Update the tools and try again.");
+  }
+  const doc = migrate(obj);
+  const check = validate(doc);
+  if (!check.ok) throw new Error(`This project file is not valid: ${check.errors[0]}.`);
+
+  if (typeof doc.name !== "string" || !doc.name.trim()) doc.name = "Untitled";
+  let renamed = false;
+  if (!okId(doc.id)) {
+    doc.id = newId();
+  } else {
+    const entries = readIndex(storage, opts);
+    if (entries.some((e) => e.id === doc.id) || readRaw(storage, opts, keyFor(doc.id)) !== null) {
+      doc.id = newId();
+      doc.name = copyName(doc.name, entries.map((e) => e.name));
+      renamed = true;
+    }
+  }
+  const res = saveProject(storage, doc, opts);
+  if (!res.ok) throw new Error(res.warning || "The project could not be saved.");
+  const out = { doc, renamed };
+  if (res.warning) out.warning = res.warning;
+  return out;
+}
+
+/**
+ * The project id in `?project=<id>`. `location` is a URL string (or just its query) or an object with a
+ * `search` text, such as the page location. Returns null when there is no usable id.
+ */
+function projectIdFromUrl(location) {
+  try {
+    let s = typeof location === "string" ? location : location && typeof location.search === "string" ? location.search : location && typeof location.href === "string" ? location.href : "";
+    const hash = s.indexOf("#");
+    if (hash >= 0) s = s.slice(0, hash);
+    const q = s.indexOf("?");
+    if (q >= 0) s = s.slice(q + 1);
+    const id = new URLSearchParams(s).get("project");
+    const t = typeof id === "string" ? id.trim() : "";
+    return okId(t) ? t : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Hands the project to another tool: saves a copy of `doc` with the log entry
+ * { at, tool: fromToolId, action: "send", note: "<from> → <to>" } and returns the URL `../<toolId>/?project=<id>`.
+ * `doc` itself is not changed. Throws when the project cannot be saved (the next tool could not load it).
+ */
+function sendTo(storage, doc, toolId, fromToolId, opts) {
+  if (typeof toolId !== "string" || !/^[\w-]+$/.test(toolId)) throw new Error('sendTo: toolId must be a tool id such as "plate".');
+  if (!isObj(doc)) throw new Error("sendTo: the project must be an object.");
+  if (Number.isFinite(doc.version) && doc.version > VERSION) throw readOnlyError();
+  const from = typeof fromToolId === "string" && fromToolId ? fromToolId : "workspace";
+  const m = migrate(doc);
+  const next = m === doc ? clone(doc) : m;
+  appendLog(next, { at: stamp(next.updatedAt), tool: from, action: "send", note: `${from} → ${toolId}` });
+  const res = saveProject(storage, next, opts);
+  if (!res.ok) {
+    const e = new Error(res.warning || "The project could not be saved.");
+    e.saveFailed = true;
+    throw e;
+  }
+  return `../${toolId}/?project=${encodeURIComponent(next.id)}`;
+}
+
+return { FORMAT, VERSION, SECTIONS, SIZE_WARN, SIZE_MAX, newProject, validate, migrate, getSection, writeSection, toProject, toLocal, transformRing, transformMultiPoly, siteContextFor, projectBytes, largestSection, listProjects, loadProject, saveProject, deleteProject, exportProject, importProject, projectIdFromUrl, sendTo };
+})();
+
+/* ---- src/tower/derived.js ---- */
+const TowerDerivedMod = {};   // src/tower/derived.js is missing: an empty stub until that module is written
+
+/* ---- src/shared/solar.js ---- */
+const SolarMod = (() => {
+// Solar position, sunrise and sunset, and US time zones for the sun study.
+// Source: docs/tower-project-sun-plan.md sections 3.3 and 3.4 (the NOAA Solar Calculator equations, after Meeus).
+// Pure ES module: no DOM, no Three.js, inputs never changed. Angles are degrees; times are minutes after
+// local midnight unless named otherwise. Azimuth is a compass bearing: 0 = north, clockwise.
+
+const ATLANTA = { lat: 33.749, lon: -84.388 };
+
+const RAD = Math.PI / 180;
+const rad = (d) => d * RAD;
+const deg = (r) => r / RAD;
+const mod = (a, n) => ((a % n) + n) % n;
+const clamp1 = (v) => Math.max(-1, Math.min(1, v));
+const DAY_MS = 86400000;
+
+const ZONES = {
+  "us-eastern": { std: -5, dst: true },
+  "us-central": { std: -6, dst: true },
+  "us-mountain": { std: -7, dst: true },
+  "us-pacific": { std: -8, dst: true },
+  "us-arizona": { std: -7, dst: false },
+};
+
+/* ----------------------------------------------------------------- dates */
+
+/** "YYYY-MM-DD" (or "MM-DD", read in the current year) → { y, m, d }. */
+function parseDate(localDate) {
+  if (localDate && typeof localDate === "object" && Number.isFinite(localDate.y)) return { y: localDate.y, m: localDate.m, d: localDate.d };
+  const s = String(localDate || "");
+  let mt = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s);
+  if (mt) return { y: +mt[1], m: +mt[2], d: +mt[3] };
+  mt = /^(\d{1,2})-(\d{1,2})$/.exec(s);
+  if (mt) return { y: new Date().getFullYear(), m: +mt[1], d: +mt[2] };
+  throw new Error(`solar: bad date "${s}" (use YYYY-MM-DD)`);
+}
+
+/** Day number (days since 1970-01-01) of a calendar date. */
+const dayNum = ({ y, m, d }) => Math.round(Date.UTC(y, m - 1, d) / DAY_MS);
+
+/** Calendar date of a day number. */
+function fromDayNum(n) {
+  const t = new Date(n * DAY_MS);
+  return { y: t.getUTCFullYear(), m: t.getUTCMonth() + 1, d: t.getUTCDate() };
+}
+
+/** Rolls minutes outside 0 … 1440 into the next or previous day. */
+function normalize(localDate, localMinutes) {
+  const day = dayNum(parseDate(localDate));
+  const mins = Number.isFinite(localMinutes) ? localMinutes : 0;
+  const k = Math.floor(mins / 1440);
+  return { date: fromDayNum(day + k), minutes: mins - k * 1440 };
+}
+
+/** Day of month of the nth Sunday of a month (n = 1, 2, …). */
+function nthSunday(y, m, n) {
+  const dow = new Date(Date.UTC(y, m - 1, 1)).getUTCDay();   // 0 = Sunday
+  return 1 + ((7 - dow) % 7) + 7 * (n - 1);
+}
+
+/** US daylight time: second Sunday of March 2:00 standard to first Sunday of November 2:00 daylight. */
+function usDST(date, minutes) {
+  const { y, m, d } = date;
+  if (m < 3 || m > 11) return false;
+  if (m > 3 && m < 11) return true;
+  if (m === 3) {
+    const s = nthSunday(y, 3, 2);
+    if (d !== s) return d > s;
+    return minutes >= 120;         // 2:00 to 3:00 does not exist; it maps forward to daylight time
+  }
+  const e = nthSunday(y, 11, 1);
+  if (d !== e) return d < e;
+  return minutes < 120;            // 1:00 to 2:00 happens twice; the plan reads it as daylight time
+}
+
+/** zoneOrOffset: a zone name, a number of hours, or { zone, offset } (the state.sun.tz shape). */
+function zoneParts(zoneOrOffset, fixedOffset) {
+  if (Number.isFinite(zoneOrOffset)) return { zone: "fixed", offset: zoneOrOffset };
+  if (zoneOrOffset && typeof zoneOrOffset === "object") {
+    return { zone: String(zoneOrOffset.zone || "fixed"), offset: Number.isFinite(zoneOrOffset.offset) ? zoneOrOffset.offset : (Number.isFinite(fixedOffset) ? fixedOffset : 0) };
+  }
+  return { zone: String(zoneOrOffset || "fixed"), offset: Number.isFinite(fixedOffset) ? fixedOffset : 0 };
+}
+
+/* ------------------------------------------------------------ time zones */
+
+/**
+ * Hours from UTC for a local date and time (plan section 3.4). zone: us-eastern | us-central | us-mountain |
+ * us-pacific | us-arizona | fixed (then fixedOffset, default 0). zone may also be a number or { zone, offset }.
+ * localDate "YYYY-MM-DD"; localMinutes after local midnight (outside 0 … 1440 rolls the date).
+ */
+function tzOffset(zone, localDate, localMinutes, fixedOffset) {
+  const z = zoneParts(zone, fixedOffset);
+  const info = ZONES[z.zone];
+  if (!info) return z.offset;
+  if (!info.dst) return info.std;
+  const { date, minutes } = normalize(localDate, localMinutes);
+  return usDST(date, minutes) ? info.std + 1 : info.std;
+}
+
+/** Local date and minutes → the UTC instant (a Date). */
+function localToUTC(localDate, localMinutes, zoneOrOffset) {
+  const { date, minutes } = normalize(localDate, localMinutes);
+  const off = tzOffset(zoneOrOffset, date, minutes);
+  return new Date(dayNum(date) * DAY_MS + (minutes - 60 * off) * 60000);
+}
+
+/* -------------------------------------------------------- solar position */
+
+/** The date-only parts of the NOAA sheet for an instant (ms): declination, equation of time. */
+function solarCore(ms) {
+  const JD = ms / DAY_MS + 2440587.5;
+  const T = (JD - 2451545) / 36525;
+  const L0 = mod(280.46646 + T * (36000.76983 + 0.0003032 * T), 360);
+  const M = 357.52911 + T * (35999.05029 - 0.0001537 * T);
+  const e = 0.016708634 - T * (0.000042037 + 0.0000001267 * T);
+  const Mr = rad(M);
+  const C = Math.sin(Mr) * (1.914602 - T * (0.004817 + 0.000014 * T)) + Math.sin(2 * Mr) * (0.019993 - 0.000101 * T) + Math.sin(3 * Mr) * 0.000289;
+  const omega = rad(125.04 - 1934.136 * T);
+  const lambda = L0 + C - 0.00569 - 0.00478 * Math.sin(omega);
+  const eps0 = 23 + (26 + (21.448 - T * (46.815 + T * (0.00059 - 0.001813 * T))) / 60) / 60;
+  const eps = eps0 + 0.00256 * Math.cos(omega);
+  const decl = deg(Math.asin(Math.sin(rad(eps)) * Math.sin(rad(lambda))));
+  const y = Math.tan(rad(eps / 2)) ** 2;
+  const L0r = rad(L0);
+  const eot = 4 * deg(y * Math.sin(2 * L0r) - 2 * e * Math.sin(Mr) + 4 * e * y * Math.sin(Mr) * Math.cos(2 * L0r)
+    - 0.5 * y * y * Math.sin(4 * L0r) - 1.25 * e * e * Math.sin(2 * Mr));
+  return { decl, eot };
+}
+
+/** Atmospheric refraction in degrees for a geometric altitude h (the NOAA sheet). */
+function refraction(h) {
+  let arcsec;
+  if (h > 85) arcsec = 0;
+  else if (h > 5) {
+    const t = Math.tan(rad(h));
+    arcsec = 58.1 / t - 0.07 / t ** 3 + 0.000086 / t ** 5;
+  } else if (h > -0.575) arcsec = 1735 + h * (-518.2 + h * (103.4 + h * (-12.79 + h * 0.711)));
+  else arcsec = -20.772 / Math.tan(rad(h));
+  return arcsec / 3600;
+}
+
+/**
+ * Sun position for a place and a UTC instant (Date or ms). Plan section 3.3.
+ * → { azimuth (compass, 0 = north, clockwise), altitude (apparent, with refraction), altitudeGeometric,
+ *     declination, eot (minutes) }
+ */
+function sunPosition(lat, lon, dateUTC) {
+  const ms = dateUTC instanceof Date ? dateUTC.getTime() : +dateUTC;
+  const { decl, eot } = solarCore(ms);
+  const utcMin = mod(ms / 60000, 1440);
+  const tst = mod(utcMin + eot + 4 * lon, 1440);
+  let H = tst / 4 - 180;
+  if (H < -180) H += 360;
+  const phi = rad(lat), dr = rad(decl), Hr = rad(H);
+  const cosZ = clamp1(Math.sin(phi) * Math.sin(dr) + Math.cos(phi) * Math.cos(dr) * Math.cos(Hr));
+  const Z = deg(Math.acos(cosZ));
+  const h = 90 - Z;
+  const sinZ = Math.sin(rad(Z));
+  let azimuth;
+  const den = Math.cos(phi) * sinZ;
+  if (Math.abs(den) < 1e-12) azimuth = lat > 0 ? 180 : 0;   // sun at the zenith or a pole
+  else {
+    const a = deg(Math.acos(clamp1((Math.sin(phi) * cosZ - Math.sin(dr)) / den)));
+    azimuth = H > 0 ? mod(a + 180, 360) : mod(540 - a, 360);
+  }
+  return { azimuth, altitude: h + refraction(h), altitudeGeometric: h, declination: decl, eot };
+}
+
+/* ------------------------------------------------------ sunrise / sunset */
+
+/** Hour angle (degrees) of the sun at apparent altitude −0.833°, or ±Infinity for polar day / night. */
+function riseHourAngle(lat, decl) {
+  const phi = rad(lat), dr = rad(decl);
+  const c = (Math.cos(rad(90.833)) - Math.sin(phi) * Math.sin(dr)) / (Math.cos(phi) * Math.cos(dr));
+  if (c < -1) return Infinity;    // the sun never sets
+  if (c > 1) return -Infinity;    // the sun never rises
+  return deg(Math.acos(c));
+}
+
+/**
+ * Sunrise, solar noon and sunset as local minutes (plan section 3.3). An event that does not happen
+ * (polar day or night) is null, and `polar` says which: "day" | "night" | null.
+ * → { sunrise, noon, sunset, polar }
+ */
+function sunTimes(lat, lon, localDate, zoneOrOffset) {
+  const date = parseDate(localDate);
+  const day0 = dayNum(date) * DAY_MS;
+  const offAt = (mins) => tzOffset(zoneOrOffset, date, mins);
+  const utcMs = (localMins) => day0 + (localMins - 60 * offAt(localMins)) * 60000;
+  // solar noon, iterated with the equation of time at the event
+  let noon = 720 - 4 * lon + 60 * offAt(720);
+  for (let i = 0; i < 3; i++) noon = 720 - 4 * lon - solarCore(utcMs(noon)).eot + 60 * offAt(noon);
+  const event = (sign) => {
+    let t = noon, H0 = 0;
+    for (let i = 0; i < 3; i++) {
+      const c = solarCore(utcMs(t));
+      H0 = riseHourAngle(lat, c.decl);
+      if (!Number.isFinite(H0)) return { t: null, polar: H0 > 0 ? "day" : "night" };
+      t = 720 - 4 * lon - c.eot + 60 * offAt(t) + sign * 4 * H0;
+    }
+    return { t, polar: null };
+  };
+  const rise = event(-1), set = event(1);
+  const polar = rise.polar || set.polar;
+  return { sunrise: polar ? null : rise.t, noon, sunset: polar ? null : set.t, polar };
+}
+
+const hhmm = (mins) => {
+  const m = Math.round(mins);
+  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+};
+
+/**
+ * The sun path over one local day, 0:00 to 24:00 at stepMin (default 15).
+ * → [{ minutes, time: "HH:MM", azimuth, altitude }] (altitude apparent; negative below the horizon)
+ */
+function dayPath(lat, lon, localDate, zoneOrOffset, stepMin) {
+  const step = Number.isFinite(stepMin) && stepMin > 0 ? stepMin : 15;
+  const out = [];
+  for (let m = 0; m <= 1440 + 1e-9; m += step) {
+    const p = sunPosition(lat, lon, localToUTC(localDate, m, zoneOrOffset));
+    out.push({ minutes: m, time: hhmm(m), azimuth: p.azimuth, altitude: p.altitude });
+  }
+  return out;
+}
+
+/** A true bearing in the local frame of a placement turned by `rotation` (plan section 3.2): (A + r) mod 360. */
+function localBearing(trueAzimuth, rotation) {
+  return mod((+trueAzimuth || 0) + (+rotation || 0), 360);
+}
+
+return { ATLANTA, tzOffset, localToUTC, sunPosition, sunTimes, dayPath, localBearing };
+})();
+
+/* ---- src/tower/sunhours.js ---- */
+const SunHoursMod = (() => {
+// Sun hours on flat ground: shadow casters, ground shadows, the node grid and the hours count.
+// Source: docs/tower-project-sun-plan.md sections 3.6 and 4.
+// Pure ES module: no DOM, no Three.js, inputs never changed. Clipper through globalThis.ClipperLib at SCALE 1000.
+// Frames: the grid frame is the project frame when a placement is given, else the tower local frame. In both,
+// north is +y and every azimuth is a compass bearing in that frame (0 = north, clockwise).
+// Ground is flat at the tower ground floor (plan decision 7): caster heights are above that floor.
+
+const { sunPosition, sunTimes, localToUTC } = SolarMod;
+
+const SCALE = 1000;
+const RAD = Math.PI / 180;
+
+const num = (v, d = 0) => (Number.isFinite(+v) && v !== null && v !== "" ? +v : d);
+const CL = () => {
+  const c = globalThis.ClipperLib;
+  if (!c) throw new Error("sunhours: ClipperLib is not loaded");
+  return c;
+};
+
+/* --------------------------------------------------------------- rings */
+
+function signedArea(r) {
+  let a = 0;
+  for (let i = 0, n = r.length; i < n; i++) {
+    const p = r[i], q = r[(i + 1) % n];
+    a += p[0] * q[1] - q[0] * p[1];
+  }
+  return a / 2;
+}
+
+/** A copy of the ring as [x, y] pairs, without a repeated closing point, with the asked orientation. */
+function cleanRing(ring, ccw) {
+  if (!Array.isArray(ring)) return [];
+  const out = [];
+  for (const p of ring) {
+    if (!Array.isArray(p) || !Number.isFinite(+p[0]) || !Number.isFinite(+p[1])) continue;
+    const q = [+p[0], +p[1]];
+    const last = out[out.length - 1];
+    if (last && last[0] === q[0] && last[1] === q[1]) continue;
+    out.push(q);
+  }
+  if (out.length > 1 && out[0][0] === out[out.length - 1][0] && out[0][1] === out[out.length - 1][1]) out.pop();
+  if (out.length < 3) return [];
+  const a = signedArea(out);
+  if (a === 0) return [];
+  if ((a > 0) !== ccw) out.reverse();
+  return out;
+}
+
+/** Convex test with collinear points allowed (the ring is CCW). */
+function isConvexRing(r) {
+  const n = r.length;
+  if (n < 3) return false;
+  for (let i = 0; i < n; i++) {
+    const a = r[i], b = r[(i + 1) % n], c = r[(i + 2) % n];
+    const cr = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
+    if (cr < -1e-9 * (1 + Math.abs(a[0]) + Math.abs(a[1]))) return false;
+  }
+  return true;
+}
+
+/** Monotone-chain convex hull of [x, y] points → CCW ring. */
+function hull(points) {
+  const pts = points.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  if (pts.length < 3) return pts;
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lower = [], upper = [];
+  for (const p of pts) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+    lower.push(p);
+  }
+  for (let i = pts.length - 1; i >= 0; i--) {
+    const p = pts[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+    upper.push(p);
+  }
+  lower.pop(); upper.pop();
+  return lower.concat(upper);
+}
+
+const toPath = (ring, dx = 0, dy = 0) => ring.map((p) => ({ X: Math.round((p[0] + dx) * SCALE), Y: Math.round((p[1] + dy) * SCALE) }));
+const fromPath = (path) => path.map((p) => [p.X / SCALE, p.Y / SCALE]);
+
+/* ----------------------------------------------------------- placement */
+
+/** [sin, cos] of degrees, exact for the quarter turns (as src/shared/project.js). */
+function sincos(d) {
+  const a = ((d % 360) + 360) % 360;
+  if (a === 0) return [0, 1];
+  if (a === 90) return [1, 0];
+  if (a === 180) return [0, -1];
+  if (a === 270) return [-1, 0];
+  return [Math.sin(a * RAD), Math.cos(a * RAD)];
+}
+
+/** Local → project (spec 4): xp = x cos r − y sin r + x0, yp = x sin r + y cos r + y0. Identity without a placement. */
+function framer(placement) {
+  const p = placement && typeof placement === "object" && placement.placement && typeof placement.placement === "object" ? placement.placement : placement;
+  if (!p || typeof p !== "object") return (x, y) => [x, y];
+  const px = num(p.x), py = num(p.y), [s, c] = sincos(num(p.rotation));
+  if (px === 0 && py === 0 && s === 0 && c === 1) return (x, y) => [x, y];
+  return (x, y) => [x * c - y * s + px, x * s + y * c + py];
+}
+
+/* -------------------------------------------------------------- casters */
+
+function prismCasters(mp, z0, z1, kind, role, fr) {
+  const out = [];
+  for (const poly of Array.isArray(mp) ? mp : []) {
+    if (!poly) continue;
+    const polygon = cleanRing((poly.outer || []).map((q) => fr(+q[0], +q[1])), true);
+    if (!polygon.length) continue;
+    const holes = (Array.isArray(poly.holes) ? poly.holes : []).map((h) => cleanRing(h.map((q) => fr(+q[0], +q[1])), false)).filter((h) => h.length);
+    const c = { polygon, holes, z0, z1, kind, convex: !holes.length && isConvexRing(polygon) };
+    if (role) c.role = role;
+    out.push(c);
+  }
+  return out;
+}
+
+function meshCaster(solid, fr) {
+  const pos = Array.isArray(solid.positions) || ArrayBuffer.isView(solid.positions) ? solid.positions : [];
+  const idx = Array.isArray(solid.indices) || ArrayBuffer.isView(solid.indices) ? solid.indices : [];
+  if (pos.length < 9 || idx.length < 3) return null;
+  const positions = new Array(pos.length);
+  let z0 = Infinity, z1 = -Infinity;
+  const xy = [];
+  for (let i = 0; i < pos.length; i += 3) {
+    const [x, y] = fr(+pos[i], +pos[i + 1]);
+    positions[i] = x; positions[i + 1] = y; positions[i + 2] = +pos[i + 2];
+    xy.push([x, y]);
+    z0 = Math.min(z0, +pos[i + 2]); z1 = Math.max(z1, +pos[i + 2]);
+  }
+  const polygon = hull(xy);
+  if (polygon.length < 3) return null;
+  // Convex when every vertex lies on one side of every face plane (a spire; a sloped crown on a convex plate).
+  const I = Array.from(idx);
+  let convex = true;
+  for (let f = 0; f + 2 < I.length && convex; f += 3) {
+    const A = 3 * I[f], B = 3 * I[f + 1], Cc = 3 * I[f + 2];
+    const ux = positions[B] - positions[A], uy = positions[B + 1] - positions[A + 1], uz = positions[B + 2] - positions[A + 2];
+    const vx = positions[Cc] - positions[A], vy = positions[Cc + 1] - positions[A + 1], vz = positions[Cc + 2] - positions[A + 2];
+    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    const nl = Math.hypot(nx, ny, nz);
+    if (nl < 1e-12) continue;
+    let pos = false, neg = false;
+    for (let i = 0; i < positions.length; i += 3) {
+      const d = (nx * (positions[i] - positions[A]) + ny * (positions[i + 1] - positions[A + 1]) + nz * (positions[i + 2] - positions[A + 2])) / nl;
+      if (d > 1e-6) pos = true; else if (d < -1e-6) neg = true;
+      if (pos && neg) { convex = false; break; }
+    }
+  }
+  return { polygon, holes: [], z0, z1, kind: "crown", role: solid.role || "crown", convex, mesh: { positions, indices: I } };
+}
+
+const ringKey = (mp) => JSON.stringify((mp || []).map((p) => [p.outer, p.holes || []]));
+
+/**
+ * Every shadow caster of a tower in the grid frame (plan section 3.6).
+ * state: the tower state (context.show, context.blocks); built: buildPlates(state); placement: optional
+ * { x, y, rotation, baseZ } (or a section that holds one) → project frame; none → local frame.
+ * Stacked plates with the same polygons merge into one caster.
+ * → [{ polygon: Ring (CCW), holes: Ring[] (CW), z0, z1, kind: "plate" | "crown" | "context", convex,
+ *      role? (crown solids), mesh? ({ positions, indices } for sloped and spire crowns) }]
+ */
+function casters(state, built, placement) {
+  const fr = framer(placement);
+  const out = [];
+  const plates = ((built && built.plates) || []).filter((p) => p && !p.void && Array.isArray(p.polygons) && p.polygons.length)
+    .slice().sort((a, b) => num(a.z) - num(b.z));
+  let run = null;
+  const flush = () => { if (run) out.push(...prismCasters(run.mp, run.z0, run.z1, "plate", null, fr)); run = null; };
+  for (const p of plates) {
+    const z0 = num(p.z), z1 = z0 + num(p.ftf);
+    if (!(z1 > z0)) continue;
+    const key = ringKey(p.polygons);
+    if (run && run.key === key && Math.abs(run.z1 - z0) < 1e-6) { run.z1 = z1; continue; }
+    flush();
+    run = { key, mp: p.polygons, z0, z1 };
+  }
+  flush();
+  for (const s of (built && built.solids) || []) {
+    if (!s) continue;
+    if (s.kind === "prism") {
+      const z0 = num(s.z0), z1 = num(s.z1);
+      if (z1 > z0) out.push(...prismCasters(s.polygons, z0, z1, "crown", s.role || "crown", fr));
+    } else if (s.kind === "mesh") {
+      const c = meshCaster(s, fr);
+      if (c) out.push(c);
+    }
+  }
+  const ctx = state && state.context;
+  if (ctx && ctx.show !== false && Array.isArray(ctx.blocks)) {
+    for (const b of ctx.blocks) {
+      if (!b) continue;
+      const w = num(b.w), d = num(b.d), h = num(b.h), x = num(b.x), y = num(b.y), base = num(b.base);
+      if (!(w > 0 && d > 0 && h > 0)) continue;
+      const ring = [[x - w / 2, y - d / 2], [x + w / 2, y - d / 2], [x + w / 2, y + d / 2], [x - w / 2, y + d / 2]];
+      out.push(...prismCasters([{ outer: ring, holes: [] }], base, base + h, "context", null, fr));
+    }
+  }
+  return out;
+}
+
+/* -------------------------------------------------------------- shadows */
+
+/** Ground offset per foot of height, pointing away from the sun: v = −(sin A, cos A) / tan h. */
+function shadowVector(azimuth, altitude) {
+  const t = Math.tan(altitude * RAD);
+  return [-Math.sin(azimuth * RAD) / t, -Math.cos(azimuth * RAD) / t];
+}
+
+/** Clipper paths (SCALE) of one caster ground shadow; outers CCW, holes CW. */
+function shadowPaths(c, v) {
+  const C = CL();
+  if (c.mesh) {
+    const P = c.mesh.positions, I = c.mesh.indices;
+    const proj = (k) => [P[3 * k] + P[3 * k + 2] * v[0], P[3 * k + 1] + P[3 * k + 2] * v[1]];
+    if (c.convex) {
+      const pts = [];
+      for (let k = 0; k < P.length / 3; k++) pts.push(proj(k));
+      const h = hull(pts);
+      return h.length >= 3 ? [toPath(h)] : [];
+    }
+    const tris = [];
+    for (let i = 0; i + 2 < I.length; i += 3) {
+      const t = cleanRing([proj(I[i]), proj(I[i + 1]), proj(I[i + 2])], true);
+      if (t.length === 3) tris.push(toPath(t));
+    }
+    const res = [];
+    const cl = new C.Clipper();
+    cl.AddPaths(tris, C.PolyType.ptSubject, true);
+    cl.Execute(C.ClipType.ctUnion, res, C.PolyFillType.pftNonZero, C.PolyFillType.pftNonZero);
+    return res;
+  }
+  const ax = c.z0 * v[0], ay = c.z0 * v[1], bx = c.z1 * v[0], by = c.z1 * v[1];
+  const moveless = Math.abs(bx - ax) * SCALE < 0.5 && Math.abs(by - ay) * SCALE < 0.5;
+  const holes = c.holes || [];
+  if (moveless) return [toPath(c.polygon, ax, ay), ...holes.map((h) => toPath(h, ax, ay))];
+  if (c.convex && !holes.length) {
+    const pts = [];
+    for (const p of c.polygon) { pts.push([p[0] + ax, p[1] + ay]); pts.push([p[0] + bx, p[1] + by]); }
+    return [toPath(hull(pts))];
+  }
+  // The sweep of the rings along the segment, plus the polygon at the segment start (Clipper adds it
+  // for closed paths): exactly the region the prism shades.
+  const seg = [{ X: Math.round(ax * SCALE), Y: Math.round(ay * SCALE) }, { X: Math.round(bx * SCALE), Y: Math.round(by * SCALE) }];
+  return C.Clipper.MinkowskiSum(seg, [toPath(c.polygon), ...holes.map((h) => toPath(h))], true);
+}
+
+function unionPaths(paths, tree) {
+  const C = CL();
+  const cl = new C.Clipper();
+  cl.AddPaths(paths, C.PolyType.ptSubject, true);
+  const out = tree ? new C.PolyTree() : [];
+  cl.Execute(C.ClipType.ctUnion, out, C.PolyFillType.pftNonZero, C.PolyFillType.pftNonZero);
+  return out;
+}
+
+function treeToMP(tree) {
+  const mp = [];
+  const walk = (node) => {
+    for (const outer of node.Childs()) {
+      mp.push({ outer: cleanRing(fromPath(outer.Contour()), true), holes: outer.Childs().map((h) => cleanRing(fromPath(h.Contour()), false)) });
+      for (const h of outer.Childs()) walk(h);
+    }
+  };
+  walk(tree);
+  return mp.filter((p) => p.outer.length);
+}
+
+/**
+ * The ground shadow of one caster for a sun direction (plan section 3.6 step 2). Convex rings use the
+ * convex hull of the polygon moved by z0·v and z1·v; other rings a Clipper Minkowski sum.
+ * → MultiPoly [{ outer (CCW), holes (CW) }]; [] when the sun is at or below the horizon.
+ */
+function shadowPolygon(caster, azimuth, altitude) {
+  if (!caster || !(altitude > 0)) return [];
+  return treeToMP(unionPaths(shadowPaths(caster, shadowVector(azimuth, altitude)), true));
+}
+
+/* ----------------------------------------------------------------- grid */
+
+/**
+ * The node grid over an extent { minX, minY, maxX, maxY } at `spacing` ft. Node (i, j) sits at
+ * (x0 + i·spacing, y0 + j·spacing); index j·nx + i (row-major from the south).
+ * → { spacing, n (nodes on the longer side; the side count for a square), nx, ny, x0, y0 }
+ */
+function sunGrid(extentBox, spacing) {
+  const s = num(spacing, 10) > 0 ? num(spacing, 10) : 10;
+  const b = extentBox || {};
+  const minX = num(b.minX), minY = num(b.minY);
+  const maxX = Math.max(minX, num(b.maxX, minX)), maxY = Math.max(minY, num(b.maxY, minY));
+  const nx = Math.floor((maxX - minX) / s + 1e-9) + 1, ny = Math.floor((maxY - minY) / s + 1e-9) + 1;
+  return { spacing: s, n: Math.max(nx, ny), nx, ny, x0: minX, y0: minY };
+}
+
+/* ------------------------------------------------------------- samples */
+
+/**
+ * Sample times for one local date (plan section 3.6): the day from sunrise to sunset cut into `stepMin`
+ * intervals; each sample sits at the middle of its interval and carries the interval length `dt`
+ * (minutes; the last one is shorter). The dt values add up to the day length. Polar day covers 0 … 1440;
+ * polar night gives [].
+ * → [{ minutes, azimuth, altitude, dt }]
+ */
+function samplesFor(lat, lon, localDate, zoneOrOffset, stepMin) {
+  const step = num(stepMin, 30) > 0 ? num(stepMin, 30) : 30;
+  const t = sunTimes(lat, lon, localDate, zoneOrOffset);
+  let start, end;
+  if (t.polar === "night") return [];
+  if (t.polar === "day") { start = 0; end = 1440; } else { start = t.sunrise; end = t.sunset; }
+  const out = [];
+  for (let k = 0; start + k * step < end - 1e-9; k++) {
+    const a = start + k * step;
+    const dt = Math.min(step, end - a);
+    const minutes = a + dt / 2;
+    const p = sunPosition(lat, lon, localToUTC(localDate, minutes, zoneOrOffset));
+    out.push({ minutes, azimuth: p.azimuth, altitude: p.altitude, dt });
+  }
+  return out;
+}
+
+/* ------------------------------------------------------------ sun hours */
+
+/** Marks the grid nodes inside the even-odd region of `paths` (row scan). */
+function rasterize(paths, grid, mask, rows) {
+  const { nx, ny, x0, y0, spacing: s } = grid;
+  for (let j = 0; j < ny; j++) rows[j].length = 0;
+  for (const path of paths) {
+    const n = path.length;
+    for (let k = 0; k < n; k++) {
+      const p = path[k], q = path[(k + 1) % n];
+      const ya = p.Y / SCALE, yb = q.Y / SCALE;
+      if (ya === yb) continue;
+      const lo = Math.min(ya, yb), hi = Math.max(ya, yb);
+      let j0 = Math.ceil((lo - y0) / s), j1 = Math.ceil((hi - y0) / s) - 1;   // rows with lo ≤ y < hi
+      if (j0 < 0) j0 = 0;
+      if (j1 > ny - 1) j1 = ny - 1;
+      if (j0 > j1) continue;
+      const xa = p.X / SCALE, xb = q.X / SCALE, k1 = (xb - xa) / (yb - ya);
+      for (let j = j0; j <= j1; j++) rows[j].push(xa + (y0 + j * s - ya) * k1);
+    }
+  }
+  for (let j = 0; j < ny; j++) {
+    const r = rows[j];
+    if (r.length < 2) continue;
+    r.sort((a, b) => a - b);
+    const base = j * nx;
+    for (let k = 0; k + 1 < r.length; k += 2) {
+      let i0 = Math.ceil((r[k] - x0) / s), i1 = Math.ceil((r[k + 1] - x0) / s) - 1;   // lo ≤ x < hi
+      if (i0 < 0) i0 = 0;
+      if (i1 > nx - 1) i1 = nx - 1;
+      for (let i = i0; i <= i1; i++) mask[base + i] = 1;
+    }
+  }
+}
+
+/**
+ * Hours of direct sun per grid node (plan section 3.6). Synchronous; the page calls it with a few samples
+ * at a time and adds the `hours` arrays. Samples at or below the horizon are skipped.
+ * samples: [{ minutes, azimuth, altitude, dt }]; onProgress(done, total) after each sample;
+ * shouldStop() checked before each sample.
+ * → { hours: Float32Array (nx·ny, hours, row-major from the south), samples (samples counted), cancelled }
+ */
+function sunHours(casterList, grid, samples, { onProgress, shouldStop } = {}) {
+  const nx = grid.nx, ny = grid.ny, N = nx * ny;
+  const acc = new Float64Array(N);
+  const mask = new Uint8Array(N);
+  const rows = Array.from({ length: ny }, () => []);
+  const list = Array.isArray(samples) ? samples : [];
+  const cs = Array.isArray(casterList) ? casterList : [];
+  let used = 0, cancelled = false;
+  for (let k = 0; k < list.length; k++) {
+    if (typeof shouldStop === "function" && shouldStop()) { cancelled = true; break; }
+    const smp = list[k];
+    const dt = num(smp && smp.dt), alt = num(smp && smp.altitude, -1);
+    if (alt > 0 && dt > 0) {
+      const v = shadowVector(num(smp.azimuth), alt);
+      const all = [];
+      for (const c of cs) for (const p of shadowPaths(c, v)) all.push(p);
+      mask.fill(0);
+      if (all.length) rasterize(unionPaths(all, false), grid, mask, rows);
+      const h = dt / 60;
+      for (let i = 0; i < N; i++) if (!mask[i]) acc[i] += h;
+      used++;
+    }
+    if (typeof onProgress === "function") onProgress(k + 1, list.length);
+  }
+  return { hours: Float32Array.from(acc), samples: used, cancelled };
+}
+
+/* ------------------------------------------------------------- ray cast */
+
+function pointInRing(r, x, y) {
+  let inside = false;
+  for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+    const a = r[i], b = r[j];
+    if ((a[1] > y) !== (b[1] > y) && x < ((b[0] - a[0]) * (y - a[1])) / (b[1] - a[1]) + a[0]) inside = !inside;
+  }
+  return inside;
+}
+
+function segsCross(p, q, a, b) {
+  const d = (u, v, w) => (v[0] - u[0]) * (w[1] - u[1]) - (v[1] - u[1]) * (w[0] - u[0]);
+  const d1 = d(a, b, p), d2 = d(a, b, q), d3 = d(p, q, a), d4 = d(p, q, b);
+  return ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0));
+}
+
+function rayHitsTri(o, dir, a, b, c) {
+  const e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], e2 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+  const p = [dir[1] * e2[2] - dir[2] * e2[1], dir[2] * e2[0] - dir[0] * e2[2], dir[0] * e2[1] - dir[1] * e2[0]];
+  const det = e1[0] * p[0] + e1[1] * p[1] + e1[2] * p[2];
+  if (Math.abs(det) < 1e-12) return false;
+  const inv = 1 / det;
+  const s = [o[0] - a[0], o[1] - a[1], o[2] - a[2]];
+  const u = (s[0] * p[0] + s[1] * p[1] + s[2] * p[2]) * inv;
+  if (u < 0 || u > 1) return false;
+  const q = [s[1] * e1[2] - s[2] * e1[1], s[2] * e1[0] - s[0] * e1[2], s[0] * e1[1] - s[1] * e1[0]];
+  const w = (dir[0] * q[0] + dir[1] * q[1] + dir[2] * q[2]) * inv;
+  if (w < 0 || u + w > 1) return false;
+  return (e2[0] * q[0] + e2[1] * q[1] + e2[2] * q[2]) * inv > 1e-9;
+}
+
+/**
+ * The direct ray cast (for tests): is the ground point (x, y) in sun? The ray from the point toward the sun
+ * is tested against every caster solid. Sun at or below the horizon → false.
+ */
+function isLit(casterList, x, y, azimuth, altitude) {
+  if (!(altitude > 0)) return false;
+  const t = Math.tan(altitude * RAD);
+  const wx = Math.sin(azimuth * RAD) / t, wy = Math.cos(azimuth * RAD) / t;   // ground offset per foot of rise
+  for (const c of casterList || []) {
+    if (c.mesh) {
+      const P = c.mesh.positions, I = c.mesh.indices;
+      const o = [x, y, 0], dir = [wx, wy, 1];
+      const V = (k) => [P[3 * k], P[3 * k + 1], P[3 * k + 2]];
+      for (let i = 0; i + 2 < I.length; i += 3) if (rayHitsTri(o, dir, V(I[i]), V(I[i + 1]), V(I[i + 2]))) return false;
+      continue;
+    }
+    const p = [x + c.z0 * wx, y + c.z0 * wy], q = [x + c.z1 * wx, y + c.z1 * wy];
+    const inRegion = (pt) => pointInRing(c.polygon, pt[0], pt[1]) && !(c.holes || []).some((h) => pointInRing(h, pt[0], pt[1]));
+    if (inRegion(p) || inRegion(q)) return false;
+    for (const r of [c.polygon, ...(c.holes || [])]) {
+      for (let i = 0, n = r.length; i < n; i++) if (segsCross(p, q, r[i], r[(i + 1) % n])) return false;
+    }
+  }
+  return true;
+}
+
+return { casters, shadowPolygon, sunGrid, samplesFor, sunHours, isLit };
+})();
 
 /* ==========================================================================
    SHARED: units
@@ -1260,6 +2732,7 @@ function unitBreakdown(m) {
   const kinds = new Set(dwelling.map((r) => r.kind));
   return { rows, dwelling, spaces, total, hasTotal: dwelling.length > 0, label: kinds.has('units') && kinds.has('keys') ? 'Units + keys' : kinds.has('keys') ? 'Keys' : 'Units' };
 }
+
 const Store = (() => {
   let state = defaultState();
   let version = 0;
@@ -1366,6 +2839,7 @@ const Store = (() => {
    plates, metrics. Nothing in it touches the DOM, the store or Three.js.
    Needs the Clipper classic script (globalThis.ClipperLib).
    ========================================================================== */
+/* ---- src/tower/geometry.js ---- */
 const Geo = (() => {
 /* ==========================================================================
    geometry.js — tower geometry + metrics (Agent G, phases 3 and 4)
@@ -2535,7 +4009,7 @@ function groupFloors(numbers) {
   return `${nums.length === 1 ? "Floor" : "Floors"} ${list}`;
 }
 
-return { SCALE, PROGRAM_DEFAULTS, shapeToRing, ringArea, multiPolyArea, buildFloorList, buildPlates, computeMetrics, groupFloors };
+return { SCALE, PROGRAM_DEFAULTS, ringArea, multiPolyArea, shapeToRing, buildFloorList, buildPlates, computeMetrics, groupFloors };
 })();
 
 
@@ -2572,6 +4046,7 @@ function surroundBlocks(state) {
    marks plates and crowns that stick out. Warnings from geometry and from the
    envelope are merged below.
    ========================================================================== */
+/* ---- src/tower/envelope.js ---- */
 const Env = (() => {
 /* ==========================================================================
    envelope.js — zoning envelope for the tower generator (Agent E)
@@ -3118,7 +4593,7 @@ const Render = (() => {
   let ground, shadowPlane, gridMesh, figure, sun, hemi;
   let selOverlay = null;                   // v1.1: selection outline, carve outlines and snap guides (Select draws into it; never captured or saved)
   const frameListeners = [];            // v1.1: called once per drawn frame, just before the render (handles follow the camera)
-  let layers = null;                    // { model, context, envelope } each { group, key }
+  let layers = null;                    // { model, context, envelope, site, sun } each { group, key }
   let derived = null;
   let needsRender = true, tween = null, preset = null, refitPending = false, capturing = false, envSeen = null;
   let viewVersion = -1, sunKey = '', styleApplied = null, themeEpoch = 0, themeApplied = -1, geomIdSeen = -1;
@@ -3266,7 +4741,7 @@ const Render = (() => {
     scene.add(selOverlay);
 
     layers = {};
-    for (const id of ['model', 'context', 'envelope']) {
+    for (const id of ['model', 'context', 'envelope', 'site', 'sun']) {     // site: SiteLayer (06c), sun: SunLayer (06d)
       const group = new THREE.Group();
       scene.add(group);
       layers[id] = { group, key: null };
@@ -3408,6 +4883,9 @@ const Render = (() => {
     changed = syncLayer(layers.model, [disp.key, v.floorLines, v.style, v.colorBy, colorsKey(state)].join('|'), () => buildFloorObjects(state, disp)) || changed;
     changed = syncLayer(layers.context, [v.style, JSON.stringify(state.context)].join('|'), () => buildContextObjects(state)) || changed;
     changed = syncLayer(layers.envelope, [d.geomId, v.envelope].join('|'), () => buildEnvelopeObjects(state, d.wire)) || changed;
+    const kit = { syncLayer, clearGroup, materialFor, lineMaterial };
+    changed = SiteLayer.update(layers.site, state, d, kit) || changed;     // project site boundary (06c_site.js)
+    changed = SunLayer.update(layers.sun, state, d, kit) || changed;       // sun-hours heat map (06d_sunhours.js)
     if (changed) { viewVersion = -1; needsRender = true; }
   }
 
@@ -3750,6 +5228,7 @@ const Render = (() => {
     const list = entries.map((e, i) => ({ ...e, uid: `${i}:${e.uid || e.name}`, group: null }));
     cmp = { entries: list, key: null, reserve, bounds: combineBounds(list.map((e) => e.d)) };
     layers.model.group.visible = layers.context.group.visible = layers.envelope.group.visible = false;
+    layers.site.group.visible = layers.sun.group.visible = false;
     selOverlay.visible = false;
     figure.visible = false;
     applyViewOffset();
@@ -3763,6 +5242,7 @@ const Render = (() => {
     for (const e of cmp.entries) if (e.group) { clearGroup(e.group); scene.remove(e.group); }
     cmp = null;
     layers.model.group.visible = layers.context.group.visible = layers.envelope.group.visible = true;
+    layers.site.group.visible = layers.sun.group.visible = true;
     selOverlay.visible = true;
     resetLayers();
     viewVersion = -1;
@@ -3856,6 +5336,7 @@ const Render = (() => {
     const prev = {
       bg: scene.background, ground: ground.material.color.clone(), grid: gridMesh.visible, fig: figure.visible,
       model: layers.model.group.visible, ctx: layers.context.group.visible, env: layers.envelope.group.visible, shadow: shadowPlane.visible,
+      site: layers.site.group.visible, sun: layers.sun.group.visible,
     };
     const restore = () => {
       scene.remove(cap);
@@ -3865,6 +5346,7 @@ const Render = (() => {
       ground.material.color.copy(prev.ground);
       gridMesh.visible = prev.grid; figure.visible = prev.fig; shadowPlane.visible = prev.shadow;
       layers.model.group.visible = prev.model; layers.context.group.visible = prev.ctx; layers.envelope.group.visible = prev.env;
+      layers.site.group.visible = prev.site; layers.sun.group.visible = prev.sun;
       viewVersion = -1;
     };
     capturing = true;
@@ -3879,6 +5361,7 @@ const Render = (() => {
         ground.material.color.set('#e4e7ea');
         gridMesh.visible = false; figure.visible = false; shadowPlane.visible = shadowsOn;
         layers.model.group.visible = layers.context.group.visible = layers.envelope.group.visible = false;
+        layers.site.group.visible = layers.sun.group.visible = false;
         for (const c of [persp, ortho]) c.clearViewOffset();
         pending = ShotMod.captureView({ renderer, scene, camera: cam, scale });
       } finally { restore(); }
@@ -3964,6 +5447,7 @@ const Render = (() => {
   };
 })();
 
+/* ---- src/tower/snap.js ---- */
 const SnapMod = (() => {
 /* ==========================================================================
    snap.js — snapping for direct editing in the tower generator (v1.1)
@@ -4336,7 +5820,7 @@ function snapLength(length, { step = 1 } = {}) {
   return clean === 0 ? 0 : clean;
 }
 
-return { collectSnapTargets, snapMove, snapEdge, snapLength, itemBox };
+return { itemBox, collectSnapTargets, snapMove, snapEdge, snapLength };
 })();
 
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
@@ -5462,6 +6946,46 @@ const Select = (() => {
 })();
 
 /* ==========================================================================
+   SITE LAYER  (docs/tower-project-sun-plan.md sections 4.1 and 6.1)
+   `SiteLayer` draws the project site boundary under the tower when a project with a site is open
+   (in the tower local frame, ProjectMod.transformRing(placement, boundary, "toLocal")). Neighbor buildings
+   come in as context blocks through Context from site, so the context layer already draws them.
+   PHASE 0 STUB: phase 3 replaces the bodies. Keep the global name and the method signatures.
+   ========================================================================== */
+const SiteLayer = (() => {
+  /** Called by Render.syncMain on every frame of the main view (never in Compare).
+   *  layer = { group, key } (a THREE.Group already in the scene, hidden in Compare and in the AI-ready image);
+   *  state = Store.raw(); d = Derived.get(); kit = { syncLayer, clearGroup, materialFor, lineMaterial }.
+   *  Use kit.syncLayer(layer, key, () => objects) so the group is rebuilt only when the key changes.
+   *  Returns true when the scene changed. */
+  function update(layer, state, d, kit) { return false; }
+  /** For tests: what is drawn. */
+  function info() { return { shown: false, points: 0 }; }
+  return { update, info };
+})();
+
+/* ==========================================================================
+   SUN-HOURS LAYER  (docs/tower-project-sun-plan.md sections 4.1 and 6.2)
+   `SunLayer` draws the sun-hours heat map: one ground quad at z = 0.05 ft with a canvas texture (one pixel per
+   grid node, nearest filter, 75 percent opacity) and the legend. Hidden in Diagram style and in AI-ready images.
+   PHASE 0 STUB: phase 4 replaces the bodies. Keep the global name and the method signatures.
+   ========================================================================== */
+const SunLayer = (() => {
+  /** Called by Render.syncMain on every frame of the main view (never in Compare).
+   *  layer = { group, key } (a THREE.Group already in the scene, hidden in Compare and in the AI-ready image);
+   *  state = Store.raw(); d = Derived.get(); kit = { syncLayer, clearGroup, materialFor, lineMaterial }.
+   *  Returns true when the scene changed. */
+  function update(layer, state, d, kit) { return false; }
+  /** A finished sunHours result (plan section 3.6 "Output"), or null to clear it. */
+  function setResult(result) { }
+  function clear() { }
+  /** The form changed after a compute: show "Out of date" and keep the old colors. */
+  function markStale(stale = true) { }
+  function info() { return { shown: false, stale: false, result: null }; }
+  return { update, setResult, clear, markStale, info };
+})();
+
+/* ==========================================================================
    SHARED: controls
    Generic, reusable building blocks. A control talks to data through a
    "bind" object: { get(), set(value, live), commit() }. Store-backed binds
@@ -5806,6 +7330,7 @@ const ICONS = {
   sparkle: '<svg viewBox="0 0 24 24"><path d="M10 3l1.8 5.2L17 10l-5.2 1.8L10 17l-1.8-5.2L3 10l5.2-1.8z"/><path d="M18 14l.9 2.1L21 17l-2.1.9L18 20l-.9-2.1L15 17l2.1-.9z"/></svg>',
   snap: '<svg viewBox="0 0 24 24"><path d="M6 3v8a6 6 0 0012 0V3h-4v8a2 2 0 01-4 0V3z"/><path d="M6 7h4M14 7h4"/></svg>',
   export: '<svg viewBox="0 0 24 24"><path d="M12 15V4"/><path d="M8 8l4-4 4 4"/><path d="M5 13v6h14v-6"/></svg>',
+  folder: '<svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>',
   chev: '<svg class="chev" viewBox="0 0 14 14" fill="none" stroke="currentColor"><path d="M3 5l4 4 4-4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
 const UI_STORAGE_KEY = 'towergen.ui.v1';
@@ -6282,7 +7807,10 @@ const UI = (() => {
     { id: 'targets', tab: 'program', title: 'Targets', open: true, build: buildTargets },
     { id: 'display', tab: 'view', title: 'Display', open: true, build: buildDisplay },
     { id: 'scene', tab: 'view', title: 'Context and envelope', open: true, build: buildScene },
-    { id: 'sun', tab: 'view', title: 'Sun', open: true, build: buildSun },
+    // The Sun section is SunUI's (08d_sun.js); buildSun above is its Manual mode (the schema 1 sliders).
+    { id: 'sun', tab: 'view', title: 'Sun', open: true, build: () => SunUI.build({ bs, els, degS, get, legacy: buildSun }) },
+    // Project site (09b_project.js): the first Site section, shown only while a project is open.
+    { id: 'project', tab: 'site', title: 'Project site', open: true, build: () => ProjectUI.buildSite({ bs, els, lenF, degS, get }), when: () => ProjectUI.has() },
     { id: 'site', tab: 'site', title: 'Site', open: true, build: buildSite },
     { id: 'setbacks', tab: 'site', title: 'Setbacks', open: true, build: buildSetbacks },
     { id: 'height', tab: 'site', title: 'Height limit and stepback', open: true, build: buildHeight },
@@ -6311,6 +7839,7 @@ const UI = (() => {
       if (s.id === 'podium') opt.headExtra = podiumSwatches();
       const sec = Controls.section(opt);
       sectionCtl[s.id] = sec;
+      if (s.when) { const sync = () => { sec.el.hidden = !s.when(); }; swatchSyncs.push(sync); sync(); }   // shown only while when() is true
       panels[s.tab].append(sec.el);
     }
   }
@@ -6449,7 +7978,7 @@ const UI = (() => {
     Pop.open(anchor, el, { align: 'right', onClose: off });
   }
 
-  /** The Export menu: Image, AI-ready image, AI Prompts, the image overlay choices (a sub-view), Export / Import JSON. */
+  /** The Export menu: Image, AI-ready image, AI Prompts, the image overlay choices (a sub-view), files, and Send to (ProjectUI.send). */
   function openExportMenu(anchor) {
     const el = h('div', { role: 'menu', id: 'exportMenu' });
     const item = (id, title, sub, onclick, o = {}) => h('button', { class: 'pop-item', type: 'button', role: 'menuitem', id, onclick: () => { if (!o.keep) Pop.close(); onclick(); } },
@@ -6464,7 +7993,11 @@ const UI = (() => {
         h('div', { class: 'pop-sep' }), h('div', { class: 'label pop-label' }, 'Files'),
         item('miSketchup', 'SketchUp (.json)', 'Import with the CMRLM SketchUp extension', () => SketchupExport.download()),
         item('miExportJson', 'Export JSON', 'Download all saved options', () => Options.exportJson()),
-        item('miImportJson', 'Import JSON', 'Add the options from a file', () => $('importFile').click()));
+        item('miImportJson', 'Import JSON', 'Add the options from a file', () => $('importFile').click()),
+        h('div', { class: 'pop-sep' }), h('div', { class: 'label pop-label' }, 'Send to'),
+        item('miSendPlate', 'Send to Plate Planner', 'Save the project and open the Plate Planner', () => ProjectUI.send('plate')),
+        item('miSendFacade', 'Send to Facade Studio', 'Save the project and open the Facade Studio', () => ProjectUI.send('facade')),
+        item('miSendGrading', 'Send to Grading Sketch', 'Save the project and open the Grading Sketch', () => ProjectUI.send('grading')));
     };
     const overlay = () => {
       el.textContent = '';
@@ -6508,7 +8041,11 @@ const UI = (() => {
     };
     Store.subscribe(syncSnap); syncSnap();
 
-    const exp = h('button', { class: 'btn has-text menu-btn', type: 'button', id: 'btnExport', 'aria-haspopup': 'true', 'aria-expanded': 'false', title: 'Export: image, AI-ready image, AI prompts, SketchUp, JSON', 'aria-label': 'Export menu', onclick: () => openExportMenu(exp) },
+    const proj = h('button', { class: 'btn has-text menu-btn', type: 'button', id: 'btnProject', 'aria-haspopup': 'true', 'aria-expanded': 'false', title: 'Project: new, open, import, export', 'aria-label': 'Project menu', onclick: () => ProjectUI.openMenu(proj) },
+      h('span', { html: ICONS.folder, style: 'display:contents' }), h('span', { class: 'btn-text', id: 'projLabel' }, 'Project'), h('span', { html: ICONS.chev, style: 'display:contents' }));
+    $('tbProject').append(proj);
+
+    const exp = h('button', { class: 'btn has-text menu-btn', type: 'button', id: 'btnExport', 'aria-haspopup': 'true', 'aria-expanded': 'false', title: 'Export: image, AI-ready image, AI prompts, SketchUp, JSON, send to another tool', 'aria-label': 'Export menu', onclick: () => openExportMenu(exp) },
       h('span', { html: ICONS.export, style: 'display:contents' }), h('span', { class: 'btn-text' }, 'Export'), h('span', { html: ICONS.chev, style: 'display:contents' }));
     $('tbExport').append(exp);
   }
@@ -6780,6 +8317,7 @@ const UI = (() => {
    Step 1 saves the AI-ready picture, step 2 copies the filled prompt.
    Custom prompts live in the options storage blob (key `prompts`).
    ========================================================================== */
+/* ---- src/tower/prompts.js ---- */
 const PromptsMod = (() => {
 // AI prompt library for the tower massing tool.
 // The architect exports a white massing screenshot, then pastes it with one of these
@@ -7673,6 +9211,7 @@ const Prompts = (() => {
    CMRLM SketchUp extension imports. The document is built by src/tower/sketchup.js from
    the same plates the screen shows; the file format helpers are src/shared/sketchup-format.js.
    ========================================================================== */
+/* ---- src/shared/sketchup-format.js ---- */
 const SkFmt = (() => {
 /* ==========================================================================
    SHARED: sketchup-format
@@ -7767,7 +9306,7 @@ function validateDoc(doc) {
   if (!doc || typeof doc !== "object") return { ok: false, errors: ["document: not an object"], counts };
   if (doc.format !== FORMAT) err("format", `must be "${FORMAT}"`);
   if (doc.version !== VERSION) err("version", `must be ${VERSION}`);
-  if (!["tower", "site"].includes(doc.source)) err("source", "must be tower or site");
+  if (!["tower", "site", "midrise", "parking", "facade", "grading"].includes(doc.source)) err("source", "must be tower, site, midrise, parking, facade, or grading");
   if (doc.units !== "feet") err("units", "must be feet");
   if (!Number.isFinite(doc.zShift)) err("zShift", "must be a number");
   const tagNames = new Set(), matNames = new Set();
@@ -7840,9 +9379,10 @@ function docToBlob(doc) {
   return new Blob([JSON.stringify(doc)], { type: "application/json" });
 }
 
-return { FORMAT, VERSION, cleanRing2, cleanRing3, ringArea2, makeDoc, validateDoc, sketchupFilename, docToBlob };
+return { FORMAT, VERSION, ringArea2, cleanRing2, cleanRing3, makeDoc, validateDoc, sketchupFilename, docToBlob };
 })();
 
+/* ---- src/tower/sketchup.js ---- */
 const SkTower = (() => {
 /* ==========================================================================
    tower/sketchup.js — Tower Generator → ".sketchup.json" (docs/sketchup-spec.md section 4)
@@ -8043,7 +9583,7 @@ function towerToSketchup(state, built) {
   return doc;
 }
 
-return { towerToSketchup, programLabel };
+return { programLabel, towerToSketchup };
 })();
 
 
@@ -8079,6 +9619,27 @@ const SketchupExport = (() => {
 })();
 
 /* ==========================================================================
+   SUN UI  (docs/tower-project-sun-plan.md sections 4.1, 5.3 and 3.5)
+   `SunUI` builds the View tab Sun section (it replaces the schema 1 buildSun), drives the study
+   (date, time, place, time zone -> state.view.sun through SolarMod), Play, and the sun-hours controls and
+   compute loop (SunHoursMod, in slices; SunLayer draws the result). Writes state.sun and state.view.sun only.
+   PHASE 0 STUB: phase 4 replaces the bodies. Keep the global name and the method signatures.
+   ========================================================================== */
+const SunUI = (() => {
+  /** Called once by UI.buildPanel for the 'sun' section. ctx = { bs, els, degS, get, legacy } where legacy() is the
+   *  schema 1 section (the azimuth and altitude sliders, for Manual mode). Returns { children, more }. */
+  function build(ctx) { return ctx.legacy(); }
+  /** Called once from 13_start.js after UI.init() and before ProjectUI.start(). */
+  function init() { }
+  /** For tests and the __tower hooks. */
+  function info() { return { mode: 'manual', stub: true }; }
+  function compute(opts) { return Promise.resolve(null); }
+  function cancel() { }
+  function play(on) { }
+  return { build, init, info, compute, cancel, play };
+})();
+
+/* ==========================================================================
    SHARED: storage
    src/shared/storage.js inlined unchanged (apart from the export keywords),
    plus `Options`, the tower tool's glue: save, duplicate, rename, delete, the
@@ -8087,6 +9648,7 @@ const SketchupExport = (() => {
    Saved options live under localStorage key `towergen.options.v1`; the
    working copy autosaves into the "__current" slot after a 1 s pause.
    ========================================================================== */
+/* ---- src/shared/storage.js ---- */
 const StorageMod = (() => {
 /* ==========================================================================
    SHARED: storage
@@ -8602,7 +10164,7 @@ function readWithReader(file) {
   });
 }
 
-return { createStorage, exportFilename, uniqueName };
+return { exportFilename, uniqueName, createStorage };
 })();
 
 
@@ -8832,11 +10394,44 @@ const Options = (() => {
 })();
 
 /* ==========================================================================
+   PROJECT FILE  (docs/project-file-spec.md sections 8, 10 and 12; docs/tower-project-sun-plan.md section 7)
+   `ProjectUI` is the glue between the page and src/shared/project.js (ProjectMod): ?project= load, autosave of the
+   massing and sun sections, the Project menu, the project pill, Send, placement and context from site.
+   Copy build/midrise/09b_project.js and change the tool details (plan section 7).
+   PHASE 0 STUB: phase 3 replaces the bodies. Keep the global name and the method signatures used by the hooks:
+   08_ui.js calls buildSite(ctx), has(), openMenu(anchor) and send(tool); 13_start.js calls start() and the
+   __tower project hooks; 06c_site.js may call boundaryLocal() / boundaryKey().
+   ========================================================================== */
+const ProjectUI = (() => {
+  const has = () => false;
+  const hasSite = () => false;
+  /** Called once by UI.buildPanel for the 'project' section (Site tab, first; shown only while has() is true).
+   *  ctx = { bs, els, lenF, degS, get }. Returns { children, more }. */
+  function buildSite(ctx) { return { children: [] }; }
+  /** Called once from 13_start.js after UI.init(), Select.init() and SunUI.init(): reads ?project=. */
+  function start() { }
+  /** tool: 'plate' | 'facade' | 'grading' (the Export menu Send items). */
+  function send(tool) { }
+  function openMenu(anchor) { }
+  const noop = () => {};
+  return {
+    has, hasSite, buildSite, start, send, openMenu,
+    siteInfo: () => null, groundAt: () => null, boundaryKey: () => '', boundaryLocal: () => null, placement: () => null,
+    openDoc: noop, close: noop, create: noop, rename: noop, flush: () => Promise.resolve(false), exportFile: noop, importFile: noop,
+    centerOnSite: noop, contextFromSite: noop, markDirty: noop, askReplace: () => Promise.resolve(true), renderPill: noop,
+    doc: () => null,
+    status: () => ({ open: false, id: null, name: null, dirty: false, readOnly: false, replaceNeeded: false, confirmed: false }),
+    configure: noop, restoreDefaults: noop, reset: noop,
+  };
+})();
+
+/* ==========================================================================
    SHARED: screenshot
    src/shared/screenshot.js inlined unchanged (apart from the export keywords),
    plus `Shots`: the image actions and the overlay choices (shown in the Export menu's
    "Image overlay" view). The choices are kept in state.view.shot.
    ========================================================================== */
+/* ---- src/shared/screenshot.js ---- */
 const ShotMod = (() => {
 /* ==========================================================================
    SHARED: screenshot
@@ -9238,6 +10833,20 @@ const Shots = (() => {
 })();
 
 /* ==========================================================================
+   SHADOW STUDY SHEET  (docs/tower-project-sun-plan.md sections 4.1 and 6.3)
+   `SunStudy` makes the 3 x 3 shadow-range sheet: for each study date (rows) and time (columns), the Plan view with
+   shadows, captured with ShotMod.captureView, laid out on one canvas with labels and the CMRLM footer.
+   Downloads <option>-shadow-study.png. Restores the view after.
+   PHASE 0 STUB: phase 4 replaces the bodies. Keep the global name and the method signatures.
+   ========================================================================== */
+const SunStudy = (() => {
+  /** opts { deliver = true }. Resolves to { blob, width, height, panels } (or null while this is a stub). */
+  function make(opts = {}) { return Promise.resolve(null); }
+  function busy() { return false; }
+  return { make, busy };
+})();
+
+/* ==========================================================================
    COMPARE
    Choose 2 to 4 options. One renderer draws each option in its own part of
    the screen (setViewport / setScissor, see Render.enterCompare), one camera
@@ -9411,6 +11020,7 @@ const Compare = (() => {
    (through the integrated pipeline), every preset, and the save / export /
    import round trip. The result toast appears in ?test mode only.
    ========================================================================== */
+/* ---- src/tower/testcases.js ---- */
 const TestCasesMod = (() => {
 // Hand-calculated test cases for the tower massing tool (plan section 12, phase 6).
 // Every expected value below was worked out by hand. The arithmetic is in each comment.
@@ -9957,7 +11567,7 @@ async function runLayoutTests() {
     await t('each tab shows its own sections and no others', () => {
       const want = {
         form: ['podium', 'segments', 'moves', 'carves', 'crown', 'core'], program: ['programs', 'targets'],
-        view: ['display', 'scene', 'sun'], site: ['site', 'setbacks', 'height', 'context'],
+        view: ['display', 'scene', 'sun'], site: ['project', 'site', 'setbacks', 'height', 'context'],   // project: hidden until a project opens
       };
       for (const [tab, ids] of Object.entries(want)) {
         UI.setTab(tab);
@@ -10120,12 +11730,16 @@ async function runAllTests() {
   const select = await runSelectTests();
   const fresh = await runNewDesignTests();
   const sketchup = await runSketchupTests();
-  const all = [...(base.results || []), ...layout, ...select, ...fresh, ...sketchup];
+  const project = await runProjectTests();     // 12f_tests_project.js
+  const sun = await runSunTests();             // 12g_tests_sun.js
+  const all = [...(base.results || []), ...layout, ...select, ...fresh, ...sketchup, ...project, ...sun];
   const failed = all.filter((r) => !r.ok);
   console.log(`[tests] layout ${layout.length - layout.filter((r) => !r.ok).length}/${layout.length} passed`, layout.filter((r) => !r.ok).length ? JSON.stringify(layout.filter((r) => !r.ok)) : '');
   console.log(`[tests] select ${select.length - select.filter((r) => !r.ok).length}/${select.length} passed`, select.filter((r) => !r.ok).length ? JSON.stringify(select.filter((r) => !r.ok)) : '');
   console.log(`[tests] new design ${fresh.length - fresh.filter((r) => !r.ok).length}/${fresh.length} passed`, fresh.filter((r) => !r.ok).length ? JSON.stringify(fresh.filter((r) => !r.ok)) : '');
   console.log(`[tests] sketchup ${sketchup.length - sketchup.filter((r) => !r.ok).length}/${sketchup.length} passed`, sketchup.filter((r) => !r.ok).length ? JSON.stringify(sketchup.filter((r) => !r.ok)) : '');
+  console.log(`[tests] project ${project.length - project.filter((r) => !r.ok).length}/${project.length} passed`, project.filter((r) => !r.ok).length ? JSON.stringify(project.filter((r) => !r.ok)) : '');
+  console.log(`[tests] sun ${sun.length - sun.filter((r) => !r.ok).length}/${sun.length} passed`, sun.filter((r) => !r.ok).length ? JSON.stringify(sun.filter((r) => !r.ok)) : '');
   window.__towerTestResults = { total: all.length, passed: all.length - failed.length, failed, results: all };
   return window.__towerTestResults;
 }
@@ -10874,6 +12488,24 @@ async function runSketchupTests() {
   return results;
 }
 
+/* ==========================================================================
+   TESTS: project file, placement, context from site, migration (docs/tower-project-sun-plan.md section 9.2)
+   runAllTests in 12b merges the results.
+   PHASE 0 STUB: phase 3 replaces the body. Keep the function name; return [{ name, ok, detail }].
+   ========================================================================== */
+async function runProjectTests() {
+  return [];
+}
+
+/* ==========================================================================
+   TESTS: sun study, sun hours, shadow study sheet (docs/tower-project-sun-plan.md section 9.2)
+   runAllTests in 12b merges the results.
+   PHASE 0 STUB: phase 4 replaces the body. Keep the function name; return [{ name, ok, detail }].
+   ========================================================================== */
+async function runSunTests() {
+  return [];
+}
+
 
 /* ==========================================================================
    Start-up and test hook
@@ -10886,6 +12518,8 @@ Compare.init();
 Options.syncDirty();
 if (!Render.init(document.getElementById('canvasHost'))) Store.subscribe(() => UI.updateHud(Derived.get()));
 Select.init();
+SunUI.init();          // 08d_sun.js: the study driver (before the project loads, so a loaded sun section drives it)
+ProjectUI.start();     // 09b_project.js: ?project= load and autosave
 
 const optionInfo = (o) => ({ id: o.id, name: o.name, updatedAt: o.updatedAt });
 window.__tower = {
@@ -10937,6 +12571,30 @@ window.__tower = {
   units: Units,
   runTests: runAllTests,
   sketchupDoc: () => SketchupExport.doc(),                   // the SketchUp export document for the design on screen
+  // project file (ProjectUI, 09b_project.js; tests inject storage and navigation with projectConfigure)
+  getDerivedSection: () => { const d = Derived.get(); return TowerDerivedMod.towerDerived(Store.snapshot(), d, d.metrics); },
+  projectConfigure: (o) => ProjectUI.configure(o),
+  projectReset: () => ProjectUI.reset(),
+  projectOpenDoc: (doc) => ProjectUI.openDoc(doc),
+  projectStatus: () => ProjectUI.status(),
+  projectDoc: () => ProjectUI.doc(),
+  projectFlush: () => { ProjectUI.markDirty(); return ProjectUI.flush(); },
+  projectCreate: (name) => ProjectUI.create(name, { quiet: true }),
+  projectClose: () => ProjectUI.close(),
+  projectCenter: () => ProjectUI.centerOnSite({ quiet: true }),
+  projectContext: (radius, opts) => ProjectUI.contextFromSite(radius, { quiet: true, ...(opts || {}) }),
+  projectSend: (tool) => ProjectUI.send(tool),
+  projectGroundAt: (x, y) => ProjectUI.groundAt(x, y),
+  projectBoundary: () => ProjectUI.boundaryLocal(),
+  projectAskReplace: () => ProjectUI.askReplace(),
+  siteLayerInfo: () => SiteLayer.info(),
+  // sun study (SunUI 08d_sun.js, SunLayer 06d_sunhours.js, SunStudy 10b_sunstudy.js)
+  sunInfo: () => SunUI.info(),
+  sunPlay: (on) => SunUI.play(on),
+  sunComputeHours: (opts) => SunUI.compute(opts),
+  sunCancelHours: () => SunUI.cancel(),
+  sunHoursInfo: () => SunLayer.info(),
+  shadowStudy: (opts) => SunStudy.make({ deliver: false, ...(opts || {}) }),
   // v1.1 layout hooks (the same functions the selection card calls)
   openItem: (item) => UI.openItem(item),
   setProgramForItems: (items, program) => UI.setProgramForItems(items, program),
@@ -10966,6 +12624,7 @@ if (TEST_MODE) {
     Toast.show(msg, r.failed.length ? 'bad' : 'test-pass', 0);
   });
 }
+
 </script>
 </body>
 </html>

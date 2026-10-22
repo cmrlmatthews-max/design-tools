@@ -388,3 +388,14 @@ textarea.ai-preview {
 }
 .hdl-label[hidden] { display: none; }
 .hdl-label span { font-size: 11.5px; opacity: .78; }
+
+/* ---- project file (copied from the Mid-Rise; ProjectUI in 09b_project.js fills them) ---------------- */
+.proj-pill {
+  display: inline-flex; align-items: center; max-width: 220px; height: 28px; padding: 0 10px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent); font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.proj-pill[hidden] { display: none; }
+.proj-new { padding: 4px 8px 6px; }
+.proj-new[hidden] { display: none; }
+.proj-line { margin: 4px 0 8px; font-size: 12.5px; color: var(--ink-2); line-height: 1.4; }
+.chev-r { color: var(--ink-3); }

@@ -3,7 +3,8 @@
   "private": true,
   "description": "Browser design tools for early-stage architecture. No build step for the pages; Node is only for the module tests.",
   "scripts": {
-    "test": "node test/geometry.test.mjs && node test/envelope.test.mjs && node test/snap.test.mjs && node test/sketchup-format.test.mjs && node test/tower.sketchup.test.mjs && node test/site.model.test.mjs && node test/site.sketchup.test.mjs && node test/site.derived.test.mjs && node test/project.test.mjs && npm run test:midrise --silent && npm run test:parking --silent && npm run test:facade --silent && npm run test:grading --silent",
+    "test": "node test/geometry.test.mjs && node test/envelope.test.mjs && node test/snap.test.mjs && node test/sketchup-format.test.mjs && node test/tower.sketchup.test.mjs && node test/site.model.test.mjs && node test/site.sketchup.test.mjs && node test/site.derived.test.mjs && node test/project.test.mjs && npm run test:tower --silent && npm run test:midrise --silent && npm run test:parking --silent && npm run test:facade --silent && npm run test:grading --silent",
+    "test:tower": "node test/run-if-exists.mjs test/tower.derived.test.mjs test/solar.test.mjs test/tower.sunhours.test.mjs test/tower.presets.test.mjs",
     "build:tower": "python3 build/tower/build.py",
     "build:site": "python3 build/site/build.py",
     "build:midrise": "python3 build/midrise/build.py",
