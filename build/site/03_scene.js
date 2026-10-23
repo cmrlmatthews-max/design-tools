@@ -698,6 +698,16 @@ const Scene = (() => {
   }
   const fit = (animate = true) => goTo('fit', animate);
   const planView = (animate = true) => goTo('plan', animate);
+  /** Site, the top-bar zoom button (docs/batch-fixes-technical-plan.md section 5): refits the whole site square in the current camera direction.
+   *  Unlike Fit it never turns the view, and it leaves no preset pressed. */
+  function frameSite(animate = true) {
+    if (!renderer || !cam) return null;
+    const dir = cam.position.clone().sub(controls.target).normalize();
+    const goal = fitPersp(fitCorners(), dir, hostAspect());
+    setPreset(null);
+    setCamera(goal.target, dir, goal.dist, animate);
+    return { dist: goal.dist, target: goal.target.clone() };
+  }
   function refit() { if (preset) goTo(preset, true); }
 
   function updateClip() {
@@ -800,7 +810,8 @@ const Scene = (() => {
   }
 
   return {
-    init, setModel, setRemoved, setWalks, pick, select, screenOf, setLayer, setVScale, setContour, fit, planView, capture,
+    init, setModel, setRemoved, setWalks, pick, select, screenOf, setLayer, setVScale, setContour, fit, planView, frameSite, capture,
+    framedCorners: () => fitCorners(),       // tests: the world corners the Site button fits
     onCamera: (fn) => cameraListeners.push(fn),
     onPreset: (fn) => presetListeners.push(fn),
     /** fn(hit | null, { x, y }) after every tap (see pick for hit). null = a tap on empty ground. */
