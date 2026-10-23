@@ -8,7 +8,9 @@
    - Rotate: a ring around the building box and a grip (DOM, `.hdl.hdl-rotate`) on its local +x side. The building turns about
      its box center in 5 degree steps (1 degree with Alt).
    - Live preview with Store.set(path, value, { live: true }); ONE undo step on release (Store.commit()). On release the base
-     elevation snaps to the ground (SiteLayerMod.groundZAt) when the building was moved or turned. Escape or a second finger
+     elevation follows the ground when the building was moved or turned: ProjectUI.baseFor(placement) gives the lowest ground under
+     the footprint (Follow ground), or null to leave the base alone (Typed, no site ground, a wrap or podium deck). A page without
+     ProjectUI.baseFor snaps to the ground at the placement origin (SiteLayerMod.groundZAt). Escape or a second finger
      restores the original values and commits nothing.
    - The pointer maths always uses a SNAPSHOT of the camera taken at the start of the drag. While the drag runs, Render.shiftView
      (when the page has it) carries the camera along with the local frame, so the site stays still on screen and the building
@@ -49,7 +51,9 @@ const PlacementGizmo = (() => {
   function readPlacement() {
     const p = Store.get(pathOf());
     if (!p || typeof p !== 'object') return null;
-    return { x: fin(p.x), y: fin(p.y), rotation: fin(p.rotation), baseZ: fin(p.baseZ) };
+    const out = { x: fin(p.x), y: fin(p.y), rotation: fin(p.rotation), baseZ: fin(p.baseZ) };
+    if (typeof p.baseMode === 'string') out.baseMode = p.baseMode;       // Follow ground / Typed: a move never drops it
+    return out;
   }
   function active() {
     if (!opts || !ready) return false;
@@ -81,6 +85,17 @@ const PlacementGizmo = (() => {
       else if (typeof ProjectUI.groundAt === 'function') z = ProjectUI.groundAt(x, y);
     } catch (e) { z = null; }
     return Number.isFinite(z) ? z : null;
+  }
+  /** The base elevation (absolute ft) for the placement `pl`, or null to leave it. The page decides (ProjectUI.baseFor, 09b_project.js):
+   *  Follow ground = the lowest ground under the building footprint; Typed = null. Without that hook: the ground at the origin. */
+  function baseFor(pl) {
+    try {
+      if (typeof ProjectUI !== 'undefined' && ProjectUI && typeof ProjectUI.baseFor === 'function') {
+        const z = ProjectUI.baseFor(pl);
+        return Number.isFinite(z) ? z : null;
+      }
+    } catch (e) { return null; }
+    return groundZ(pl.x, pl.y);
   }
   const modelMeshes = () => {
     try { return typeof Render.modelMeshes === 'function' ? Render.modelMeshes() : []; } catch (e) { return []; }
@@ -258,7 +273,7 @@ const PlacementGizmo = (() => {
       let cur = readPlacement() || d.pl0;
       changed = cur.x !== d.pl0.x || cur.y !== d.pl0.y || cur.rotation !== d.pl0.rotation;
       if (changed) {
-        const z = groundZ(cur.x, cur.y);
+        const z = baseFor(cur);
         if (z != null && r2(z) !== cur.baseZ) {
           const next = { ...cur, baseZ: r2(z) };
           Store.set(path, next, { live: true });
@@ -478,6 +493,6 @@ const PlacementGizmo = (() => {
     begin: (kind, cx, cy) => startDrag(kind, cx, cy, {}),
     move: (cx, cy, mods) => applyMove(cx, cy, mods || {}),
     end: (ok = true) => finish(ok !== false),
-    modelPoint, ringPoint, groundZ,
+    modelPoint, ringPoint, groundZ, baseFor,
   };
 })();
