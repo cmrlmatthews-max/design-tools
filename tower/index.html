@@ -745,6 +745,38 @@ textarea.ai-preview {
 /* ---- placement gizmo: rotation grip (06y_placement.js, phase C) ---- */
 .hdl-rotate .hdl-glyph { background: var(--accent); }
 .hdl-rotate .hdl-glyph svg { stroke: var(--accent-ink); }
+
+/* ---- batch fixes phase D: Collapse all (panel head) and the Site / Building zoom buttons (top bar); build/shared/08z_topbar.js ---- */
+.tb-zoom { gap: 2px; margin-right: 4px; }
+.tb-zoom[hidden], .tb-zbtn[hidden], .panel-collapse[hidden] { display: none; }
+.tb-zbtn { padding: 0 10px; font-size: 13px; font-weight: 500; }
+.tb-zbtn .tb-ztxt { white-space: nowrap; }
+.tb-zbtn:focus-visible, .panel-collapse:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.panel-head { display: flex; align-items: stretch; flex: none; border-bottom: 1px solid var(--line); background: var(--panel); }
+.panel-head .tabs { flex: 1 1 auto; min-width: 0; border-bottom: 0; }
+.panel-collapse {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px; flex: none;
+  min-height: var(--hit); min-width: var(--hit); padding: 0 9px; border: 0; border-left: 1px solid var(--line); border-radius: 0;
+  background: transparent; color: var(--ink-2); font-size: 11.5px; font-weight: 600; letter-spacing: 0; white-space: nowrap;
+}
+.panel-head .tab { padding: 0 3px; font-size: 12.5px; letter-spacing: 0; }
+.panel-collapse:hover { background: var(--surface-2); color: var(--ink); }
+.panel-collapse:active { background: var(--line); }
+.panel-collapse svg { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.panel-head-solo { justify-content: flex-end; }
+.panel-head-solo .panel-collapse { border-left: 0; }
+@media (max-width: 899px) {
+  .tb-zbtn { padding: 0; }
+  .tb-zbtn .tb-ztxt { display: none; }
+}
+@media (max-width: 479px) {
+  .panel-collapse { padding: 0; }
+  .panel-collapse .pc-txt { display: none; }
+}
+
+/* Sun Study mode (?study=sun): the "Edit the tower" link in the top bar */
+a.tb-edit { text-decoration: none; color: var(--ink); white-space: nowrap; flex: none; }
+a.tb-edit:hover, a.tb-edit:focus-visible { text-decoration: none; }
 </style>
 </head>
 <body>
@@ -760,6 +792,10 @@ textarea.ai-preview {
     <div class="tb-group" id="tbProject"></div>
     <span class="proj-pill" id="projPill" hidden></span>
     <div class="tb-spacer"></div>
+    <div class="tb-group tb-zoom" id="tbZoom" role="group" aria-label="Zoom the view">
+      <button class="btn tb-zbtn" id="tbZoomSite" type="button" title="Zoom to the whole site" aria-label="Zoom to the whole site"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V5h4M16 5h4v4M20 15v4h-4M8 19H4v-4"/><path d="M9 14l1.2-4 4.8-1 1 5z"/></svg><span class="tb-ztxt">Site</span></button>
+      <button class="btn tb-zbtn" id="tbZoomBuilding" type="button" title="Zoom to the building" aria-label="Zoom to the building"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 20V5l9-2v17M15 8h3v12M4 20h16M9.5 8h2M9.5 12h2M9.5 16h2"/></svg><span class="tb-ztxt">Building</span></button>
+    </div>
     <div class="tb-group" id="tbHistory"></div>
     <div class="seg" id="styleToggle" role="group" aria-label="Visual style"></div>
     <div class="btn-split" id="tbSnap"></div>
@@ -783,7 +819,10 @@ textarea.ai-preview {
     <aside class="panel" id="panel" aria-label="Controls">
       <div class="grabber" id="grabber" role="separator" aria-orientation="horizontal" aria-label="Drag to resize the controls sheet" tabindex="0"><span></span></div>
       <div id="selection-card" hidden></div>
-      <div class="tabs" id="panelTabs" role="tablist" aria-label="Control groups"></div>
+      <div class="panel-head" id="panelHead">
+        <div class="tabs" id="panelTabs" role="tablist" aria-label="Control groups"></div>
+        <button class="panel-collapse" id="panelCollapse" type="button" title="Close every section of the panel" aria-label="Collapse all sections"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5l5 5 5-5M7 19l5-5 5 5"/></svg><span class="pc-txt">Collapse all</span></button>
+      </div>
       <div class="panel-scroll" id="panelScroll">
         <div id="sections"></div>
       </div>
@@ -1107,11 +1146,15 @@ const CONFIG = {
   outsideColor: '#d64545',
   presets: PresetsMod.PRESETS,
   storageKey: 'towergen.options.v1',
+  heroColor: '#E0A458',    // AI-ready image: the hero model draws in this color, everything else stays white (batch-fixes plan 7); one value
+  heroColorName: 'amber',  // the name the Hero render prompt uses for it
   schema: 2,               // the option state (plan section 2.3); the saved options blob uses the same number
+  pinLocksOffsets: true,   // Pin placement also disables the offset fields of segments (Tower) or the start x/y of bars (Mid-Rise); Cade chose yes (batch-fixes plan 2.2); false leaves them editable
   projectSchema: 1,        // schema of the "massing" and "sun" sections this tool writes (plan section 2.3)
   projectSaveMs: 1000,     // project autosave delay (spec section 8)
   projectListMax: 8,
   contextRadius: 600,      // ft, default radius for "Context from site"
+  shadowStrength: 0.55,   // opacity of the flat ground shadow (batch-fixes plan 3.2); the Tower also boosts the light contrast for the Sun Study
   tool: 'tower',
 };
 
@@ -4307,6 +4350,7 @@ function fillDefaults(src) {
   merge(s, base);                                           // a state with no colorBy gets "program"; an explicit "zone" or "program" is kept
   migrateView(s.view);
   if (isObj(s.placement)) s.placement.baseMode = s.placement.baseMode === 'typed' ? 'typed' : 'follow';       // base elevation: Follow ground (default, and the migration for old saves) | Typed
+  if (isObj(s.placement) && s.placement.pinned !== true) delete s.placement.pinned;       // Pin placement (batch fixes plan 2.2): true only while pinned, a missing value is false
   if (!Array.isArray(s.segments) || !s.segments.length) s.segments = [defaultSegment()];
   const seg0 = defaultSegment();
   s.segments.forEach((seg) => merge(seg, seg0));
@@ -5136,13 +5180,26 @@ const Render = (() => {
   }
 
   /* ---- scene ---------------------------------------------------------------- */
+  // Light contrast. The normal view keeps today's values. shadowBoost(true) (Sun Study mode, a running shadow study, the shadow study
+  // sheet) raises the sun and lowers the sky light so a shadow reads clearly on a lit ground (batch-fixes plan 3.2).
+  const LIGHT_NORMAL = { sun: 1.7, hemi: 2.3 }, LIGHT_BOOST = { sun: 2.3, hemi: 1.1 };   // plan 3.2 said 2.0 / 1.6: that left a shadow on the lit site ground at 0.71 of the lit luminance, too faint
+  let lightBoost = false;
+  function shadowBoost(on) {
+    on = !!on;
+    if (on === lightBoost) return;
+    lightBoost = on;
+    const L = on ? LIGHT_BOOST : LIGHT_NORMAL;
+    if (sun) sun.intensity = L.sun;
+    if (hemi) hemi.intensity = L.hemi;
+    needsRender = true;
+  }
   function buildScene() {
     scene = new THREE.Scene();
 
-    hemi = new THREE.HemisphereLight(0xffffff, 0xb4bac2, 2.3);
+    hemi = new THREE.HemisphereLight(0xffffff, 0xb4bac2, (lightBoost ? LIGHT_BOOST : LIGHT_NORMAL).hemi);
     scene.add(hemi);
 
-    sun = new THREE.DirectionalLight(0xffffff, 1.7);
+    sun = new THREE.DirectionalLight(0xffffff, (lightBoost ? LIGHT_BOOST : LIGHT_NORMAL).sun);
     sun.castShadow = true;
     const fine = window.matchMedia && matchMedia('(pointer: fine)').matches;
     sun.shadow.mapSize.set(fine ? 4096 : 2048, fine ? 4096 : 2048);
@@ -5161,7 +5218,7 @@ const Render = (() => {
     // Shadow catcher on the ground.
     const sp = new THREE.PlaneGeometry(8000, 8000);
     sp.applyMatrix4(planMatrix(0));
-    shadowPlane = new THREE.Mesh(sp, new THREE.ShadowMaterial({ opacity: 0.24, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }));
+    shadowPlane = new THREE.Mesh(sp, new THREE.ShadowMaterial({ opacity: CONFIG.shadowStrength, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }));
     shadowPlane.receiveShadow = true;
     shadowPlane.renderOrder = 1;
     scene.add(shadowPlane);
@@ -5591,8 +5648,9 @@ const Render = (() => {
 
   function setView(id, animate = true) {
     if (!renderer) return;
-    const goal = viewTarget(id, framingBox(id), framingAspect());
-    preset = id;
+    const custom = !!id && typeof id === 'object';       // a goal from fitBox (the zoom buttons) instead of a preset id
+    const goal = custom ? id : viewTarget(id, framingBox(id), framingAspect());
+    preset = custom ? null : id;
     tween = null;
     if (goal.type !== camType) switchCamera(goal.type);
     const curTarget = controls.target.clone();
@@ -5622,6 +5680,64 @@ const Render = (() => {
     needsRender = true;
     viewListeners.forEach((fn) => fn(preset));
   }
+
+  /* ---- zoom buttons: Site and Building (docs/batch-fixes-technical-plan.md section 5) ---------------------------------
+     Both keep the camera direction and refit the distance and the target (fitBox). Neither turns the view or picks a preset. */
+  /** Fits `box` ({ minX, maxX, minY, maxY, height, minZ? } in plan feet) in the current camera direction, with the usual FIT_MARGIN. Returns the goal it flew to. */
+  function fitBox(box, animate = true) {
+    if (!renderer || !cam || !controls || !box) return null;
+    const dir = cam.position.clone().sub(controls.target).normalize();
+    const aspect = framingAspect();
+    const z0 = box.minZ || 0, H = Math.max(box.height || 0, z0 + 20);
+    let goal;
+    if (camType === 'persp') {
+      const f = fitPersp(box, dir, aspect, H);
+      goal = { type: 'persp', dist: f.dist, target: f.target, dir };
+    } else {
+      const fwd = dir.clone().negate();
+      const cr = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0));
+      const right = cr.length() < 1e-6 ? new THREE.Vector3(1, 0, 0) : cr.normalize();
+      const up = new THREE.Vector3().crossVectors(right, fwd).normalize();
+      let r0 = Infinity, r1 = -Infinity, u0 = Infinity, u1 = -Infinity;
+      for (const x of [box.minX, box.maxX]) for (const y of [box.minY, box.maxY]) for (const z of [z0, H]) {
+        const p = worldVec(x, y, z), r = p.dot(right), u = p.dot(up);
+        r0 = Math.min(r0, r); r1 = Math.max(r1, r); u0 = Math.min(u0, u); u1 = Math.max(u1, u);
+      }
+      const c = worldVec((box.minX + box.maxX) / 2, (box.minY + box.maxY) / 2, (z0 + H) / 2);
+      const target = c.clone().addScaledVector(right, (r0 + r1) / 2 - c.dot(right)).addScaledVector(up, (u0 + u1) / 2 - c.dot(up));
+      const fit = 1 - 2 * FIT_MARGIN;
+      const vis = Math.max((u1 - u0) / fit, (r1 - r0) / (aspect * fit), 30);
+      const ex = box.maxX - box.minX, ey = box.maxY - box.minY;
+      goal = { type: 'ortho', zoom: (2 * ORTHO_HALF) / vis, minDist: 0.55 * Math.sqrt(ex * ex + ey * ey + (H - z0) * (H - z0)), target, dir };
+    }
+    setView(goal, animate);
+    return goal;
+  }
+  /** The model box: the building without its site, its neighbors or the envelope. */
+  function buildingBox() {
+    if (cmp) return framingBox('n');
+    const d = Derived.get();
+    const b = boxOf({ ...d, bounds: { ...d.bounds, union: d.bounds.model } }, false);
+    b.minZ = 0;
+    return b;
+  }
+
+  /** The site box: the whole site square plus the model (a building that sticks out stays inside). With no site open it is the model, its own parcel and the neighbors. */
+  function siteBox() {
+    if (cmp) return framingBox('n');
+    const b = boxOf(Derived.get(), !!Store.raw().view.envelope);
+    const sb = SiteLayer.frameBounds();
+    if (sb) {
+      b.minX = Math.min(b.minX, sb.minX); b.maxX = Math.max(b.maxX, sb.maxX); b.minY = Math.min(b.minY, sb.minY); b.maxY = Math.max(b.maxY, sb.maxY);
+      b.minZ = Math.min(0, sb.zMin); b.height = Math.max(b.height, sb.zMax);
+    }
+    return b;
+  }
+
+  /** Site: the whole site square in the current direction (the model when no site is open). */
+  function frameSite(animate = true) { return fitBox(siteBox(), animate); }
+  /** Building: the hero building fills the view, the model box plus the margin. */
+  function frameBuilding(animate = true) { return fitBox(buildingBox(), animate); }
 
   function stepTween(now) {
     const k = tween;
@@ -5824,6 +5940,15 @@ const Render = (() => {
    *  only its dashed boundary and its north arrow are hidden (docs/site-base-style-technical-plan.md section 3.1).
    *  Nothing in the store is touched: the live layers are hidden, a throwaway group is drawn, then everything is put back. */
   async function captureClean(scale = 2) {
+    // The AI-ready image always shows the neighbors as a solid white model (Glass or Wireframe on screen reads as glass to image AIs).
+    const liveState = Store.raw();
+    const solidSite = SiteLayer.isOn(liveState) && liveState.view && liveState.view.siteStyle && liveState.view.siteStyle !== 'solid';
+    const siteKit = () => ({ syncLayer, clearGroup, materialFor, lineMaterial, themeEpoch: () => themeEpoch });
+    if (solidSite) SiteLayer.update(layers.site, { ...liveState, view: { ...liveState.view, siteStyle: 'solid' } }, Derived.get(), siteKit());
+    try { return await captureCleanInner(scale); }
+    finally { if (solidSite) { SiteLayer.update(layers.site, Store.raw(), Derived.get(), siteKit()); needsRender = true; } }
+  }
+  async function captureCleanInner(scale = 2) {
     if (!renderer) throw new Error('The 3D view is not available.');
     if (cmp) throw new Error('Leave Compare to save an AI-ready image.');
     const state = Store.raw();
@@ -5840,10 +5965,24 @@ const Render = (() => {
     const ctxMat = new THREE.MeshStandardMaterial({ color: new THREE.Color('#c9cdd2'), roughness: 0.95, metalness: 0 });
     const cap = new THREE.Group();
     const siteOn = SiteLayer.isOn(state);        // the site layer draws the site buildings: their context blocks are left out, as in the live view
-    for (const o of [...buildFloorObjects(st, disp), ...buildContextObjects(st, siteOn)]) {
+    // Hero color (batch-fixes plan 7): the model draws in CONFIG.heroColor for this picture only; its edges, the context blocks and the site layer stay as drawn.
+    // The live materials are shared and never touched: each hero mesh of the throwaway group gets its own copy (shade kept), disposed again in restore.
+    const heroMats = [];
+    const heroColor = new THREE.Color(CONFIG.heroColor);
+    const heroRef = materialFor('model').color;
+    const heroOf = (mat) => {
+      const m = mat.clone();
+      m.color.copy(heroColor).multiplyScalar(heroRef.r > 0 ? Math.min(1, mat.color.r / heroRef.r) : 1);
+      heroMats.push(m);
+      return m;
+    };
+    const floorObjects = buildFloorObjects(st, disp);
+    const floorSet = new Set(floorObjects);
+    for (const o of [...floorObjects, ...buildContextObjects(st, siteOn)]) {
       if (o.isLineLoop) { if (o.geometry) o.geometry.dispose(); continue; }       // no site outline
       if (o.isMesh) {
         if (o.material.transparent) o.material = ctxMat;
+        else if (floorSet.has(o) && o.material.isMeshStandardMaterial) { o.material = heroOf(o.material); o.userData.hero = true; }
         o.castShadow = shadowsOn; o.receiveShadow = shadowsOn;
       }
       cap.add(o);
@@ -5858,6 +5997,7 @@ const Render = (() => {
       scene.remove(cap);
       clearGroup(cap);
       ctxMat.dispose();
+      for (const m of heroMats) m.dispose();
       showMarks();
       scene.background = prev.bg;
       ground.material.color.copy(prev.ground);
@@ -5886,6 +6026,7 @@ const Render = (() => {
         layers.sun.group.visible = false;
         showMarks = hideSiteMarks();
         lastCapture = {
+          heroColor: CONFIG.heroColor,
           site: layers.site.group.visible, boundary: siteMarkFlag('site-boundary'), arrow: siteMarkFlag('site-arrow'),
           grid: gridMesh.visible, figure: figure.visible, overlay: selOverlay.visible, envelope: layers.envelope.group.visible, sun: layers.sun.group.visible,
           siteObjects: layers.site.group.children.filter((o) => o.visible).length,
@@ -5961,8 +6102,20 @@ const Render = (() => {
     onRebuild: (fn) => rebuildListeners.push(fn),
     onViewChange: (fn) => viewListeners.push(fn),
     onResize: (fn) => resizeListeners.push(fn),
-    framedBox: (id = 'axon') => framingBox(id),       // tests: the box a preset frames
+    frameSite, frameBuilding, fitBox,       // the zoom buttons (TopBar); fitBox keeps the camera direction
+    framedBox: (id = 'axon') => (id === 'site' ? siteBox() : id === 'building' ? buildingBox() : framingBox(id)),       // tests: the box a preset frames, or the box Site / Building fit
     info: () => ({ siteLines: layers ? layers.model.group.children.filter((o) => o.isLineLoop).length : 0, envelopeLines: layers ? layers.envelope.group.children.length : 0, camera: camType, preset, meshes: layers ? layers.model.group.children.length : 0, tweening: !!tween, distance: cam ? cam.position.distanceTo(controls.target) : 0, zoom: cam ? cam.zoom : 0, compare: !!cmp, drawQuality: derived ? Derived.display(Store.gestureActive() && !Store.gesturePath().startsWith('view')).quality : null }),
+    // A plan point (x, y, elev) as a pixel of the canvas the way capture() draws it (no panel offset): { x, y, w, h } (CSS px). The shadow study sheet and its test use it.
+    projectPlan: (x, y, z = 0) => {
+      if (!renderer) return null;
+      for (const c of [persp, ortho]) c.clearViewOffset();
+      try {
+        cam.updateMatrixWorld(); cam.updateProjectionMatrix();
+        const v = worldVec(x, y, z).project(cam), w = host.clientWidth, hgt = host.clientHeight;
+        return { x: (v.x + 1) / 2 * w, y: (1 - v.y) / 2 * hgt, w, h: hgt };
+      } finally { applyViewOffset(); }
+    },
+    shadowBoost, shadowBoosted: () => lightBoost, lightInfo: () => ({ sun: sun ? sun.intensity : null, hemi: hemi ? hemi.intensity : null, boost: lightBoost, shadowOpacity: shadowPlane ? shadowPlane.material.opacity : null }),
     ready: () => !!renderer,
     comparing: () => !!cmp,
     // v1.1 hooks for direct editing (Select): the camera, the orbit controls, the overlay group and a per-frame callback
@@ -7895,6 +8048,7 @@ const Select = (() => {
     releaseHandleDrag: () => { flushMove(); endDrag(true); },
     cancelHandleDrag: () => endDrag(false),
     dragging: () => !!drag, lastDrag: () => lastDrag,
+    handlesShown: () => handlesWanted(),     // read-only: a selection with visible handles (the placement gizmo yields to it)
     setAddMode: (v) => { addMode = !!v; if (cardRefs && cardRefs.more) cardRefs.more.setAttribute('aria-pressed', String(addMode)); },
     addMode: () => addMode,
     onChange: (fn) => listeners.push(fn),
@@ -7922,6 +8076,8 @@ const Select = (() => {
      (when the page has it) carries the camera along with the local frame, so the site stays still on screen and the building
      follows the finger. Without that export the building stays still and the site slides: same numbers, less natural.
    - Orbit is off from the pointer down on the model until the pointer is released; it starts on empty ground as before.
+   - Hit rule: a move starts only from a press whose target is the canvas itself (never a .hdl, a card or a button) and only while
+     Select.handlesShown() is false (no selection with handles). Pin placement: opts.locked() true makes the gizmo inactive.
    - The Store notifies live sets with live = true: 09b_project.js (Tower, Mid-Rise) re-runs Context from site only on the
      commit notification, so a drag never rewrites the context blocks per frame.
 
@@ -7961,10 +8117,14 @@ const PlacementGizmo = (() => {
     if (typeof p.baseMode === 'string') out.baseMode = p.baseMode;       // Follow ground / Typed: a move never drops it
     return out;
   }
+  /** Pin placement (PinUI, 08y_pin.js): a locked placement has no drag, no ring and no grip. */
+  function locked() {
+    try { return !!(opts && typeof opts.locked === 'function' && opts.locked()); } catch (e) { return false; }
+  }
   function active() {
     if (!opts || !ready) return false;
     try {
-      if (!Render.ready() || Render.comparing()) return false;
+      if (!Render.ready() || Render.comparing() || locked()) return false;
       return !!ProjectUI.has() && !!readPlacement() && !!opts.enabled();
     } catch (e) { return false; }
   }
@@ -8250,6 +8410,10 @@ const PlacementGizmo = (() => {
     if (pend || drag) return;
     if (!active() || Store.gestureActive()) return;
     if (typeof Select !== 'undefined' && Select.dragging && Select.dragging()) return;
+    // The hit rule (batch fixes plan 2.3): only a press on the canvas itself can move the building, never one on a handle, a card or a button,
+    // and never while the selection shows handles (a press on the model then selects or edits; Escape clears the selection first).
+    if (e.target !== Render.canvas()) return;
+    try { if (typeof Select !== 'undefined' && Select.handlesShown && Select.handlesShown()) return; } catch (err) { /* no select layer */ }
     const hit = hitModel(e.clientX, e.clientY);
     if (!hit) return;
     const rect = canvasRect();
@@ -8335,9 +8499,9 @@ const PlacementGizmo = (() => {
 
   /* ---- public ------------------------------------------------------------------------------- */
   /** Wires the handlers once. opts: { enabled: () => bool, bounds: () => { minX, maxX, minY, maxY } (local building box),
-   *  path: 'placement', onCommit: () => void }. Returns false when the page has no 3D view. */
+   *  path: 'placement', onCommit: () => void, locked: () => bool (Pin placement: true turns the drag and the ring off) }. Returns false when the page has no 3D view. */
   function init(o) {
-    opts = { path: 'placement', enabled: () => true, bounds: () => null, onCommit: null, ...(o || {}) };
+    opts = { path: 'placement', enabled: () => true, bounds: () => null, onCommit: null, locked: null, ...(o || {}) };
     if (wired) return true;
     ready = !!Render.ready();
     if (!ready) return false;
@@ -8394,7 +8558,7 @@ const PlacementGizmo = (() => {
 
   return {
     init, sync,
-    info: () => { sync(); return { active: active(), dragging: drag ? drag.kind : null, handles: layer && !layer.hidden && rotEl && !rotEl.hidden ? 1 : 0, label: lastLabel }; },
+    info: () => { sync(); return { active: active(), locked: locked(), dragging: drag ? drag.kind : null, handles: layer && !layer.hidden && rotEl && !rotEl.hidden ? 1 : 0, label: lastLabel }; },
     /** Synthetic drags for tests: begin(kind, cx, cy) -> move(cx, cy, { shift, alt }) -> end(ok). kind: 'move' | 'rotate'. */
     begin: (kind, cx, cy) => startDrag(kind, cx, cy, {}),
     move: (cx, cy, mods) => applyMove(cx, cy, mods || {}),
@@ -9655,6 +9819,9 @@ const UI = (() => {
   const $ = (id) => document.getElementById(id);
   const sheetQuery = window.matchMedia('(max-width: 899px), (orientation: portrait)');
   const prefs = uiPrefs;
+  // Sun Study mode (batch-fixes plan 3.1): ?study=sun opens the Tower with the View tab only, the Sun section open, no handles and a trimmed Export menu.
+  const STUDY = /[?&]study=sun(?:&|#|$)/.test(location.search);
+  const STUDY_TAB = 'view';
   const MAXD = CONFIG.limits.maxDim;
   const bs = (path) => Controls.bindStore(Store, path);
   const round1 = (v) => String(Math.round(v * 10) / 10);
@@ -9665,6 +9832,12 @@ const UI = (() => {
     format: Units.formatFeetInches, parse: Units.parseLength, inputMode: 'text', ...extra,
   });
   const lenF = (label, path, extra = {}) => lenS(label, path, 0, 1, { compact: true, ...extra });   // compact (number field only)
+  // Pin placement (batch fixes plan 2.2): with CONFIG.pinLocksOffsets a pinned placement also disables these number fields; the default leaves them editable
+  const pinLockF = (c) => {
+    const f = c.el.querySelector('input.numfield');
+    return Controls.when(() => { if (f) f.disabled = PinUI.locksOffsets(); return true; }, [c]);
+  };
+  const pinLockNote = () => Controls.when(() => PinUI.locksOffsets(), [Controls.help('Unpin the placement to move the building.')]);
   const offS = (label, path, lim = 200) => lenS(label, path, -lim, lim, { hardMin: -MAXD });          // may be negative
   const intS = (label, path, min, max, extra = {}) => Controls.slider({
     label, bind: bs(path), min, max, step: 1, hardMin: 1, hardMax: CONFIG.limits.maxFloors, integer: true,
@@ -9844,7 +10017,8 @@ const UI = (() => {
           ]),
           more: els([
             Controls.label('Shift'),
-            Controls.group(els([lenF('Offset x (east)', `${p}.offset.x`, { hardMin: -MAXD }), lenF('Offset y (north)', `${p}.offset.y`, { hardMin: -MAXD })])),
+            Controls.group(els([pinLockF(lenF('Offset x (east)', `${p}.offset.x`, { hardMin: -MAXD })), pinLockF(lenF('Offset y (north)', `${p}.offset.y`, { hardMin: -MAXD }))])),
+            pinLockNote(),
             degS('Rotation', `${p}.rotation`, -180, 180),
             Controls.label('Taper (change bottom to top)'),
             pctS('Taper x', `${p}.taper.x`, -60, 60), pctS('Taper y', `${p}.taper.y`, -60, 60),
@@ -10084,7 +10258,7 @@ const UI = (() => {
   ];
   const sectionCtl = {};          // id -> Controls.section result
   const swatchSyncs = [];         // functions that repaint section-head swatches
-  let activeTab = 'form';
+  let activeTab = STUDY ? STUDY_TAB : 'form';
   const scrollPos = {};
 
   function buildPanel() {
@@ -10097,10 +10271,11 @@ const UI = (() => {
     }
     for (const s of SECTIONS) {
       const parts = s.build();
-      const open = prefs.sections && s.id in prefs.sections ? !!prefs.sections[s.id] : !!s.open;
+      let open = prefs.sections && s.id in prefs.sections ? !!prefs.sections[s.id] : !!s.open;
+      if (STUDY && s.tab === STUDY_TAB) open = s.id === 'sun';     // Sun Study mode: the Sun section open, Display and Context collapsed
       const opt = {
         id: s.id, title: s.title, open, children: parts.children, more: parts.more,
-        onToggle: (isOpen) => rememberSection(s.id, isOpen),
+        onToggle: (isOpen) => { if (!STUDY) rememberSection(s.id, isOpen); },     // Sun Study mode leaves the saved section choices alone
       };
       if (s.id === 'podium') opt.headExtra = podiumSwatches();
       const sec = Controls.section(opt);
@@ -10132,12 +10307,14 @@ const UI = (() => {
     for (const t of TABS) {
       bar.append(h('button', {
         class: 'tab', type: 'button', role: 'tab', id: `tab-${t.id}`, 'data-tab': t.id, 'aria-controls': `tabpanel-${t.id}`, 'aria-selected': 'false', tabindex: '-1',
+        hidden: STUDY && t.id !== STUDY_TAB,      // Sun Study mode: the View tab only
         onclick: () => { setTab(t.id); raiseSheet(); },
       }, t.title));
     }
     bar.addEventListener('keydown', (e) => {
       if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Home' && e.key !== 'End') return;
       e.preventDefault();
+      if (STUDY) return;
       const i = TABS.findIndex((t) => t.id === activeTab);
       const next = e.key === 'Home' ? 0 : e.key === 'End' ? TABS.length - 1 : (i + (e.key === 'ArrowRight' ? 1 : -1) + TABS.length) % TABS.length;
       setTab(TABS[next].id);
@@ -10146,7 +10323,8 @@ const UI = (() => {
   }
   /** Shows one tab. Remembered in the UI prefs (localStorage), and each tab keeps its own scroll position. */
   function setTab(id, { remember = true } = {}) {
-    if (!TABS.some((t) => t.id === id)) return false;
+    if (!TABS.some((t) => t.id === id) || (STUDY && id !== STUDY_TAB)) return false;
+    if (STUDY) remember = false;
     const scroller = $('panelScroll');
     if (id !== activeTab) scrollPos[activeTab] = scroller.scrollTop;
     activeTab = id;
@@ -10251,6 +10429,18 @@ const UI = (() => {
       h('span', { class: 'grow' }, title, sub ? h('small', null, sub) : null), o.chev ? h('span', { html: ICONS.chev, class: 'chev-r', style: 'display:contents' }) : null);
     const main = () => {
       el.textContent = '';
+      if (STUDY) {      // Sun Study mode: Image, AI-ready image, Shadow study sheet, and the project items (Send to). No prompts, SketchUp or option files.
+        el.append(h('div', { class: 'label pop-label' }, 'Pictures'),
+          item('miImage', 'Image', 'Save a PNG of this view', () => Shots.take()),
+          item('miAiReady', 'AI-ready image', 'Plain model, no overlay, grid or wireframe. For ChatGPT or Gemini.', () => Shots.takeAiReady()),
+          item('miOverlay', 'Image overlay', 'Choose what the Image shows', () => overlay(), { keep: true, chev: true }),
+          item('miShadowSheet', 'Shadow study sheet', 'Three dates by three times in one picture', () => { SunStudy.make({ deliver: true }).catch((e) => { console.error(e); Toast.show(e && e.message ? e.message : 'The sheet could not be made.', 'bad', 6000); }); }),
+          h('div', { class: 'pop-sep' }), h('div', { class: 'label pop-label' }, 'Send to'),
+          item('miSendPlate', 'Send to Plate Planner', 'Save the project and open the Plate Planner', () => ProjectUI.send('plate')),
+          item('miSendFacade', 'Send to Facade Studio', 'Save the project and open the Facade Studio', () => ProjectUI.send('facade')),
+          item('miSendGrading', 'Send to Grading Sketch', 'Save the project and open the Grading Sketch', () => ProjectUI.send('grading')));
+        return;
+      }
       el.append(h('div', { class: 'label pop-label' }, 'Pictures'),
         item('miImage', 'Image', 'Save a PNG of this view', () => Shots.take()),
         item('miAiReady', 'AI-ready image', 'Plain model, no overlay, grid or wireframe. For ChatGPT or Gemini.', () => Shots.takeAiReady()),
@@ -10314,6 +10504,26 @@ const UI = (() => {
     const exp = h('button', { class: 'btn has-text menu-btn', type: 'button', id: 'btnExport', 'aria-haspopup': 'true', 'aria-expanded': 'false', title: 'Export: image, AI-ready image, AI prompts, SketchUp, JSON, send to another tool', 'aria-label': 'Export menu', onclick: () => openExportMenu(exp) },
       h('span', { html: ICONS.export, style: 'display:contents' }), h('span', { class: 'btn-text' }, 'Export'), h('span', { html: ICONS.chev, style: 'display:contents' }));
     $('tbExport').append(exp);
+
+    if (STUDY) {
+      // Sun Study mode: the title, and a link back to the same project in the full Tower (the same address without ?study).
+      const t = document.querySelector('.app-title');
+      if (t) t.textContent = 'Tower Generator · Sun Study';
+      document.title = 'Tower Generator · Sun Study';
+      const edit = h('a', { class: 'btn has-text tb-edit', id: 'tbEditTower', href: editTowerHref(), title: 'Open the tower with all its tabs and handles', 'aria-label': 'Edit the tower' }, h('span', { class: 'btn-text' }, 'Edit the tower'));
+      // the address can gain ?project= after this runs (a project made in this session): read it again when the link is used
+      for (const ev of ['pointerdown', 'focus', 'mouseover', 'touchstart']) edit.addEventListener(ev, () => { edit.setAttribute('href', editTowerHref()); });
+      const spacer = document.querySelector('#topbar .tb-spacer');
+      if (spacer) spacer.before(edit); else $('topbar').append(edit);
+    }
+  }
+  /** This address without the study flag (?project= and the rest stay). */
+  function editTowerHref() {
+    try {
+      const u = new URL(location.href);
+      u.searchParams.delete('study');
+      return u.pathname + u.search + u.hash;
+    } catch (e) { return location.pathname; }
   }
 
   /* ---- preset views ------------------------------------------------------------------ */
@@ -10505,7 +10715,7 @@ const UI = (() => {
     };
     let drag = null;
     grabber.addEventListener('pointerdown', (e) => {
-      grabber.setPointerCapture(e.pointerId);
+      try { grabber.setPointerCapture(e.pointerId); } catch (err) { /* synthetic events have no active pointer */ }
       drag = { y: e.clientY, h: curH(), moved: false };
     });
     grabber.addEventListener('pointermove', (e) => {
@@ -10560,7 +10770,7 @@ const UI = (() => {
     buildTopBar();
     buildPanel();
     buildTabs();
-    setTab(TABS.some((t) => t.id === prefs.tab) ? prefs.tab : 'form', { remember: false });
+    setTab(STUDY ? STUDY_TAB : TABS.some((t) => t.id === prefs.tab) ? prefs.tab : 'form', { remember: false });
     buildViews();
     buildHud();
     initSheet();
@@ -10575,15 +10785,120 @@ const UI = (() => {
   return {
     init, updateHud, rebuildPanel: () => { Controls.refreshAll(); },
     // test hooks: the section controllers, and a rebuild of the panel from the saved UI prefs (a simulated reload)
-    sectionCtl, rebuildSections: () => { buildPanel(); setTab(activeTab, { remember: false }); Controls.refreshAll(); swatchSyncs.forEach((fn) => fn()); },
+    rememberSection, sectionCtl, rebuildSections: () => { buildPanel(); setTab(activeTab, { remember: false }); Controls.refreshAll(); swatchSyncs.forEach((fn) => fn()); },
     // v1.1 hooks for the selection card
-    openItem, setProgramForItems, setTab, activeTab: () => activeTab, tabs: () => TABS.map((t) => t.id),
+    openItem, setProgramForItems, setTab, activeTab: () => activeTab, tabs: () => TABS.filter((t) => !STUDY || t.id === STUDY_TAB).map((t) => t.id),
+    studyMode: STUDY,        // ?study=sun (Sun Study mode); SunUI, 13_start.js and the placement gizmo read it
     setHudOpen, hudOpen: () => $('hud').dataset.collapsed === 'false',
   };
 })();
 
 /* SLOT: ai-prompts */
 /* Filled: the entry is the AI Prompts item (#miAiPrompts) in the Export menu (UI.openExportMenu above); the panel and its logic are in 08b_prompts.js. */
+
+/* ==========================================================================
+   PIN PLACEMENT  (shared by the Tower, the Mid-Rise Generator and the Parking Deck; batch fixes plan section 2)
+   A top-bar button right after the project pill: Pin placement / Unpin. While a project with a placement is open:
+   - pinned: the drag gizmo and the rotation ring are off (PlacementGizmo.init gets locked: () => PinUI.pinned()), the site style
+     switches to Solid, and with CONFIG.pinLocksOffsets the offset fields of the page are disabled too (08_ui.js reads PinUI.locksOffsets()).
+     Typed X, Y, rotation and base fields stay editable; Center on site and Context from site still work.
+   - Unpin: the gizmo is back and the site style goes to Glass.
+   One click is one undo step (placement.pinned and view.siteStyle change together). placement.pinned is saved with the section
+   (a missing value is false) and comes back when the project opens; 09b_project.js sets Glass on open when it is not pinned.
+
+   API: PinUI.init({ tool, enabled }) builds the button once and wires it; sync() refreshes it; pinned() reads placement.pinned;
+   setPinned(v) sets it (false when there is nothing to pin or nothing changes); available() is true while the button shows;
+   locksOffsets() is true while the offset fields lock; button() is the element; info() is for tests.
+   Globals used at call time: Store, ProjectUI, PlacementGizmo, Render, Toast, CONFIG, h, UI (optional: UI.studyMode hides the button).
+   ========================================================================== */
+const PinUI = (() => {
+  const PIN_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3.5h6M10 3.5l-.7 6L6.5 12.5v1.5h11v-1.5l-2.8-3-.7-6M12 14v6.5"/></svg>';
+  const CSS = '.tb-pin{flex:none}.tb-pin[hidden]{display:none}'
+    + '.tb-pin[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}'
+    + '.tb-pin[aria-pressed="true"]:hover{background:var(--accent-soft)}';
+  let opts = { tool: '', enabled: () => true };
+  let btn = null, textEl = null, wired = false;
+
+  const placementObj = () => {
+    try { const p = Store.raw().placement; return p && typeof p === 'object' ? p : null; } catch (e) { return null; }
+  };
+  /** True while placement.pinned is true. */
+  const pinned = () => { const p = placementObj(); return !!p && p.pinned === true; };
+  /** True while the button shows: a project with a placement is open, the page lets the building move, and it is not the Sun Study. */
+  function available() {
+    try {
+      if (!ProjectUI.has() || !placementObj()) return false;
+      if (typeof UI !== 'undefined' && UI && UI.studyMode) return false;
+      return !!opts.enabled();
+    } catch (e) { return false; }
+  }
+  /** CONFIG.pinLocksOffsets (default true, Cade's decision) and pinned: the page's offset fields are disabled. */
+  const locksOffsets = () => {
+    try { return CONFIG.pinLocksOffsets === true && pinned(); } catch (e) { return false; }
+  };
+
+  /** The open project has a site (the Tower and the Mid-Rise say hasSite(), the Parking Deck reads siteDerived()). */
+  const siteOf = () => {
+    try { return typeof ProjectUI.hasSite === 'function' ? !!ProjectUI.hasSite() : !!(typeof ProjectUI.siteDerived === 'function' && ProjectUI.siteDerived()); } catch (e) { return false; }
+  };
+
+  /** Pins (true) or unpins (false): placement.pinned and, with a site, the site style (Solid pinned, Glass unpinned) in ONE undo step. */
+  function setPinned(v) {
+    v = !!v;
+    if (!placementObj() || !ProjectUI.has() || v === pinned()) return false;
+    if (Store.gestureActive()) Store.commit();
+    Store.set('placement.pinned', v, { live: false });
+    try { if (siteOf()) Store.set('view.siteStyle', v ? 'solid' : 'glass', { live: false, merge: true }); } catch (e) { /* no site layer */ }
+    sync();
+    return true;
+  }
+
+  function sync() {
+    if (btn) {
+      const on = pinned(), show = available();
+      btn.hidden = !show;
+      btn.setAttribute('aria-pressed', String(on));
+      if (textEl) textEl.textContent = on ? 'Unpin' : 'Pin placement';
+      const tip = on ? 'Placement is pinned. Select to unpin and move the building again.' : 'Pin the placement: the drag handle and the rotation ring lock, and the site draws solid.';
+      btn.title = tip;
+      btn.setAttribute('aria-label', on ? 'Unpin the placement' : 'Pin the placement');
+    }
+    try { PlacementGizmo.sync(); } catch (e) { /* no gizmo on this page */ }
+    try { if (Render.ready()) Render.requestRender(); } catch (e) { /* no 3D view */ }
+  }
+
+  function toggle() {
+    const next = !pinned();
+    if (!setPinned(next)) return;
+    try { Toast.show(next ? 'Placement pinned. Select Unpin to move the building again.' : 'Placement unpinned.', '', 2600); } catch (e) { /* no toast */ }
+  }
+
+  /** Builds the button after the project pill (once) and keeps it in step with the Store. opts: { tool, enabled: () => bool }. */
+  function init(o) {
+    opts = { tool: '', enabled: () => true, ...(o || {}) };
+    if (wired) { sync(); return true; }
+    const pill = document.getElementById('projPill');
+    if (!pill || !pill.parentNode) return false;
+    wired = true;
+    const style = document.createElement('style');
+    style.id = 'pinStyle';
+    style.textContent = CSS;
+    document.head.append(style);
+    textEl = h('span', { class: 'btn-text', id: 'tbPinText' }, 'Pin placement');
+    btn = h('button', { class: 'btn has-text tb-pin', type: 'button', id: 'tbPin', hidden: true, 'aria-pressed': 'false', onclick: toggle },
+      h('span', { html: PIN_SVG, style: 'display:contents' }), textEl);
+    pill.after(btn);
+    Store.subscribe((s, info) => { if (!info || !info.live) sync(); });
+    sync();
+    return true;
+  }
+
+  return {
+    init, sync, pinned, setPinned, available, locksOffsets,
+    button: () => btn,
+    info: () => ({ pinned: pinned(), available: available(), hidden: btn ? btn.hidden : true, text: textEl ? textEl.textContent : '', pressed: btn ? btn.getAttribute('aria-pressed') : null, locksOffsets: locksOffsets() }),
+  };
+})();
 
 /* ==========================================================================
    AI PROMPTS
@@ -10604,6 +10919,7 @@ const PromptsMod = (() => {
 // Auto fields (the panel computes them from the current option):
 //   {{floors}} {{height}} {{program}} {{podium}} {{form}}
 //   {{hero}}  the Hero render prompt only: the sentences about the hero building, from heroFor() below (the panel passes it in the values)
+//   {{heroColor}}  the Hero render prompt only: the color name of the hero volume in the AI-ready image ("amber"; the panel passes CONFIG.heroColorName)
 // Pick fields (the user chooses them in the panel): see PROMPT_FIELDS.
 // Pick values are written to read naturally in the template sentences:
 //   material -> "The facade is {{material}}."
@@ -10717,6 +11033,7 @@ const feet = (v) => `${Math.round(nz(v))} feet`;
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const articleFor = (phrase) => (/^(?:[aeio]|L-|8|11|18)/i.test(phrase) ? "an" : "a");
 const RENDER_ONLY = "Render only this building in full photographic detail.";
+const HERO_COLOR_FALLBACK = "amber";
 const HERO_FALLBACK = `The hero building is the building at the center of the image. ${RENDER_ONLY}`;
 const TOWER_SHAPES = { rect: "rectangular", square: "rectangular", circle: "round", ellipse: "elliptical", triangle: "triangular", L: "L-shaped", U: "U-shaped", polygon: "custom-shaped" };
 const CROWNS = { none: "a flat roof", flat: "a flat roof", stepped: "a stepped crown", sloped: "a sloped crown", spire: "a spire", screen: "a rooftop screen" };
@@ -10875,6 +11192,7 @@ const PROMPTS = [
       "* The road layout, block shapes, and site boundary.\n" +
       "Do not add, remove, move, stretch, or reshape any volume.\n\n" +
       "HERO BUILDING — RENDER PHOTOREAL\n" +
+      "The hero building is the {{heroColor}} volume. Render only that building photoreal. Every white volume stays a white model.\n" +
       "{{hero}}\n" +
       "* The facade is {{material}}.\n" +
       "* Slab edges read as dark horizontal lines between floors.\n" +
@@ -10896,7 +11214,7 @@ const PROMPTS = [
       "CAMERA\n" +
       "Architectural visualization quality. Vertical lines stay straight. Clean blacks. Sharp focus across the frame.\n\n" +
       "DO NOT INCLUDE\n" +
-      "Text, logos, watermarks, building signage, neon colors, fisheye distortion, tilt-shift blur, cartoon or illustration style, windows on the white volumes.",
+      "Text, logos, watermarks, building signage, neon colors, fisheye distortion, tilt-shift blur, cartoon or illustration style, windows on the white volumes, any {{heroColor}} tint on the finished hero.",
     uses: ["material", "time", "season"],
     defaults: { material: FRITTED, time: DUSK, season: AUTUMN },
   },
@@ -11229,11 +11547,11 @@ const PROMPTS = [
 // Full prompt text: FORM_LOCK + blank line + template, with every {{token}} replaced.
 // A prompt with noLock: true (the Hero render) starts with its own text, without the form lock.
 // Value order (later wins): PROMPT_FIELDS defaults < prompt.defaults < values.
-// {{hero}} has a plain default sentence, so a tool that does not send it still gets a whole prompt.
+// {{hero}} has a plain default sentence and {{heroColor}} defaults to "amber", so a tool that does not send them still gets a whole prompt.
 // Empty, null, or undefined entries in values do not override a default.
 // Unknown tokens stay visible as [token].
 function fillPrompt(prompt, values = {}) {
-  const merged = { hero: HERO_FALLBACK };
+  const merged = { hero: HERO_FALLBACK, heroColor: HERO_COLOR_FALLBACK };
   for (const [key, field] of Object.entries(PROMPT_FIELDS)) merged[key] = field.default;
   for (const [key, v] of Object.entries((prompt && prompt.defaults) || {})) {
     if (v !== undefined && v !== null && v !== "") merged[key] = v;
@@ -11313,6 +11631,7 @@ const Prompts = (() => {
       podium: podiumPhrase(state),
       form: formPhrase(state),
       hero: PromptsMod.heroFor('tower', state, metrics),
+      heroColor: CONFIG.heroColorName,
     };
   }
   const currentAuto = () => autoValues(Store.raw(), Derived.get().metrics);
@@ -12055,6 +12374,18 @@ const SunUI = (() => {
 
   /* ---- writing the store ------------------------------------------------------------------------------- */
   let shadowsAutoOff = false, sheetMode = false, fixing = false;
+
+  /* Shadow strength (batch-fixes plan 3.2): the light contrast goes up (Render.shadowBoost) while the sheet runs, in the Sun Study mode
+     (?study=sun) and during a date and time study, whenever shadows are on in the Model style. Everywhere else the model keeps its look. */
+  function boostWanted() {
+    if (sheetMode) return true;
+    const st = Store.raw();
+    if (!st.view || !st.view.shadows || st.view.style === 'diagram') return false;
+    return !!((typeof UI !== 'undefined' && UI.studyMode) || (st.sun && st.sun.mode === 'study'));
+  }
+  function syncBoost() {
+    try { if (Render.ready()) Render.shadowBoost(boostWanted()); } catch (e) { console.error(e); }
+  }
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
   function shadowOp(below) {
@@ -12459,8 +12790,12 @@ const SunUI = (() => {
     const study = Controls.when(isStudy, studyBody);
     const manual = Controls.when(() => !isStudy(), legacy.children);
     refreshers.push(() => { study.refresh(); });
+    // Sun Study mode hides the Site tab, so Context from site is offered here (batch-fixes plan 11).
+    const ctxSite = Controls.when(() => !!(typeof UI !== 'undefined' && UI.studyMode) && ProjectUI.has() && ProjectUI.hasSite(),
+      [h('div', { class: 'add-row' }, Controls.button('Context from site', () => ProjectUI.contextFromSite(), 'outline sm'), Controls.help('Loads the neighbors around the tower from the project site so their shadows show.'))]);
+    refreshers.push(() => { ctxSite.refresh(); });
     refreshAll();
-    return { children: [modeSel, manual.el, study.el] };
+    return { children: [modeSel, ctxSite.el, manual.el, study.el] };
   }
 
   async function sheetClick() {
@@ -12474,6 +12809,7 @@ const SunUI = (() => {
     if (kind === 'replace') shadowsAutoOff = false;
     if (!fixing && kind !== 'undo' && kind !== 'redo') ensureConsistent();
     restoreStored();
+    syncBoost();
     refreshAll();
   }
   /** Called once from 13_start.js after UI.init() and before ProjectUI.start(). */
@@ -12487,6 +12823,7 @@ const SunUI = (() => {
       if (touch() && raw.sun && raw.sun.hours && raw.sun.hours.spacing === 10 && raw.sun.hours.step === 30 && !raw.sun.hours.on) { raw.sun.hours.spacing = 20; raw.sun.hours.step = 60; }
     } catch (e) { /* ignore */ }
     ensureConsistent();
+    syncBoost();
     refreshAll();
   }
   /** For tests and the __tower hooks. */
@@ -12508,7 +12845,8 @@ const SunUI = (() => {
     tzText: () => { const s = sunOf(); return s.tz.zone === 'fixed' ? `Fixed ${offsetText(num(s.tz.offset, -5))}` : zoneLabel(s.tz.zone); },
     dayOffsetText: (md) => { const s = sunOf(); return offsetText(SolarMod.tzOffset(s.tz.zone, isoOf(md), 720, s.tz.offset)); },
     calcAt: (md, minutes) => calcAt(sunOf(), md, minutes),
-    sheetMode: (on) => { sheetMode = !!on; },
+    sheetMode: (on) => { sheetMode = !!on; syncBoost(); },
+    syncBoost, boostWanted,
     fmtMD, hm, isoOf,
   };
 })();
@@ -13628,6 +13966,7 @@ const ProjectUI = (() => {
         ? `Grading Sketch sets the ground floor at ${Units.formatFeetInches(tier.ffe)}. The other tools read that height; the base elevation below stays editable.`
         : 'No Grading Sketch height yet, so the tools read the base elevation below as the ground floor.';
     }
+    try { if (typeof PinUI !== 'undefined') PinUI.sync(); } catch (e) { /* the Pin button is optional */ }
   }
   function openCheck(doc) {
     let sec = null, sunSec = null;
@@ -13668,6 +14007,7 @@ const ProjectUI = (() => {
     const d = Derived.get();
     const derived = TowerDerivedMod.towerDerived(st, d, d.metrics);
     const pl = { ...placement(), baseMode: baseMode() };
+    if (isObjP(Store.raw().placement) && Store.raw().placement.pinned === true) pl.pinned = true;     // Pin placement: saved with the section, a missing value is false
     return { tool: CONFIG.tool, schema: CONFIG.projectSchema, placement: pl, state: { ...st, placement: pl }, derived, note: st.name };
   }
   /**
@@ -13769,6 +14109,11 @@ const ProjectUI = (() => {
       if (!project.readOnly) markDirty();              // the new massing section is written (another tool's massing waits for the question)
     }
     if (!project.readOnly) followGround({ merge: true });     // the base elevation is the lowest ground under the footprint (Follow ground)
+    if (hasSite()) {                // Glass on open (batch fixes plan 2.1): this session only; the saved option keeps its style, Pin sets Solid
+      const was = project.loading;
+      project.loading = true;
+      try { Store.set('view.siteStyle', isObjP(Store.raw().placement) && Store.raw().placement.pinned === true ? 'solid' : 'glass', { live: false, merge: true }); } finally { project.loading = was; }
+    }
     renderPill();
     if (Render.ready()) Render.setView(Render.info().preset || 'axon', true);
     return doc;
@@ -13846,7 +14191,7 @@ const ProjectUI = (() => {
     project.navigate(url);
     return url;
   }
-  function openById(id) { flush(); project.navigate(`${location.pathname}?project=${encodeURIComponent(id)}`); }
+  function openById(id) { flush(); project.navigate(`${location.pathname}?${typeof UI !== 'undefined' && UI.studyMode ? 'study=sun&' : ''}project=${encodeURIComponent(id)}`); }
   async function exportFile() {
     const doc = project.doc;
     if (!doc) return false;
@@ -14442,6 +14787,9 @@ const Shots = (() => {
    CMRLM footer. Downloads <option>-shadow-study.png. Restores the view after.
    While it runs it changes the sun, the shadows switch, the style and the camera as one open drag; at the end every
    value goes back and the drag closes with no net change, so the sheet adds no undo step.
+   Shadow strength (batch-fixes plan 3.2): SunUI.sheetMode(true) turns Render.shadowBoost on (a stronger sun, a weaker sky light) for the
+   panels, and the flat ground shadow draws at CONFIG.shadowStrength, so the shadows read dark on the sheet. The result also carries the
+   sheet canvas and a cell list ({ row, col, x, y, w, h, sun, at(planX, planY) -> sheet pixel }) so a test can read the pixels.
    ========================================================================== */
 const SunStudy = (() => {
   let working = false;
@@ -14478,7 +14826,8 @@ const SunStudy = (() => {
     };
     let sheet = null, sctx = null, cellH = 0, cols = 0;
     const lay = { margin: 36, rowLabel: 92, head: 84, colLabel: 40, foot: 56, gap: 12 };
-    const captions = [];
+    const captions = [], cells = [];
+    let boostDuring = false;
     try {
       SunUI.sheetMode(true);
       SunLayer.suppress(true);
@@ -14494,6 +14843,9 @@ const SunStudy = (() => {
           const up = info.altitude > 0;
           if (!!Store.raw().view.shadows !== up) Store.set('view.shadows', up, { live: true });
           await frames(3);
+          boostDuring = boostDuring || Render.shadowBoosted();
+          const proj0 = Render.projectPlan(0, 0, 0), projX = Render.projectPlan(100, 0, 0), projY = Render.projectPlan(0, 100, 0);
+          const sunNow = deepClone(Store.raw().view.sun);
           const blob = await Render.capture(null, 1);
           const bmp = await toBitmap(blob);
           if (!sheet) {
@@ -14510,6 +14862,13 @@ const SunStudy = (() => {
           const x = lay.margin + lay.rowLabel + c * (CELL_W + lay.gap);
           const y = lay.margin + lay.head + lay.colLabel + r * (cellH + lay.gap);
           sctx.drawImage(bmp, x, y, CELL_W, cellH);
+          if (proj0 && projX && projY) {
+            const k = CELL_W / proj0.w;       // sheet pixels per canvas CSS pixel (the panel is the whole canvas)
+            cells.push({
+              row: r, col: c, x, y, w: CELL_W, h: cellH, up, sun: sunNow,
+              at: (px, py) => ({ x: x + (proj0.x + (projX.x - proj0.x) * px / 100 + (projY.x - proj0.x) * py / 100) * k, y: y + (proj0.y + (projX.y - proj0.y) * px / 100 + (projY.y - proj0.y) * py / 100) * k }),
+            });
+          }
           if (bmp.close) bmp.close();
           sctx.strokeStyle = '#d5d9de'; sctx.lineWidth = 1;
           sctx.strokeRect(x + 0.5, y + 0.5, CELL_W - 1, cellH - 1);
@@ -14548,7 +14907,7 @@ const SunStudy = (() => {
       sctx.fillText('CMRLM', sheet.width - lay.margin, fy);
     } finally {
       // Put everything back. The drag closes with the original values, so the history gets nothing.
-      SunUI.sheetMode(false);
+      SunUI.sheetMode(false);          // also turns the shadow boost off again (unless the Sun Study mode or a date and time study wants it)
       SunLayer.suppress(false);
       try {
         Store.set('sun', saved.sun === undefined ? { mode: 'manual' } : saved.sun, { live: true });
@@ -14557,13 +14916,14 @@ const SunStudy = (() => {
         Store.set('view.style', saved.style, { live: true });
         Store.commit();
         Render.setView(saved.preset || 'axon', false);
+        SunUI.syncBoost();
       } catch (e) { console.error(e); }
       working = false;
     }
     const blob = await new Promise((resolve, reject) => sheet.toBlob((b) => (b ? resolve(b) : reject(new Error('The sheet could not be saved as a PNG.'))), 'image/png'));
     const slug = String(Store.get('name') || 'tower').trim().replace(/[^\w\-]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'tower';
     const filename = `${slug}-shadow-study.png`;
-    const out = { blob, width: sheet.width, height: sheet.height, panels: dates.length * times.length, rows: dates.length, cols: times.length, filename };
+    const out = { blob, width: sheet.width, height: sheet.height, panels: dates.length * times.length, rows: dates.length, cols: times.length, filename, canvas: sheet, cells, boostDuring };
     if (deliver) {
       const result = await ShotMod.deliverImage(blob, filename);
       if (result === 'downloaded') Toast.show('Shadow study sheet saved to your downloads.');
@@ -15253,6 +15613,10 @@ async function runTests() {
     const m = Derived.get().metrics, text = Prompts.promptText('hero-render');
     return eq([!!text && text.startsWith('Edit the attached massing model image'), text.includes('rotates slightly'), text.includes(`${Math.round(m.totalHeight)} feet`), /\[|\{\{/.test(text)], [true, true, true, false]);
   });
+  await t('Hero render names the hero color: the amber volume is the hero, every white volume stays a white model, the avoid list names the tint', () => {
+    const text = Prompts.promptText('hero-render');
+    return eq([text.includes(`The hero building is the ${CONFIG.heroColorName} volume.`), CONFIG.heroColorName, text.includes('Every white volume stays a white model.'), text.includes(`any ${CONFIG.heroColorName} tint on the finished hero`), /\[|\{\{/.test(text)], [true, 'amber', true, true, false]);
+  });
   await t('custom prompts: save, export, import (title collisions become "Title (2)"), remove', async () => {
     const a = StorageMod.createStorage({ key: 'k', schema: 1, storage: memory() });
     const rec = a.savePrompt({ title: 'Evening mood', template: 'A {{height}} tower at {{time}}.', uses: ['time'] });
@@ -15294,6 +15658,70 @@ async function runTests() {
       const blob = await Shots.capture({ scale: 1 });
       return (blob.type === 'image/png' && blob.size > 2000) || `type ${blob.type} size ${blob.size}`;
     });
+  }
+
+  /* ---- Sun Study mode (?study=sun, batch-fixes plan 3.1): the same page opened in a hidden frame ---- */
+  await t('this page (no ?study) is the full Tower: four tabs, not in study mode, no data-study mark', () => eq([UI.studyMode, UI.tabs(), document.documentElement.getAttribute('data-study'), !!document.getElementById('tbEditTower')], [false, ['form', 'program', 'view', 'site'], null, false]));
+  {
+    const frame = document.createElement('iframe');
+    frame.setAttribute('aria-hidden', 'true');
+    frame.style.cssText = 'position:fixed;left:0;top:0;width:1280px;height:800px;border:0;opacity:0;pointer-events:none;z-index:-1';
+    frame.src = `${location.pathname}?study=sun&project=study-test-none`;
+    document.body.append(frame);
+    let cw = null;
+    const t0 = performance.now();
+    while (performance.now() - t0 < 20000) {
+      try { cw = frame.contentWindow; if (cw && cw.__tower && cw.document.readyState === 'complete' && cw.document.getElementById('tbEditTower')) break; } catch (e) { /* not ready */ }
+      cw = null;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    await new Promise((r) => setTimeout(r, 300));
+    const info = () => cw.__tower.studyInfo();
+    const doc = () => cw.document;
+    await t('Sun Study mode: the page loads with the study flag (UI.studyMode, data-study="sun")', () => cw ? eq([info().study, doc().documentElement.getAttribute('data-study')], [true, 'sun']) : 'the study page did not load');
+    await t('Sun Study mode: the tab row shows View only (Form, Program, Site hidden) and View is the open tab', () => {
+      const d = doc();
+      const shown = [...d.querySelectorAll('#panelTabs .tab')].filter((b) => !b.hidden && b.offsetParent !== null).map((b) => b.dataset.tab);
+      const hidden = [...d.querySelectorAll('#panelTabs .tab')].filter((b) => b.hidden || b.offsetParent === null).map((b) => b.dataset.tab);
+      const refused = cw.__tower.setTab('form');
+      return eq([shown, hidden, cw.__tower.getTab(), refused, info().tabs], [['view'], ['form', 'program', 'site'], 'view', false, ['view']]);
+    });
+    await t('Sun Study mode: the Sun section is open, Display and Context and envelope are collapsed', () => eq([info().open.sun, info().open.display, info().open.scene], [true, false, false]));
+    await t('Sun Study mode: the Sun section offers Date and time controls and the shadow study sheet button', () => {
+      const d = doc();
+      return eq([!!d.querySelector('[data-sun="mode"]'), !!d.querySelector('[data-sun="sheet"]'), !!d.querySelector('[data-sun="compute"]')], [true, true, true]);
+    });
+    await t('Sun Study mode: the title reads "Tower Generator · Sun Study" (page and browser tab)', () => eq([doc().querySelector('.app-title').textContent, doc().title], ['Tower Generator · Sun Study', 'Tower Generator · Sun Study']));
+    await t('Sun Study mode: no selection handles and no placement gizmo (a click on the model selects nothing)', () => {
+      const d = doc();
+      // a click on the middle of the model: with the selection off nothing gets selected
+      const cv = d.querySelector('#canvasHost canvas');
+      if (cv) {
+        const r = cv.getBoundingClientRect();
+        for (const type of ['pointerdown', 'pointerup']) {
+          try { cv.dispatchEvent(new cw.PointerEvent(type, { clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, button: 0, pointerId: 7, pointerType: 'mouse', bubbles: true })); } catch (e) { /* a synthetic pointer id has no capture */ }
+        }
+      }
+      const sel = cw.__tower.getSelection().length;
+      let hdl = 0;
+      try { hdl = cw.__tower.visibleHandles().length; } catch (e) { hdl = 0; }
+      const shownHdl = [...d.querySelectorAll('.hdl')].filter((e) => e.offsetParent !== null).length;
+      return eq([shownHdl, hdl, sel, cw.__tower.placementGizmo.info().active, cw.__tower.placementGizmo.info().handles, d.getElementById('selection-card').hidden], [0, 0, 0, false, 0, true]);
+    });
+    await t('Sun Study mode: the Export menu keeps Image, AI-ready image, Shadow study sheet and Send to; it drops AI Prompts, SketchUp and the JSON files', () => {
+      const d = doc();
+      d.getElementById('btnExport').click();
+      const ids = [...d.querySelectorAll('#exportMenu .pop-item')].map((b) => b.id);
+      cw.__tower.closePop();
+      const has = (id) => ids.includes(id);
+      return eq([has('miImage'), has('miAiReady'), has('miShadowSheet'), has('miSendPlate'), has('miAiPrompts'), has('miSketchup'), has('miExportJson'), has('miImportJson')], [true, true, true, true, false, false, false, false]);
+    });
+    await t('Sun Study mode: the "Edit the tower" link opens the same address without ?study and keeps ?project=', () => {
+      const a = doc().getElementById('tbEditTower');
+      return eq([a && a.tagName, a && a.textContent.trim(), a && a.getAttribute('href')], ['A', 'Edit the tower', `${location.pathname}?project=study-test-none`]);
+    });
+    await t('Sun Study mode: the shadows draw with the stronger light (the boost is on while shadows are on)', () => (info().ready ? eq([info().boosted, info().light.sun, info().light.hemi], [true, 2.3, 1.1]) : true));
+    frame.remove();
   }
 
   const failed = results.filter((r) => !r.ok);
@@ -17187,6 +17615,95 @@ async function runSunTests() {
       SunUI.setSun({ dates: ['03-20', '06-21', '12-21'], times: [540, 720, 900] });
       return eq([fields, r && r.panels], [[`${YEAR}-01-15`, '17:00'], 9]);
     });
+
+    /* ---- shadow strength (batch-fixes plan 3.2) ---- */
+    // Reads the sheet canvas: a ground point inside the shadow (past the tower's edge on the side away from the sun) against a lit
+    // ground point on the sun side. The point comes from the cell's plan-to-sheet map, so the test does not guess pixels.
+    const lum = (ctx, x, y) => {
+      const d = ctx.getImageData(Math.round(x) - 2, Math.round(y) - 2, 5, 5).data;
+      let s = 0, n = 0;
+      for (let i = 0; i < d.length; i += 4) { s += 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]; n++; }
+      return s / n;
+    };
+    const shadowContrast = (r, row = 1, col = 1) => {
+      const cell = r.cells.find((c) => c.row === row && c.col === col);
+      if (!cell || !cell.up) return { error: 'no sunlit cell' };
+      const b = Derived.get().bounds.model;
+      const cx = (b.minX + b.maxX) / 2, cy = (b.minY + b.maxY) / 2, hx = (b.maxX - b.minX) / 2, hy = (b.maxY - b.minY) / 2;
+      const az = cell.sun.azimuth * Math.PI / 180, alt = Math.max(cell.sun.altitude, 3) * Math.PI / 180;
+      const sx = -Math.sin(az), sy = -Math.cos(az);                       // plan direction the shadows fall toward
+      const exit = Math.min(hx / Math.max(Math.abs(sx), 1e-6), hy / Math.max(Math.abs(sy), 1e-6));
+      const L = b.height / Math.tan(alt);                                 // shadow length past the tower's edge
+      const dist = exit + 0.5 * L;
+      const ctx = r.canvas.getContext('2d');
+      const sh = cell.at(cx + sx * dist, cy + sy * dist), lit = cell.at(cx - sx * dist, cy - sy * dist);
+      const inside = (q) => q.x > cell.x + 4 && q.x < cell.x + cell.w - 4 && q.y > cell.y + 4 && q.y < cell.y + cell.h - 4;
+      if (!inside(sh) || !inside(lit)) return { error: `points outside the panel ${JSON.stringify([sh, lit])}` };
+      const a = lum(ctx, sh.x, sh.y), l = lum(ctx, lit.x, lit.y);
+      return { shadow: Math.round(a * 10) / 10, lit: Math.round(l * 10) / 10, ratio: Math.round(a / l * 1000) / 1000, length: Math.round(L) };
+    };
+    await t('Render.shadowBoost raises the sun and lowers the sky light, and turning it off restores today\'s values; the ground shadow draws at CONFIG.shadowStrength', () => {
+      if (!hasGL) return true;
+      Render.shadowBoost(false);
+      const a = Render.lightInfo();
+      Render.shadowBoost(true);
+      const b = Render.lightInfo();
+      Render.shadowBoost(false);
+      const c = Render.lightInfo();
+      SunUI.syncBoost();
+      return eq([CONFIG.shadowStrength, a.shadowOpacity, [a.sun, a.hemi, a.boost], [b.sun, b.hemi, b.boost], [c.sun, c.hemi, c.boost]], [0.55, 0.55, [1.7, 2.3, false], [2.3, 1.1, true], [1.7, 2.3, false]]);
+    });
+    await t('the boost follows the sun mode: off in Manual, on in Date and time with shadows on, off with shadows off or in Diagram', () => {
+      if (!hasGL) return true;
+      fresh();
+      const manual = Render.shadowBoosted();
+      setStudy({ date: '06-21', time: 720 });
+      const study = Render.shadowBoosted();
+      Store.set('view.shadows', false, { live: false });
+      const noShadows = Render.shadowBoosted();
+      Store.set('view.shadows', true, { live: false });
+      Store.set('view.style', 'diagram', { live: false });
+      const diagram = Render.shadowBoosted();
+      Store.set('view.style', 'model', { live: false });
+      SunUI.setSun({ mode: 'manual' });
+      return eq([manual, study, noShadows, diagram, Render.shadowBoosted()], [false, true, false, false, false]);
+    });
+    await t('the sheet runs with the shadow boost on and puts the lights back to today\'s values after (Manual mode)', async () => {
+      if (!hasGL) return true;
+      fresh();
+      const r = await SunStudy.make({ deliver: false });
+      const li = Render.lightInfo();
+      return eq([!!r, r && r.boostDuring, li.boost, li.sun, li.hemi, Render.shadowBoosted()], [true, true, false, 1.7, 2.3, false]);
+    });
+    await t('on the sheet a shadowed ground pixel is clearly darker than a lit one (flat ground): below 0.7 of the lit luminance', async () => {
+      if (!hasGL) return true;
+      fresh();
+      const r = await SunStudy.make({ deliver: false });
+      if (!r || !r.cells || !r.cells.length) return 'no cells';
+      const m = shadowContrast(r);
+      timings.shadowFlat = m;
+      if (m.error) return m.error;
+      return m.lit > 120 && m.ratio < 0.7 ? true : `shadow ${m.shadow}, lit ${m.lit}, ratio ${m.ratio} (needs < 0.7)`;
+    });
+    await t('on the sheet with a project site ground (lit material) a shadowed ground pixel is clearly darker than a lit one: below 0.7', async () => {
+      if (!hasGL) return true;
+      ProjectUI.reset();
+      ProjectUI.configure({ storage: mem, navigate: () => {}, updateUrl: () => {} });
+      const doc = ProjectFixture.siteProject();
+      ProjectMod.saveProject(mem, doc);
+      ProjectUI.openDoc(doc);
+      fresh();
+      Store.set('placement', { x: 500, y: 500, rotation: 0, baseZ: 1010 }, { live: false });
+      await frames(3);
+      const r = await SunStudy.make({ deliver: false });
+      ProjectUI.reset();
+      ProjectUI.restoreDefaults();
+      if (!r || !r.cells || !r.cells.length) return 'no cells';
+      const m = shadowContrast(r);
+      timings.shadowSite = m;
+      if (m.error) return m.error;
+      return m.lit > 60 && m.ratio < 0.7 ? true : `shadow ${m.shadow}, lit ${m.lit}, ratio ${m.ratio} (needs < 0.7)`;
+    });
   } finally {
     SunUI.play(false);
     SunLayer.suppress(false);
@@ -17489,6 +18006,26 @@ async function runSiteLayerTests() {
       const marks = ['site-boundary', 'site-arrow'].map((k) => kids.some((o) => o.userData.kind === k && o.visible));
       return eq([seen, [cf.site, cf.boundary, cf.arrow, cf.grid, cf.figure, cf.overlay], cf.siteObjects > 2, [f.siteVisible, f.slabY < -10, marks], SiteLayer.info().shown],
         [[[true, true, false]], [true, false, false, false, false, false], true, [true, true, [true, true]], true]);
+    });
+
+    await t('5b the AI-ready image draws the hero in CONFIG.heroColor (captureFlags reports it), the neighbors and context stay as drawn, and the live materials come back', async () => {
+      if (!live) return true;
+      const heroHex = CONFIG.heroColor.toLowerCase();
+      const orig = ShotMod.captureView;
+      const hx = (m) => `#${m.color.getHexString()}`;
+      const hasColor = (x) => x.isMesh && x.material && !Array.isArray(x.material) && x.material.color;
+      let seen = null;
+      ShotMod.captureView = async (o) => {
+        const heroes = [], others = [];
+        o.scene.traverse((x) => { if (x.isMesh) (x.userData.hero ? heroes : others).push(x); });
+        seen = { scene: o.scene, flags: Render.captureFlags(), n: heroes.length, heroHexes: heroes.filter(hasColor).map((x) => hx(x.material)), othersHero: others.filter((x) => hasColor(x) && hx(x.material) === heroHex).length };
+        return new Blob(['x']);
+      };
+      try { await Render.captureClean(1); } finally { ShotMod.captureView = orig; }
+      await wait(150);
+      let liveHero = 0;
+      seen.scene.traverse((x) => { if (hasColor(x) && hx(x.material) === heroHex) liveHero++; });
+      return eq([seen.n > 0, seen.heroHexes.includes(heroHex), seen.flags.heroColor, Render.captureFlags().heroColor, seen.othersHero, liveHero], [true, true, CONFIG.heroColor, CONFIG.heroColor, 0, 0]);
     });
 
     await t('6. a theme change rebuilds the layer (the key carries the theme epoch)', async () => {
@@ -17891,6 +18428,130 @@ runAllTests = ((base) => async function runAllWithGizmo() {
   return r;
 })(runAllTests);
 
+
+/* ==========================================================================
+   TESTS: the placement hit rule (docs/batch-fixes-technical-plan.md sections 2.3 and 2.4) - Tower
+   A placement move needs a press whose target is the canvas itself (never a .hdl or a card) and no selection with handles shown.
+   ========================================================================== */
+async function runHitRuleTests() {
+  const results = [];
+  const eq = (a, b) => (JSON.stringify(a) === JSON.stringify(b) ? true : `got ${JSON.stringify(a)}, expected ${JSON.stringify(b)}`);
+  const t = async (name, fn) => {
+    let r;
+    try { r = await fn(); } catch (e) { r = `threw ${e && e.message}`; }
+    results.push({ name, ok: r === true, detail: r === true ? '' : String(r) });
+  };
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const G = PlacementGizmo;
+  const savedState = Store.snapshot();
+  Options.holdAutosave(true);
+  const mem = GizmoFixture.memory();
+  ProjectUI.reset();
+  ProjectUI.configure({ storage: mem, navigate: () => {}, updateUrl: () => {} });
+  const pl = () => Store.get('placement');
+  const ev = (type, x, y, id) => new PointerEvent(type, { pointerId: id, pointerType: 'mouse', button: 0, buttons: type === 'pointerup' ? 0 : 1, clientX: x, clientY: y, bubbles: true, cancelable: true });
+  /** A press at (x, y) on `target`, then 60 px of travel and a release. Returns true when the placement moved. */
+  const dragOn = async (target, pt, id) => {
+    const p0 = JSON.stringify(pl());
+    const canvas = Render.canvas(), cap = canvas.setPointerCapture;
+    canvas.setPointerCapture = () => {};                  // a synthetic pointer has no capture to take (orbit may take the press when the gizmo yields)
+    let during;
+    try {
+      target.dispatchEvent(ev('pointerdown', pt.x, pt.y, id));
+      window.dispatchEvent(ev('pointermove', pt.x + 60, pt.y + 10, id));
+      await wait(60);
+      during = G.info().dragging;
+      window.dispatchEvent(ev('pointerup', pt.x + 60, pt.y + 10, id));
+    } finally { canvas.setPointerCapture = cap; }
+    return { moved: JSON.stringify(pl()) !== p0, during, orbit: Render.orbitEnabled() };
+  };
+
+  try {
+    Store.replace(fillDefaults(defaultState()), { resetHistory: true });
+    const doc = GizmoFixture.siteProject();
+    ProjectMod.saveProject(mem, doc);
+    ProjectUI.openDoc(doc);
+    await wait(300);
+    Select.clear();
+
+    await t('2.3 with nothing selected a press on the canvas still moves the placement (control)', async () => {
+      if (!Render.ready()) return true;
+      const pt = G.modelPoint();
+      if (!pt) return 'no model point on screen';
+      const r = await dragOn(Render.canvas(), pt, 51);
+      return (r.moved && r.during === 'move' && r.orbit) || JSON.stringify(r);
+    });
+
+    await t('2.3 a press whose target is a .hdl element over the model never starts a placement move', async () => {
+      if (!Render.ready()) return true;
+      const pt = G.modelPoint();
+      if (!pt) return 'no model point on screen';
+      const fake = h('div', { class: 'hdl', 'data-handle': 'test' });
+      Render.canvas().parentNode.append(fake);
+      try {
+        const r = await dragOn(fake, pt, 52);
+        return (!r.moved && r.during === null && r.orbit) || JSON.stringify(r);
+      } finally { fake.remove(); }
+    });
+
+    await t('2.3 a press whose target is a card or a button inside the canvas host never starts a placement move', async () => {
+      if (!Render.ready()) return true;
+      const pt = G.modelPoint();
+      if (!pt) return 'no model point on screen';
+      const out = [];
+      for (const [tag, cls] of [['div', 'sel-card'], ['button', 'btn']]) {
+        const fake = h(tag, { class: cls });
+        Render.canvas().parentNode.append(fake);
+        try { const r = await dragOn(fake, pt, 53); out.push(!r.moved && r.during === null && r.orbit); } finally { fake.remove(); }
+      }
+      return eq(out, [true, true]);
+    });
+
+    await t('2.3 Select.handlesShown() is false with nothing selected and true with an item selected', () => {
+      Select.clear();
+      const none = Select.handlesShown();
+      Select.select([{ kind: 'segment', index: 0 }]);
+      const one = Select.handlesShown();
+      Select.clear();
+      return eq([none, one], [false, true]);
+    });
+
+    await t('2.3 with an item selected and handles shown, a press on the model does not move the placement; Escape-clear gives the move back', async () => {
+      if (!Render.ready()) return true;
+      Select.select([{ kind: 'segment', index: 0 }]);
+      const shown = Select.handlesShown();
+      const pt = G.modelPoint();
+      if (!pt) return 'no model point on screen';
+      const r = await dragOn(Render.canvas(), pt, 54);
+      Select.clear();
+      const pt2 = G.modelPoint();
+      const r2 = await dragOn(Render.canvas(), pt2, 55);
+      return (shown && !r.moved && r.during === null && r.orbit && r2.moved) || `shown ${shown} selected ${JSON.stringify(r)} cleared ${JSON.stringify(r2)}`;
+    });
+  } finally {
+    try { G.end(false); } catch (e) { /* no drag open */ }
+    ProjectUI.reset();
+    ProjectUI.restoreDefaults();
+    Select.clear();
+    Store.replace(savedState);
+    Options.holdAutosave(false);
+  }
+  return results;
+}
+
+/* Extend runAllTests with the hit rule tests. */
+runAllTests = ((base) => async function runAllWithHitRule() {
+  const r = await base();
+  const g = await runHitRuleTests();
+  const bad = g.filter((x) => !x.ok);
+  r.results.push(...g);
+  r.total += g.length;
+  r.passed += g.length - bad.length;
+  r.failed.push(...bad);
+  console.log(`[tests] hit rule ${g.length - bad.length}/${g.length} passed`, bad.length ? JSON.stringify(bad) : '');
+  return r;
+})(runAllTests);
+
 /* ==========================================================================
    TESTS: base elevation follows the ground (docs/site-base-style-technical-plan.md section 1.5) - Tower
    The base elevation is the lowest ground under the building footprint (Follow ground), or the typed value (Typed).
@@ -18169,6 +18830,226 @@ runAllTests = ((base) => async function runAllWithBase() {
   return r;
 })(runAllTests);
 
+
+/* ==========================================================================
+   TESTS: Pin placement, Glass on open (docs/batch-fixes-technical-plan.md sections 2.1, 2.2 and 2.4) - Tower
+   Opening a project with a site draws the site Glass for the session; Pin placement locks the drag gizmo and the ring, draws the site
+   Solid and saves with the section; Unpin gives Glass back. One undo step per toggle. Typed X, Y and rotation stay editable.
+   Uses BaseFixture (above): an in-memory sloped site project, so a ?test visit never touches the saved projects.
+   ========================================================================== */
+async function runPinTests() {
+  const results = [];
+  const eq = (a, b) => (JSON.stringify(a) === JSON.stringify(b) ? true : `got ${JSON.stringify(a)}, expected ${JSON.stringify(b)}`);
+  const t = async (name, fn) => {
+    let r;
+    try { r = await fn(); } catch (e) { r = `threw ${e && e.message}`; }
+    results.push({ name, ok: r === true, detail: r === true ? '' : String(r) });
+  };
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const G = PlacementGizmo;
+  const savedState = Store.snapshot();
+  const savedLocks = CONFIG.pinLocksOffsets;
+  Options.holdAutosave(true);
+  const mem = BaseFixture.memory();
+  ProjectUI.reset();
+  ProjectUI.configure({ storage: mem, navigate: () => {}, updateUrl: () => {} });
+  const fresh = () => { Store.replace(fillDefaults(defaultState()), { resetHistory: true }); };
+  const pl = () => Store.get('placement');
+  const depth = () => Store.historyDepth();
+  const style = () => Store.get('view.siteStyle');
+  const btn = () => document.getElementById('tbPin');
+  const openSite = async (withSite = true) => {
+    fresh();
+    const doc = BaseFixture.siteDoc(withSite);
+    ProjectMod.saveProject(mem, doc);
+    ProjectUI.openDoc(doc);
+    await wait(300);
+    return doc;
+  };
+  const flushed = () => { ProjectUI.markDirty(); ProjectUI.flush(); return ProjectMod.getSection(ProjectUI.doc(), 'massing'); };
+  const offsetFields = () => [...document.querySelectorAll('section[data-section="segments"] [aria-label="Offset x (east) value"], section[data-section="segments"] [aria-label="Offset y (north) value"]')];
+
+  try {
+    await t('2.1 a project with a site opens with view.siteStyle glass (the style was solid before)', async () => {
+      fresh();
+      Store.set('view.siteStyle', 'solid', { live: false });
+      const before = style();
+      const doc = BaseFixture.siteDoc(true);
+      ProjectMod.saveProject(mem, doc);
+      ProjectUI.openDoc(doc);
+      await wait(300);
+      return eq([before, style(), pl().pinned === true], ['solid', 'glass', false]);
+    });
+
+    await t('2.1 a project without a site keeps the style it had', async () => {
+      fresh();
+      Store.set('view.siteStyle', 'wireframe', { live: false });
+      await openSite(false);
+      return eq(style(), 'solid');
+    });
+
+    await t('2.2 the Pin placement button sits right after the project pill, shows with a project open and reads "Pin placement"', async () => {
+      await openSite(true);
+      const b = btn(), pill = document.getElementById('projPill');
+      return eq([!!b, b && b.previousElementSibling === pill, b && b.hidden, b && b.textContent.trim(), b && b.getAttribute('aria-pressed'), PinUI.pinned()], [true, true, false, 'Pin placement', 'false', false]);
+    });
+
+    await t('2.2 the button is hidden without a project', async () => {
+      await openSite(true);
+      ProjectUI.close();
+      return eq([btn().hidden, PinUI.available()], [true, false]);
+    });
+
+    await openSite(true);
+
+    await t('2.2 Pin: placement.pinned is true, the button reads "Unpin" and is pressed, the site style is solid, ONE undo step', () => {
+      const d0 = depth();
+      btn().click();
+      const ok = pl().pinned === true && PinUI.pinned() && btn().textContent.trim() === 'Unpin' && btn().getAttribute('aria-pressed') === 'true' && style() === 'solid' && depth() - d0 === 1;
+      return ok || `pinned ${pl().pinned} text ${btn().textContent} style ${style()} steps ${depth() - d0}`;
+    });
+
+    await t('2.2 pinned: the ring and the grip are hidden, the gizmo is inactive, begin("move") and begin("rotate") are refused, nothing is written', () => {
+      if (!Render.ready()) return true;
+      const p0 = JSON.stringify(pl()), d0 = depth();
+      const i = G.info();
+      const rect = Render.canvas().getBoundingClientRect();
+      const pt = G.modelPoint() || { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+      const began = G.begin('move', pt.x, pt.y) || G.begin('rotate', pt.x, pt.y);
+      return eq([i.active, i.locked, i.handles, began, JSON.stringify(pl()) === p0, depth() === d0, Store.gestureActive()], [false, true, 0, false, true, true, false]);
+    });
+
+    await t('2.2 pinned: a real pointer drag on the model moves nothing and leaves orbit on', async () => {
+      if (!Render.ready()) return true;
+      const pt = G.modelPoint();
+      if (!pt) return 'no model point on screen';
+      const ev = (type, x, y) => new PointerEvent(type, { pointerId: 61, pointerType: 'mouse', button: 0, buttons: type === 'pointerup' ? 0 : 1, clientX: x, clientY: y, bubbles: true, cancelable: true });
+      const p0 = JSON.stringify(pl());
+      const canvas = Render.canvas(), cap = canvas.setPointerCapture;
+      canvas.setPointerCapture = () => {};                  // a synthetic pointer has no capture to take (orbit stays on while pinned)
+      try {
+        canvas.dispatchEvent(ev('pointerdown', pt.x, pt.y));
+        window.dispatchEvent(ev('pointermove', pt.x + 60, pt.y + 10));
+        await wait(60);
+        window.dispatchEvent(ev('pointerup', pt.x + 60, pt.y + 10));
+      } finally { canvas.setPointerCapture = cap; }
+      return eq([JSON.stringify(pl()) === p0, G.info().dragging, Render.orbitEnabled()], [true, null, true]);
+    });
+
+    await t('2.2 pinned: typed X, Y and rotation still write', () => {
+      const x0 = pl().x;
+      const fx = document.querySelector('[aria-label="X (east) value"]');
+      if (fx) { fx.value = String(x0 + 25); fx.dispatchEvent(new Event('change', { bubbles: true })); } else Store.set('placement.x', x0 + 25, { live: false });
+      const xOk = Math.abs(pl().x - (x0 + 25)) < 0.01 || `x ${pl().x} expected ${x0 + 25} (field ${!!fx})`;
+      Store.set('placement.y', 111, { live: false });
+      Store.set('placement.rotation', 30, { live: false });
+      return (xOk === true && pl().y === 111 && pl().rotation === 30 && pl().pinned === true) || `${xOk} placement ${JSON.stringify(pl())}`;
+    });
+
+    await t('2.2 Center on site and Context from site still work while pinned', () => {
+      const r = ProjectUI.centerOnSite({ quiet: true });
+      const c = ProjectUI.contextFromSite(undefined, { quiet: true });
+      return (pl().pinned === true && pl().x === 500 && pl().y === 500 && c !== -1) || `placement ${JSON.stringify(pl())} centered ${r} ctx ${c}`;
+    });
+
+
+    await t('2.2 pinLocksOffsets (default true): pinned, the segment offset x and y fields are disabled and the help line shows; unpinned they are enabled; false leaves them enabled', () => {
+      if (CONFIG.pinLocksOffsets !== true) return `CONFIG.pinLocksOffsets is ${CONFIG.pinLocksOffsets}, expected true`;
+      const note = () => [...document.querySelectorAll('#sections .help')].find((p) => p.textContent === 'Unpin the placement to move the building.');
+      const fields = offsetFields();
+      if (!fields.length) return 'no offset fields in the panel';
+      const lockedOn = fields.every((f) => f.disabled === true) && !!note() && !note().closest('.when').hidden;
+      CONFIG.pinLocksOffsets = false; Controls.refreshAll();
+      const freeWhenFalse = offsetFields().every((f) => f.disabled === false);
+      CONFIG.pinLocksOffsets = true; Controls.refreshAll();
+      PinUI.setPinned(false);
+      const freeUnpinned = offsetFields().every((f) => f.disabled === false) && note().closest('.when').hidden;
+      PinUI.setPinned(true);
+      return (lockedOn && freeWhenFalse && freeUnpinned && offsetFields().every((f) => f.disabled === true)) || `locked ${lockedOn} falseFlag ${freeWhenFalse} unpinned ${freeUnpinned}`;
+    });
+
+    await t('2.2 the pinned flag is saved with the section (placement and state) and a reopened project is pinned and solid', async () => {
+      const sec = flushed();
+      const savedOk = !!sec && sec.placement.pinned === true && sec.state.placement.pinned === true;
+      const doc = ProjectUI.doc();
+      fresh();
+      Store.set('view.siteStyle', 'wireframe', { live: false });
+      ProjectUI.openDoc(doc);
+      await wait(300);
+      const i = G.info();
+      return (savedOk && pl().pinned === true && style() === 'solid' && btn().textContent.trim() === 'Unpin' && !i.active)
+        || `saved ${savedOk} pinned ${pl().pinned} style ${style()} active ${i.active}`;
+    });
+
+    await t('2.2 Unpin: the style goes to glass, the gizmo and the ring are back, ONE undo step; undo re-pins and redo unpins', () => {
+      const d0 = depth();
+      btn().click();
+      const un = pl().pinned !== true && !PinUI.pinned() && btn().textContent.trim() === 'Pin placement' && style() === 'glass' && depth() - d0 === 1;
+      const i = G.info();
+      const ringBack = !Render.ready() || (i.active && i.handles === 1);
+      Store.undo();
+      const undone = [pl().pinned === true, style()];
+      Store.redo();
+      const redone = [pl().pinned === true, style()];
+      return (un && ringBack && eq(undone, [true, 'solid']) === true && eq(redone, [false, 'glass']) === true)
+        || `un ${un} ringBack ${ringBack} undone ${JSON.stringify(undone)} redone ${JSON.stringify(redone)}`;
+    });
+
+    await t('2.2 after Unpin a drag on the model works again (begin("move") starts)', () => {
+      if (!Render.ready()) return true;
+      const pt = G.modelPoint();
+      if (!pt) return 'no model point on screen';
+      const began = G.begin('move', pt.x, pt.y);
+      G.end(false);
+      return began || 'begin refused after Unpin';
+    });
+
+    await t('2.2 a project saved unpinned reopens with glass and an unpinned placement', async () => {
+      const sec = flushed();
+      const doc = ProjectUI.doc();
+      fresh();
+      ProjectUI.openDoc(doc);
+      await wait(300);
+      return eq([sec.placement.pinned === true, pl().pinned === true, style()], [false, false, 'glass']);
+    });
+
+    await t('2.2 fillDefaults keeps pinned true, drops anything else, and a missing placement stays null', () => {
+      const a = fillDefaults({ placement: { x: 1, y: 2, rotation: 0, baseZ: 3, pinned: true } }).placement;
+      const b = fillDefaults({ placement: { x: 1, y: 2, rotation: 0, baseZ: 3, pinned: 'yes' } }).placement;
+      const c = fillDefaults({ placement: { x: 1, y: 2, rotation: 0, baseZ: 3 } }).placement;
+      return eq([a.pinned, b.pinned === true, c.pinned === true, fillDefaults({}).placement], [true, false, false, null]);
+    });
+
+    await t('2.2 PinUI.setPinned without a project does nothing', () => {
+      ProjectUI.close();
+      const d0 = depth();
+      return eq([PinUI.setPinned(true), PinUI.pinned(), depth() === d0], [false, false, true]);
+    });
+  } finally {
+    CONFIG.pinLocksOffsets = savedLocks;
+    try { G.end(false); } catch (e) { /* no drag open */ }
+    ProjectUI.reset();
+    ProjectUI.restoreDefaults();
+    Select.clear();
+    Store.replace(savedState);
+    Options.holdAutosave(false);
+  }
+  return results;
+}
+
+/* Extend runAllTests with the Pin placement tests. */
+runAllTests = ((base) => async function runAllWithPin() {
+  const r = await base();
+  const g = await runPinTests();
+  const bad = g.filter((x) => !x.ok);
+  r.results.push(...g);
+  r.total += g.length;
+  r.passed += g.length - bad.length;
+  r.failed.push(...bad);
+  console.log(`[tests] pin placement ${g.length - bad.length}/${g.length} passed`, bad.length ? JSON.stringify(bad) : '');
+  return r;
+})(runAllTests);
+
 /* ==========================================================================
    TESTS: collapsed panel sections and the prompt panel (docs/site-base-style-technical-plan.md section 4)
    Every panel section starts collapsed on a fresh profile. A click on a section title opens it and saves the choice in the UI prefs
@@ -18360,6 +19241,266 @@ runAllTests = ((base) => async function runAllWithSections() {
 
 
 /* ==========================================================================
+   TESTS: Collapse all and the Site / Building zoom buttons (docs/batch-fixes-technical-plan.md sections 4 and 5)
+   Collapse all closes every panel section and remembers each one (the UI prefs), so a reload keeps them closed.
+   Site frames a box that contains the site square (the model when no site is open); Building frames a box close to the model box.
+   Both keep the camera direction (compared as unit vectors, within 0.001) and fit the box inside the view.
+   The site tests open the in-memory fixture project and restore everything when they finish.
+   ========================================================================== */
+async function runTopBarTests() {
+  const results = [];
+  const eq = (a, b) => (JSON.stringify(a) === JSON.stringify(b) ? true : `got ${JSON.stringify(a)}, expected ${JSON.stringify(b)}`);
+  const t = async (name, fn) => {
+    let r;
+    try { r = await fn(); } catch (e) { r = `threw ${e && e.message}`; }
+    results.push({ name, ok: r === true, detail: r === true ? '' : String(r) });
+  };
+  const $ = (id) => document.getElementById(id);
+  const frames = (n = 2) => new Promise((res) => { const f = () => (--n <= 0 ? res() : requestAnimationFrame(f)); requestAnimationFrame(f); });
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const live = Render.ready();
+  const savedState = Store.snapshot(), savedTab = UI.activeTab();
+  const savedSections = uiPrefs.sections === undefined ? undefined : JSON.parse(JSON.stringify(uiPrefs.sections));
+  Options.holdAutosave(true);
+  const mem = ProjectFixture.memory();
+  ProjectUI.reset();
+  ProjectUI.configure({ storage: mem, navigate: () => {}, updateUrl: () => {} });
+  const openSite = async () => {
+    Store.replace(fillDefaults(defaultState()), { resetHistory: true });
+    const doc = ProjectFixture.siteProject();
+    ProjectMod.saveProject(mem, doc);
+    ProjectUI.openDoc(doc);
+    await wait(350);
+    await frames(3);
+  };
+  const siteSquare = () => SiteLayer.frameBounds();
+  const stored = () => { try { return JSON.parse(localStorage.getItem(UI_STORAGE_KEY)) || {}; } catch (e) { return {}; } };
+  const freshProfile = () => { uiPrefs.sections = {}; saveUiPrefs(uiPrefs); UI.rebuildSections(); };
+  const reload = () => { uiPrefs.sections = stored().sections; UI.rebuildSections(); };
+  const accs = () => [...document.querySelectorAll('#sections section.acc')];
+  const openIds = () => accs().filter((a) => a.dataset.open === 'true').map((a) => a.dataset.section);
+  const dirOf = () => { const c = Render.camera(); c.updateMatrixWorld(true); return c.getWorldDirection(new THREE.Vector3()); };
+  /** The corners of a framing box in normalized device coordinates (-1 .. 1) of the camera as it stands. */
+  const ndcOf = (box) => {
+    const c = Render.camera(); c.updateMatrixWorld(true); c.updateProjectionMatrix();
+    const z0 = box.minZ || 0, H = Math.max(box.height || 0, z0 + 20);
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (const x of [box.minX, box.maxX]) for (const y of [box.minY, box.maxY]) for (const z of [z0, H]) {
+      const p = worldVec(x, y, z).project(c);
+      x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y);
+    }
+    return { x0, x1, y0, y1, fill: Math.max(x1 - x0, y1 - y0) };
+  };
+  const inside = (n, slack = 0.02) => n.x0 >= -1 - slack && n.x1 <= 1 + slack && n.y0 >= -1 - slack && n.y1 <= 1 + slack;
+  const contains = (outer, inner, tol = 0.5) => outer.minX <= inner.minX + tol && outer.maxX >= inner.maxX - tol && outer.minY <= inner.minY + tol && outer.maxY >= inner.maxY - tol;
+  const sameDir = (a, b) => a.distanceTo(b) < 0.001;
+  const dist = () => Render.info().distance;
+
+  try {
+    /* ---- Collapse all (section 4) ---- */
+    await t('Z1. the Collapse all button sits in the panel head with a name, a touch-size target and a visible label', () => {
+      const b = $('panelCollapse');
+      if (!b) return 'missing #panelCollapse';
+      const r = b.getBoundingClientRect();
+      return eq([b.tagName, !!b.getAttribute('aria-label'), !b.hidden, r.height >= 40, !!b.closest('#panel'), b.textContent.trim()], ['BUTTON', true, true, true, true, 'Collapse all']);
+    });
+    await t('Z2. Collapse all closes every section, saves each one as closed, and a reload keeps them closed', () => {
+      freshProfile();
+      const ids = Object.keys(UI.sectionCtl);
+      accs().filter((a) => !a.hidden).slice(0, 3).forEach((a) => a.querySelector('.acc-head').click());
+      const before = openIds().length;
+      $('panelCollapse').click();
+      const closed = [openIds(), ids.filter((id) => UI.sectionCtl[id].isOpen())];
+      const saved = ids.filter((id) => (stored().sections || {})[id] !== false);
+      reload();
+      return eq([before >= 3, closed, saved, openIds()], [true, [[], []], [], []]);
+    });
+    await t('Z3. after Collapse all a section the user opens stays open after a reload, and the others stay closed', () => {
+      freshProfile();
+      $('panelCollapse').click();
+      const id = accs().find((a) => !a.hidden).dataset.section;
+      document.querySelector(`#sections section.acc[data-section="${id}"] .acc-head`).click();
+      reload();
+      return eq(openIds(), [id]);
+    });
+    await t('Z4. Collapse all is harmless when every section is already closed (and scrolls the panel to its top)', () => {
+      freshProfile();
+      $('panelCollapse').click();
+      $('panelCollapse').click();
+      return eq([openIds(), $('panelScroll').scrollTop], [[], 0]);
+    });
+
+    /* ---- the zoom buttons (section 5) ---- */
+    await t('Z5. the Site and Building buttons are in the top bar with names, touch-size targets and visible labels', () => {
+      const s = $('tbZoomSite'), b = $('tbZoomBuilding');
+      if (!s || !b) return 'missing zoom buttons';
+      const hit = (e) => e.getBoundingClientRect().height >= 40;
+      return eq([!!s.closest('#topbar'), !!b.closest('#topbar'), !!s.getAttribute('aria-label'), !!b.getAttribute('aria-label'), hit(s), hit(b), s.textContent.trim(), b.textContent.trim()], [true, true, true, true, true, true, 'Site', 'Building']);
+    });
+    await t('Z6. the buttons call the Render zoom functions (Site → frameSite, Building → frameBuilding)', () => {
+      if (!live) return true;
+      const origS = Render.frameSite, origB = Render.frameBuilding;
+      const seen = [];
+      Render.frameSite = () => { seen.push('site'); return origS(false); };
+      Render.frameBuilding = () => { seen.push('building'); return origB(false); };
+      try { $('tbZoomSite').click(); $('tbZoomBuilding').click(); } finally { Render.frameSite = origS; Render.frameBuilding = origB; }
+      return eq(seen, ['site', 'building']);
+    });
+    await t('Z7. no site open: Site frames a box that contains the model, keeps the camera direction and fits the box in the view', async () => {
+      if (!live) return true;
+      Store.replace(fillDefaults(defaultState()), { resetHistory: true });
+      await frames(3);
+      Render.setView('axon', false);
+      Render.camera().position.add(new THREE.Vector3(13, 4, -9));      // a view the presets do not make
+      await frames(3);                                                   // the frame loop turns the camera to its target
+      const d0 = dirOf();
+      Render.frameSite(false);
+      const box = Render.framedBox('site'), model = Derived.get().bounds.model, n = ndcOf(box);
+      return eq([contains(box, model), sameDir(d0, dirOf()), inside(n), n.fill > 0.35], [true, true, true, true]);
+    });
+    await t('Z8. Building frames a box close to the model box, fits it in the view, keeps the direction, and is no farther than Site', async () => {
+      if (!live) return true;
+      Render.setView('axon', false);
+      Render.frameSite(false);
+      const dSite = dist(), zSite = Render.info().zoom;
+      const d0 = dirOf();
+      Render.frameBuilding(false);
+      const box = Render.framedBox('building'), m = Derived.get().bounds.model, n = ndcOf(box);
+      const span = Math.max(m.maxX - m.minX, m.maxY - m.minY);
+      const slack = (span) => Math.max(8, 0.25 * span);
+      const close = contains(box, m) === true && box.minX >= m.minX - slack(span) && box.maxX <= m.maxX + slack(span) && box.minY >= m.minY - slack(span) && box.maxY <= m.maxY + slack(span);
+      const nearer = Render.cameraType() === 'persp' ? dist() <= dSite * 1.001 : Render.info().zoom >= zSite * 0.999;       // no site: the Site box can equal the model box
+      return eq([close, sameDir(d0, dirOf()), inside(n), n.fill > 0.35, nearer], [true, true, true, true, true]);
+    });
+    await t('Z9. in an elevation (orthographic) Building and Site keep the direction and the orthographic camera', async () => {
+      if (!live) return true;
+      Render.setView('n', false);
+      const d0 = dirOf();
+      Render.frameBuilding(false);
+      const nB = ndcOf(Render.framedBox('building')), d1 = dirOf(), type1 = Render.cameraType();
+      Render.frameSite(false);
+      const nS = ndcOf(Render.framedBox('site')), d2 = dirOf(), type2 = Render.cameraType();
+      return eq([sameDir(d0, d1), sameDir(d0, d2), type1, type2, inside(nB), inside(nS), nB.fill > 0.35, nS.fill > 0.35], [true, true, 'ortho', 'ortho', true, true, true, true]);
+    });
+    await t('Z10. a preset button after a zoom button still works (the zoom leaves no preset pressed, the preset returns)', async () => {
+      if (!live) return true;
+      Render.frameBuilding(false);
+      const pressedAfterZoom = document.querySelectorAll('#views button[aria-pressed="true"]').length;
+      Render.setView('axon', false);
+      const pressed = [...document.querySelectorAll('#views button[aria-pressed="true"]')].map((b) => b.dataset.view);
+      return eq([pressedAfterZoom, pressed, Render.cameraType()], [0, ['axon'], 'persp']);
+    });
+    await t('Z11. a site open: Site frames a box that contains the whole site square and the model, keeps the direction, and fits it', async () => {
+      if (!live) return true;
+      await openSite();
+      Render.setView('axon', false);
+      Render.camera().position.add(new THREE.Vector3(-17, 6, 11));
+      await frames(3);
+      const d0 = dirOf();
+      Render.frameSite(false);
+      const sq = siteSquare(), box = Render.framedBox('site'), n = ndcOf(box);
+      return eq([!!sq, contains(box, sq, 0.01), contains(box, Derived.get().bounds.model), sameDir(d0, dirOf()), inside(n), n.fill > 0.35], [true, true, true, true, true, true]);
+    });
+    await t('Z12. a site open: Building stays on the model (the site is far larger) and is much closer than Site', async () => {
+      if (!live) return true;
+      Render.setView('axon', false);
+      Render.frameSite(false);
+      const dSite = dist(), site = Render.framedBox('site');
+      const d0 = dirOf();
+      Render.frameBuilding(false);
+      const box = Render.framedBox('building'), n = ndcOf(box), m = Derived.get().bounds.model;
+      const small = (box.maxX - box.minX) < 0.5 * (site.maxX - site.minX);
+      return eq([contains(box, m), small, sameDir(d0, dirOf()), inside(n), n.fill > 0.35, dist() < 0.6 * dSite], [true, true, true, true, true, true]);
+    });
+    await t('Z13. a site open: Collapse all and the zoom buttons still work with the project panel sections in place', () => {
+      freshProfile();
+      accs().filter((a) => !a.hidden).slice(0, 2).forEach((a) => a.querySelector('.acc-head').click());
+      $('panelCollapse').click();
+      return eq(openIds(), []);
+    });
+  } finally {
+    ProjectUI.reset();
+    ProjectUI.restoreDefaults();
+    if (typeof Select !== 'undefined' && Select.clear) Select.clear();
+    if (savedSections === undefined) delete uiPrefs.sections; else uiPrefs.sections = savedSections;
+    saveUiPrefs(uiPrefs);
+    UI.rebuildSections();
+    Store.replace(savedState); UI.setTab(savedTab, { remember: false });
+    Options.holdAutosave(false);
+  }
+  return results;
+}
+
+runAllTests = ((base) => async function runAllWithTopBar() {
+  const r = await base();
+  const g = await runTopBarTests();
+  const bad = g.filter((x) => !x.ok);
+  r.results.push(...g);
+  r.total += g.length;
+  r.passed += g.length - bad.length;
+  r.failed.push(...bad);
+  console.log(`[tests] topbar ${g.length - bad.length}/${g.length} passed`, bad.length ? JSON.stringify(bad) : '');
+  return r;
+})(runAllTests);
+
+/* ==========================================================================
+   TopBar: the Collapse all button and the Site / Building zoom buttons (docs/batch-fixes-technical-plan.md sections 4 and 5)
+   Shared page part, placed after the UI part in all seven tools. The markup lives in each tool's body.html:
+     #panelCollapse   the Collapse all button, in the panel head beside the tab row (the Site Model: at the top of the panel)
+     #tbZoom          the zoom group in the top bar, with #tbZoomSite and #tbZoomBuilding
+   TopBar.init wires them:
+     TopBar.init({
+       tool,                    // 'tower' | 'midrise' | 'parking' | 'facade' | 'grading' | 'plate' | 'site' (a label for tests)
+       sections: () => ({ id: { setOpen(bool), isOpen() } }),   // the section controllers now on screen (UI.sectionCtl; the Site Model: its blocks)
+       remember: (id, open) => {},                              // saves the open state of one section (UI.rememberSection)
+       onSite: () => {},        // Site: frame the whole site square (Render.frameSite); null hides the button
+       onBuilding: () => {},    // Building: fill the view with the hero building (Render.frameBuilding); null hides the button
+     })
+   Collapse all closes every section through its controller and remembers each one, so the choice survives a reload.
+   The controllers are read when the button is pressed, not when init runs, because the panel can be rebuilt.
+   ========================================================================== */
+const TopBar = (() => {
+  let cfg = null;
+  const $ = (id) => document.getElementById(id);
+
+  /** Closes every section and remembers each one as closed. Returns how many sections it closed. */
+  function collapseAll() {
+    const ctl = (cfg && typeof cfg.sections === 'function' && cfg.sections()) || {};
+    let n = 0;
+    for (const id of Object.keys(ctl)) {
+      const c = ctl[id];
+      if (!c || typeof c.setOpen !== 'function') continue;
+      c.setOpen(false);
+      if (cfg && typeof cfg.remember === 'function') cfg.remember(id, false);
+      n++;
+    }
+    const scroller = $('panelScroll');
+    if (scroller) scroller.scrollTop = 0;
+    return n;
+  }
+  function zoomSite() { if (cfg && typeof cfg.onSite === 'function') cfg.onSite(); }
+  function zoomBuilding() { if (cfg && typeof cfg.onBuilding === 'function') cfg.onBuilding(); }
+
+  function init(o) {
+    cfg = { tool: '', ...(o || {}) };
+    const collapse = $('panelCollapse'), site = $('tbZoomSite'), building = $('tbZoomBuilding'), group = $('tbZoom');
+    if (collapse) collapse.onclick = () => { collapseAll(); };
+    if (site) { site.hidden = typeof cfg.onSite !== 'function'; site.onclick = zoomSite; }
+    if (building) { building.hidden = typeof cfg.onBuilding !== 'function'; building.onclick = zoomBuilding; }
+    if (group) group.hidden = (!site || site.hidden) && (!building || building.hidden);
+  }
+
+  /** For tests: what is wired and shown. */
+  function info() {
+    const vis = (id) => { const e = $(id); return !!e && !e.hidden && e.getClientRects().length > 0; };
+    return { tool: cfg ? cfg.tool : null, ready: !!cfg, collapse: vis('panelCollapse'), site: vis('tbZoomSite'), building: vis('tbZoomBuilding') };
+  }
+
+  return { init, collapseAll, zoomSite, zoomBuilding, info };
+})();
+
+
+/* ==========================================================================
    Start-up and test hook
    ========================================================================== */
 const TEST_MODE = /[?&]test\b/.test(location.search);
@@ -18369,15 +19510,23 @@ Prompts.init();
 Compare.init();
 Options.syncDirty();
 if (!Render.init(document.getElementById('canvasHost'))) Store.subscribe(() => UI.updateHud(Derived.get()));
-Select.init();
+if (!UI.studyMode) Select.init();     // Sun Study mode (?study=sun): no selection, no handles, no keyboard editing
 PlacementGizmo.init({   // 06y_placement.js: drag the building to place it, turn it with the ring (a project must be open)
-  enabled: () => !Render.comparing(),
+  enabled: () => !Render.comparing() && !UI.studyMode,
   bounds: () => Derived.get().bounds.model,
   path: 'placement',
   onCommit: () => {},   // 09b_project.js re-runs Context from site on the commit notification (one undo step)
+  locked: () => PinUI.pinned(),   // Pin placement: no drag and no ring while pinned
 });
+PinUI.init({ tool: 'tower' });   // 08y_pin.js: the Pin placement button after the project pill
+if (UI.studyMode) {     // Sun Study mode: the placement gizmo off (a second init only replaces the options; the gizmo's own enabled line can read UI.studyMode instead)
+  PlacementGizmo.init({ enabled: () => false, bounds: () => Derived.get().bounds.model, path: 'placement', onCommit: () => {} });
+  document.documentElement.setAttribute('data-study', 'sun');
+}
 SunUI.init();          // 08d_sun.js: the study driver (before the project loads, so a loaded sun section drives it)
 ProjectUI.start();     // 09b_project.js: ?project= load and autosave
+
+TopBar.init({ tool: 'tower', sections: () => UI.sectionCtl, remember: UI.rememberSection, onSite: () => Render.frameSite(), onBuilding: () => Render.frameBuilding() });   // 08z_topbar.js: Collapse all and the zoom buttons
 
 const optionInfo = (o) => ({ id: o.id, name: o.name, updatedAt: o.updatedAt });
 window.__tower = {
@@ -18454,6 +19603,9 @@ window.__tower = {
   sunCancelHours: () => SunUI.cancel(),
   sunHoursInfo: () => SunLayer.info(),
   shadowStudy: (opts) => SunStudy.make({ deliver: false, ...(opts || {}) }),
+  // Sun Study mode (?study=sun) and the shadow strength, for tests: the mode, the tabs, which sections are open, the light values
+  studyInfo: () => ({ study: UI.studyMode, tabs: UI.tabs(), tab: UI.activeTab(), open: Object.fromEntries(['sun', 'display', 'scene'].map((id) => [id, UI.sectionCtl[id].isOpen()])), boosted: Render.shadowBoosted(), light: Render.lightInfo(), ready: Render.ready() }),
+  closePop: () => Pop.close(),
   // v1.1 layout hooks (the same functions the selection card calls)
   openItem: (item) => UI.openItem(item),
   setProgramForItems: (items, program) => UI.setProgramForItems(items, program),

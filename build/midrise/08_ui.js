@@ -105,6 +105,12 @@ const UI = (() => {
     format: Units.formatFeetInches, parse: Units.parseLength, inputMode: 'text', ...extra,
   });
   const lenF = (label, path, extra = {}) => lenS(label, path, 0, 1, { compact: true, ...extra });   // compact (number field only)
+  // Pin placement (batch fixes plan 2.2): with CONFIG.pinLocksOffsets a pinned placement also disables these number fields; the default leaves them editable
+  const pinLockF = (c) => {
+    const f = c.el.querySelector('input.numfield');
+    return Controls.when(() => { if (f) f.disabled = PinUI.locksOffsets(); return true; }, [c]);
+  };
+  const pinLockNote = () => Controls.when(() => PinUI.locksOffsets(), [Controls.help('Unpin the placement to move the building.')]);
   const offS = (label, path, lim = 200) => lenS(label, path, -lim, lim, { hardMin: -MAXD });          // may be negative
   const intS = (label, path, min, max, extra = {}) => Controls.slider({
     label, bind: bs(path), min, max, step: 1, hardMin: 1, hardMax: CONFIG.limits.maxFloors, integer: true,
@@ -234,7 +240,8 @@ const UI = (() => {
           ]),
           more: els([
             Controls.label('Start of the bar'),
-            Controls.group(els([lenF('Start x', `${p}.x`, { hardMin: -MAXD }), lenF('Start y', `${p}.y`, { hardMin: -MAXD })])),
+            Controls.group(els([pinLockF(lenF('Start x', `${p}.x`, { hardMin: -MAXD })), pinLockF(lenF('Start y', `${p}.y`, { hardMin: -MAXD }))])),
+            pinLockNote(),
             degS('Angle (from east, counter-clockwise)', `${p}.angle`, -180, 180),
             Controls.group(els([sel('Start end', `${p}.ends.start`, endOpts), sel('End end', `${p}.ends.end`, endOpts)])),
             Controls.label('Bends'),
@@ -1114,7 +1121,7 @@ const UI = (() => {
   return {
     init, updateHud, rebuildPanel: () => { Controls.refreshAll(); },
     // test hooks: the section controllers, and a rebuild of the panel from the saved UI prefs (a simulated reload)
-    sectionCtl, rebuildSections: () => { buildPanel(); setTab(activeTab, { remember: false }); Controls.refreshAll(); swatchSyncs.forEach((fn) => fn()); },
+    rememberSection, sectionCtl, rebuildSections: () => { buildPanel(); setTab(activeTab, { remember: false }); Controls.refreshAll(); swatchSyncs.forEach((fn) => fn()); },
     // hooks for the selection card
     openItem, setProgramForItems, setTab, activeTab: () => activeTab, tabs: () => TABS.map((t) => t.id), reorderBars,
     setHudOpen, hudOpen: () => $('hud').dataset.collapsed === 'false', sections: () => SECTIONS.map((s) => ({ id: s.id, tab: s.tab })),

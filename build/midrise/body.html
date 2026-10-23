@@ -10,6 +10,10 @@
     <div class="tb-group" id="tbProject"></div>
     <span class="proj-pill" id="projPill" hidden></span>
     <div class="tb-spacer"></div>
+    <div class="tb-group tb-zoom" id="tbZoom" role="group" aria-label="Zoom the view">
+      <button class="btn tb-zbtn" id="tbZoomSite" type="button" title="Zoom to the whole site" aria-label="Zoom to the whole site"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V5h4M16 5h4v4M20 15v4h-4M8 19H4v-4"/><path d="M9 14l1.2-4 4.8-1 1 5z"/></svg><span class="tb-ztxt">Site</span></button>
+      <button class="btn tb-zbtn" id="tbZoomBuilding" type="button" title="Zoom to the building" aria-label="Zoom to the building"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 20V5l9-2v17M15 8h3v12M4 20h16M9.5 8h2M9.5 12h2M9.5 16h2"/></svg><span class="tb-ztxt">Building</span></button>
+    </div>
     <div class="tb-group" id="tbHistory"></div>
     <div class="seg" id="styleToggle" role="group" aria-label="Visual style"></div>
     <div class="btn-split" id="tbSnap"></div>
@@ -34,7 +38,10 @@
     <aside class="panel" id="panel" aria-label="Controls">
       <div class="grabber" id="grabber" role="separator" aria-orientation="horizontal" aria-label="Drag to resize the controls sheet" tabindex="0"><span></span></div>
       <div id="selection-card" hidden></div>
-      <div class="tabs" id="panelTabs" role="tablist" aria-label="Control groups"></div>
+      <div class="panel-head" id="panelHead">
+        <div class="tabs" id="panelTabs" role="tablist" aria-label="Control groups"></div>
+        <button class="panel-collapse" id="panelCollapse" type="button" title="Close every section of the panel" aria-label="Collapse all sections"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5l5 5 5-5M7 19l5-5 5 5"/></svg><span class="pc-txt">Collapse all</span></button>
+      </div>
       <div class="panel-scroll" id="panelScroll">
         <div id="sections"></div>
       </div>

@@ -151,6 +151,7 @@ function fillDefaults(src) {
   merge(s, base);                                           // a state with no colorBy gets "program"; an explicit "zone" or "program" is kept
   migrateView(s.view);
   if (isObj(s.placement)) s.placement.baseMode = s.placement.baseMode === 'typed' ? 'typed' : 'follow';       // base elevation: Follow ground (default, and the migration for old saves) | Typed
+  if (isObj(s.placement) && s.placement.pinned !== true) delete s.placement.pinned;       // Pin placement (batch fixes plan 2.2): true only while pinned, a missing value is false
   if (!Array.isArray(s.segments) || !s.segments.length) s.segments = [defaultSegment()];
   const seg0 = defaultSegment();
   s.segments.forEach((seg) => merge(seg, seg0));

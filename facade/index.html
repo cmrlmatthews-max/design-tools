@@ -716,6 +716,34 @@ textarea.ai-preview {
 .warns li .btn { margin-left: 4px; vertical-align: middle; }
 .metrics dd.bad, .hud .v.bad { color: var(--bad); }
 .hud .sec { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+
+/* ---- batch fixes phase D: Collapse all (panel head) and the Site / Building zoom buttons (top bar); build/shared/08z_topbar.js ---- */
+.tb-zoom { gap: 2px; margin-right: 4px; }
+.tb-zoom[hidden], .tb-zbtn[hidden], .panel-collapse[hidden] { display: none; }
+.tb-zbtn { padding: 0 10px; font-size: 13px; font-weight: 500; }
+.tb-zbtn .tb-ztxt { white-space: nowrap; }
+.tb-zbtn:focus-visible, .panel-collapse:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.panel-head { display: flex; align-items: stretch; flex: none; border-bottom: 1px solid var(--line); background: var(--panel); }
+.panel-head .tabs { flex: 1 1 auto; min-width: 0; border-bottom: 0; }
+.panel-collapse {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px; flex: none;
+  min-height: var(--hit); min-width: var(--hit); padding: 0 9px; border: 0; border-left: 1px solid var(--line); border-radius: 0;
+  background: transparent; color: var(--ink-2); font-size: 11.5px; font-weight: 600; letter-spacing: 0; white-space: nowrap;
+}
+.panel-head .tab { padding: 0 3px; font-size: 12.5px; letter-spacing: 0; }
+.panel-collapse:hover { background: var(--surface-2); color: var(--ink); }
+.panel-collapse:active { background: var(--line); }
+.panel-collapse svg { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.panel-head-solo { justify-content: flex-end; }
+.panel-head-solo .panel-collapse { border-left: 0; }
+@media (max-width: 899px) {
+  .tb-zbtn { padding: 0; }
+  .tb-zbtn .tb-ztxt { display: none; }
+}
+@media (max-width: 479px) {
+  .panel-collapse { padding: 0; }
+  .panel-collapse .pc-txt { display: none; }
+}
 </style>
 </head>
 <body>
@@ -731,6 +759,10 @@ textarea.ai-preview {
     <div class="tb-group" id="tbProject"></div>
     <span class="proj-pill" id="projPill" hidden></span>
     <div class="tb-spacer"></div>
+    <div class="tb-group tb-zoom" id="tbZoom" role="group" aria-label="Zoom the view">
+      <button class="btn tb-zbtn" id="tbZoomSite" type="button" title="Zoom to the whole site" aria-label="Zoom to the whole site"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V5h4M16 5h4v4M20 15v4h-4M8 19H4v-4"/><path d="M9 14l1.2-4 4.8-1 1 5z"/></svg><span class="tb-ztxt">Site</span></button>
+      <button class="btn tb-zbtn" id="tbZoomBuilding" type="button" title="Zoom to the building" aria-label="Zoom to the building"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 20V5l9-2v17M15 8h3v12M4 20h16M9.5 8h2M9.5 12h2M9.5 16h2"/></svg><span class="tb-ztxt">Building</span></button>
+    </div>
     <div class="tb-group" id="tbHistory"></div>
     <div class="seg" id="styleToggle" role="group" aria-label="Visual style"></div>
     <div class="tb-group" id="tbExport"></div>
@@ -754,7 +786,10 @@ textarea.ai-preview {
     <aside class="panel" id="panel" aria-label="Controls">
       <div class="grabber" id="grabber" role="separator" aria-orientation="horizontal" aria-label="Drag to resize the controls sheet" tabindex="0"><span></span></div>
       <div id="selection-card" hidden></div>
-      <div class="tabs" id="panelTabs" role="tablist" aria-label="Control groups"></div>
+      <div class="panel-head" id="panelHead">
+        <div class="tabs" id="panelTabs" role="tablist" aria-label="Control groups"></div>
+        <button class="panel-collapse" id="panelCollapse" type="button" title="Close every section of the panel" aria-label="Collapse all sections"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5l5 5 5-5M7 19l5-5 5 5"/></svg><span class="pc-txt">Collapse all</span></button>
+      </div>
       <div class="panel-scroll" id="panelScroll">
         <div id="sections"></div>
       </div>
@@ -3064,6 +3099,7 @@ const PromptsMod = (() => {
 // Auto fields (the panel computes them from the current option):
 //   {{floors}} {{height}} {{program}} {{podium}} {{form}}
 //   {{hero}}  the Hero render prompt only: the sentences about the hero building, from heroFor() below (the panel passes it in the values)
+//   {{heroColor}}  the Hero render prompt only: the color name of the hero volume in the AI-ready image ("amber"; the panel passes CONFIG.heroColorName)
 // Pick fields (the user chooses them in the panel): see PROMPT_FIELDS.
 // Pick values are written to read naturally in the template sentences:
 //   material -> "The facade is {{material}}."
@@ -3177,6 +3213,7 @@ const feet = (v) => `${Math.round(nz(v))} feet`;
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const articleFor = (phrase) => (/^(?:[aeio]|L-|8|11|18)/i.test(phrase) ? "an" : "a");
 const RENDER_ONLY = "Render only this building in full photographic detail.";
+const HERO_COLOR_FALLBACK = "amber";
 const HERO_FALLBACK = `The hero building is the building at the center of the image. ${RENDER_ONLY}`;
 const TOWER_SHAPES = { rect: "rectangular", square: "rectangular", circle: "round", ellipse: "elliptical", triangle: "triangular", L: "L-shaped", U: "U-shaped", polygon: "custom-shaped" };
 const CROWNS = { none: "a flat roof", flat: "a flat roof", stepped: "a stepped crown", sloped: "a sloped crown", spire: "a spire", screen: "a rooftop screen" };
@@ -3335,6 +3372,7 @@ const PROMPTS = [
       "* The road layout, block shapes, and site boundary.\n" +
       "Do not add, remove, move, stretch, or reshape any volume.\n\n" +
       "HERO BUILDING — RENDER PHOTOREAL\n" +
+      "The hero building is the {{heroColor}} volume. Render only that building photoreal. Every white volume stays a white model.\n" +
       "{{hero}}\n" +
       "* The facade is {{material}}.\n" +
       "* Slab edges read as dark horizontal lines between floors.\n" +
@@ -3356,7 +3394,7 @@ const PROMPTS = [
       "CAMERA\n" +
       "Architectural visualization quality. Vertical lines stay straight. Clean blacks. Sharp focus across the frame.\n\n" +
       "DO NOT INCLUDE\n" +
-      "Text, logos, watermarks, building signage, neon colors, fisheye distortion, tilt-shift blur, cartoon or illustration style, windows on the white volumes.",
+      "Text, logos, watermarks, building signage, neon colors, fisheye distortion, tilt-shift blur, cartoon or illustration style, windows on the white volumes, any {{heroColor}} tint on the finished hero.",
     uses: ["material", "time", "season"],
     defaults: { material: FRITTED, time: DUSK, season: AUTUMN },
   },
@@ -3689,11 +3727,11 @@ const PROMPTS = [
 // Full prompt text: FORM_LOCK + blank line + template, with every {{token}} replaced.
 // A prompt with noLock: true (the Hero render) starts with its own text, without the form lock.
 // Value order (later wins): PROMPT_FIELDS defaults < prompt.defaults < values.
-// {{hero}} has a plain default sentence, so a tool that does not send it still gets a whole prompt.
+// {{hero}} has a plain default sentence and {{heroColor}} defaults to "amber", so a tool that does not send them still gets a whole prompt.
 // Empty, null, or undefined entries in values do not override a default.
 // Unknown tokens stay visible as [token].
 function fillPrompt(prompt, values = {}) {
-  const merged = { hero: HERO_FALLBACK };
+  const merged = { hero: HERO_FALLBACK, heroColor: HERO_COLOR_FALLBACK };
   for (const [key, field] of Object.entries(PROMPT_FIELDS)) merged[key] = field.default;
   for (const [key, v] of Object.entries((prompt && prompt.defaults) || {})) {
     if (v !== undefined && v !== null && v !== "") merged[key] = v;
@@ -3765,7 +3803,7 @@ const MIN_EDGE = 0.1;       // ft, plan 3.2
 const GROUP_TOL = 1;        // ft, plan 3.5
 const GROUP_DEG = 1;        // degrees, plan 3.5
 const Z_TOL = 0.01;         // ft: floors touch
-const SKIP_ZONES = ["deck", "crown"];   // decision 16
+const SKIP_ZONES = ["deck"];   // decision 16, revised: the crown now stays (batch-fixes plan 1)
 
 const SECTORS = ["N", "E", "S", "W"];
 
@@ -3899,7 +3937,7 @@ function byZ(levels) {
 }
 
 /**
- * Plan 3.1 and section 7. Project source: massing.derived.levels without deck, crown, or empty levels.
+ * Plan 3.1 and section 7. Project source: massing.derived.levels without deck or empty levels. The crown level stays, with zone "crown".
  * A missing project massing, or one with no levels, falls back to the standalone massing with a note.
  * → { levels (sorted by z), rotation, source: "project" | "standalone", notes: [string], noteIds: [string] }
  */
@@ -4039,15 +4077,18 @@ function zoneOf(state, levels) {
   if (!sorted.length) return out;
   const podium = sorted.filter((l) => l.zone === "podium").map((l) => l.index);
   const base = new Set(podium.length ? podium : [sorted[0].index]);
-  const topIdx = sorted[sorted.length - 1].index;
+  const nonCrown = sorted.filter((l) => l.zone !== "crown");
+  const topIdx = nonCrown.length ? nonCrown[nonCrown.length - 1].index : null;
   for (const l of sorted) out[l.index] = base.has(l.index) ? "base" : l.index === topIdx ? "top" : "middle";
   const z = (state && state.zones) || {};
   if (z.mode === "ranges" && Array.isArray(z.ranges)) {
     for (const l of sorted) {
+      if (l.zone === "crown") continue;
       const r = z.ranges.find((g) => g && g.id !== undefined && l.index >= num(g.from, Infinity) && l.index <= num(g.to, -Infinity));
       if (r) out[l.index] = String(r.id);
     }
   }
+  for (const l of sorted) if (l.zone === "crown") out[l.index] = "crown";   // the crown is always its own zone
   return out;
 }
 
@@ -4403,7 +4444,7 @@ const SYSTEMS = Object.keys(DEFAULT_SYSTEMS);
 function ruleFor(state, zoneId, orientation) {
   const st = state || {};
   const zones = st.zones || {};
-  const base = (zones.rules && zones.rules[zoneId]) || {};
+  const base = (zones.rules && zones.rules[zoneId]) || (zoneId === "crown" ? { system: "solid" } : {});   // the crown is a screen unless a rule says otherwise
   const ov = (zones.overrides && zones.overrides[zoneId] && zones.overrides[zoneId][orientation]) || {};
   let rule = { ...base };
   if (ov.system && ov.system !== (base.system || "punched")) {
@@ -4616,7 +4657,7 @@ function buildFacade(state, { project = null, quality = "full", faces: override 
       const length = isNum(e.length) ? e.length : Math.hypot(b[0] - a[0], b[1] - a[1]);
       const rule = ruleFor(state, g.zone, g.orientation);
       const { n, module } = panelize(length, rule.module);
-      const eligible = bal.on && rule.system !== "solid" && bal.zones.includes(g.zone) && bal.orientations.includes(g.orientation);
+      const eligible = bal.on && rule.system !== "solid" && g.zone !== "crown" && bal.zones.includes(g.zone) && bal.orientations.includes(g.orientation);
       entries.push({ g, lv, a, b, length, rule, n, module, eligible, convexStart: e.convexStart === undefined ? g.convexStart : e.convexStart,
         convexEnd: e.convexEnd === undefined ? g.convexEnd : e.convexEnd, bearing: isNum(e.bearing) ? e.bearing : g.bearing });
     }
@@ -4721,6 +4762,9 @@ const FacMetricsMod = (() => {
    - wwrByOrientation holds a number, or null for an orientation with no wall.
      wwrByZone and wwrBySystem are { key: wwr }. `areas` holds
      { byOrientation, byZone, bySystem } as { wall, glazing } for the tables.
+   - The crown (zone "crown") counts in wwrByZone and areas.byZone only. It is
+     left out of wall, glazing, wwr, the orientation and system sums, and
+     hasCrown tells the page to say "crown not counted".
    - worst = { orientation, wwr } for the highest orientation WWR; a tie goes
      to the first of N, E, S, W. null when there is no wall.
    - transparency = glass inside the band on street faces / sum of
@@ -4831,7 +4875,7 @@ function ratio(glazing, wall) {
 
 /** Plan 3.10 to 3.12. project: the loaded project document or null (reads sections.sun.derived).
     → { wall, glazing, wwr, wwrByOrientation, wwrByZone, wwrBySystem, areas, worst, transparency, balconyCount,
-        balconyArea, projectionFactors, exposure, envelope, wwrLimit, levels, buildWarnings } */
+        balconyArea, projectionFactors, exposure, envelope, wwrLimit, levels, hasCrown, buildWarnings } */
 function computeMetrics(state, built, project) {
   need(state, "computeMetrics", "state");
   need(built && Array.isArray(built.faces) && Array.isArray(built.levels), "computeMetrics", "built.faces and built.levels");
@@ -4839,12 +4883,15 @@ function computeMetrics(state, built, project) {
   const byO = Object.fromEntries(ORIENTATIONS.map((o) => [o, bucket()]));
   const byZ = {}, byS = {};
   let wall = 0, glazing = 0;
+  let hasCrown = false;
   for (const f of built.faces) {
+    const z = byZ[f.zone] || (byZ[f.zone] = bucket());
+    z.wall += f.wall; z.glazing += f.glazing;
+    // The crown is a screen, not a floor of the building: it has its own zone row and stays out of every other sum.
+    if (f.zone === "crown") { hasCrown = true; continue; }
     wall += f.wall; glazing += f.glazing;
     const o = byO[f.orientation] || (byO[f.orientation] = bucket());
     o.wall += f.wall; o.glazing += f.glazing;
-    const z = byZ[f.zone] || (byZ[f.zone] = bucket());
-    z.wall += f.wall; z.glazing += f.glazing;
     const sys = f.rule && f.rule.system ? f.rule.system : "punched";
     const s = byS[sys] || (byS[sys] = bucket());
     s.wall += f.wall; s.glazing += f.glazing;
@@ -4907,6 +4954,7 @@ function computeMetrics(state, built, project) {
     envelope: envelopeNote(state, built),
     wwrLimit: isNum(chk.wwrLimit) ? chk.wwrLimit : 0.4,
     levels: built.levels.length,
+    hasCrown,
     buildWarnings: (Array.isArray(built.warnings) ? built.warnings : []).map((w) => ({ ...w, floors: Array.isArray(w.floors) ? w.floors.slice() : [] })),
   };
 }
@@ -6213,11 +6261,14 @@ const CONFIG = {
   zoneLabels: { base: 'Base', middle: 'Middle', top: 'Top' },
   presets: PresetsMod.PRESETS,
   storageKey: 'facade.options.v1',
+  heroColor: '#E0A458',    // AI-ready image: the hero model draws in this color, everything else stays white (batch-fixes plan 7); one value
+  heroColorName: 'amber',  // the name the Hero render prompt uses for it
   schema: 1,
   projectSchema: 1,        // schema of the "facade" section this tool writes
   projectSaveMs: 1000,     // project autosave delay (spec section 8)
   projectListMax: 8,
   contextRadius: 900,      // ft, site neighbors drawn around the massing
+  shadowStrength: 0.55,   // opacity of the flat ground shadow (batch-fixes plan 3.2); the Tower also boosts the light contrast for the Sun Study
   tool: 'facade',
   wallThickness: 0.5,      // ft, the wall box of each face and level
   glassLift: 0.15,         // ft, glass sits this far proud of the wall face
@@ -6348,8 +6399,8 @@ function fillDefaults(src) {
     from: Math.max(1, Math.round(num(r.from, 1))), to: Math.max(1, Math.round(num(r.to, num(r.from, 1)))),
   }));
   if (!isObj(z.rules)) z.rules = {};
-  for (const id of ['base', 'middle', 'top', ...z.ranges.map((r) => r.id)]) {
-    if (!isObj(z.rules[id])) z.rules[id] = deepClone(z.rules.middle || { system: 'punched' });
+  for (const id of ['base', 'middle', 'top', 'crown', ...z.ranges.map((r) => r.id)]) {
+    if (!isObj(z.rules[id])) z.rules[id] = id === 'crown' ? { system: 'solid' } : deepClone(z.rules.middle || { system: 'punched' });   // the crown is a screen by default
     if (!SYSTEM_KEYS.includes(z.rules[id].system)) z.rules[id].system = 'punched';
   }
   if (!isObj(z.overrides)) z.overrides = {};
@@ -6577,11 +6628,13 @@ function summarize(s, built, metrics) {
   for (const f of built.faces || []) {
     const w = mv(f.wall), gl = mv(f.glazing);
     const doors = (f.panels || []).filter((p) => p.kind === 'door').length;
-    if (byO[f.orientation]) { byO[f.orientation].wall += w; byO[f.orientation].glazing += gl; }
+    const crown = f.zone === 'crown';   // the crown is a screen: its own zone row, not counted in the orientation or system sums
+    if (!crown && byO[f.orientation]) { byO[f.orientation].wall += w; byO[f.orientation].glazing += gl; }
     const gi = groupInfo[f.groupId];
     if (gi) { gi.wall += w; gi.glazing += gl; gi.balconies += doors; gi.faces++; gi.system = gi.system || (f.rule && f.rule.system) || 'punched'; }
     const z = zones[f.zone] = zones[f.zone] || { wall: 0, glazing: 0 };
     z.wall += w; z.glazing += gl;
+    if (crown) continue;
     const sy = systems[(f.rule && f.rule.system) || 'punched'] = systems[(f.rule && f.rule.system) || 'punched'] || { wall: 0, glazing: 0 };
     sy.wall += w; sy.glazing += gl;
   }
@@ -6603,7 +6656,7 @@ function summarize(s, built, metrics) {
     levels: (built.levels || []).length, faces: (built.groups || []).length, height: top,
     exposure: metrics.exposure && typeof metrics.exposure === 'object' ? metrics.exposure : null,
     projection: Array.isArray(metrics.projectionFactors) ? metrics.projectionFactors : [],
-    zones, systems, groupInfo,
+    zones, systems, groupInfo, crown: !!metrics.hasCrown || !!zones.crown,
   };
 }
 
@@ -7058,7 +7111,7 @@ const Render = (() => {
     // Shadow catcher on the ground.
     const sp = new THREE.PlaneGeometry(8000, 8000);
     sp.applyMatrix4(planMatrix(0));
-    shadowPlane = new THREE.Mesh(sp, new THREE.ShadowMaterial({ opacity: 0.24, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }));
+    shadowPlane = new THREE.Mesh(sp, new THREE.ShadowMaterial({ opacity: CONFIG.shadowStrength, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }));
     shadowPlane.receiveShadow = true;
     shadowPlane.renderOrder = 1;
     scene.add(shadowPlane);
@@ -7410,8 +7463,9 @@ const Render = (() => {
 
   function setView(id, animate = true) {
     if (!renderer) return;
-    const goal = viewTarget(id, framingBox(id === 'axon'), framingAspect(), cmp ? 0 : num(Derived.get().rotation, 0));
-    preset = id;
+    const custom = !!id && typeof id === 'object';       // a goal from fitBox (the zoom buttons) instead of a preset id
+    const goal = custom ? id : viewTarget(id, framingBox(id === 'axon'), framingAspect(), cmp ? 0 : num(Derived.get().rotation, 0));
+    preset = custom ? null : id;
     overlayVis = null;
     tween = null;
     if (goal.type !== camType) switchCamera(goal.type);
@@ -7442,6 +7496,60 @@ const Render = (() => {
     needsRender = true;
     viewListeners.forEach((fn) => fn(preset));
   }
+
+  /* ---- zoom buttons: Site and Building (docs/batch-fixes-technical-plan.md section 5) ---------------------------------
+     Both keep the camera direction and refit the distance and the target (fitBox). Neither turns the view or picks a preset. */
+  /** Fits `box` ({ minX, maxX, minY, maxY, height, minZ? } in plan feet) in the current camera direction, with the usual FIT_MARGIN. Returns the goal it flew to. */
+  function fitBox(box, animate = true) {
+    if (!renderer || !cam || !controls || !box) return null;
+    const dir = cam.position.clone().sub(controls.target).normalize();
+    const aspect = framingAspect();
+    const z0 = box.minZ || 0, H = Math.max(box.height || 0, z0 + 20);
+    let goal;
+    if (camType === 'persp') {
+      const f = fitPersp(box, dir, aspect, H);
+      goal = { type: 'persp', dist: f.dist, target: f.target, dir };
+    } else {
+      const fwd = dir.clone().negate();
+      const cr = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0));
+      const right = cr.length() < 1e-6 ? new THREE.Vector3(1, 0, 0) : cr.normalize();
+      const up = new THREE.Vector3().crossVectors(right, fwd).normalize();
+      let r0 = Infinity, r1 = -Infinity, u0 = Infinity, u1 = -Infinity;
+      for (const x of [box.minX, box.maxX]) for (const y of [box.minY, box.maxY]) for (const z of [z0, H]) {
+        const p = worldVec(x, y, z), r = p.dot(right), u = p.dot(up);
+        r0 = Math.min(r0, r); r1 = Math.max(r1, r); u0 = Math.min(u0, u); u1 = Math.max(u1, u);
+      }
+      const c = worldVec((box.minX + box.maxX) / 2, (box.minY + box.maxY) / 2, (z0 + H) / 2);
+      const target = c.clone().addScaledVector(right, (r0 + r1) / 2 - c.dot(right)).addScaledVector(up, (u0 + u1) / 2 - c.dot(up));
+      const fit = 1 - 2 * FIT_MARGIN;
+      const vis = Math.max((u1 - u0) / fit, (r1 - r0) / (aspect * fit), 30);
+      const ex = box.maxX - box.minX, ey = box.maxY - box.minY;
+      goal = { type: 'ortho', zoom: (2 * ORTHO_HALF) / vis, minDist: 0.55 * Math.sqrt(ex * ex + ey * ey + (H - z0) * (H - z0)), target, dir };
+    }
+    setView(goal, animate);
+    return goal;
+  }
+  /** The model box: the building without its site, its neighbors or the envelope. */
+  function buildingBox() {
+    if (cmp) return framingBox(false);
+    const d = Derived.get();
+    const b = boxOf({ ...d, bounds: { ...d.bounds, union: d.bounds.model } });
+    return b;
+  }
+
+  /** The site box: the whole site square plus the model (a building that sticks out stays inside). With no site open it is the model, its own parcel and the neighbors. */
+  function siteBox() {
+    if (cmp) return framingBox(false);
+    const b = boxOf(Derived.get());
+    const sb = SiteLayer.frameBox(Store.raw());
+    if (sb) { b.minX = Math.min(b.minX, sb.minX); b.maxX = Math.max(b.maxX, sb.maxX); b.minY = Math.min(b.minY, sb.minY); b.maxY = Math.max(b.maxY, sb.maxY); }
+    return b;
+  }
+
+  /** Site: the whole site square in the current direction (the model when no site is open). */
+  function frameSite(animate = true) { return fitBox(siteBox(), animate); }
+  /** Building: the hero building fills the view, the model box plus the margin. */
+  function frameBuilding(animate = true) { return fitBox(buildingBox(), animate); }
 
   function stepTween(now) {
     const k = tween;
@@ -7645,6 +7753,15 @@ const Render = (() => {
    *  only its dashed boundary and its north arrow are hidden (docs/site-base-style-technical-plan.md section 3.1).
    *  Nothing in the store is touched: the live layers are hidden, a throwaway group is drawn, then everything is put back. */
   async function captureClean(scale = 2) {
+    // The AI-ready image always shows the neighbors as a solid white model (Glass or Wireframe on screen reads as glass to image AIs).
+    const liveState = Store.raw();
+    const solidSite = SiteLayer.info().shown && liveState.view && liveState.view.siteStyle && liveState.view.siteStyle !== 'solid';
+    const siteKit = () => ({ syncLayer, clearGroup, cssColor, themeEpoch: () => themeEpoch });
+    if (solidSite) SiteLayer.update(layers.site, { ...liveState, view: { ...liveState.view, siteStyle: 'solid' } }, Derived.get(), siteKit());
+    try { return await captureCleanInner(scale); }
+    finally { if (solidSite) { SiteLayer.update(layers.site, Store.raw(), Derived.get(), siteKit()); needsRender = true; } }
+  }
+  async function captureCleanInner(scale = 2) {
     if (!renderer) throw new Error('The 3D view is not available.');
     if (cmp) throw new Error('Leave Compare to save an AI-ready image.');
     const state = Store.raw();
@@ -7656,9 +7773,19 @@ const Render = (() => {
     const cap = new THREE.Group();
     const sub = new THREE.Group();
     setFrame(sub, d);
-    const built = Facade3D.build(d, st, { quality: 'full', key: 'ai' }, { mesh: (k) => materialFor(k), line: lineMaterial });
+    // Hero color (batch-fixes plan 7): the wall color becomes CONFIG.heroColor for this picture only, so the panels keep their own colors (glass, mullions, a chosen
+    // wall material) and the AI still sees the systems. Facade3D reads the wall base from --scene-model while it builds; the roof cap uses its own copy of the material.
+    const heroMats = [];
+    const root = document.documentElement.style, wasModelVar = root.getPropertyValue('--scene-model');
+    const capMat = materialFor('mass').clone();
+    capMat.color.set(CONFIG.heroColor);
+    heroMats.push(capMat);
+    let built;
+    root.setProperty('--scene-model', CONFIG.heroColor);
+    try { built = Facade3D.build(d, st, { quality: 'full', key: 'ai' }, { mesh: (k) => (k === 'mass' ? capMat : materialFor(k)), line: lineMaterial }); }
+    finally { if (wasModelVar) root.setProperty('--scene-model', wasModelVar); else root.removeProperty('--scene-model'); }
     for (const o of built.model) {
-      if (o.isMesh) { o.castShadow = shadowsOn; o.receiveShadow = shadowsOn; }
+      if (o.isMesh) { o.castShadow = shadowsOn; o.receiveShadow = shadowsOn; if (o.material === capMat || (o.isInstancedMesh && o.material === materialFor('opaque'))) o.userData.hero = true; }
       sub.add(o);
     }
     cap.add(sub);
@@ -7677,6 +7804,7 @@ const Render = (() => {
       scene.remove(cap);
       clearGroup(sub); clearGroup(cap);
       ctxMat.dispose();
+      for (const m of heroMats) m.dispose();
       showMarks();
       scene.background = prev.bg;
       ground.material.color.copy(prev.ground);
@@ -7703,6 +7831,7 @@ const Render = (() => {
         ground.position.y = bottom == null ? 0 : bottom - SLAB_DROP;
         showMarks = hideSiteMarks();
         lastCapture = {
+          heroColor: CONFIG.heroColor,
           site: layers.site.group.visible, boundary: siteMarkFlag('site-boundary'), arrow: siteMarkFlag('site-arrow'),
           grid: gridMesh.visible, figure: figure.visible, overlay: selOverlay.visible || layers.overlay.group.visible,
           siteObjects: layers.site.group.children.filter((o) => o.visible).length,
@@ -7779,7 +7908,8 @@ const Render = (() => {
     onViewChange: (fn) => viewListeners.push(fn),
     onResize: (fn) => resizeListeners.push(fn),
     overlayInfo: () => { const kids = layers.overlay.group.children; return { total: kids.length, plan: kids.filter((o) => o.userData.plan).length, planVisible: kids.some((o) => o.userData.plan && o.visible), labels: kids.filter((o) => o.userData.label).map((o) => o.userData.label) }; },
-    framedBox: (id = 'axon') => framingBox(id === 'axon'),       // tests: the box a preset frames
+    frameSite, frameBuilding, fitBox,       // the zoom buttons (TopBar); fitBox keeps the camera direction
+    framedBox: (id = 'axon') => (id === 'site' ? siteBox() : id === 'building' ? buildingBox() : framingBox(id === 'axon')),       // tests: the box a preset frames, or the box Site / Building fit
     info: () => ({ camera: camType, preset, meshes: layers ? layers.model.group.children.length : 0, tweening: !!tween, distance: cam ? cam.position.distanceTo(controls.target) : 0, zoom: cam ? cam.zoom : 0, compare: !!cmp, drawQuality: derived ? Derived.display(Store.gestureActive() && !Store.gesturePath().startsWith('view')).quality : null }),
     ready: () => !!renderer,
     comparing: () => !!cmp,
@@ -9089,6 +9219,7 @@ const UI = (() => {
   let rangesList = null, bandsList = null;
   const ORIENT_OPTS = CONFIG.orientations.map((o) => ({ value: o, label: o }));
   const BASE_ZONES = ['base', 'middle', 'top'];
+  CONFIG.zoneLabels.crown = CONFIG.zoneLabels.crown || 'Crown';   // the crown zone (a tower crown level), shown after Top when the massing has one
   const zoneIds = () => [...BASE_ZONES, ...(get('zones.ranges') || []).map((r) => r.id)];
   const zoneName = (id) => CONFIG.zoneLabels[id] || ((get('zones.ranges') || []).find((r) => r.id === id) || {}).name || id;
   const lenB = (label, bind, min, max, extra = {}) => Controls.slider({
@@ -9549,6 +9680,7 @@ const UI = (() => {
     { id: 'zone-base', tab: 'facade', title: 'Base zone', open: false, build: () => zoneSection('base') },
     { id: 'zone-middle', tab: 'facade', title: 'Middle zone', open: false, build: () => zoneSection('middle') },
     { id: 'zone-top', tab: 'facade', title: 'Top zone', build: () => zoneSection('top') },
+    { id: 'zone-crown', tab: 'facade', title: 'Crown', open: false, build: () => zoneSection('crown') },
     { id: 'zone-ranges', tab: 'facade', title: 'Level ranges', build: buildRangeZones },
     { id: 'balconies', tab: 'facade', title: 'Balconies', open: false, build: buildBalconies },
     { id: 'fins', tab: 'facade', title: 'Fins', build: buildFins },
@@ -9633,7 +9765,7 @@ const UI = (() => {
     const g = D().groups.find((x) => x.id === item.id);
     if (!g) return false;
     setTab('facade');
-    const direct = BASE_ZONES.includes(g.zone);
+    const direct = BASE_ZONES.includes(g.zone) || g.zone === 'crown';
     const secId = direct ? `zone-${g.zone}` : 'zone-ranges';
     const sec = sectionCtl[secId];
     if (!sec) return false;
@@ -9874,7 +10006,9 @@ const UI = (() => {
     const cw = $('checksWarnings');
     if (cw) { cw.textContent = ''; if (!d.warnings.length) cw.append(h('li', { class: 'none' }, 'No warnings')); for (const w of d.warnings) cw.append(warnItem(w)); }
     const wn = $('wwrNote');
-    if (wn) wn.textContent = `Now ${pct1(m.wwr)} overall${m.over ? ', above the check value' : ''}.`;
+    if (wn) wn.textContent = `Now ${pct1(m.wwr)} overall${m.over ? ', above the check value' : ''}.${m.crown ? ' Crown not counted.' : ''}`;
+    const crownSec = sectionCtl['zone-crown'];
+    if (crownSec) crownSec.el.hidden = !m.crown;
     const tn = $('transNote');
     if (tn) tn.textContent = m.transparency == null ? 'No street faces, so no ground transparency.' : `Ground transparency ${pct1(m.transparency)}${m.target == null ? ' (no target set)' : m.targetMet ? `, at or above the ${pct1(m.target)} target` : `, below the ${pct1(m.target)} target`}.`;
     const tbl = (o) => [CONFIG.orientationLabels[o] || o, '', ''];
@@ -10000,7 +10134,7 @@ const UI = (() => {
   return {
     init, updateHud, rebuildPanel: () => { Controls.refreshAll(); },
     // test hooks: the section controllers, and a rebuild of the panel from the saved UI prefs (a simulated reload)
-    sectionCtl, rebuildSections: () => { buildPanel(); setTab(activeTab, { remember: false }); Controls.refreshAll(); },
+    rememberSection, sectionCtl, rebuildSections: () => { buildPanel(); setTab(activeTab, { remember: false }); Controls.refreshAll(); },
     // hooks for the face card and the street pick mode
     openItem, setTab, activeTab: () => activeTab, tabs: () => TABS.map((t) => t.id), setStreetPick,
     setHudOpen, hudOpen: () => $('hud').dataset.collapsed === 'false', sections: () => SECTIONS.map((s) => ({ id: s.id, tab: s.tab })),
@@ -10098,6 +10232,7 @@ const Prompts = (() => {
       podium: podiumPhrase(state, d),
       form: formPhrase(state, d),
       hero: PromptsMod.heroFor('facade', state, d),
+      heroColor: CONFIG.heroColorName,
     };
   }
   const currentAuto = () => autoValues(Store.raw(), Derived.get());
@@ -10569,11 +10704,13 @@ const Help = (() => {
       'Click a face in the view to select it. The card at the top of the panel shows its orientation, level range, zone, system and window-to-wall ratio, with a street-face switch. Esc clears the selection.',
       'There are no geometry handles in this version. The massing comes from the source: a standalone shape, or the open project.',
       'Each section starts collapsed. Select a section title to open it. Your choice is remembered.',
+      'Collapse all, beside the tabs, closes every section at once.',
     ]],
     ['Massing', [
       'Standalone is a rectangle, an L, a U or a courtyard (O) with an optional podium. Every shape is centered on its bounding box. The angle turns the whole massing.',
       'Project massing reads the levels of the open project (from the Mid-Rise Generator, or the Tower Generator once it writes levels). If the Tower has not written levels yet, a note says so and the standalone massing is shown.',
       'Zones: base is the podium (or the lowest level), top is the highest level, middle is everything between. Level ranges replace that split with your own list.',
+      'When the project massing has a crown level, the crown is its own zone. It shows as Crown after Top in the zone list. The crown has its own system, and its default system is solid.',
       'Street faces are the faces that front a street. Automatic uses the project site roads (or the south faces on the lowest level without a site). Manual lets you pick faces in the view.',
     ]],
     ['Facade', [
@@ -10582,7 +10719,7 @@ const Help = (() => {
       'Balconies are inset (cut into the wall, the door counts as glazing, the side returns are not wall area) or projected (a slab outside the face). The door replaces the window in its module. Fins, shades and bands do not change the areas.',
     ]],
     ['Numbers', [
-      'Glazing counts the whole window opening, frame and mullions included. Wall area is face length times floor-to-floor on every level; parapets and screens add none. The window-to-wall ratio is glazing over wall.',
+      'Glazing counts the whole window opening, frame and mullions included. Wall area is face length times floor-to-floor on every level; parapets and screens add none. The window-to-wall ratio is glazing over wall. The building ratio and the orientation ratios leave out the crown. A note under the ratio says crown not counted.',
       'The 40 percent check value is a design value (the prescriptive path of ASHRAE 90.1-2019). The tool never says a design complies. Verify the edition and the path for each project.',
       'Ground transparency is the glass in the band over the street faces. The band, the target and the envelope values are editable design values. Every table carries a Caution line.',
     ]],
@@ -10590,9 +10727,10 @@ const Help = (() => {
       'Keys 1 to 6 jump to Axon, N, E, S, W and Plan. D switches between Model and Diagram. The N, E, S and W views are flat elevations and match the DXF sheets.',
       'Diagram style colors the faces by system or by window-to-wall ratio (five steps, light to dark). Street faces get an orange edge.',
       'While you drag a slider the picture drops the mullions and fins. They come back when you let go.',
+      'The Site button in the top bar frames the whole site. The Building button frames the building. Neither button changes the view direction.',
     ]],
     ['Site', [
-      'The Site toggle in the View tab shows the project site from the Site Model. It shows the real ground, roads, water, and trees.',
+      'The Site toggle in the View tab shows the project site from the Site Model. It shows the real ground, roads and water. The Site Model makes no trees yet.',
       'Site style, under the Site toggle, sets how the neighbor buildings draw. Solid draws opaque grey blocks with dark edges. Glass draws see-through blocks. Wireframe draws edges only.',
       'This tool does not drag. Move the building in the Tower Generator or the Mid-Rise Generator.',
     ]],
@@ -10605,6 +10743,7 @@ const Help = (() => {
       'Export > SketchUp (.json) opens in SketchUp with the CMRLM extension. Elevations (.dxf) has four sheets with panels, glass, balconies, fins and shades for Revit or AutoCAD.',
       'Export > Image saves a picture. AI-ready image and AI Prompts are a pair for ChatGPT or Gemini; the prompt keeps every window and balcony where the model shows it.',
       'The AI-ready image shows the site with the building. Set Site style to Solid before you make it.',
+      'In the AI-ready image, the wall is amber. The panels keep their colors.',
       'The first prompt in AI Prompts is Hero render. It renders the hero building as photoreal and keeps the neighbors as a white model.',
     ]],
   ];
@@ -11754,6 +11893,10 @@ async function runTests() {
     const d = Derived.get();
     return eq([!!text && text.startsWith('Edit the attached massing model image'), text.includes(`${d.hud.levels}-story`), text.includes(`about ${Math.round(d.hud.wwr * 100)} percent of the facade is glass`), text.includes('Keep every window, door, balcony'), /\[|\{\{|__design__/.test(text)], [true, true, true, true, false]);
   });
+  await t('Hero render names the hero color: the amber volume is the hero, every white volume stays a white model, the avoid list names the tint', () => {
+    const text = Prompts.promptText('hero-render');
+    return eq([text.includes(`The hero building is the ${CONFIG.heroColorName} volume.`), CONFIG.heroColorName, text.includes('Every white volume stays a white model.'), text.includes(`any ${CONFIG.heroColorName} tint on the finished hero`), /\[|\{\{/.test(text)], [true, 'amber', true, true, false]);
+  });
   /* ---- save / export / import ---- */
   await t('state survives a JSON round trip and fillDefaults', () => {
     const s = def(), back = fillDefaults(JSON.parse(JSON.stringify(s)));
@@ -11800,7 +11943,7 @@ async function runUiTests() {
     await t('each tab shows its own sections and no others', () => {
       const want = {
         massing: ['source', 'standalone', 'zones', 'street'],
-        facade: ['zone-base', 'zone-middle', 'zone-top', 'zone-ranges', 'balconies', 'fins', 'shades', 'bands', 'corners'],
+        facade: ['zone-base', 'zone-middle', 'zone-top', 'zone-crown', 'zone-ranges', 'balconies', 'fins', 'shades', 'bands', 'corners'],
         checks: ['checkslist', 'limits', 'wwrtables', 'envelope'],
         view: ['display'],
       };
@@ -12053,6 +12196,32 @@ async function runUiTests() {
       const out = row ? [row.children[0].textContent, on && on.dataset.value] : null;
       Prompts.close();
       return eq(out, ['From the design', '__design__']);
+    });
+    await t('a tower crown level stays in the facade: Crown card, solid by default, 3D draws it, WWR says "crown not counted"', async () => {
+      const mem = ProjectFixture.memory(), plate = (x) => [{ outer: [[-x, -x / 2], [x, -x / 2], [x, x / 2], [-x, x / 2]], holes: [] }];
+      const floors = [1, 2, 3].map((i) => ({ index: i, zone: 'tower', z: (i - 1) * 10, ftf: 10, program: 'residential', plates: plate(50) }));
+      const crown = { index: 4, zone: 'crown', z: 30, ftf: 20, program: null, plates: plate(30) };
+      const mats = { mesh: () => new THREE.MeshBasicMaterial(), line: () => new THREE.LineBasicMaterial() };
+      const top = (d, st) => { const box = new THREE.Box3(); for (const o of Facade3D.build(d, st, { key: 'crown-t', quality: 'full' }, mats).model) box.union(new THREE.Box3().setFromObject(o)); return Math.max(box.max.y, box.max.z); };
+      ProjectUI.reset();
+      ProjectUI.configure({ storage: mem, navigate: () => {}, updateUrl: () => {} });
+      try {
+        const open = (levels, name) => { const doc = ProjectFixture.project({ tool: 'tower', levels, name }); ProjectMod.saveProject(mem, doc); ProjectUI.openDoc(doc); UI.setTab('facade'); UI.updateHud(Derived.get()); return Derived.get(); };
+        const without = open(floors, 'No crown');
+        const sec = () => document.querySelector('[data-section="zone-crown"]');
+        const hiddenBefore = !!(sec() && sec().hidden), topWithout = top(without, Store.raw());
+        const d = open([...floors, crown], 'With crown');
+        UI.setTab('checks'); UI.updateHud(d);
+        const cf = d.faces.filter((f) => f.zone === 'crown');
+        return eq([hiddenBefore, d.levels.length, d.levels[3].zone, !!sec() && !sec().hidden, /Crown/.test(sec().textContent),
+          Store.get('zones.rules.crown.system'), cf.length > 0 && cf.every((f) => f.glazing === 0 && f.rule.system === 'solid'),
+          /Crown not counted/.test($('wwrNote').textContent), Math.round(d.hud.wall) === Math.round(without.hud.wall), d.hud.zones.crown && d.hud.zones.crown.glazing,
+          top(d, Store.raw()) > topWithout + 1],
+        [true, 4, 'crown', true, true, 'solid', true, true, true, 0, true]);
+      } finally {
+        ProjectUI.close(); ProjectUI.restoreDefaults(); ProjectUI.reset();
+        Store.replace(fillDefaults(defaultState()));
+      }
     });
     await t('Help opens with the Facade Studio guide and the Caution about the 40 percent value', () => {
       click($('btnHelp'));
@@ -12503,6 +12672,28 @@ async function runSiteTests() {
       return eq([seen && seen.site, [cf.site, cf.boundary, cf.arrow, cf.grid, cf.figure, cf.overlay], cf.siteObjects > 2, Render.sceneFlags().site, eq(marks, before)], [true, [true, false, false, false, false, false], true, true, true]);
     });
 
+    await t('5b the AI-ready image draws the hero in CONFIG.heroColor (captureFlags reports it), the neighbors and context stay as drawn, and the live materials come back', async () => {
+      const heroHex = CONFIG.heroColor.toLowerCase();
+      const orig = ShotMod.captureView;
+      const hx = (m) => `#${m.color.getHexString()}`;
+      const hasColor = (x) => x.isMesh && x.material && !Array.isArray(x.material) && x.material.color;
+      let seen = null;
+      ShotMod.captureView = async (o) => {
+        const heroes = [], others = [];
+        o.scene.traverse((x) => { if (x.isMesh) (x.userData.hero ? heroes : others).push(x); });
+        const op = heroes.find((x) => x.isInstancedMesh), hc = new THREE.Color(CONFIG.heroColor);
+        let wallInst = false;
+        if (op && op.instanceColor) for (let i = 0; i < op.count && !wallInst; i++) wallInst = Math.abs(op.instanceColor.getX(i) - hc.r) < 1e-4 && Math.abs(op.instanceColor.getY(i) - hc.g) < 1e-4 && Math.abs(op.instanceColor.getZ(i) - hc.b) < 1e-4;
+        seen = { scene: o.scene, flags: Render.captureFlags(), n: heroes.length, heroHexes: heroes.filter(hasColor).map((x) => hx(x.material)), othersHero: others.filter((x) => hasColor(x) && hx(x.material) === heroHex).length, wallInst };
+        return new Blob(['x']);
+      };
+      try { await Render.captureClean(1); } finally { ShotMod.captureView = orig; }
+      await frames(3);
+      let liveHero = 0;
+      seen.scene.traverse((x) => { if (hasColor(x) && hx(x.material) === heroHex) liveHero++; });
+      return eq([seen.n > 0, seen.heroHexes.includes(heroHex), seen.flags.heroColor, Render.captureFlags().heroColor, seen.othersHero, liveHero, seen.wallInst], [true, true, CONFIG.heroColor, CONFIG.heroColor, 0, 0, true]);
+    });
+
     await t('6 a theme change rebuilds the layer (the key carries the theme epoch)', async () => {
       const k0 = SiteLayer.info().key, m0 = siteMesh('site-buildings');
       Render.themeChanged();
@@ -12844,6 +13035,266 @@ runAllTests = ((base) => async function runAllWithSections() {
   return r;
 })(runAllTests);
 
+
+/* ==========================================================================
+   TESTS: Collapse all and the Site / Building zoom buttons (docs/batch-fixes-technical-plan.md sections 4 and 5)
+   Collapse all closes every panel section and remembers each one (the UI prefs), so a reload keeps them closed.
+   Site frames a box that contains the site square (the model when no site is open); Building frames a box close to the model box.
+   Both keep the camera direction (compared as unit vectors, within 0.001) and fit the box inside the view.
+   The site tests open the in-memory fixture project and restore everything when they finish.
+   ========================================================================== */
+async function runTopBarTests() {
+  const results = [];
+  const eq = (a, b) => (JSON.stringify(a) === JSON.stringify(b) ? true : `got ${JSON.stringify(a)}, expected ${JSON.stringify(b)}`);
+  const t = async (name, fn) => {
+    let r;
+    try { r = await fn(); } catch (e) { r = `threw ${e && e.message}`; }
+    results.push({ name, ok: r === true, detail: r === true ? '' : String(r) });
+  };
+  const $ = (id) => document.getElementById(id);
+  const frames = (n = 2) => new Promise((res) => { const f = () => (--n <= 0 ? res() : requestAnimationFrame(f)); requestAnimationFrame(f); });
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const live = Render.ready();
+  const savedState = Store.snapshot(), savedTab = UI.activeTab();
+  const savedSections = uiPrefs.sections === undefined ? undefined : JSON.parse(JSON.stringify(uiPrefs.sections));
+  Options.holdAutosave(true);
+  const mem = SiteFixture.memory();
+  ProjectUI.reset();
+  ProjectUI.configure({ storage: mem, navigate: () => {}, updateUrl: () => {} });
+  const openSite = async () => {
+    Store.replace(fillDefaults(defaultState()), { resetHistory: true });
+    const doc = SiteFixture.siteProject({ massing: { tool: 'midrise', schema: 1, placement: { ...SiteFixture.PLACEMENT }, state: {}, derived: { levels: ProjectFixture.courtyardLevels(), metrics: { units: 120 } } } });
+    ProjectMod.saveProject(mem, doc);
+    ProjectUI.openDoc(doc);
+    await wait(350);
+    await frames(3);
+  };
+  const siteSquare = () => SiteLayer.frameBox(Store.raw());
+  const stored = () => { try { return JSON.parse(localStorage.getItem(UI_STORAGE_KEY)) || {}; } catch (e) { return {}; } };
+  const freshProfile = () => { uiPrefs.sections = {}; saveUiPrefs(uiPrefs); UI.rebuildSections(); };
+  const reload = () => { uiPrefs.sections = stored().sections; UI.rebuildSections(); };
+  const accs = () => [...document.querySelectorAll('#sections section.acc')];
+  const openIds = () => accs().filter((a) => a.dataset.open === 'true').map((a) => a.dataset.section);
+  const dirOf = () => { const c = Render.camera(); c.updateMatrixWorld(true); return c.getWorldDirection(new THREE.Vector3()); };
+  /** The corners of a framing box in normalized device coordinates (-1 .. 1) of the camera as it stands. */
+  const ndcOf = (box) => {
+    const c = Render.camera(); c.updateMatrixWorld(true); c.updateProjectionMatrix();
+    const z0 = box.minZ || 0, H = Math.max(box.height || 0, z0 + 20);
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (const x of [box.minX, box.maxX]) for (const y of [box.minY, box.maxY]) for (const z of [z0, H]) {
+      const p = worldVec(x, y, z).project(c);
+      x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y);
+    }
+    return { x0, x1, y0, y1, fill: Math.max(x1 - x0, y1 - y0) };
+  };
+  const inside = (n, slack = 0.02) => n.x0 >= -1 - slack && n.x1 <= 1 + slack && n.y0 >= -1 - slack && n.y1 <= 1 + slack;
+  const contains = (outer, inner, tol = 0.5) => outer.minX <= inner.minX + tol && outer.maxX >= inner.maxX - tol && outer.minY <= inner.minY + tol && outer.maxY >= inner.maxY - tol;
+  const sameDir = (a, b) => a.distanceTo(b) < 0.001;
+  const dist = () => Render.info().distance;
+
+  try {
+    /* ---- Collapse all (section 4) ---- */
+    await t('Z1. the Collapse all button sits in the panel head with a name, a touch-size target and a visible label', () => {
+      const b = $('panelCollapse');
+      if (!b) return 'missing #panelCollapse';
+      const r = b.getBoundingClientRect();
+      return eq([b.tagName, !!b.getAttribute('aria-label'), !b.hidden, r.height >= 40, !!b.closest('#panel'), b.textContent.trim()], ['BUTTON', true, true, true, true, 'Collapse all']);
+    });
+    await t('Z2. Collapse all closes every section, saves each one as closed, and a reload keeps them closed', () => {
+      freshProfile();
+      const ids = Object.keys(UI.sectionCtl);
+      accs().filter((a) => !a.hidden).slice(0, 3).forEach((a) => a.querySelector('.acc-head').click());
+      const before = openIds().length;
+      $('panelCollapse').click();
+      const closed = [openIds(), ids.filter((id) => UI.sectionCtl[id].isOpen())];
+      const saved = ids.filter((id) => (stored().sections || {})[id] !== false);
+      reload();
+      return eq([before >= 3, closed, saved, openIds()], [true, [[], []], [], []]);
+    });
+    await t('Z3. after Collapse all a section the user opens stays open after a reload, and the others stay closed', () => {
+      freshProfile();
+      $('panelCollapse').click();
+      const id = accs().find((a) => !a.hidden).dataset.section;
+      document.querySelector(`#sections section.acc[data-section="${id}"] .acc-head`).click();
+      reload();
+      return eq(openIds(), [id]);
+    });
+    await t('Z4. Collapse all is harmless when every section is already closed (and scrolls the panel to its top)', () => {
+      freshProfile();
+      $('panelCollapse').click();
+      $('panelCollapse').click();
+      return eq([openIds(), $('panelScroll').scrollTop], [[], 0]);
+    });
+
+    /* ---- the zoom buttons (section 5) ---- */
+    await t('Z5. the Site and Building buttons are in the top bar with names, touch-size targets and visible labels', () => {
+      const s = $('tbZoomSite'), b = $('tbZoomBuilding');
+      if (!s || !b) return 'missing zoom buttons';
+      const hit = (e) => e.getBoundingClientRect().height >= 40;
+      return eq([!!s.closest('#topbar'), !!b.closest('#topbar'), !!s.getAttribute('aria-label'), !!b.getAttribute('aria-label'), hit(s), hit(b), s.textContent.trim(), b.textContent.trim()], [true, true, true, true, true, true, 'Site', 'Building']);
+    });
+    await t('Z6. the buttons call the Render zoom functions (Site → frameSite, Building → frameBuilding)', () => {
+      if (!live) return true;
+      const origS = Render.frameSite, origB = Render.frameBuilding;
+      const seen = [];
+      Render.frameSite = () => { seen.push('site'); return origS(false); };
+      Render.frameBuilding = () => { seen.push('building'); return origB(false); };
+      try { $('tbZoomSite').click(); $('tbZoomBuilding').click(); } finally { Render.frameSite = origS; Render.frameBuilding = origB; }
+      return eq(seen, ['site', 'building']);
+    });
+    await t('Z7. no site open: Site frames a box that contains the model, keeps the camera direction and fits the box in the view', async () => {
+      if (!live) return true;
+      Store.replace(fillDefaults(defaultState()), { resetHistory: true });
+      await frames(3);
+      Render.setView('axon', false);
+      Render.camera().position.add(new THREE.Vector3(13, 4, -9));      // a view the presets do not make
+      await frames(3);                                                   // the frame loop turns the camera to its target
+      const d0 = dirOf();
+      Render.frameSite(false);
+      const box = Render.framedBox('site'), model = Derived.get().bounds.model, n = ndcOf(box);
+      return eq([contains(box, model), sameDir(d0, dirOf()), inside(n), n.fill > 0.35], [true, true, true, true]);
+    });
+    await t('Z8. Building frames a box close to the model box, fits it in the view, keeps the direction, and is no farther than Site', async () => {
+      if (!live) return true;
+      Render.setView('axon', false);
+      Render.frameSite(false);
+      const dSite = dist(), zSite = Render.info().zoom;
+      const d0 = dirOf();
+      Render.frameBuilding(false);
+      const box = Render.framedBox('building'), m = Derived.get().bounds.model, n = ndcOf(box);
+      const span = Math.max(m.maxX - m.minX, m.maxY - m.minY);
+      const slack = (span) => Math.max(8, 0.25 * span);
+      const close = contains(box, m) === true && box.minX >= m.minX - slack(span) && box.maxX <= m.maxX + slack(span) && box.minY >= m.minY - slack(span) && box.maxY <= m.maxY + slack(span);
+      const nearer = Render.cameraType() === 'persp' ? dist() <= dSite * 1.001 : Render.info().zoom >= zSite * 0.999;       // no site: the Site box can equal the model box
+      return eq([close, sameDir(d0, dirOf()), inside(n), n.fill > 0.35, nearer], [true, true, true, true, true]);
+    });
+    await t('Z9. in an elevation (orthographic) Building and Site keep the direction and the orthographic camera', async () => {
+      if (!live) return true;
+      Render.setView('n', false);
+      const d0 = dirOf();
+      Render.frameBuilding(false);
+      const nB = ndcOf(Render.framedBox('building')), d1 = dirOf(), type1 = Render.cameraType();
+      Render.frameSite(false);
+      const nS = ndcOf(Render.framedBox('site')), d2 = dirOf(), type2 = Render.cameraType();
+      return eq([sameDir(d0, d1), sameDir(d0, d2), type1, type2, inside(nB), inside(nS), nB.fill > 0.35, nS.fill > 0.35], [true, true, 'ortho', 'ortho', true, true, true, true]);
+    });
+    await t('Z10. a preset button after a zoom button still works (the zoom leaves no preset pressed, the preset returns)', async () => {
+      if (!live) return true;
+      Render.frameBuilding(false);
+      const pressedAfterZoom = document.querySelectorAll('#views button[aria-pressed="true"]').length;
+      Render.setView('axon', false);
+      const pressed = [...document.querySelectorAll('#views button[aria-pressed="true"]')].map((b) => b.dataset.view);
+      return eq([pressedAfterZoom, pressed, Render.cameraType()], [0, ['axon'], 'persp']);
+    });
+    await t('Z11. a site open: Site frames a box that contains the whole site square and the model, keeps the direction, and fits it', async () => {
+      if (!live) return true;
+      await openSite();
+      Render.setView('axon', false);
+      Render.camera().position.add(new THREE.Vector3(-17, 6, 11));
+      await frames(3);
+      const d0 = dirOf();
+      Render.frameSite(false);
+      const sq = siteSquare(), box = Render.framedBox('site'), n = ndcOf(box);
+      return eq([!!sq, contains(box, sq, 0.01), contains(box, Derived.get().bounds.model), sameDir(d0, dirOf()), inside(n), n.fill > 0.35], [true, true, true, true, true, true]);
+    });
+    await t('Z12. a site open: Building stays on the model (the site is far larger) and is much closer than Site', async () => {
+      if (!live) return true;
+      Render.setView('axon', false);
+      Render.frameSite(false);
+      const dSite = dist(), site = Render.framedBox('site');
+      const d0 = dirOf();
+      Render.frameBuilding(false);
+      const box = Render.framedBox('building'), n = ndcOf(box), m = Derived.get().bounds.model;
+      const small = (box.maxX - box.minX) < 0.5 * (site.maxX - site.minX);
+      return eq([contains(box, m), small, sameDir(d0, dirOf()), inside(n), n.fill > 0.35, dist() < 0.6 * dSite], [true, true, true, true, true, true]);
+    });
+    await t('Z13. a site open: Collapse all and the zoom buttons still work with the project panel sections in place', () => {
+      freshProfile();
+      accs().filter((a) => !a.hidden).slice(0, 2).forEach((a) => a.querySelector('.acc-head').click());
+      $('panelCollapse').click();
+      return eq(openIds(), []);
+    });
+  } finally {
+    ProjectUI.reset();
+    ProjectUI.restoreDefaults();
+    if (typeof Select !== 'undefined' && Select.clear) Select.clear();
+    if (savedSections === undefined) delete uiPrefs.sections; else uiPrefs.sections = savedSections;
+    saveUiPrefs(uiPrefs);
+    UI.rebuildSections();
+    Store.replace(savedState); UI.setTab(savedTab, { remember: false });
+    Options.holdAutosave(false);
+  }
+  return results;
+}
+
+runAllTests = ((base) => async function runAllWithTopBar() {
+  const r = await base();
+  const g = await runTopBarTests();
+  const bad = g.filter((x) => !x.ok);
+  r.results.push(...g);
+  r.total += g.length;
+  r.passed += g.length - bad.length;
+  r.failed.push(...bad);
+  console.log(`[tests] topbar ${g.length - bad.length}/${g.length} passed`, bad.length ? JSON.stringify(bad) : '');
+  return r;
+})(runAllTests);
+
+/* ==========================================================================
+   TopBar: the Collapse all button and the Site / Building zoom buttons (docs/batch-fixes-technical-plan.md sections 4 and 5)
+   Shared page part, placed after the UI part in all seven tools. The markup lives in each tool's body.html:
+     #panelCollapse   the Collapse all button, in the panel head beside the tab row (the Site Model: at the top of the panel)
+     #tbZoom          the zoom group in the top bar, with #tbZoomSite and #tbZoomBuilding
+   TopBar.init wires them:
+     TopBar.init({
+       tool,                    // 'tower' | 'midrise' | 'parking' | 'facade' | 'grading' | 'plate' | 'site' (a label for tests)
+       sections: () => ({ id: { setOpen(bool), isOpen() } }),   // the section controllers now on screen (UI.sectionCtl; the Site Model: its blocks)
+       remember: (id, open) => {},                              // saves the open state of one section (UI.rememberSection)
+       onSite: () => {},        // Site: frame the whole site square (Render.frameSite); null hides the button
+       onBuilding: () => {},    // Building: fill the view with the hero building (Render.frameBuilding); null hides the button
+     })
+   Collapse all closes every section through its controller and remembers each one, so the choice survives a reload.
+   The controllers are read when the button is pressed, not when init runs, because the panel can be rebuilt.
+   ========================================================================== */
+const TopBar = (() => {
+  let cfg = null;
+  const $ = (id) => document.getElementById(id);
+
+  /** Closes every section and remembers each one as closed. Returns how many sections it closed. */
+  function collapseAll() {
+    const ctl = (cfg && typeof cfg.sections === 'function' && cfg.sections()) || {};
+    let n = 0;
+    for (const id of Object.keys(ctl)) {
+      const c = ctl[id];
+      if (!c || typeof c.setOpen !== 'function') continue;
+      c.setOpen(false);
+      if (cfg && typeof cfg.remember === 'function') cfg.remember(id, false);
+      n++;
+    }
+    const scroller = $('panelScroll');
+    if (scroller) scroller.scrollTop = 0;
+    return n;
+  }
+  function zoomSite() { if (cfg && typeof cfg.onSite === 'function') cfg.onSite(); }
+  function zoomBuilding() { if (cfg && typeof cfg.onBuilding === 'function') cfg.onBuilding(); }
+
+  function init(o) {
+    cfg = { tool: '', ...(o || {}) };
+    const collapse = $('panelCollapse'), site = $('tbZoomSite'), building = $('tbZoomBuilding'), group = $('tbZoom');
+    if (collapse) collapse.onclick = () => { collapseAll(); };
+    if (site) { site.hidden = typeof cfg.onSite !== 'function'; site.onclick = zoomSite; }
+    if (building) { building.hidden = typeof cfg.onBuilding !== 'function'; building.onclick = zoomBuilding; }
+    if (group) group.hidden = (!site || site.hidden) && (!building || building.hidden);
+  }
+
+  /** For tests: what is wired and shown. */
+  function info() {
+    const vis = (id) => { const e = $(id); return !!e && !e.hidden && e.getClientRects().length > 0; };
+    return { tool: cfg ? cfg.tool : null, ready: !!cfg, collapse: vis('panelCollapse'), site: vis('tbZoomSite'), building: vis('tbZoomBuilding') };
+  }
+
+  return { init, collapseAll, zoomSite, zoomBuilding, info };
+})();
+
 /* ==========================================================================
    Start-up and test hook
    ========================================================================== */
@@ -12858,6 +13309,8 @@ Select.init();
 ProjectUI.start();
 // A restored option may be saved in an elevation view: the camera starts there.
 if (Render.ready() && Store.raw().view.elevation) Render.setView(Store.raw().view.elevation.toLowerCase(), false);
+
+TopBar.init({ tool: 'facade', sections: () => UI.sectionCtl, remember: UI.rememberSection, onSite: () => Render.frameSite(), onBuilding: () => Render.frameBuilding() });   // 08z_topbar.js: Collapse all and the zoom buttons
 
 const optionInfo = (o) => ({ id: o.id, name: o.name, updatedAt: o.updatedAt });
 window.__facade = {

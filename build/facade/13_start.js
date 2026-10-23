@@ -13,6 +13,8 @@ ProjectUI.start();
 // A restored option may be saved in an elevation view: the camera starts there.
 if (Render.ready() && Store.raw().view.elevation) Render.setView(Store.raw().view.elevation.toLowerCase(), false);
 
+TopBar.init({ tool: 'facade', sections: () => UI.sectionCtl, remember: UI.rememberSection, onSite: () => Render.frameSite(), onBuilding: () => Render.frameBuilding() });   // 08z_topbar.js: Collapse all and the zoom buttons
+
 const optionInfo = (o) => ({ id: o.id, name: o.name, updatedAt: o.updatedAt });
 window.__facade = {
   getState: () => Store.snapshot(),

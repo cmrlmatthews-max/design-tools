@@ -405,6 +405,42 @@ const SiteTests = (() => {
       return eq([at0, !!mem.getItem(key), CONFIG.projectSaveMs], [null, true, 1000]);
     }));
 
+    /* ---- trees off (docs/batch-fixes-technical-plan.md section 6): the Site Model makes no trees for now; the tree code stays ---- */
+    /** The synthetic site on screen as a loaded result (the panel reads state.result); puts the panel back afterwards. */
+    const withResult = (fn) => inProject(async () => { Scene.setModel(model); App.renderMetrics(); try { return await fn(); } finally { App.renderMetrics(); } });
+    await t('trees: CONFIG.trees is { generate: false, exports: false }; buildModel with trees: false (what the pipeline passes) builds none, and trees: true still builds them', () => {
+      const off = buildModel(frame, { dem, tiles, trees: CONFIG.trees.generate }), forced = buildModel(frame, { dem, tiles, trees: true });
+      return eq([CONFIG.trees, off.trees.length, summarize(off).trees, off.errors.trees === undefined, forced.trees.length >= 2], [{ generate: false, exports: false }, 0, 0, true, true]);
+    });
+    await t('trees: a model without trees draws no tree meshes and siteDerived gives trees []', () => {
+      const off = buildModel(frame, { dem, tiles, trees: false });
+      Scene.setModel(off);
+      const drawn = [Scene.info().trees, Scene.groups().trees.children.length];
+      Scene.setModel(model);
+      return eq([drawn, siteDerived(off, pmeta).trees], [[0, 0], []]);
+    });
+    await t('trees: the Trees layer toggle, the Site data row, the overlay line, the DXF menu text and the credits leave the panel', () => withResult(() => {
+      App.openDownloads();
+      const dxfText = (document.querySelector('[data-dl="dxf"]') || { textContent: 'missing' }).textContent;
+      Pop.close();
+      const metricsText = $('metrics').textContent;
+      return eq([!!document.querySelector('[data-layer="trees"]'), !!document.querySelector('[data-layer="water"]'), /trees/i.test(metricsText), /water areas/i.test(metricsText), /trees/i.test(dxfText), /trees/i.test(document.querySelector('.credits').textContent)],
+        [false, true, false, true, false, false]);
+    }));
+    await t('trees: with exports off the DXF and the notes leave trees out even for a model that carries trees; with exports on they come back', () => withResult(() => {
+      const r = App.state.result, pick = () => [App.fileFor('dxf', r).text.includes('TREE'), App.fileFor('notes', r).text.includes('- Trees:'), App.fileFor('notes', r).text.includes(CREDITS)];
+      const was = CONFIG.trees.exports;
+      let off, on;
+      try { off = pick(); CONFIG.trees.exports = true; on = pick(); } finally { CONFIG.trees.exports = was; }
+      return eq([r.model.trees.length >= 2, off, on], [true, [false, false, false], [true, true, true]]);
+    }));
+    await t('trees: a model without trees has no TREE layer in the DXF, no Trees line in the notes and no "trees" in the credits; a model with trees keeps all three', () => {
+      const off = buildModel(frame, { dem, tiles, trees: false });
+      const dOff = siteDxf(off), dOn = siteDxf(model), nOff = notesMarkdown(off, meta), nOn = notesMarkdown(model, meta);
+      return eq([dOff.includes('TREE'), dOn.includes('TREE'), nOff.includes('- Trees:'), nOn.includes('- Trees:'), nOff.includes(ExportsMod.CREDITS_NO_TREES), /trees/i.test(ExportsMod.CREDITS_NO_TREES), nOn.includes(CREDITS)],
+        [false, true, false, true, true, false, true]);
+    });
+
     /* ---- remove existing buildings (docs/site-remove-technical-plan.md, section 7.2) ---- */
     const bById = (id) => model.buildings.find((b) => b.id === id);
     const ptOf = (id, top = true) => {                       // client point of the middle of a building (roof or ground)
@@ -607,6 +643,69 @@ const SiteTests = (() => {
       let raw = null;
       try { raw = JSON.parse(localStorage.getItem('cmrlm.site.sections')); } catch (e) { raw = null; }
       return eq([App.BLOCKS_KEY, raw && raw.view], ['cmrlm.site.sections', true]);
+    }));
+
+    /* ---- Collapse all and the Site zoom button (docs/batch-fixes-technical-plan.md sections 4 and 5; the Building button does not apply here and stays hidden) ---- */
+    const raf = (n = 3) => new Promise((res) => { const f = () => (--n <= 0 ? res() : requestAnimationFrame(f)); requestAnimationFrame(f); });
+    const ALL_FOLDED = { location: false, layers: false, view: false, data: false, help: false };
+    await t('collapse all: the button sits at the top of the panel with a name and a touch-size target', () => {
+      const b = $('panelCollapse');
+      if (!b) return 'missing #panelCollapse';
+      const r = b.getBoundingClientRect();
+      return eq([b.tagName, !!b.getAttribute('aria-label'), r.height >= 40, !!b.closest('#panel'), b.textContent.trim()], ['BUTTON', true, true, true, 'Collapse all']);
+    });
+    await t('collapse all: it closes every block, saves each one as closed under cmrlm.site.sections, and a rebuild keeps them closed', () => withBlocks(() => {
+      $('blockHead-layers').click(); $('blockHead-view').click();
+      const before = Object.values(blockState()).filter(Boolean).length;
+      $('panelCollapse').click();
+      const closed = blockState();
+      let raw = null;
+      try { raw = JSON.parse(localStorage.getItem(App.BLOCKS_KEY)); } catch (e) { raw = null; }
+      App.rebuildBlocks();
+      const sorted = (o) => Object.keys(o || {}).sort().map((k) => [k, o[k]]);
+      return eq([before, closed, sorted(raw), blockState()], [3, ALL_FOLDED, sorted(ALL_FOLDED), ALL_FOLDED]);
+    }));
+    await t('collapse all: a block opened afterwards stays open after a rebuild, the others stay closed', () => withBlocks(() => {
+      $('panelCollapse').click();
+      $('blockHead-data').click();
+      App.rebuildBlocks();
+      return eq(blockState(), { ...ALL_FOLDED, data: true });
+    }));
+    await t('zoom: the top bar has a Site button with a name and a touch-size target; the Building button is hidden here', () => {
+      const s = $('tbZoomSite'), b = $('tbZoomBuilding');
+      if (!s || !b) return 'missing zoom buttons';
+      const r = s.getBoundingClientRect();
+      return eq([!!s.closest('#topbar'), !!s.getAttribute('aria-label'), r.height >= 40, s.textContent.trim(), b.hidden, b.getClientRects().length, TopBar.info().building], [true, true, true, 'Site', true, 0, false]);
+    });
+    await t('zoom: the Site button calls Scene.frameSite', () => {
+      const orig = Scene.frameSite;
+      let n = 0;
+      Scene.frameSite = () => { n += 1; return orig(false); };
+      try { $('tbZoomSite').click(); } finally { Scene.frameSite = orig; }
+      return eq(n, 1);
+    });
+    await t('zoom: Site fits the whole site square in the view, keeps the camera direction, and leaves no view button pressed', () => withRemove(async () => {
+      if (!Scene.ready()) return true;
+      Scene.planView(false);
+      Scene.camera().position.add(new THREE.Vector3(120, 40, -90));       // a view the presets do not make
+      await raf(3);
+      const cam = Scene.camera(), dir = () => { cam.updateMatrixWorld(true); return cam.getWorldDirection(new THREE.Vector3()); };
+      const d0 = dir();
+      Scene.frameSite(false);
+      const d1 = dir();
+      cam.updateMatrixWorld(true); cam.updateProjectionMatrix();
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      for (const c of Scene.framedCorners()) { const p = c.clone().project(cam); x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y); }
+      const fill = Math.max(x1 - x0, y1 - y0);
+      const pressed = [$('btnFit'), $('btnPlan')].filter((b) => b.getAttribute('aria-pressed') === 'true').length;
+      return eq([d0.distanceTo(d1) < 0.001, x0 >= -1.02 && x1 <= 1.02 && y0 >= -1.02 && y1 <= 1.02, fill > 0.5, pressed, Scene.info().preset], [true, true, true, 0, null]);
+    }));
+    await t('zoom: Fit still turns the view to the three-quarter view after Site', () => withRemove(async () => {
+      if (!Scene.ready()) return true;
+      Scene.frameSite(false);
+      Scene.fit(false);
+      await raf(2);
+      return eq([Scene.info().preset, $('btnFit').getAttribute('aria-pressed')], ['fit', 'true']);
     }));
 
     return results;

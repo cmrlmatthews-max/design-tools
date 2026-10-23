@@ -215,6 +215,10 @@ async function runTests() {
     const d = Derived.get();
     return eq([!!text && text.startsWith('Edit the attached massing model image'), text.includes(`${d.hud.levels}-story`), text.includes(`about ${Math.round(d.hud.wwr * 100)} percent of the facade is glass`), text.includes('Keep every window, door, balcony'), /\[|\{\{|__design__/.test(text)], [true, true, true, true, false]);
   });
+  await t('Hero render names the hero color: the amber volume is the hero, every white volume stays a white model, the avoid list names the tint', () => {
+    const text = Prompts.promptText('hero-render');
+    return eq([text.includes(`The hero building is the ${CONFIG.heroColorName} volume.`), CONFIG.heroColorName, text.includes('Every white volume stays a white model.'), text.includes(`any ${CONFIG.heroColorName} tint on the finished hero`), /\[|\{\{/.test(text)], [true, 'amber', true, true, false]);
+  });
   /* ---- save / export / import ---- */
   await t('state survives a JSON round trip and fillDefaults', () => {
     const s = def(), back = fillDefaults(JSON.parse(JSON.stringify(s)));

@@ -80,7 +80,7 @@ clip = '<script src="https://cdn.jsdelivr.net/npm/clipper-lib@6.4.2/clipper.js">
 head = head.replace('<style>', clip + '\n<style>', 1)
 head += '</head>\n<body>\n'
 
-PARTS = ['00_imports.js', '01_config.js', '02_pipeline.js', '03_scene.js', '04_ui.js', '05_tests.js', '06_start.js']
+PARTS = ['00_imports.js', '01_config.js', '02_pipeline.js', '03_scene.js', '04_ui.js', os.path.join(HERE, '..', 'shared', '08z_topbar.js'), '05_tests.js', '06_start.js']
 js = '\n'.join(part(p) for p in PARTS)
 
 html = head + rd('body.html') + '<script type="module">\n' + js + '</script>\n</body>\n</html>\n'

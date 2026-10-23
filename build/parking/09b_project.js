@@ -222,6 +222,7 @@ const ProjectUI = (() => {
       const n = sources().map((s) => `${s.levels.length} ${s.zone} level${s.levels.length === 1 ? '' : 's'}`).join(', ');
       line.textContent = `Project “${doc.name}”${project.readOnly ? ' (read only)' : ''}. ${hasMassing() ? `Massing: ${n || 'no deck or podium levels'}.` : 'No massing in this project yet.'}`;
     }
+    try { if (typeof PinUI !== 'undefined') PinUI.sync(); } catch (e) { /* the Pin button is optional */ }
   }
   function openCheck(doc) {
     let sec = null;
@@ -246,6 +247,7 @@ const ProjectUI = (() => {
     const d = Derived.get();
     const derived = ParkDerivedMod.parkingDerived(st, d.built, d.metrics);
     const pl = { ...placement(), baseMode: baseMode() };
+    if (isObjP(Store.raw().placement) && Store.raw().placement.pinned === true) pl.pinned = true;     // Pin placement: saved with the section, a missing value is false
     return { tool: CONFIG.tool, schema: CONFIG.projectSchema, placement: pl, state: { ...st, placement: pl }, derived, note: st.name };
   }
   /**
@@ -318,6 +320,11 @@ const ProjectUI = (() => {
       if (!project.readOnly) markDirty();
     }
     if (!project.readOnly) followGround({ merge: true });     // a standalone deck: the base elevation is the lowest ground under the footprint
+    if (siteDerived() && Store.raw().source === 'standalone') {                // Glass on open (batch fixes plan 2.1): this session only; the saved option keeps its style, Pin sets Solid
+      const was = project.loading;
+      project.loading = true;
+      try { Store.set('view.siteStyle', isObjP(Store.raw().placement) && Store.raw().placement.pinned === true ? 'solid' : 'glass', { live: false, merge: true }); } finally { project.loading = was; }
+    }
     renderPill();
     if (Render.ready()) Render.setView(Render.info().preset || 'axon', true);
     return doc;

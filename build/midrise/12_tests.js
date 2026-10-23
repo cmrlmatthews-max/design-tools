@@ -253,6 +253,10 @@ async function runTests() {
     const m = Derived.get().metrics;
     return eq([!!text && text.startsWith('Edit the attached massing model image'), text.includes(`${m.floors}-story`), text.includes(`${Math.round(m.height)} feet`), /\[|\{\{/.test(text), /tower/i.test(text)], [true, true, true, false, false]);
   });
+  await t('Hero render names the hero color: the amber volume is the hero, every white volume stays a white model, the avoid list names the tint', () => {
+    const text = Prompts.promptText('hero-render');
+    return eq([text.includes(`The hero building is the ${CONFIG.heroColorName} volume.`), CONFIG.heroColorName, text.includes('Every white volume stays a white model.'), text.includes(`any ${CONFIG.heroColorName} tint on the finished hero`), /\[|\{\{/.test(text)], [true, 'amber', true, true, false]);
+  });
   /* ---- screenshots ---- */
   if (Render.ready()) {
     await t('AI-ready capture returns a PNG and puts the scene back exactly', async () => {

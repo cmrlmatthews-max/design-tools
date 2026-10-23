@@ -29,6 +29,7 @@ const CONFIG = {
   demFtPerPixel: 3,               // about 1 pixel per 3 ft
   demMaxPixels: 1024,
   demMargin: 50,                  // ft around the site square
+  trees: { generate: false, exports: false },  // the Site Model makes no trees for now (batch-fixes plan 6); exports false: trees stay out of the CSV, DXF, SketchUp and notes even if a tree list exists
   zoomCap: { buildings: 14, transportation: 14, base: 13 },
   layers: [
     ['ground', 'Ground'], ['buildings', 'Buildings'], ['roads', 'Roads'],
@@ -39,6 +40,9 @@ const CONFIG = {
     ['buildings', 'Buildings'], ['roads', 'Roads'], ['base', 'Trees and water'],
   ],
 };
+
+// No trees for now: the progress step reads "Water" instead of "Trees and water".
+if (!CONFIG.trees.generate) CONFIG.steps = CONFIG.steps.map(([k, label]) => (k === 'base' ? [k, 'Water'] : [k, label]));
 
 const $ = (id) => document.getElementById(id);
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));

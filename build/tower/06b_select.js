@@ -1112,6 +1112,7 @@ const Select = (() => {
     releaseHandleDrag: () => { flushMove(); endDrag(true); },
     cancelHandleDrag: () => endDrag(false),
     dragging: () => !!drag, lastDrag: () => lastDrag,
+    handlesShown: () => handlesWanted(),     // read-only: a selection with visible handles (the placement gizmo yields to it)
     setAddMode: (v) => { addMode = !!v; if (cardRefs && cardRefs.more) cardRefs.more.setAttribute('aria-pressed', String(addMode)); },
     addMode: () => addMode,
     onChange: (fn) => listeners.push(fn),

@@ -9,15 +9,23 @@ Prompts.init();
 Compare.init();
 Options.syncDirty();
 if (!Render.init(document.getElementById('canvasHost'))) Store.subscribe(() => UI.updateHud(Derived.get()));
-Select.init();
+if (!UI.studyMode) Select.init();     // Sun Study mode (?study=sun): no selection, no handles, no keyboard editing
 PlacementGizmo.init({   // 06y_placement.js: drag the building to place it, turn it with the ring (a project must be open)
-  enabled: () => !Render.comparing(),
+  enabled: () => !Render.comparing() && !UI.studyMode,
   bounds: () => Derived.get().bounds.model,
   path: 'placement',
   onCommit: () => {},   // 09b_project.js re-runs Context from site on the commit notification (one undo step)
+  locked: () => PinUI.pinned(),   // Pin placement: no drag and no ring while pinned
 });
+PinUI.init({ tool: 'tower' });   // 08y_pin.js: the Pin placement button after the project pill
+if (UI.studyMode) {     // Sun Study mode: the placement gizmo off (a second init only replaces the options; the gizmo's own enabled line can read UI.studyMode instead)
+  PlacementGizmo.init({ enabled: () => false, bounds: () => Derived.get().bounds.model, path: 'placement', onCommit: () => {} });
+  document.documentElement.setAttribute('data-study', 'sun');
+}
 SunUI.init();          // 08d_sun.js: the study driver (before the project loads, so a loaded sun section drives it)
 ProjectUI.start();     // 09b_project.js: ?project= load and autosave
+
+TopBar.init({ tool: 'tower', sections: () => UI.sectionCtl, remember: UI.rememberSection, onSite: () => Render.frameSite(), onBuilding: () => Render.frameBuilding() });   // 08z_topbar.js: Collapse all and the zoom buttons
 
 const optionInfo = (o) => ({ id: o.id, name: o.name, updatedAt: o.updatedAt });
 window.__tower = {
@@ -94,6 +102,9 @@ window.__tower = {
   sunCancelHours: () => SunUI.cancel(),
   sunHoursInfo: () => SunLayer.info(),
   shadowStudy: (opts) => SunStudy.make({ deliver: false, ...(opts || {}) }),
+  // Sun Study mode (?study=sun) and the shadow strength, for tests: the mode, the tabs, which sections are open, the light values
+  studyInfo: () => ({ study: UI.studyMode, tabs: UI.tabs(), tab: UI.activeTab(), open: Object.fromEntries(['sun', 'display', 'scene'].map((id) => [id, UI.sectionCtl[id].isOpen()])), boosted: Render.shadowBoosted(), light: Render.lightInfo(), ready: Render.ready() }),
+  closePop: () => Pop.close(),
   // v1.1 layout hooks (the same functions the selection card calls)
   openItem: (item) => UI.openItem(item),
   setProgramForItems: (items, program) => UI.setProgramForItems(items, program),

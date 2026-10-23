@@ -6,7 +6,7 @@
 const App = (() => {
   const { googleMapsUrl, parseCoordinates } = GeocodeMod;
   const { summarize } = ModelMod;
-  const { revitCsv, siteDxf, notesMarkdown, CREDITS } = ExportsMod;
+  const { revitCsv, siteDxf, notesMarkdown, CREDITS, CREDITS_NO_TREES } = ExportsMod;
   const { siteToSketchup } = SkSite;
   const { sketchupFilename, docToBlob } = SkFmt;
   const { siteDerived, siteState, derivedBytes } = SiteDerivedMod;
@@ -84,7 +84,7 @@ const App = (() => {
     box.append(h('dl', { class: 'kv' },
       row('Buildings', grouped(s.buildings), s.estimated ? `${grouped(s.estimated)} estimated` : ''),
       row('Road length', fmtFt(s.roadsFt, 0)),
-      row('Trees', grouped(s.trees)),
+      CONFIG.trees.generate ? row('Trees', grouped(s.trees)) : null,           // no trees row while the Site Model makes none
       row('Water areas', grouped(s.waterAreas)),
       row('Ground', `${grouped(s.groundMin, 1)} to ${grouped(s.groundMax, 1)} ft`),
       row('Grid spacing', fmtFt(g.spacing, 1)),
@@ -257,12 +257,14 @@ const App = (() => {
   function setContour(v) { state.contour = v; setSegPressed(els.contourSeg, 'contour', v); Scene.setContour(v); }
 
   /* ---- downloads and screenshot -------------------------------------------------------------------- */
+  /** The model a file is made from: with CONFIG.trees.exports off, trees stay out of every file even when the model carries a tree list (an old project may). */
+  const exportModel = (m) => (CONFIG.trees.exports || !m.trees || !m.trees.length ? m : { ...m, trees: [] });
   const FILES = {
     csv: { suffix: 'topo.csv', type: 'text/csv', make: (r) => revitCsv(r.model.ground) },
-    dxf: { suffix: 'site.dxf', type: 'application/dxf', make: (r) => siteDxf(r.model, { removed: new Set(state.removed) }) },
-    notes: { suffix: 'notes.md', type: 'text/markdown', make: (r) => notesMarkdown(r.model, metaOf(r)) },
+    dxf: { suffix: 'site.dxf', type: 'application/dxf', make: (r) => siteDxf(exportModel(r.model), { removed: new Set(state.removed) }) },
+    notes: { suffix: 'notes.md', type: 'text/markdown', make: (r) => notesMarkdown(exportModel(r.model), metaOf(r)) },
     // SketchUp: the name comes from sketchupFilename (slug + date) and the file is a Blob made by docToBlob
-    sketchup: { type: 'application/json', name: (r) => sketchupFilename(slugOf(r), new Date()), blob: (r) => docToBlob(siteToSketchup(r.model, metaOf(r))) },
+    sketchup: { type: 'application/json', name: (r) => sketchupFilename(slugOf(r), new Date()), blob: (r) => docToBlob(siteToSketchup(exportModel(r.model), metaOf(r))) },
   };
   function fileFor(kind, r = state.result) {
     const f = FILES[kind];
@@ -270,7 +272,7 @@ const App = (() => {
     return { name: `${slugOf(r)}-${f.suffix}`, text: f.make(r), type: f.type };
   }
   /** The SketchUp document for a result (default: the current site). */
-  function sketchupDoc(r = state.result) { return r ? siteToSketchup(r.model, metaOf(r)) : null; }
+  function sketchupDoc(r = state.result) { return r ? siteToSketchup(exportModel(r.model), metaOf(r)) : null; }
   async function download(kind) {
     Pop.close();
     if (!state.result) return;
@@ -284,7 +286,7 @@ const App = (() => {
     const item = (kind, title, sub) => h('button', { class: 'pop-item', type: 'button', 'data-dl': kind, onclick: () => download(kind) }, h('span', { class: 'grow' }, title, h('small', null, sub)));
     Pop.open(els.btnDl, h('div', { role: 'menu' },
       item('csv', 'Revit CSV', 'Ground points for a Revit toposolid'),
-      item('dxf', 'DXF', 'Topo mesh, buildings, roads, trees, water'),
+      item('dxf', 'DXF', `Topo mesh, buildings, roads, ${CONFIG.trees.generate ? 'trees, ' : ''}water`),
       item('sketchup', 'SketchUp', 'Ground, buildings, roads, water. Import with the CMRLM extension'),
       item('notes', 'Notes', 'Origin, counts, and Revit import steps')));
   }
@@ -294,7 +296,7 @@ const App = (() => {
       ['Site', `${grouped(r.frame.size)} ft square`],
       ['Buildings', `${grouped(s.buildings)}${s.estimated ? ` (${grouped(s.estimated)} est.)` : ''}`],
       ['Roads', fmtFt(s.roadsFt, 0)],
-      ['Trees', grouped(s.trees)],
+      ...(CONFIG.trees.generate ? [['Trees', grouped(s.trees)]] : []),
       ['Ground', `${grouped(s.groundMin, 1)} to ${grouped(s.groundMax, 1)} ft`],
     ];
   }
@@ -665,6 +667,7 @@ const App = (() => {
      Location, Layers, View, Site data and Remove buildings fold under a header button. All start folded except Location (the address
      field must show). The open state of each block is remembered in localStorage under cmrlm.site.sections ({ id: true | false }). */
   const BLOCKS_KEY = 'cmrlm.site.sections';
+  const blocks = {};              // id -> { el, setOpen(bool), isOpen() }: the blocks now in the panel (TopBar's Collapse all; rebuilt with the panel)
   const blockPrefs = () => { const m = Local.get(BLOCKS_KEY, {}); return m && typeof m === 'object' && !Array.isArray(m) ? m : {}; };
   function setBlockOpen(sec, open, remember = true) {
     const head = sec.querySelector(':scope > .sec-head'), body = sec.querySelector(':scope > .sec-body');
@@ -681,6 +684,7 @@ const App = (() => {
     const body = h('div', { class: 'sec-body', id: `blockBody-${id}` }, children);
     const sec = h('div', { class: 'sec', 'data-block': id, ...(o.id ? { id: o.id } : {}) }, head, body);
     setBlockOpen(sec, open, false);
+    blocks[id] = { el: sec, setOpen: (o) => setBlockOpen(sec, !!o, false), isOpen: () => head.getAttribute('aria-expanded') === 'true' };
     return sec;
   }
 
@@ -713,7 +717,7 @@ const App = (() => {
     sections.append(els.progressSec);
 
     // Layers
-    els.toggles = h('div', { class: 'toggles' }, CONFIG.layers.map(([k, l]) => toggleRow(k, l)));
+    els.toggles = h('div', { class: 'toggles' }, CONFIG.layers.filter(([k]) => k !== 'trees' || CONFIG.trees.generate).map(([k, l]) => toggleRow(k, l)));
     sections.append(block('layers', 'Layers', [els.toggles]));
 
     // View
@@ -732,7 +736,7 @@ const App = (() => {
     els.help = block('help', 'Remove buildings', [h('p', { class: 'help-text', id: 'helpRemove' }, HELP_REMOVE)], { id: 'helpSec' });
     sections.append(els.help);
 
-    sections.append(h('p', { class: 'credits' }, CREDITS));
+    sections.append(h('p', { class: 'credits' }, CONFIG.trees.generate ? CREDITS : CREDITS_NO_TREES));
   }
 
   function buildViews() {
@@ -832,7 +836,7 @@ const App = (() => {
     init, go, buildCompass, screenshot, download, fileFor, sketchupDoc, openDownloads, toggleLayer, setVScale, setContour, setSize, openMaps, syncActions,
     setRemoved, removeBuilding, restoreBuilding, restoreAll, selectHit, renderCard,
     state, els, metaOf, slugOf, renderMetrics, setStep,
-    BLOCKS_KEY, blockPrefs, setBlockOpen, rebuildBlocks: () => { $('sections').textContent = ''; buildPanel(); renderMetrics(); renderRecents(); syncActions(); },
+    BLOCKS_KEY, blockPrefs, setBlockOpen, blocks, rememberBlock: (id, open) => Local.set(BLOCKS_KEY, { ...blockPrefs(), [id]: !!open }), rebuildBlocks: () => { $('sections').textContent = ''; buildPanel(); renderMetrics(); renderRecents(); syncActions(); },
     project, startProject, openProjectDoc, projectClose, projectCreate, projectWrite, projectSend, scheduleProjectSave, flushProject, siteRequest, openProjectMenu, projectMeta,
   };
 })();

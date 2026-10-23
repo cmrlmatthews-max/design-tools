@@ -15,8 +15,12 @@ PlacementGizmo.init({   // 06y_placement.js: drag the building to place it, turn
   bounds: () => Derived.get().bounds.model,
   path: 'placement',
   onCommit: () => {},   // 09b_project.js re-runs Context from site on the commit notification (one undo step)
+  locked: () => PinUI.pinned(),   // Pin placement: no drag and no ring while pinned
 });
+PinUI.init({ tool: 'midrise' });   // 08y_pin.js: the Pin placement button after the project pill
 ProjectUI.start();
+
+TopBar.init({ tool: 'midrise', sections: () => UI.sectionCtl, remember: UI.rememberSection, onSite: () => Render.frameSite(), onBuilding: () => Render.frameBuilding() });   // 08z_topbar.js: Collapse all and the zoom buttons
 
 const optionInfo = (o) => ({ id: o.id, name: o.name, updatedAt: o.updatedAt });
 window.__midrise = {

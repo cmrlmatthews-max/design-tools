@@ -93,6 +93,9 @@ const UI = (() => {
   const $ = (id) => document.getElementById(id);
   const sheetQuery = window.matchMedia('(max-width: 899px), (orientation: portrait)');
   const prefs = uiPrefs;
+  // Sun Study mode (batch-fixes plan 3.1): ?study=sun opens the Tower with the View tab only, the Sun section open, no handles and a trimmed Export menu.
+  const STUDY = /[?&]study=sun(?:&|#|$)/.test(location.search);
+  const STUDY_TAB = 'view';
   const MAXD = CONFIG.limits.maxDim;
   const bs = (path) => Controls.bindStore(Store, path);
   const round1 = (v) => String(Math.round(v * 10) / 10);
@@ -103,6 +106,12 @@ const UI = (() => {
     format: Units.formatFeetInches, parse: Units.parseLength, inputMode: 'text', ...extra,
   });
   const lenF = (label, path, extra = {}) => lenS(label, path, 0, 1, { compact: true, ...extra });   // compact (number field only)
+  // Pin placement (batch fixes plan 2.2): with CONFIG.pinLocksOffsets a pinned placement also disables these number fields; the default leaves them editable
+  const pinLockF = (c) => {
+    const f = c.el.querySelector('input.numfield');
+    return Controls.when(() => { if (f) f.disabled = PinUI.locksOffsets(); return true; }, [c]);
+  };
+  const pinLockNote = () => Controls.when(() => PinUI.locksOffsets(), [Controls.help('Unpin the placement to move the building.')]);
   const offS = (label, path, lim = 200) => lenS(label, path, -lim, lim, { hardMin: -MAXD });          // may be negative
   const intS = (label, path, min, max, extra = {}) => Controls.slider({
     label, bind: bs(path), min, max, step: 1, hardMin: 1, hardMax: CONFIG.limits.maxFloors, integer: true,
@@ -282,7 +291,8 @@ const UI = (() => {
           ]),
           more: els([
             Controls.label('Shift'),
-            Controls.group(els([lenF('Offset x (east)', `${p}.offset.x`, { hardMin: -MAXD }), lenF('Offset y (north)', `${p}.offset.y`, { hardMin: -MAXD })])),
+            Controls.group(els([pinLockF(lenF('Offset x (east)', `${p}.offset.x`, { hardMin: -MAXD })), pinLockF(lenF('Offset y (north)', `${p}.offset.y`, { hardMin: -MAXD }))])),
+            pinLockNote(),
             degS('Rotation', `${p}.rotation`, -180, 180),
             Controls.label('Taper (change bottom to top)'),
             pctS('Taper x', `${p}.taper.x`, -60, 60), pctS('Taper y', `${p}.taper.y`, -60, 60),
@@ -522,7 +532,7 @@ const UI = (() => {
   ];
   const sectionCtl = {};          // id -> Controls.section result
   const swatchSyncs = [];         // functions that repaint section-head swatches
-  let activeTab = 'form';
+  let activeTab = STUDY ? STUDY_TAB : 'form';
   const scrollPos = {};
 
   function buildPanel() {
@@ -535,10 +545,11 @@ const UI = (() => {
     }
     for (const s of SECTIONS) {
       const parts = s.build();
-      const open = prefs.sections && s.id in prefs.sections ? !!prefs.sections[s.id] : !!s.open;
+      let open = prefs.sections && s.id in prefs.sections ? !!prefs.sections[s.id] : !!s.open;
+      if (STUDY && s.tab === STUDY_TAB) open = s.id === 'sun';     // Sun Study mode: the Sun section open, Display and Context collapsed
       const opt = {
         id: s.id, title: s.title, open, children: parts.children, more: parts.more,
-        onToggle: (isOpen) => rememberSection(s.id, isOpen),
+        onToggle: (isOpen) => { if (!STUDY) rememberSection(s.id, isOpen); },     // Sun Study mode leaves the saved section choices alone
       };
       if (s.id === 'podium') opt.headExtra = podiumSwatches();
       const sec = Controls.section(opt);
@@ -570,12 +581,14 @@ const UI = (() => {
     for (const t of TABS) {
       bar.append(h('button', {
         class: 'tab', type: 'button', role: 'tab', id: `tab-${t.id}`, 'data-tab': t.id, 'aria-controls': `tabpanel-${t.id}`, 'aria-selected': 'false', tabindex: '-1',
+        hidden: STUDY && t.id !== STUDY_TAB,      // Sun Study mode: the View tab only
         onclick: () => { setTab(t.id); raiseSheet(); },
       }, t.title));
     }
     bar.addEventListener('keydown', (e) => {
       if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Home' && e.key !== 'End') return;
       e.preventDefault();
+      if (STUDY) return;
       const i = TABS.findIndex((t) => t.id === activeTab);
       const next = e.key === 'Home' ? 0 : e.key === 'End' ? TABS.length - 1 : (i + (e.key === 'ArrowRight' ? 1 : -1) + TABS.length) % TABS.length;
       setTab(TABS[next].id);
@@ -584,7 +597,8 @@ const UI = (() => {
   }
   /** Shows one tab. Remembered in the UI prefs (localStorage), and each tab keeps its own scroll position. */
   function setTab(id, { remember = true } = {}) {
-    if (!TABS.some((t) => t.id === id)) return false;
+    if (!TABS.some((t) => t.id === id) || (STUDY && id !== STUDY_TAB)) return false;
+    if (STUDY) remember = false;
     const scroller = $('panelScroll');
     if (id !== activeTab) scrollPos[activeTab] = scroller.scrollTop;
     activeTab = id;
@@ -689,6 +703,18 @@ const UI = (() => {
       h('span', { class: 'grow' }, title, sub ? h('small', null, sub) : null), o.chev ? h('span', { html: ICONS.chev, class: 'chev-r', style: 'display:contents' }) : null);
     const main = () => {
       el.textContent = '';
+      if (STUDY) {      // Sun Study mode: Image, AI-ready image, Shadow study sheet, and the project items (Send to). No prompts, SketchUp or option files.
+        el.append(h('div', { class: 'label pop-label' }, 'Pictures'),
+          item('miImage', 'Image', 'Save a PNG of this view', () => Shots.take()),
+          item('miAiReady', 'AI-ready image', 'Plain model, no overlay, grid or wireframe. For ChatGPT or Gemini.', () => Shots.takeAiReady()),
+          item('miOverlay', 'Image overlay', 'Choose what the Image shows', () => overlay(), { keep: true, chev: true }),
+          item('miShadowSheet', 'Shadow study sheet', 'Three dates by three times in one picture', () => { SunStudy.make({ deliver: true }).catch((e) => { console.error(e); Toast.show(e && e.message ? e.message : 'The sheet could not be made.', 'bad', 6000); }); }),
+          h('div', { class: 'pop-sep' }), h('div', { class: 'label pop-label' }, 'Send to'),
+          item('miSendPlate', 'Send to Plate Planner', 'Save the project and open the Plate Planner', () => ProjectUI.send('plate')),
+          item('miSendFacade', 'Send to Facade Studio', 'Save the project and open the Facade Studio', () => ProjectUI.send('facade')),
+          item('miSendGrading', 'Send to Grading Sketch', 'Save the project and open the Grading Sketch', () => ProjectUI.send('grading')));
+        return;
+      }
       el.append(h('div', { class: 'label pop-label' }, 'Pictures'),
         item('miImage', 'Image', 'Save a PNG of this view', () => Shots.take()),
         item('miAiReady', 'AI-ready image', 'Plain model, no overlay, grid or wireframe. For ChatGPT or Gemini.', () => Shots.takeAiReady()),
@@ -752,6 +778,26 @@ const UI = (() => {
     const exp = h('button', { class: 'btn has-text menu-btn', type: 'button', id: 'btnExport', 'aria-haspopup': 'true', 'aria-expanded': 'false', title: 'Export: image, AI-ready image, AI prompts, SketchUp, JSON, send to another tool', 'aria-label': 'Export menu', onclick: () => openExportMenu(exp) },
       h('span', { html: ICONS.export, style: 'display:contents' }), h('span', { class: 'btn-text' }, 'Export'), h('span', { html: ICONS.chev, style: 'display:contents' }));
     $('tbExport').append(exp);
+
+    if (STUDY) {
+      // Sun Study mode: the title, and a link back to the same project in the full Tower (the same address without ?study).
+      const t = document.querySelector('.app-title');
+      if (t) t.textContent = 'Tower Generator · Sun Study';
+      document.title = 'Tower Generator · Sun Study';
+      const edit = h('a', { class: 'btn has-text tb-edit', id: 'tbEditTower', href: editTowerHref(), title: 'Open the tower with all its tabs and handles', 'aria-label': 'Edit the tower' }, h('span', { class: 'btn-text' }, 'Edit the tower'));
+      // the address can gain ?project= after this runs (a project made in this session): read it again when the link is used
+      for (const ev of ['pointerdown', 'focus', 'mouseover', 'touchstart']) edit.addEventListener(ev, () => { edit.setAttribute('href', editTowerHref()); });
+      const spacer = document.querySelector('#topbar .tb-spacer');
+      if (spacer) spacer.before(edit); else $('topbar').append(edit);
+    }
+  }
+  /** This address without the study flag (?project= and the rest stay). */
+  function editTowerHref() {
+    try {
+      const u = new URL(location.href);
+      u.searchParams.delete('study');
+      return u.pathname + u.search + u.hash;
+    } catch (e) { return location.pathname; }
   }
 
   /* ---- preset views ------------------------------------------------------------------ */
@@ -943,7 +989,7 @@ const UI = (() => {
     };
     let drag = null;
     grabber.addEventListener('pointerdown', (e) => {
-      grabber.setPointerCapture(e.pointerId);
+      try { grabber.setPointerCapture(e.pointerId); } catch (err) { /* synthetic events have no active pointer */ }
       drag = { y: e.clientY, h: curH(), moved: false };
     });
     grabber.addEventListener('pointermove', (e) => {
@@ -998,7 +1044,7 @@ const UI = (() => {
     buildTopBar();
     buildPanel();
     buildTabs();
-    setTab(TABS.some((t) => t.id === prefs.tab) ? prefs.tab : 'form', { remember: false });
+    setTab(STUDY ? STUDY_TAB : TABS.some((t) => t.id === prefs.tab) ? prefs.tab : 'form', { remember: false });
     buildViews();
     buildHud();
     initSheet();
@@ -1013,9 +1059,10 @@ const UI = (() => {
   return {
     init, updateHud, rebuildPanel: () => { Controls.refreshAll(); },
     // test hooks: the section controllers, and a rebuild of the panel from the saved UI prefs (a simulated reload)
-    sectionCtl, rebuildSections: () => { buildPanel(); setTab(activeTab, { remember: false }); Controls.refreshAll(); swatchSyncs.forEach((fn) => fn()); },
+    rememberSection, sectionCtl, rebuildSections: () => { buildPanel(); setTab(activeTab, { remember: false }); Controls.refreshAll(); swatchSyncs.forEach((fn) => fn()); },
     // v1.1 hooks for the selection card
-    openItem, setProgramForItems, setTab, activeTab: () => activeTab, tabs: () => TABS.map((t) => t.id),
+    openItem, setProgramForItems, setTab, activeTab: () => activeTab, tabs: () => TABS.filter((t) => !STUDY || t.id === STUDY_TAB).map((t) => t.id),
+    studyMode: STUDY,        // ?study=sun (Sun Study mode); SunUI, 13_start.js and the placement gizmo read it
     setHudOpen, hudOpen: () => $('hud').dataset.collapsed === 'false',
   };
 })();

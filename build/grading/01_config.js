@@ -37,11 +37,14 @@ const CONFIG = {
   exaggerations: [1, 2, 3, 5],
   presets: PresetsMod.PRESETS,
   storageKey: 'grading.options.v1',
+  heroColor: '#E0A458',    // AI-ready image: the hero model draws in this color, everything else stays white (batch-fixes plan 7); one value
+  heroColorName: 'amber',  // the name the Hero render prompt uses for it
   schema: 1,
   projectSchema: 1,        // schema of the "grading" section this tool writes
   projectSaveMs: 1000,     // project autosave delay (spec section 8)
   projectListMax: 8,
   contextRadius: 900,      // ft, site neighbors drawn around the work
+  shadowStrength: 0.55,   // opacity of the flat ground shadow (batch-fixes plan 3.2); the Tower also boosts the light contrast for the Sun Study
   tool: 'grading',
   title: 'Grading Sketch',
   sketchCaution: 'Caution: this is a sketch for early coordination with the civil engineer. It is never a grading plan. Every volume, slope, and wall height is a design-stage estimate.',

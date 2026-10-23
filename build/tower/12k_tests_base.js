@@ -275,3 +275,223 @@ runAllTests = ((base) => async function runAllWithBase() {
   console.log(`[tests] base elevation ${g.length - bad.length}/${g.length} passed`, bad.length ? JSON.stringify(bad) : '');
   return r;
 })(runAllTests);
+
+
+/* ==========================================================================
+   TESTS: Pin placement, Glass on open (docs/batch-fixes-technical-plan.md sections 2.1, 2.2 and 2.4) - Tower
+   Opening a project with a site draws the site Glass for the session; Pin placement locks the drag gizmo and the ring, draws the site
+   Solid and saves with the section; Unpin gives Glass back. One undo step per toggle. Typed X, Y and rotation stay editable.
+   Uses BaseFixture (above): an in-memory sloped site project, so a ?test visit never touches the saved projects.
+   ========================================================================== */
+async function runPinTests() {
+  const results = [];
+  const eq = (a, b) => (JSON.stringify(a) === JSON.stringify(b) ? true : `got ${JSON.stringify(a)}, expected ${JSON.stringify(b)}`);
+  const t = async (name, fn) => {
+    let r;
+    try { r = await fn(); } catch (e) { r = `threw ${e && e.message}`; }
+    results.push({ name, ok: r === true, detail: r === true ? '' : String(r) });
+  };
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const G = PlacementGizmo;
+  const savedState = Store.snapshot();
+  const savedLocks = CONFIG.pinLocksOffsets;
+  Options.holdAutosave(true);
+  const mem = BaseFixture.memory();
+  ProjectUI.reset();
+  ProjectUI.configure({ storage: mem, navigate: () => {}, updateUrl: () => {} });
+  const fresh = () => { Store.replace(fillDefaults(defaultState()), { resetHistory: true }); };
+  const pl = () => Store.get('placement');
+  const depth = () => Store.historyDepth();
+  const style = () => Store.get('view.siteStyle');
+  const btn = () => document.getElementById('tbPin');
+  const openSite = async (withSite = true) => {
+    fresh();
+    const doc = BaseFixture.siteDoc(withSite);
+    ProjectMod.saveProject(mem, doc);
+    ProjectUI.openDoc(doc);
+    await wait(300);
+    return doc;
+  };
+  const flushed = () => { ProjectUI.markDirty(); ProjectUI.flush(); return ProjectMod.getSection(ProjectUI.doc(), 'massing'); };
+  const offsetFields = () => [...document.querySelectorAll('section[data-section="segments"] [aria-label="Offset x (east) value"], section[data-section="segments"] [aria-label="Offset y (north) value"]')];
+
+  try {
+    await t('2.1 a project with a site opens with view.siteStyle glass (the style was solid before)', async () => {
+      fresh();
+      Store.set('view.siteStyle', 'solid', { live: false });
+      const before = style();
+      const doc = BaseFixture.siteDoc(true);
+      ProjectMod.saveProject(mem, doc);
+      ProjectUI.openDoc(doc);
+      await wait(300);
+      return eq([before, style(), pl().pinned === true], ['solid', 'glass', false]);
+    });
+
+    await t('2.1 a project without a site keeps the style it had', async () => {
+      fresh();
+      Store.set('view.siteStyle', 'wireframe', { live: false });
+      await openSite(false);
+      return eq(style(), 'solid');
+    });
+
+    await t('2.2 the Pin placement button sits right after the project pill, shows with a project open and reads "Pin placement"', async () => {
+      await openSite(true);
+      const b = btn(), pill = document.getElementById('projPill');
+      return eq([!!b, b && b.previousElementSibling === pill, b && b.hidden, b && b.textContent.trim(), b && b.getAttribute('aria-pressed'), PinUI.pinned()], [true, true, false, 'Pin placement', 'false', false]);
+    });
+
+    await t('2.2 the button is hidden without a project', async () => {
+      await openSite(true);
+      ProjectUI.close();
+      return eq([btn().hidden, PinUI.available()], [true, false]);
+    });
+
+    await openSite(true);
+
+    await t('2.2 Pin: placement.pinned is true, the button reads "Unpin" and is pressed, the site style is solid, ONE undo step', () => {
+      const d0 = depth();
+      btn().click();
+      const ok = pl().pinned === true && PinUI.pinned() && btn().textContent.trim() === 'Unpin' && btn().getAttribute('aria-pressed') === 'true' && style() === 'solid' && depth() - d0 === 1;
+      return ok || `pinned ${pl().pinned} text ${btn().textContent} style ${style()} steps ${depth() - d0}`;
+    });
+
+    await t('2.2 pinned: the ring and the grip are hidden, the gizmo is inactive, begin("move") and begin("rotate") are refused, nothing is written', () => {
+      if (!Render.ready()) return true;
+      const p0 = JSON.stringify(pl()), d0 = depth();
+      const i = G.info();
+      const rect = Render.canvas().getBoundingClientRect();
+      const pt = G.modelPoint() || { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+      const began = G.begin('move', pt.x, pt.y) || G.begin('rotate', pt.x, pt.y);
+      return eq([i.active, i.locked, i.handles, began, JSON.stringify(pl()) === p0, depth() === d0, Store.gestureActive()], [false, true, 0, false, true, true, false]);
+    });
+
+    await t('2.2 pinned: a real pointer drag on the model moves nothing and leaves orbit on', async () => {
+      if (!Render.ready()) return true;
+      const pt = G.modelPoint();
+      if (!pt) return 'no model point on screen';
+      const ev = (type, x, y) => new PointerEvent(type, { pointerId: 61, pointerType: 'mouse', button: 0, buttons: type === 'pointerup' ? 0 : 1, clientX: x, clientY: y, bubbles: true, cancelable: true });
+      const p0 = JSON.stringify(pl());
+      const canvas = Render.canvas(), cap = canvas.setPointerCapture;
+      canvas.setPointerCapture = () => {};                  // a synthetic pointer has no capture to take (orbit stays on while pinned)
+      try {
+        canvas.dispatchEvent(ev('pointerdown', pt.x, pt.y));
+        window.dispatchEvent(ev('pointermove', pt.x + 60, pt.y + 10));
+        await wait(60);
+        window.dispatchEvent(ev('pointerup', pt.x + 60, pt.y + 10));
+      } finally { canvas.setPointerCapture = cap; }
+      return eq([JSON.stringify(pl()) === p0, G.info().dragging, Render.orbitEnabled()], [true, null, true]);
+    });
+
+    await t('2.2 pinned: typed X, Y and rotation still write', () => {
+      const x0 = pl().x;
+      const fx = document.querySelector('[aria-label="X (east) value"]');
+      if (fx) { fx.value = String(x0 + 25); fx.dispatchEvent(new Event('change', { bubbles: true })); } else Store.set('placement.x', x0 + 25, { live: false });
+      const xOk = Math.abs(pl().x - (x0 + 25)) < 0.01 || `x ${pl().x} expected ${x0 + 25} (field ${!!fx})`;
+      Store.set('placement.y', 111, { live: false });
+      Store.set('placement.rotation', 30, { live: false });
+      return (xOk === true && pl().y === 111 && pl().rotation === 30 && pl().pinned === true) || `${xOk} placement ${JSON.stringify(pl())}`;
+    });
+
+    await t('2.2 Center on site and Context from site still work while pinned', () => {
+      const r = ProjectUI.centerOnSite({ quiet: true });
+      const c = ProjectUI.contextFromSite(undefined, { quiet: true });
+      return (pl().pinned === true && pl().x === 500 && pl().y === 500 && c !== -1) || `placement ${JSON.stringify(pl())} centered ${r} ctx ${c}`;
+    });
+
+
+    await t('2.2 pinLocksOffsets (default true): pinned, the segment offset x and y fields are disabled and the help line shows; unpinned they are enabled; false leaves them enabled', () => {
+      if (CONFIG.pinLocksOffsets !== true) return `CONFIG.pinLocksOffsets is ${CONFIG.pinLocksOffsets}, expected true`;
+      const note = () => [...document.querySelectorAll('#sections .help')].find((p) => p.textContent === 'Unpin the placement to move the building.');
+      const fields = offsetFields();
+      if (!fields.length) return 'no offset fields in the panel';
+      const lockedOn = fields.every((f) => f.disabled === true) && !!note() && !note().closest('.when').hidden;
+      CONFIG.pinLocksOffsets = false; Controls.refreshAll();
+      const freeWhenFalse = offsetFields().every((f) => f.disabled === false);
+      CONFIG.pinLocksOffsets = true; Controls.refreshAll();
+      PinUI.setPinned(false);
+      const freeUnpinned = offsetFields().every((f) => f.disabled === false) && note().closest('.when').hidden;
+      PinUI.setPinned(true);
+      return (lockedOn && freeWhenFalse && freeUnpinned && offsetFields().every((f) => f.disabled === true)) || `locked ${lockedOn} falseFlag ${freeWhenFalse} unpinned ${freeUnpinned}`;
+    });
+
+    await t('2.2 the pinned flag is saved with the section (placement and state) and a reopened project is pinned and solid', async () => {
+      const sec = flushed();
+      const savedOk = !!sec && sec.placement.pinned === true && sec.state.placement.pinned === true;
+      const doc = ProjectUI.doc();
+      fresh();
+      Store.set('view.siteStyle', 'wireframe', { live: false });
+      ProjectUI.openDoc(doc);
+      await wait(300);
+      const i = G.info();
+      return (savedOk && pl().pinned === true && style() === 'solid' && btn().textContent.trim() === 'Unpin' && !i.active)
+        || `saved ${savedOk} pinned ${pl().pinned} style ${style()} active ${i.active}`;
+    });
+
+    await t('2.2 Unpin: the style goes to glass, the gizmo and the ring are back, ONE undo step; undo re-pins and redo unpins', () => {
+      const d0 = depth();
+      btn().click();
+      const un = pl().pinned !== true && !PinUI.pinned() && btn().textContent.trim() === 'Pin placement' && style() === 'glass' && depth() - d0 === 1;
+      const i = G.info();
+      const ringBack = !Render.ready() || (i.active && i.handles === 1);
+      Store.undo();
+      const undone = [pl().pinned === true, style()];
+      Store.redo();
+      const redone = [pl().pinned === true, style()];
+      return (un && ringBack && eq(undone, [true, 'solid']) === true && eq(redone, [false, 'glass']) === true)
+        || `un ${un} ringBack ${ringBack} undone ${JSON.stringify(undone)} redone ${JSON.stringify(redone)}`;
+    });
+
+    await t('2.2 after Unpin a drag on the model works again (begin("move") starts)', () => {
+      if (!Render.ready()) return true;
+      const pt = G.modelPoint();
+      if (!pt) return 'no model point on screen';
+      const began = G.begin('move', pt.x, pt.y);
+      G.end(false);
+      return began || 'begin refused after Unpin';
+    });
+
+    await t('2.2 a project saved unpinned reopens with glass and an unpinned placement', async () => {
+      const sec = flushed();
+      const doc = ProjectUI.doc();
+      fresh();
+      ProjectUI.openDoc(doc);
+      await wait(300);
+      return eq([sec.placement.pinned === true, pl().pinned === true, style()], [false, false, 'glass']);
+    });
+
+    await t('2.2 fillDefaults keeps pinned true, drops anything else, and a missing placement stays null', () => {
+      const a = fillDefaults({ placement: { x: 1, y: 2, rotation: 0, baseZ: 3, pinned: true } }).placement;
+      const b = fillDefaults({ placement: { x: 1, y: 2, rotation: 0, baseZ: 3, pinned: 'yes' } }).placement;
+      const c = fillDefaults({ placement: { x: 1, y: 2, rotation: 0, baseZ: 3 } }).placement;
+      return eq([a.pinned, b.pinned === true, c.pinned === true, fillDefaults({}).placement], [true, false, false, null]);
+    });
+
+    await t('2.2 PinUI.setPinned without a project does nothing', () => {
+      ProjectUI.close();
+      const d0 = depth();
+      return eq([PinUI.setPinned(true), PinUI.pinned(), depth() === d0], [false, false, true]);
+    });
+  } finally {
+    CONFIG.pinLocksOffsets = savedLocks;
+    try { G.end(false); } catch (e) { /* no drag open */ }
+    ProjectUI.reset();
+    ProjectUI.restoreDefaults();
+    Select.clear();
+    Store.replace(savedState);
+    Options.holdAutosave(false);
+  }
+  return results;
+}
+
+/* Extend runAllTests with the Pin placement tests. */
+runAllTests = ((base) => async function runAllWithPin() {
+  const r = await base();
+  const g = await runPinTests();
+  const bad = g.filter((x) => !x.ok);
+  r.results.push(...g);
+  r.total += g.length;
+  r.passed += g.length - bad.length;
+  r.failed.push(...bad);
+  console.log(`[tests] pin placement ${g.length - bad.length}/${g.length} passed`, bad.length ? JSON.stringify(bad) : '');
+  return r;
+})(runAllTests);
