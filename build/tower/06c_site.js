@@ -4,13 +4,13 @@
    `SiteLayer` is the small adapter between the page and the shared site layer. While a project with a site is open and the View
    tab's "Site" toggle (view.site) is on, it builds the layer data with SiteLayerMod.buildSiteLayerData (the site in the tower's
    local frame) and the Three.js objects with SiteLayer3D.objects (build/shared/06x_sitelayer.js): the ground with a skirt, the
-   dashed site boundary with the north arrow, the neighbor buildings (solid, dark edges), roads, walks, water and trees.
+   dashed site boundary with the north arrow, the neighbor buildings (view.siteStyle: solid with dark edges, glass, or wireframe), roads, walks, water and trees.
    The layer is rebuilt only when its key changes (site, placement, theme).
    The layer draws EVERY site building as a solid with dark edges. While it shows, Render's context layer leaves out the context blocks
    that came from the site (block.site === true; they stay in the state for metrics and sun hours), so nothing draws twice.
    ========================================================================== */
 const SiteLayer = (() => {
-  const EMPTY = { shown: false, ground: false, buildings: 0, roads: 0, walks: 0, waterAreas: 0, trees: 0, triangles: 0, points: 0, rotation: 0, key: 'off', bounds: null };
+  const EMPTY = { style: 'solid', shown: false, ground: false, buildings: 0, roads: 0, walks: 0, waterAreas: 0, trees: 0, triangles: 0, points: 0, rotation: 0, key: 'off', bounds: null };
   let drawn = { ...EMPTY };
   let lastObjects = [];
   let builtPl = null;                // the placement the objects were built for
@@ -29,6 +29,9 @@ const SiteLayer = (() => {
     const st = state || Store.raw();
     return ProjectUI.has() && ProjectUI.hasSite() && !(st.view && st.view.site === false);
   }
+
+  /** The site style of the View tab: 'solid' | 'glass' | 'wireframe' (anything else is 'solid'). Only the neighbor buildings change. */
+  const styleOf = (state) => { const v = state && state.view && state.view.siteStyle; return v === 'glass' || v === 'wireframe' ? v : 'solid'; };
 
   /** Called by Render.syncMain on every frame of the main view (never in Compare).
    *  layer = { group, key } (a THREE.Group already in the scene, hidden in Compare and in the AI-ready image);
@@ -52,7 +55,7 @@ const SiteLayer = (() => {
     }
     const wasMoved = g.rotation.y !== 0 || g.position.x !== 0 || g.position.y !== 0 || g.position.z !== 0;
     if (wasMoved) { g.rotation.y = 0; g.position.set(0, 0, 0); }
-    const key = on ? SiteLayer3D.keyFor(ProjectUI.doc(), pl, 'site', kit.themeEpoch ? kit.themeEpoch() : 0) : 'off';
+    const key = on ? SiteLayer3D.keyFor(ProjectUI.doc(), pl, 'site', kit.themeEpoch ? kit.themeEpoch() : 0, styleOf(state)) : 'off';
     const rebuilt = kit.syncLayer(layer, key, () => {
       builtPl = pl;
       SiteLayer3D.dispose(lastObjects);
@@ -62,7 +65,7 @@ const SiteLayer = (() => {
       const data = SiteLayerMod.buildSiteLayerData(derived, pl, {});
       const ring = ProjectUI.boundaryLocal();
       if (!data.ok) { drawn = { ...EMPTY, shown: true, key, points: ring ? ring.length : 0, rotation: pl.rotation }; return []; }
-      const res = SiteLayer3D.objects(data, { rotation: pl.rotation });
+      const res = SiteLayer3D.objects(data, { rotation: pl.rotation, style: styleOf(state) });
       lastObjects = res.objects;
       drawn = { ...EMPTY, ...res.info, shown: true, key, points: ring ? ring.length : 0, rotation: pl.rotation };
       return res.objects;

@@ -9,7 +9,7 @@
    ========================================================================== */
 //@@MODULE sitelayer@@
 const SiteLayer = (() => {
-  const OFF = { shown: false, ground: false, buildings: 0, roads: 0, walks: 0, waterAreas: 0, trees: 0, key: 'off' };
+  const OFF = { style: 'solid', shown: false, ground: false, buildings: 0, roads: 0, walks: 0, waterAreas: 0, trees: 0, key: 'off' };
   let drawn = { ...OFF };
 
   /** site.derived of the open project, or null (no project, no site section, or nothing in it). */
@@ -21,6 +21,9 @@ const SiteLayer = (() => {
     return dv && typeof dv === 'object' && !Array.isArray(dv) ? dv : null;
   }
 
+  /** The site style of the View tab: 'solid' | 'glass' | 'wireframe' (anything else is 'solid'). Only the neighbor buildings change. */
+  const styleOf = (state) => { const v = state && state.view && state.view.siteStyle; return v === 'glass' || v === 'wireframe' ? v : 'solid'; };
+
   /** Called by Render.syncMain on every frame of the main view (never in Compare).
    *  layer = { group, key } (a THREE.Group already in the scene, hidden in Compare and in the AI-ready image);
    *  state = Store.raw(); d = Derived.get(); kit = { syncLayer, clearGroup, cssColor, themeEpoch, mapper }.
@@ -31,7 +34,7 @@ const SiteLayer = (() => {
     const doc = dv ? ProjectUI.doc() : null;
     const pl = dv ? ProjectUI.placement() : null;
     const M = dv && d && Number.isFinite(d.zBase) ? kit.mapper() : null;                 // the sketch's elevation mapper (base level and exaggeration)
-    const key = M ? `${SiteLayer3D.keyFor(doc, pl, { site: true, buildings: true }, kit.themeEpoch ? kit.themeEpoch() : 0)}|${M.ex}|${M.zb}` : 'off';
+    const key = M ? `${SiteLayer3D.keyFor(doc, pl, { site: true, buildings: true }, kit.themeEpoch ? kit.themeEpoch() : 0, styleOf(state))}|${M.ex}|${M.zb}` : 'off';
     if (layer.key !== key) SiteLayer3D.dispose(layer.group.children);       // the materials; kit.syncLayer frees the geometry
     return kit.syncLayer(layer, key, () => {
       drawn = { ...OFF, key };
@@ -40,9 +43,9 @@ const SiteLayer = (() => {
       try { data = SiteLayerMod.buildSiteLayerData(dv, pl, { contextIds: new Set() }); } catch (e) { console.error(e); return []; }
       if (!data || !data.ok) return [];
       let res = null;
-      try { res = SiteLayer3D.objects(data, { parts: ['buildings', 'roads', 'walks', 'water', 'trees'], zOf: M.Y, css: kit.cssColor, rotation: pl.rotation, edges: true, shadows: true }); } catch (e) { console.error(e); return []; }
+      try { res = SiteLayer3D.objects(data, { style: styleOf(state), parts: ['buildings', 'roads', 'walks', 'water', 'trees'], zOf: M.Y, css: kit.cssColor, rotation: pl.rotation, edges: true, shadows: true }); } catch (e) { console.error(e); return []; }
       const i = res.info;
-      drawn = { shown: true, ground: false, buildings: i.buildings, roads: i.roads, walks: i.walks, waterAreas: i.waterAreas, trees: i.trees, key };
+      drawn = { style: styleOf(state), shown: true, ground: false, buildings: i.buildings, roads: i.roads, walks: i.walks, waterAreas: i.waterAreas, trees: i.trees, key };
       return res.objects;
     });
   }
