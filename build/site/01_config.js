@@ -18,7 +18,7 @@
 
 const CONFIG = {
   sizes: [500, 1000, 1500, 2000, 3000],
-  defaultSize: 1000,
+  defaultSize: 3000,
   scales: [1, 2, 3, 5],
   contours: [0, 2, 5],            // ft; 0 = off
   recentKey: 'sitemodel.recent.v1',
