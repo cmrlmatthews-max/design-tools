@@ -49,11 +49,13 @@ function summarize(s, built, metrics) {
   for (const f of built.faces || []) {
     const w = mv(f.wall), gl = mv(f.glazing);
     const doors = (f.panels || []).filter((p) => p.kind === 'door').length;
-    if (byO[f.orientation]) { byO[f.orientation].wall += w; byO[f.orientation].glazing += gl; }
+    const crown = f.zone === 'crown';   // the crown is a screen: its own zone row, not counted in the orientation or system sums
+    if (!crown && byO[f.orientation]) { byO[f.orientation].wall += w; byO[f.orientation].glazing += gl; }
     const gi = groupInfo[f.groupId];
     if (gi) { gi.wall += w; gi.glazing += gl; gi.balconies += doors; gi.faces++; gi.system = gi.system || (f.rule && f.rule.system) || 'punched'; }
     const z = zones[f.zone] = zones[f.zone] || { wall: 0, glazing: 0 };
     z.wall += w; z.glazing += gl;
+    if (crown) continue;
     const sy = systems[(f.rule && f.rule.system) || 'punched'] = systems[(f.rule && f.rule.system) || 'punched'] || { wall: 0, glazing: 0 };
     sy.wall += w; sy.glazing += gl;
   }
@@ -75,7 +77,7 @@ function summarize(s, built, metrics) {
     levels: (built.levels || []).length, faces: (built.groups || []).length, height: top,
     exposure: metrics.exposure && typeof metrics.exposure === 'object' ? metrics.exposure : null,
     projection: Array.isArray(metrics.projectionFactors) ? metrics.projectionFactors : [],
-    zones, systems, groupInfo,
+    zones, systems, groupInfo, crown: !!metrics.hasCrown || !!zones.crown,
   };
 }
 

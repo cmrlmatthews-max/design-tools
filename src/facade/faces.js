@@ -48,7 +48,7 @@ const MIN_EDGE = 0.1;       // ft, plan 3.2
 const GROUP_TOL = 1;        // ft, plan 3.5
 const GROUP_DEG = 1;        // degrees, plan 3.5
 const Z_TOL = 0.01;         // ft: floors touch
-const SKIP_ZONES = ["deck", "crown"];   // decision 16
+const SKIP_ZONES = ["deck"];   // decision 16, revised: the crown now stays (batch-fixes plan 1)
 
 export const SECTORS = ["N", "E", "S", "W"];
 
@@ -182,7 +182,7 @@ function byZ(levels) {
 }
 
 /**
- * Plan 3.1 and section 7. Project source: massing.derived.levels without deck, crown, or empty levels.
+ * Plan 3.1 and section 7. Project source: massing.derived.levels without deck or empty levels. The crown level stays, with zone "crown".
  * A missing project massing, or one with no levels, falls back to the standalone massing with a note.
  * → { levels (sorted by z), rotation, source: "project" | "standalone", notes: [string], noteIds: [string] }
  */
@@ -322,15 +322,18 @@ export function zoneOf(state, levels) {
   if (!sorted.length) return out;
   const podium = sorted.filter((l) => l.zone === "podium").map((l) => l.index);
   const base = new Set(podium.length ? podium : [sorted[0].index]);
-  const topIdx = sorted[sorted.length - 1].index;
+  const nonCrown = sorted.filter((l) => l.zone !== "crown");
+  const topIdx = nonCrown.length ? nonCrown[nonCrown.length - 1].index : null;
   for (const l of sorted) out[l.index] = base.has(l.index) ? "base" : l.index === topIdx ? "top" : "middle";
   const z = (state && state.zones) || {};
   if (z.mode === "ranges" && Array.isArray(z.ranges)) {
     for (const l of sorted) {
+      if (l.zone === "crown") continue;
       const r = z.ranges.find((g) => g && g.id !== undefined && l.index >= num(g.from, Infinity) && l.index <= num(g.to, -Infinity));
       if (r) out[l.index] = String(r.id);
     }
   }
+  for (const l of sorted) if (l.zone === "crown") out[l.index] = "crown";   // the crown is always its own zone
   return out;
 }
 

@@ -234,7 +234,7 @@ t("contract: standalone podium levels and z", () => {
   ok(lv[0].plates !== lv[1].plates, "plates not shared");
 });
 
-t("contract: project levels skip deck, crown, and empty; tower with no levels notes", () => {
+t("contract: project levels skip deck and empty and keep the crown; tower with no levels notes", () => {
   const ring = [[0, 0], [100, 0], [100, 50], [0, 50]];
   const L = (index, zone, z, ftf, plates) => ({ index, zone, z, ftf, program: "residential", plates });
   const derived = { levels: [L(2, "bar", 12, 10, [{ outer: ring, holes: [] }]), L(1, "bar", 0, 12, [{ outer: ring, holes: [] }]),
@@ -242,7 +242,8 @@ t("contract: project levels skip deck, crown, and empty; tower with no levels no
   const project = { sections: { massing: { tool: "midrise", placement: { x: 0, y: 0, rotation: 30, baseZ: 0 }, derived } } };
   const m = massingLevels({ source: "project", standalone: STANDALONE }, project);
   eq(m.source, "project"); eq(m.rotation, 30);
-  deq(m.levels.map((l) => l.index), [1, 2]);
+  deq(m.levels.map((l) => l.index), [1, 2, 4]);
+  eq(m.levels[2].zone, "crown");
   const tower = { sections: { massing: { tool: "tower", placement: { x: 0, y: 0, rotation: 0, baseZ: 0 }, derived: {} } } };
   const t2 = massingLevels({ source: "project", standalone: STANDALONE }, tower);
   eq(t2.source, "standalone"); deq(t2.noteIds, ["tower-no-levels"]);
@@ -250,6 +251,28 @@ t("contract: project levels skip deck, crown, and empty; tower with no levels no
   eq(t2.levels.length, 5);
   const none = massingLevels({ source: "project", standalone: STANDALONE }, null);
   eq(none.source, "standalone"); deq(none.noteIds, ["no-project-massing"]);
+});
+
+t("crown: a tower-like project keeps its crown level; the crown is its own zone and never the top zone", () => {
+  const ring = [{ outer: [[0, 0], [100, 0], [100, 50], [0, 50]], holes: [] }];
+  const screen = [{ outer: [[20, 10], [80, 10], [80, 40], [20, 40]], holes: [] }];
+  const L = (index, zone, z, ftf, plates) => ({ index, name: zone === "crown" ? "Crown" : `Floor ${index}`, zone, z, ftf, program: zone === "crown" ? null : "residential", plates });
+  const derived = { levels: [L(1, "tower", 0, 10, ring), L(2, "tower", 10, 10, ring), L(3, "tower", 20, 10, ring), L(4, "crown", 30, 20, screen)] };
+  const project = { sections: { massing: { tool: "tower", placement: { x: 0, y: 0, rotation: 0, baseZ: 0 }, derived } } };
+  const st = { source: "project", standalone: STANDALONE, zones: { mode: "default", ranges: [] } };
+  const m = massingLevels(st, project);
+  eq(m.levels.length, 4); deq(m.levels.map((l) => l.zone), ["tower", "tower", "tower", "crown"]);
+  eq(m.levels[3].ftf, 20); eq(m.levels[3].z, 30);
+  const z = zoneOf(st, m.levels);
+  eq(z[4], "crown"); eq(z[3], "top"); eq(z[2], "middle"); eq(z[1], "base");
+  // ranges that span 1 to 4 never capture the crown
+  const rz = zoneOf({ ...st, zones: { mode: "ranges", ranges: [{ id: "A", from: 1, to: 4 }] } }, m.levels);
+  eq(rz[4], "crown"); eq(rz[3], "A"); eq(rz[1], "A");
+  // face groups: the crown faces form their own groups, none joins the floors below
+  const g = faceGroups(st, m.levels, 0);
+  ok(g.filter((x) => x.zone === "crown").length === 4, "four crown faces");
+  ok(g.filter((x) => x.zone === "crown").every((x) => x.levelFrom === 4 && x.levelTo === 4), "crown groups hold the crown level only");
+  ok(g.filter((x) => x.zone !== "crown").every((x) => x.levelTo <= 3), "floor groups stop below the crown");
 });
 
 t("contract: groups do not join across a void floor", () => {

@@ -60,7 +60,7 @@ const SYSTEMS = Object.keys(DEFAULT_SYSTEMS);
 export function ruleFor(state, zoneId, orientation) {
   const st = state || {};
   const zones = st.zones || {};
-  const base = (zones.rules && zones.rules[zoneId]) || {};
+  const base = (zones.rules && zones.rules[zoneId]) || (zoneId === "crown" ? { system: "solid" } : {});   // the crown is a screen unless a rule says otherwise
   const ov = (zones.overrides && zones.overrides[zoneId] && zones.overrides[zoneId][orientation]) || {};
   let rule = { ...base };
   if (ov.system && ov.system !== (base.system || "punched")) {
@@ -273,7 +273,7 @@ export function buildFacade(state, { project = null, quality = "full", faces: ov
       const length = isNum(e.length) ? e.length : Math.hypot(b[0] - a[0], b[1] - a[1]);
       const rule = ruleFor(state, g.zone, g.orientation);
       const { n, module } = panelize(length, rule.module);
-      const eligible = bal.on && rule.system !== "solid" && bal.zones.includes(g.zone) && bal.orientations.includes(g.orientation);
+      const eligible = bal.on && rule.system !== "solid" && g.zone !== "crown" && bal.zones.includes(g.zone) && bal.orientations.includes(g.orientation);
       entries.push({ g, lv, a, b, length, rule, n, module, eligible, convexStart: e.convexStart === undefined ? g.convexStart : e.convexStart,
         convexEnd: e.convexEnd === undefined ? g.convexEnd : e.convexEnd, bearing: isNum(e.bearing) ? e.bearing : g.bearing });
     }
