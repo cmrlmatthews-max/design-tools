@@ -8,6 +8,7 @@ const Help = (() => {
       'Pick a design from the Option menu > New from a preset, then change the numbers. The default is a 300 by 65 ft residential bar, five levels, with punched windows and inset balconies on the north and south faces.',
       'Click a face in the view to select it. The card at the top of the panel shows its orientation, level range, zone, system and window-to-wall ratio, with a street-face switch. Esc clears the selection.',
       'There are no geometry handles in this version. The massing comes from the source: a standalone shape, or the open project.',
+      'Each section starts collapsed. Select a section title to open it. Your choice is remembered.',
     ]],
     ['Massing', [
       'Standalone is a rectangle, an L, a U or a courtyard (O) with an optional podium. Every shape is centered on its bounding box. The angle turns the whole massing.',
@@ -31,7 +32,9 @@ const Help = (() => {
       'While you drag a slider the picture drops the mullions and fins. They come back when you let go.',
     ]],
     ['Site', [
-      'The Site toggle in the View tab shows the project site from the Site Model. It shows the real ground, roads, water, and trees. Neighbor buildings are solid grey blocks with dark edges. This tool does not drag. Move the building in the Tower Generator or the Mid-Rise Generator.',
+      'The Site toggle in the View tab shows the project site from the Site Model. It shows the real ground, roads, water, and trees.',
+      'Site style, under the Site toggle, sets how the neighbor buildings draw. Solid draws opaque grey blocks with dark edges. Glass draws see-through blocks. Wireframe draws edges only.',
+      'This tool does not drag. Move the building in the Tower Generator or the Mid-Rise Generator.',
     ]],
     ['Projects', [
       'A project holds the site, the massing and the work of other tools in one file. Use Project > New, or open a project from the Mid-Rise or the Tower.',
@@ -41,6 +44,8 @@ const Help = (() => {
       'Option menu > Save keeps the design in this browser. Export > Export JSON downloads all saved options. Import JSON adds them back.',
       'Export > SketchUp (.json) opens in SketchUp with the CMRLM extension. Elevations (.dxf) has four sheets with panels, glass, balconies, fins and shades for Revit or AutoCAD.',
       'Export > Image saves a picture. AI-ready image and AI Prompts are a pair for ChatGPT or Gemini; the prompt keeps every window and balcony where the model shows it.',
+      'The AI-ready image shows the site with the building. Set Site style to Solid before you make it.',
+      'The first prompt in AI Prompts is Hero render. It renders the hero building as photoreal and keeps the neighbors as a white model.',
     ]],
   ];
   function toggle() {

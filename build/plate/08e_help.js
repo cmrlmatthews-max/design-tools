@@ -18,6 +18,7 @@ const Help = (() => {
       'Pick a plate from the Option menu > New from a preset, then change the numbers. The default is a 300 by 65 ft double-loaded bar: 17 units, NRSF 15,078 sf, efficiency 77.3 percent.',
       'The Plan view is the default. The HUD shows units (or keys), NRSF, efficiency and the warnings. Tap the HUD for the mix, the corridor, the stair door path, dead ends, support space and the building totals.',
       'Keys: 1 to 6 change the view (Plan is 6), D switches Model and Diagram, L locks the selected unit, F re-fills, Delete removes a selected block, Esc clears.',
+      'Each section starts collapsed. Select a section title to open it. Your choice is remembered.',
     ]],
     ['Plate tab', [
       'A drawn plate is a rectangle, L, U, courtyard (O), circle or a polygon. Draw outline starts a polygon in the Plan view: tap the points, tap the first point or press Enter to finish.',
@@ -40,7 +41,9 @@ const Help = (() => {
       'Levels in 3D stacks every filled level of the project at its height. The grid and the snap set the step for moving blocks and bay lines. Hold Option to skip snapping.',
     ]],
     ['Site', [
-      'The Site toggle in the View tab shows the project site from the Site Model. It shows the real ground, roads, water, and trees. Neighbor buildings are solid grey blocks with dark edges. Buildings removed in the Site Model do not show here. This tool does not drag. Move the building in the Tower Generator or the Mid-Rise Generator.',
+      'The Site toggle in the View tab shows the project site from the Site Model. It shows the real ground, roads, water, and trees.',
+      'Site style, under the Site toggle, sets how the neighbor buildings draw. Solid draws opaque grey blocks with dark edges. Glass draws see-through blocks. Wireframe draws edges only.',
+      'Buildings removed in the Site Model do not show here. This tool does not drag. Move the building in the Tower Generator or the Mid-Rise Generator.',
     ]],
     ['Projects', [
       'A project holds the site, the massing and the work of other tools in one file. The Plate Planner reads the massing levels and writes a plates section with the units, so the Parking Deck and the Facade Studio can read it.',
