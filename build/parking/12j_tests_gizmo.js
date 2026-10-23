@@ -91,7 +91,7 @@ async function runGizmoTests() {
       const gestureOpen = Store.gestureActive();
       G.end();
       const p1 = { ...pl() };
-      const gz = GizmoFixture.groundAt(p1.x, p1.y);
+      const gz = ProjectUI.groundUnderFootprint(p1);   // the lowest ground under the footprint (base rule), not the ground at the origin
       const moved = p1.x !== p0.x || p1.y !== p0.y;
       return (moved && during === 'move' && gestureOpen && live.x === p1.x && live.y === p1.y && Number.isInteger(p1.x) && Number.isInteger(p1.y)
         && Math.abs(p1.baseZ - gz) <= 0.05 && p1.rotation === p0.rotation && depth() - d0 === 1 && !Store.gestureActive() && G.info().dragging === null)
@@ -190,7 +190,7 @@ async function runGizmoTests() {
       const cAfter = ProjectMod.toProject(p1, c);
       const ok = during === 'rotate' && p1.rotation % 5 === 0 && Math.abs(p1.rotation - p0.rotation - 90) <= 5 && live === p1.rotation
         && Math.hypot(cAfter[0] - cBefore[0], cAfter[1] - cBefore[1]) < 0.01 && depth() - d0 === 1
-        && Math.abs(p1.baseZ - GizmoFixture.groundAt(p1.x, p1.y)) <= 0.05;
+        && Math.abs(p1.baseZ - ProjectUI.groundUnderFootprint(p1)) <= 0.05;
       return ok || `rot ${p0.rotation} -> ${p1.rotation}, center moved ${Math.hypot(cAfter[0] - cBefore[0], cAfter[1] - cBefore[1])}, steps ${depth() - d0}`;
     });
 

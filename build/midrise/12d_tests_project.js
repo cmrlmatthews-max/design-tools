@@ -58,7 +58,9 @@ async function runProjectTests() {
       ProjectMod.saveProject(mem, doc);
       ProjectUI.openDoc(doc);
       const p = Store.get('placement'), ctx = Store.get('context');
-      return eq([p.x, p.y, p.rotation, Math.round(p.baseZ), ctx.fromSite, ctx.blocks.length, ProjectUI.has(), ProjectUI.hasSite()], [500, 500, 0, 1015, true, 1, true, true]);
+      // The base is the LOWEST ground under the footprint, not the ground at the placement origin (500, 500: 1015 ft).
+      const low = ProjectUI.groundUnderFootprint(p), atOrigin = ProjectUI.groundAt(p.x, p.y);
+      return eq([p.x, p.y, p.rotation, p.baseMode, low != null && Math.abs(p.baseZ - low) <= 0.1, atOrigin - p.baseZ >= 1, ctx.fromSite, ctx.blocks.length, ProjectUI.has(), ProjectUI.hasSite()], [500, 500, 0, 'follow', true, true, true, 1, true, true]);
     });
     await t('the project name shows next to the Project button', () => {
       const pill = $('projPill');
@@ -82,7 +84,9 @@ async function runProjectTests() {
       const b = ProjectUI.contextFromSite(2000, { quiet: true });
       const both = Store.get('context.blocks');
       const first = both.find((x) => Math.abs(x.w - 80) < 0.1);
-      return eq([a, near1[0].x, near1[0].y, near1[0].h, b, first && first.base, Store.get('context.radius'), Store.get('context.fromSite')], [1, 20, -100, 40, 2, -5, 2000, true]);
+      // The near building stands on 1010 ft in the site; its block base is relative to the placement's baseZ (the lowest ground under the footprint).
+      const baseOk = !!first && Math.abs(first.base - (1010 - Store.get('placement.baseZ'))) <= 0.1;
+      return eq([a, near1[0].x, near1[0].y, near1[0].h, b, baseOk, Store.get('context.radius'), Store.get('context.fromSite')], [1, 20, -100, 40, 2, true, 2000, true]);
     });
     await t('Context from site is one undo step', () => {
       const before = snap();
@@ -104,7 +108,8 @@ async function runProjectTests() {
       const before = snap();
       const ok = ProjectUI.centerOnSite({ quiet: true });
       const p = Store.get('placement');
-      return eq([ok, p.x, p.y, Math.round(p.baseZ), oneStep(before)], [true, 500, 500, 1015, true]);
+      const low = ProjectUI.groundUnderFootprint(p);
+      return eq([ok, p.x, p.y, low != null && Math.abs(p.baseZ - low) <= 0.1, p.baseMode, oneStep(before)], [true, 500, 500, true, 'follow', true]);
     });
     await t('the ground height is read from the site grid (bilinear)', () => eq([Math.round(ProjectUI.groundAt(250, 130) * 100) / 100, Math.round(ProjectUI.groundAt(0, 0))], [1005.1, 1000]));
 
@@ -171,7 +176,18 @@ async function runProjectTests() {
       const doc = ProjectFixture.siteProject({ withMassing: { tool: 'midrise', schema: 1, placement: { x: 300, y: 400, rotation: 15, baseZ: 1020 }, state: st, derived: MidDerivedMod.midriseDerived(st, d.built, d.metrics) } });
       ProjectMod.saveProject(mem, doc);
       ProjectUI.openDoc(doc);
-      return eq([Store.get('bars').length, Store.get('deck.on'), Store.get('placement'), ProjectUI.status().replaceNeeded], [4, true, { x: 300, y: 400, rotation: 15, baseZ: 1020 }, false]);
+      // An old save has no baseMode: it opens as Follow, and the base is the lowest ground under the footprint (not the saved 1020).
+      const p = Store.get('placement'), low = ProjectUI.groundUnderFootprint(p);
+      return eq([Store.get('bars').length, Store.get('deck.on'), [p.x, p.y, p.rotation, p.baseMode], low != null && Math.abs(p.baseZ - low) <= 0.1, ProjectUI.status().replaceNeeded], [4, true, [300, 400, 15, 'follow'], true, false]);
+    });
+    await t('a saved massing with baseMode "typed" keeps its typed base elevation when the project opens', () => {
+      fresh();
+      const st = fillDefaults(CONFIG.presets.find((p) => p.id === 'wrap-deck').state);
+      const d = computeDerived(st);
+      const doc = ProjectFixture.siteProject({ withMassing: { tool: 'midrise', schema: 1, placement: { x: 300, y: 400, rotation: 15, baseZ: 1020, baseMode: 'typed' }, state: st, derived: MidDerivedMod.midriseDerived(st, d.built, d.metrics) } });
+      ProjectMod.saveProject(mem, doc);
+      ProjectUI.openDoc(doc);
+      return eq(Store.get('placement'), { x: 300, y: 400, rotation: 15, baseZ: 1020, baseMode: 'typed' });
     });
 
     /* ---- the Tower Generator massing ---- */
@@ -221,7 +237,7 @@ async function runProjectTests() {
       fresh();
       const doc = ProjectUI.create('Local one', { quiet: true });
       const back = stored(doc.id);
-      return eq([back.frame.kind, back.name, ProjectMod.getSection(back, 'massing').tool, Store.get('placement'), urls.at(-1) === doc.id], ['local', 'Local one', 'midrise', { x: 0, y: 0, rotation: 0, baseZ: 0 }, true]);
+      return eq([back.frame.kind, back.name, ProjectMod.getSection(back, 'massing').tool, Store.get('placement'), urls.at(-1) === doc.id], ['local', 'Local one', 'midrise', { x: 0, y: 0, rotation: 0, baseZ: 0, baseMode: 'follow' }, true]);
     });
     await t('Send to Plate Planner saves the project, logs the send, and opens ../plate/?project=<id>', async () => {
       navs.length = 0;

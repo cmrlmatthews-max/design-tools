@@ -69,7 +69,7 @@ async function runProjectTests() {
       Select.clear();
       return eq(n, 0);
     });
-    await t('the massing placement is taken into the state', () => eq(Store.get('placement'), { x: 10, y: 20, rotation: 0, baseZ: 0 }));
+    await t('the massing placement is taken into the state', () => eq(Store.get('placement'), { x: 10, y: 20, rotation: 0, baseZ: 0, baseMode: 'follow' }));
     await t('the parking section is written after the 1 s debounce, with the state and the derived numbers', async () => {
       Store.set('bays.stallW', 9.5, { live: false });
       await wait(1500);
