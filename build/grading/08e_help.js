@@ -13,6 +13,7 @@ const Help = (() => {
       'The HUD shows cut, fill, net (fill minus cut) and the tallest wall. Volumes round to 10 cy there; the Checks tab shows them to 0.1 cy. Tap the HUD to see the tiers, the routes and the warnings.',
       'Click a drive, lot, wall, route, building or the property line in the view to select it. The card at the top of the panel names it. Esc clears the selection.',
       'Each section starts collapsed. Select a section title to open it. Your choice is remembered.',
+      'Collapse all, beside the tabs, closes every section at once.',
     ]],
     ['Buildings', [
       'Each building has a footprint and one or more tiers along its long axis. A tier floor (FFE) is Balance, which sets the pad so cut and fill under it are equal, or a typed elevation to 0.01 ft.',
@@ -39,9 +40,10 @@ const Help = (() => {
       'Cut and fill colors the proposed ground by how far it is above (blue, fill) or below (red, cut) the existing ground, in steps of 1, 2, 4 and 8 ft. Contours: existing dashed, proposed solid. The Plan view shows elevation labels.',
       'Draw section (View tab) takes two points. A profile appears under the view with the existing ground dashed, the proposed ground solid, the pads and the walls.',
       'Vertical exaggeration changes only the picture. Every number uses the true heights.',
+      'The Site button in the top bar frames the whole site. The Building button frames the buildings. Neither button changes the view direction.',
     ]],
     ['Site', [
-      'The Site toggle in the View tab shows the project site from the Site Model. It shows neighbor buildings, roads, water, and trees.',
+      'The Site toggle in the View tab shows the project site from the Site Model. It shows neighbor buildings, roads and water. The Site Model makes no trees yet.',
       'Site style, under the Site toggle, sets how the neighbor buildings draw. Solid draws opaque grey blocks with dark edges. Glass draws see-through blocks. Wireframe draws edges only.',
       'The sketch keeps its own ground, existing and proposed. This tool does not drag. Move a building in the tool that owns it.',
     ]],
@@ -54,6 +56,7 @@ const Help = (() => {
       'Export > SketchUp opens in SketchUp with the CMRLM extension. Revit points is a CSV of x, y, z for a toposurface. Contours (DXF) has contours, pads, walls, drives, lots and routes. Notes is a plain-text summary with the cautions.',
       'Export > Image saves a picture. AI-ready image and AI Prompts are a pair for ChatGPT or Gemini; the prompt keeps the ground, the walls and the pads where the model shows them.',
       'The AI-ready image shows the site with the grading. Set Site style to Solid before you make it.',
+      'In the AI-ready image, the project buildings are amber. The ground and the neighbors stay as drawn.',
       'The first prompt in AI Prompts is Hero render. It renders the building on the graded pad as photoreal and keeps the neighbors as a white model.',
     ]],
   ];

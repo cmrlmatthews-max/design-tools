@@ -91,6 +91,7 @@ zp = z + placement.baseZ
 - The Mid-Rise Generator, the Plate Planner, the Parking Deck, and the Facade Studio use the massing's local frame. They copy the massing placement when they first write, and keep it in step after that.
 - `baseZ` is the finished floor elevation (FFE) of the ground floor, in project z. FFE means the elevation of the top of the floor you walk on. When a tool first sends a massing into a site project, it sets `baseZ` to the lowest site ground under the massing footprint.
 - `placement.baseMode` is an optional key. Its value is `'follow'` or `'typed'`. A missing key means `'follow'`. In `'follow'`, the tool that owns the section sets `baseZ` to the lowest ground under its footprint each time the footprint moves. In `'typed'`, the user sets `baseZ`, and the tool leaves it alone. Readers ignore `baseMode`.
+- `placement.pinned` is an optional key. Its value is `true` or `false`. A missing key means `false`. When `true`, the tool that owns the section does not move the building by drag or by the rotation handle. Typed values still change it. Readers ignore `pinned`.
 - The ground-floor FFE of a massing or a deck is `sections.grading.derived.ffe` when that section exists and holds a tier for that source (`source` = `massing` or `parking`; the lowest tier when there are several). Otherwise it is `placement.baseZ`. The Grading Sketch never edits another section's placement.
 - Sun and grading use the project frame directly. Their placement is the identity.
 

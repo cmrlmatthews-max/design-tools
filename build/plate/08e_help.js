@@ -19,6 +19,7 @@ const Help = (() => {
       'The Plan view is the default. The HUD shows units (or keys), NRSF, efficiency and the warnings. Tap the HUD for the mix, the corridor, the stair door path, dead ends, support space and the building totals.',
       'Keys: 1 to 6 change the view (Plan is 6), D switches Model and Diagram, L locks the selected unit, F re-fills, Delete removes a selected block, Esc clears.',
       'Each section starts collapsed. Select a section title to open it. Your choice is remembered.',
+      'Collapse all, beside the tabs, closes every section at once.',
     ]],
     ['Plate tab', [
       'A drawn plate is a rectangle, L, U, courtyard (O), circle or a polygon. Draw outline starts a polygon in the Plan view: tap the points, tap the first point or press Enter to finish.',
@@ -39,9 +40,10 @@ const Help = (() => {
     ['The view', [
       'Model draws white slabs with dark demising lines and dashed corridor wall lines. Diagram colors each unit by type. Labels show the type and area where the zoom allows. A red outline marks a flagged unit. A dashed amber outline marks a locked unit. An A marks an accessible unit.',
       'Levels in 3D stacks every filled level of the project at its height. The grid and the snap set the step for moving blocks and bay lines. Hold Option to skip snapping.',
+      'The Site button in the top bar frames the whole site. The Building button frames the plate. Neither button changes the view direction.',
     ]],
     ['Site', [
-      'The Site toggle in the View tab shows the project site from the Site Model. It shows the real ground, roads, water, and trees.',
+      'The Site toggle in the View tab shows the project site from the Site Model. It shows the real ground, roads and water. The Site Model makes no trees yet.',
       'Site style, under the Site toggle, sets how the neighbor buildings draw. Solid draws opaque grey blocks with dark edges. Glass draws see-through blocks. Wireframe draws edges only.',
       'Buildings removed in the Site Model do not show here. This tool does not drag. Move the building in the Tower Generator or the Mid-Rise Generator.',
     ]],

@@ -93,3 +93,6 @@ Caution: the work session cannot push to GitHub. It works on a download. Merge b
 |---|---|---|
 | First-visit tour | When a person first opens the Workspace page, show a short tour of the tools: one popup box with a few slides (what each tool does, the pipeline order, how to start a project). Show it once; a "Tour" link brings it back. | October 22, 2026 (Cade) |
 | Tower help panel | The Tower Generator has no Help panel. The other five tools have one. Add it and place the Site paragraph there. | October 22, 2026 |
+| Trees from a map image | Cade gives a map image with real foliage. The tool places trees from it. Until then the Site Model makes no trees (`CONFIG.trees.generate` is false). | October 23, 2026 (Cade) |
+
+Status: not started. Trees are off in the Site Model until this idea ships.

@@ -9,6 +9,7 @@ const Help = (() => {
       'Click a core, an entry or the speed ramp in the view to select it. Drag its handles to move or stretch it. The footprint of a standalone deck has handles too.',
       'Delete removes the selected core or entry. Esc clears the selection.',
       'Each section starts collapsed. Select a section title to open it. Your choice is remembered.',
+      'Collapse all, beside the tabs, closes every section at once.',
     ]],
     ['Source', [
       'Standalone is a free deck. A wrap deck or a podium takes its footprint, floor-to-floor heights and cores from the massing in the open project. Pick the first level of the deck in the Source card.',
@@ -25,14 +26,18 @@ const Help = (() => {
       'Diagram style colors the stalls by kind or the ramps by slope (green under 80 percent of the limit, amber up to it, red over). The Plan view shows the stall numbers.',
       'The column overlay draws the demising lines of the units above. A conflict marks a column that lands inside a stall. Use the suggested stall width to line the columns up with the units.',
       'Snap pulls a drag to the grid, the deck edges, the stall rows, the aisle edges, the column lines and the strip. Hold Option (Alt) to skip it. Rotation snaps to 5 degrees.',
+      'The Site button in the top bar frames the whole site. The Building button frames the deck. Neither button changes the view direction.',
     ]],
     ['Projects', [
       'A project holds the site, the massing and the work of other tools in one file. Use Project > New, or open a project from the Mid-Rise or the Tower.',
       'The deck reads the levels and plates of the massing and writes a parking section back. It saves by itself a second after each change.',
+      'A project opens with the site in Glass. A pinned project opens with the site in Solid.',
+      'Pin placement, in the top bar, locks the deck and sets the site style to Solid. Unpin frees the deck and sets the site style to Glass.',
+      'A pinned deck does not move by drag or by the rotation handle. Typed values still work.',
       'Send to Facade Studio is planned and not available yet.',
     ]],
     ['Site', [
-      'The Site toggle in the View tab shows the project site from the Site Model. It shows the real ground, roads, water, and trees.',
+      'The Site toggle in the View tab shows the project site from the Site Model. It shows the real ground, roads and water. The Site Model makes no trees yet.',
       'Site style, under the Site toggle, sets how the neighbor buildings draw. Solid draws opaque grey blocks with dark edges. Glass draws see-through blocks. Wireframe draws edges only.',
       'In a standalone deck, drag the deck on the ground to move it. Use the rotation handle to turn it.',
       'The Base elevation control appears only for a standalone deck, in the Site tab. Follow ground sets the base to the lowest ground under the deck. Typed keeps the value you enter.',
@@ -43,6 +48,7 @@ const Help = (() => {
       'Export > SketchUp (.json) opens in SketchUp with the CMRLM extension. DXF has the slabs, stalls, ramp faces and columns for Revit. Stall list (.csv) has one row per stall.',
       'Export > Image saves a picture. AI-ready image and AI Prompts are a pair for ChatGPT or Gemini.',
       'The AI-ready image shows the site with the deck. Set Site style to Solid before you make it.',
+      'In the AI-ready image, the deck is amber. The neighbors and the ground stay as drawn.',
       'The first prompt in AI Prompts is Hero render. It renders the deck as photoreal and keeps the neighbors as a white model.',
     ]],
   ];
