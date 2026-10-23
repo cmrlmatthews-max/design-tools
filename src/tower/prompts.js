@@ -7,6 +7,7 @@
 // Auto fields (the panel computes them from the current option):
 //   {{floors}} {{height}} {{program}} {{podium}} {{form}}
 //   {{hero}}  the Hero render prompt only: the sentences about the hero building, from heroFor() below (the panel passes it in the values)
+//   {{heroColor}}  the Hero render prompt only: the color name of the hero volume in the AI-ready image ("amber"; the panel passes CONFIG.heroColorName)
 // Pick fields (the user chooses them in the panel): see PROMPT_FIELDS.
 // Pick values are written to read naturally in the template sentences:
 //   material -> "The facade is {{material}}."
@@ -120,6 +121,7 @@ const feet = (v) => `${Math.round(nz(v))} feet`;
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const articleFor = (phrase) => (/^(?:[aeio]|L-|8|11|18)/i.test(phrase) ? "an" : "a");
 const RENDER_ONLY = "Render only this building in full photographic detail.";
+const HERO_COLOR_FALLBACK = "amber";
 const HERO_FALLBACK = `The hero building is the building at the center of the image. ${RENDER_ONLY}`;
 const TOWER_SHAPES = { rect: "rectangular", square: "rectangular", circle: "round", ellipse: "elliptical", triangle: "triangular", L: "L-shaped", U: "U-shaped", polygon: "custom-shaped" };
 const CROWNS = { none: "a flat roof", flat: "a flat roof", stepped: "a stepped crown", sloped: "a sloped crown", spire: "a spire", screen: "a rooftop screen" };
@@ -278,6 +280,7 @@ export const PROMPTS = [
       "* The road layout, block shapes, and site boundary.\n" +
       "Do not add, remove, move, stretch, or reshape any volume.\n\n" +
       "HERO BUILDING — RENDER PHOTOREAL\n" +
+      "The hero building is the {{heroColor}} volume. Render only that building photoreal. Every white volume stays a white model.\n" +
       "{{hero}}\n" +
       "* The facade is {{material}}.\n" +
       "* Slab edges read as dark horizontal lines between floors.\n" +
@@ -299,7 +302,7 @@ export const PROMPTS = [
       "CAMERA\n" +
       "Architectural visualization quality. Vertical lines stay straight. Clean blacks. Sharp focus across the frame.\n\n" +
       "DO NOT INCLUDE\n" +
-      "Text, logos, watermarks, building signage, neon colors, fisheye distortion, tilt-shift blur, cartoon or illustration style, windows on the white volumes.",
+      "Text, logos, watermarks, building signage, neon colors, fisheye distortion, tilt-shift blur, cartoon or illustration style, windows on the white volumes, any {{heroColor}} tint on the finished hero.",
     uses: ["material", "time", "season"],
     defaults: { material: FRITTED, time: DUSK, season: AUTUMN },
   },
@@ -632,11 +635,11 @@ export const PROMPTS = [
 // Full prompt text: FORM_LOCK + blank line + template, with every {{token}} replaced.
 // A prompt with noLock: true (the Hero render) starts with its own text, without the form lock.
 // Value order (later wins): PROMPT_FIELDS defaults < prompt.defaults < values.
-// {{hero}} has a plain default sentence, so a tool that does not send it still gets a whole prompt.
+// {{hero}} has a plain default sentence and {{heroColor}} defaults to "amber", so a tool that does not send them still gets a whole prompt.
 // Empty, null, or undefined entries in values do not override a default.
 // Unknown tokens stay visible as [token].
 export function fillPrompt(prompt, values = {}) {
-  const merged = { hero: HERO_FALLBACK };
+  const merged = { hero: HERO_FALLBACK, heroColor: HERO_COLOR_FALLBACK };
   for (const [key, field] of Object.entries(PROMPT_FIELDS)) merged[key] = field.default;
   for (const [key, v] of Object.entries((prompt && prompt.defaults) || {})) {
     if (v !== undefined && v !== null && v !== "") merged[key] = v;

@@ -103,7 +103,7 @@ const Pipeline = (() => {
     await new Promise((r) => setTimeout(r, 0));          // let the progress list paint before the model blocks the thread
     const tm = now();
     let model;
-    try { model = buildModel(frame, { dem: demR.dem, tiles, walks }); } catch (e) {
+    try { model = buildModel(frame, { dem: demR.dem, tiles, walks, trees: CONFIG.trees.generate }); } catch (e) {
       report('ground', 'error', errText(e));
       throw new Error(`Ground elevation could not be used. ${errText(e)}`);
     }
@@ -118,7 +118,7 @@ const Pipeline = (() => {
     };
     fin('buildings', themeR[0].ok, E.features || E.buildings, `${s.buildings} buildings${s.estimated ? `, ${s.estimated} with an estimated height` : ''}`);
     fin('roads', themeR[1].ok, E.features || E.roads, `${model.roads.segments.length} road segments, ${grouped(s.roadsFt)} ft`);
-    fin('base', themeR[2].ok, E.features || E.trees || E.water, `${s.trees} trees, ${s.waterAreas} water ${s.waterAreas === 1 ? 'area' : 'areas'}`);
+    fin('base', themeR[2].ok, E.features || E.trees || E.water, `${CONFIG.trees.generate ? `${s.trees} trees, ` : ''}${s.waterAreas} water ${s.waterAreas === 1 ? 'area' : 'areas'}`);
 
     return { loc, frame, dem: demR.dem, tiles, release, model, timings, failed: THEMES.filter((t, i) => !themeR[i].ok).map((t) => t[0]) };
   }

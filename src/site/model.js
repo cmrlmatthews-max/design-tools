@@ -521,10 +521,10 @@ export function summarize(model) {
 
 /**
  * Convenience: build every layer. Ground errors throw; other layers catch their own error
- * (listed in `errors`, the layer is empty).
+ * (listed in `errors`, the layer is empty). opts.trees === false builds no trees (trees: []).
  * @returns {{frame, ground, buildings, roads, trees, water, errors: {[layer:string]: string}}}
  */
-export function buildModel(frame, { dem, tiles = [], walks = false } = {}) {
+export function buildModel(frame, { dem, tiles = [], walks = false, trees = true } = {}) {
   const ground = buildGround(frame, dem);
   const errors = {};
   let features = {};
@@ -534,7 +534,8 @@ export function buildModel(frame, { dem, tiles = [], walks = false } = {}) {
     frame, ground, errors,
     buildings: run("buildings", () => buildBuildings(features, frame, ground), []),
     roads: run("roads", () => buildRoads(features, frame, ground, { walks }), { segments: [], pavement: [], walks: null }),
-    trees: run("trees", () => buildTrees(features, frame, ground), []),
+    // trees: false skips them (the Site Model makes none for now; the tree code stays for a later "trees from a map image" feature)
+    trees: trees === false ? [] : run("trees", () => buildTrees(features, frame, ground), []),
     water: run("water", () => buildWater(features, frame, ground), { areas: [], lines: [] }),
   };
 }
