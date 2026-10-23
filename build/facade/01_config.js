@@ -35,11 +35,14 @@ const CONFIG = {
   zoneLabels: { base: 'Base', middle: 'Middle', top: 'Top' },
   presets: PresetsMod.PRESETS,
   storageKey: 'facade.options.v1',
+  heroColor: '#E0A458',    // AI-ready image: the hero model draws in this color, everything else stays white (batch-fixes plan 7); one value
+  heroColorName: 'amber',  // the name the Hero render prompt uses for it
   schema: 1,
   projectSchema: 1,        // schema of the "facade" section this tool writes
   projectSaveMs: 1000,     // project autosave delay (spec section 8)
   projectListMax: 8,
   contextRadius: 900,      // ft, site neighbors drawn around the massing
+  shadowStrength: 0.55,   // opacity of the flat ground shadow (batch-fixes plan 3.2); the Tower also boosts the light contrast for the Sun Study
   tool: 'facade',
   wallThickness: 0.5,      // ft, the wall box of each face and level
   glassLift: 0.15,         // ft, glass sits this far proud of the wall face

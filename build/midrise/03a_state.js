@@ -142,6 +142,7 @@ function fillDefaults(src) {
   merge(s, base);
   if (keepPlacement === null || keepPlacement === undefined) s.placement = null;
   if (isObj(s.placement)) s.placement.baseMode = s.placement.baseMode === 'typed' ? 'typed' : 'follow';       // base elevation: Follow ground (default, and the migration for old saves) | Typed
+  if (isObj(s.placement) && s.placement.pinned !== true) delete s.placement.pinned;       // Pin placement (batch fixes plan 2.2): true only while pinned, a missing value is false
   // view
   const v = s.view;
   if (v.colorBy !== 'bar' && v.colorBy !== 'program') v.colorBy = 'program';

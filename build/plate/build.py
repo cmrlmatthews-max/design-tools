@@ -182,6 +182,7 @@ PARTS = [
     '12e_tests_site.js',
     '12f_tests_massing.js',
     '12l_tests_sections.js',  # collapsed sections and the prompt panel (site base style plan, section 4)
+    os.path.join(SHARED, '08z_topbar.js'),           # TopBar: Collapse all and the Site / Building zoom buttons (shared page part)
     '13_start.js',
 ]
 missing = [p for p in PARTS if not os.path.isfile(os.path.join(HERE, p))]

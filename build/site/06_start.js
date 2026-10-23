@@ -5,6 +5,7 @@ const TEST_MODE = /[?&]test\b/.test(location.search);
 App.init();
 Scene.init($('canvasHost'));
 App.buildCompass();
+TopBar.init({ tool: 'site', sections: () => App.blocks, remember: App.rememberBlock, onSite: () => Scene.frameSite(true) });   // 08z_topbar.js: Collapse all and the Site zoom button (no Building here)
 App.startProject();                                  // with ?project=<id>: open that project and load its saved site
 
 const removedIdsNow = () => [...App.state.removed].sort();

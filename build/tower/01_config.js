@@ -24,10 +24,14 @@ const CONFIG = {
   outsideColor: '#d64545',
   presets: PresetsMod.PRESETS,
   storageKey: 'towergen.options.v1',
+  heroColor: '#E0A458',    // AI-ready image: the hero model draws in this color, everything else stays white (batch-fixes plan 7); one value
+  heroColorName: 'amber',  // the name the Hero render prompt uses for it
   schema: 2,               // the option state (plan section 2.3); the saved options blob uses the same number
+  pinLocksOffsets: true,   // Pin placement also disables the offset fields of segments (Tower) or the start x/y of bars (Mid-Rise); Cade chose yes (batch-fixes plan 2.2); false leaves them editable
   projectSchema: 1,        // schema of the "massing" and "sun" sections this tool writes (plan section 2.3)
   projectSaveMs: 1000,     // project autosave delay (spec section 8)
   projectListMax: 8,
   contextRadius: 600,      // ft, default radius for "Context from site"
+  shadowStrength: 0.55,   // opacity of the flat ground shadow (batch-fixes plan 3.2); the Tower also boosts the light contrast for the Sun Study
   tool: 'tower',
 };

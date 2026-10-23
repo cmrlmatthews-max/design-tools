@@ -534,6 +534,23 @@ if (real) {
       ok(elevationsDxf(s, b, real.computeMetrics(s, b, null)).length > 1000, p.id + " dxf");
     }
   });
+  t("real: a tower project with a crown level: derived validates, the crown is a zone, the files build", () => {
+    const ring = [{ outer: [[-50, -25], [50, -25], [50, 25], [-50, 25]], holes: [] }], screen = [{ outer: [[-30, -15], [30, -15], [30, 15], [-30, 15]], holes: [] }];
+    const lv = (index, zone, z, ftf, plates) => ({ index, name: zone === "crown" ? "Crown" : `Floor ${index}`, zone, z, ftf, program: zone === "crown" ? null : "residential", plates, core: null, spines: [] });
+    const doc = writeSection(newProject({}), "massing", { tool: "tower", schema: 1, placement: { x: 0, y: 0, rotation: 0, baseZ: 0 },
+      state: {}, derived: { levels: [lv(1, "tower", 0, 10, ring), lv(2, "tower", 10, 10, ring), lv(3, "tower", 20, 10, ring), lv(4, "crown", 30, 20, screen)], metrics: {} } });
+    const s = preset("residential-punched-inset-balconies"); s.source = "project";
+    const b = real.buildFacade(s, { project: doc }), m = real.computeMetrics(s, b, doc);
+    ok(b.levels.some((l) => l.zone === "crown"), "crown level built");
+    const dd = facadeDerived(s, b, m);
+    ok(dd.faces.some((f) => f.zone === "crown" && f.system === "solid"), "crown faces in the derived, solid");
+    ok(validate(writeSection(doc, "facade", { tool: "facade", schema: 1, state: s, derived: dd })).ok, "derived validates");
+    const sk = facadeToSketchup(s, b, m);
+    ok(validateDoc(sk).ok, validateDoc(sk).errors.join("; "));
+    ok(elevationsDxf(s, b, m).length > 1000, "dxf");
+    eq(m.wwr, real.computeMetrics(s, real.buildFacade(s, { project: writeSection(newProject({}), "massing", { tool: "tower", schema: 1, placement: { x: 0, y: 0, rotation: 0, baseZ: 0 },
+      state: {}, derived: { levels: [lv(1, "tower", 0, 10, ring), lv(2, "tower", 10, 10, ring), lv(3, "tower", 20, 10, ring)], metrics: {} } }) }), null).wwr, "WWR without the crown matches");
+  });
   t("real: glass area in the S elevation of 8.1 equals the face glazing (no glass lost between panels and elevations)", () => {
     const g = elevationGeometry(R81.b, "S", R81.s);
     const area = g.glass.reduce((s, r) => s + (r.u1 - r.u0) * (r.z1 - r.z0), 0);

@@ -20,7 +20,7 @@ async function runUiTests() {
     await t('each tab shows its own sections and no others', () => {
       const want = {
         massing: ['source', 'standalone', 'zones', 'street'],
-        facade: ['zone-base', 'zone-middle', 'zone-top', 'zone-ranges', 'balconies', 'fins', 'shades', 'bands', 'corners'],
+        facade: ['zone-base', 'zone-middle', 'zone-top', 'zone-crown', 'zone-ranges', 'balconies', 'fins', 'shades', 'bands', 'corners'],
         checks: ['checkslist', 'limits', 'wwrtables', 'envelope'],
         view: ['display'],
       };
@@ -273,6 +273,32 @@ async function runUiTests() {
       const out = row ? [row.children[0].textContent, on && on.dataset.value] : null;
       Prompts.close();
       return eq(out, ['From the design', '__design__']);
+    });
+    await t('a tower crown level stays in the facade: Crown card, solid by default, 3D draws it, WWR says "crown not counted"', async () => {
+      const mem = ProjectFixture.memory(), plate = (x) => [{ outer: [[-x, -x / 2], [x, -x / 2], [x, x / 2], [-x, x / 2]], holes: [] }];
+      const floors = [1, 2, 3].map((i) => ({ index: i, zone: 'tower', z: (i - 1) * 10, ftf: 10, program: 'residential', plates: plate(50) }));
+      const crown = { index: 4, zone: 'crown', z: 30, ftf: 20, program: null, plates: plate(30) };
+      const mats = { mesh: () => new THREE.MeshBasicMaterial(), line: () => new THREE.LineBasicMaterial() };
+      const top = (d, st) => { const box = new THREE.Box3(); for (const o of Facade3D.build(d, st, { key: 'crown-t', quality: 'full' }, mats).model) box.union(new THREE.Box3().setFromObject(o)); return Math.max(box.max.y, box.max.z); };
+      ProjectUI.reset();
+      ProjectUI.configure({ storage: mem, navigate: () => {}, updateUrl: () => {} });
+      try {
+        const open = (levels, name) => { const doc = ProjectFixture.project({ tool: 'tower', levels, name }); ProjectMod.saveProject(mem, doc); ProjectUI.openDoc(doc); UI.setTab('facade'); UI.updateHud(Derived.get()); return Derived.get(); };
+        const without = open(floors, 'No crown');
+        const sec = () => document.querySelector('[data-section="zone-crown"]');
+        const hiddenBefore = !!(sec() && sec().hidden), topWithout = top(without, Store.raw());
+        const d = open([...floors, crown], 'With crown');
+        UI.setTab('checks'); UI.updateHud(d);
+        const cf = d.faces.filter((f) => f.zone === 'crown');
+        return eq([hiddenBefore, d.levels.length, d.levels[3].zone, !!sec() && !sec().hidden, /Crown/.test(sec().textContent),
+          Store.get('zones.rules.crown.system'), cf.length > 0 && cf.every((f) => f.glazing === 0 && f.rule.system === 'solid'),
+          /Crown not counted/.test($('wwrNote').textContent), Math.round(d.hud.wall) === Math.round(without.hud.wall), d.hud.zones.crown && d.hud.zones.crown.glazing,
+          top(d, Store.raw()) > topWithout + 1],
+        [true, 4, 'crown', true, true, 'solid', true, true, true, 0, true]);
+      } finally {
+        ProjectUI.close(); ProjectUI.restoreDefaults(); ProjectUI.reset();
+        Store.replace(fillDefaults(defaultState()));
+      }
     });
     await t('Help opens with the Facade Studio guide and the Caution about the 40 percent value', () => {
       click($('btnHelp'));

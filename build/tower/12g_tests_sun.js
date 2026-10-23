@@ -389,6 +389,95 @@ async function runSunTests() {
       SunUI.setSun({ dates: ['03-20', '06-21', '12-21'], times: [540, 720, 900] });
       return eq([fields, r && r.panels], [[`${YEAR}-01-15`, '17:00'], 9]);
     });
+
+    /* ---- shadow strength (batch-fixes plan 3.2) ---- */
+    // Reads the sheet canvas: a ground point inside the shadow (past the tower's edge on the side away from the sun) against a lit
+    // ground point on the sun side. The point comes from the cell's plan-to-sheet map, so the test does not guess pixels.
+    const lum = (ctx, x, y) => {
+      const d = ctx.getImageData(Math.round(x) - 2, Math.round(y) - 2, 5, 5).data;
+      let s = 0, n = 0;
+      for (let i = 0; i < d.length; i += 4) { s += 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]; n++; }
+      return s / n;
+    };
+    const shadowContrast = (r, row = 1, col = 1) => {
+      const cell = r.cells.find((c) => c.row === row && c.col === col);
+      if (!cell || !cell.up) return { error: 'no sunlit cell' };
+      const b = Derived.get().bounds.model;
+      const cx = (b.minX + b.maxX) / 2, cy = (b.minY + b.maxY) / 2, hx = (b.maxX - b.minX) / 2, hy = (b.maxY - b.minY) / 2;
+      const az = cell.sun.azimuth * Math.PI / 180, alt = Math.max(cell.sun.altitude, 3) * Math.PI / 180;
+      const sx = -Math.sin(az), sy = -Math.cos(az);                       // plan direction the shadows fall toward
+      const exit = Math.min(hx / Math.max(Math.abs(sx), 1e-6), hy / Math.max(Math.abs(sy), 1e-6));
+      const L = b.height / Math.tan(alt);                                 // shadow length past the tower's edge
+      const dist = exit + 0.5 * L;
+      const ctx = r.canvas.getContext('2d');
+      const sh = cell.at(cx + sx * dist, cy + sy * dist), lit = cell.at(cx - sx * dist, cy - sy * dist);
+      const inside = (q) => q.x > cell.x + 4 && q.x < cell.x + cell.w - 4 && q.y > cell.y + 4 && q.y < cell.y + cell.h - 4;
+      if (!inside(sh) || !inside(lit)) return { error: `points outside the panel ${JSON.stringify([sh, lit])}` };
+      const a = lum(ctx, sh.x, sh.y), l = lum(ctx, lit.x, lit.y);
+      return { shadow: Math.round(a * 10) / 10, lit: Math.round(l * 10) / 10, ratio: Math.round(a / l * 1000) / 1000, length: Math.round(L) };
+    };
+    await t('Render.shadowBoost raises the sun and lowers the sky light, and turning it off restores today\'s values; the ground shadow draws at CONFIG.shadowStrength', () => {
+      if (!hasGL) return true;
+      Render.shadowBoost(false);
+      const a = Render.lightInfo();
+      Render.shadowBoost(true);
+      const b = Render.lightInfo();
+      Render.shadowBoost(false);
+      const c = Render.lightInfo();
+      SunUI.syncBoost();
+      return eq([CONFIG.shadowStrength, a.shadowOpacity, [a.sun, a.hemi, a.boost], [b.sun, b.hemi, b.boost], [c.sun, c.hemi, c.boost]], [0.55, 0.55, [1.7, 2.3, false], [2.3, 1.1, true], [1.7, 2.3, false]]);
+    });
+    await t('the boost follows the sun mode: off in Manual, on in Date and time with shadows on, off with shadows off or in Diagram', () => {
+      if (!hasGL) return true;
+      fresh();
+      const manual = Render.shadowBoosted();
+      setStudy({ date: '06-21', time: 720 });
+      const study = Render.shadowBoosted();
+      Store.set('view.shadows', false, { live: false });
+      const noShadows = Render.shadowBoosted();
+      Store.set('view.shadows', true, { live: false });
+      Store.set('view.style', 'diagram', { live: false });
+      const diagram = Render.shadowBoosted();
+      Store.set('view.style', 'model', { live: false });
+      SunUI.setSun({ mode: 'manual' });
+      return eq([manual, study, noShadows, diagram, Render.shadowBoosted()], [false, true, false, false, false]);
+    });
+    await t('the sheet runs with the shadow boost on and puts the lights back to today\'s values after (Manual mode)', async () => {
+      if (!hasGL) return true;
+      fresh();
+      const r = await SunStudy.make({ deliver: false });
+      const li = Render.lightInfo();
+      return eq([!!r, r && r.boostDuring, li.boost, li.sun, li.hemi, Render.shadowBoosted()], [true, true, false, 1.7, 2.3, false]);
+    });
+    await t('on the sheet a shadowed ground pixel is clearly darker than a lit one (flat ground): below 0.7 of the lit luminance', async () => {
+      if (!hasGL) return true;
+      fresh();
+      const r = await SunStudy.make({ deliver: false });
+      if (!r || !r.cells || !r.cells.length) return 'no cells';
+      const m = shadowContrast(r);
+      timings.shadowFlat = m;
+      if (m.error) return m.error;
+      return m.lit > 120 && m.ratio < 0.7 ? true : `shadow ${m.shadow}, lit ${m.lit}, ratio ${m.ratio} (needs < 0.7)`;
+    });
+    await t('on the sheet with a project site ground (lit material) a shadowed ground pixel is clearly darker than a lit one: below 0.7', async () => {
+      if (!hasGL) return true;
+      ProjectUI.reset();
+      ProjectUI.configure({ storage: mem, navigate: () => {}, updateUrl: () => {} });
+      const doc = ProjectFixture.siteProject();
+      ProjectMod.saveProject(mem, doc);
+      ProjectUI.openDoc(doc);
+      fresh();
+      Store.set('placement', { x: 500, y: 500, rotation: 0, baseZ: 1010 }, { live: false });
+      await frames(3);
+      const r = await SunStudy.make({ deliver: false });
+      ProjectUI.reset();
+      ProjectUI.restoreDefaults();
+      if (!r || !r.cells || !r.cells.length) return 'no cells';
+      const m = shadowContrast(r);
+      timings.shadowSite = m;
+      if (m.error) return m.error;
+      return m.lit > 60 && m.ratio < 0.7 ? true : `shadow ${m.shadow}, lit ${m.lit}, ratio ${m.ratio} (needs < 0.7)`;
+    });
   } finally {
     SunUI.play(false);
     SunLayer.suppress(false);

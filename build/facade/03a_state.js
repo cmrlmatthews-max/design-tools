@@ -55,8 +55,8 @@ function fillDefaults(src) {
     from: Math.max(1, Math.round(num(r.from, 1))), to: Math.max(1, Math.round(num(r.to, num(r.from, 1)))),
   }));
   if (!isObj(z.rules)) z.rules = {};
-  for (const id of ['base', 'middle', 'top', ...z.ranges.map((r) => r.id)]) {
-    if (!isObj(z.rules[id])) z.rules[id] = deepClone(z.rules.middle || { system: 'punched' });
+  for (const id of ['base', 'middle', 'top', 'crown', ...z.ranges.map((r) => r.id)]) {
+    if (!isObj(z.rules[id])) z.rules[id] = id === 'crown' ? { system: 'solid' } : deepClone(z.rules.middle || { system: 'punched' });   // the crown is a screen by default
     if (!SYSTEM_KEYS.includes(z.rules[id].system)) z.rules[id].system = 'punched';
   }
   if (!isObj(z.overrides)) z.overrides = {};

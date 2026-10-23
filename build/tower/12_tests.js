@@ -231,6 +231,10 @@ async function runTests() {
     const m = Derived.get().metrics, text = Prompts.promptText('hero-render');
     return eq([!!text && text.startsWith('Edit the attached massing model image'), text.includes('rotates slightly'), text.includes(`${Math.round(m.totalHeight)} feet`), /\[|\{\{/.test(text)], [true, true, true, false]);
   });
+  await t('Hero render names the hero color: the amber volume is the hero, every white volume stays a white model, the avoid list names the tint', () => {
+    const text = Prompts.promptText('hero-render');
+    return eq([text.includes(`The hero building is the ${CONFIG.heroColorName} volume.`), CONFIG.heroColorName, text.includes('Every white volume stays a white model.'), text.includes(`any ${CONFIG.heroColorName} tint on the finished hero`), /\[|\{\{/.test(text)], [true, 'amber', true, true, false]);
+  });
   await t('custom prompts: save, export, import (title collisions become "Title (2)"), remove', async () => {
     const a = StorageMod.createStorage({ key: 'k', schema: 1, storage: memory() });
     const rec = a.savePrompt({ title: 'Evening mood', template: 'A {{height}} tower at {{time}}.', uses: ['time'] });
@@ -272,6 +276,70 @@ async function runTests() {
       const blob = await Shots.capture({ scale: 1 });
       return (blob.type === 'image/png' && blob.size > 2000) || `type ${blob.type} size ${blob.size}`;
     });
+  }
+
+  /* ---- Sun Study mode (?study=sun, batch-fixes plan 3.1): the same page opened in a hidden frame ---- */
+  await t('this page (no ?study) is the full Tower: four tabs, not in study mode, no data-study mark', () => eq([UI.studyMode, UI.tabs(), document.documentElement.getAttribute('data-study'), !!document.getElementById('tbEditTower')], [false, ['form', 'program', 'view', 'site'], null, false]));
+  {
+    const frame = document.createElement('iframe');
+    frame.setAttribute('aria-hidden', 'true');
+    frame.style.cssText = 'position:fixed;left:0;top:0;width:1280px;height:800px;border:0;opacity:0;pointer-events:none;z-index:-1';
+    frame.src = `${location.pathname}?study=sun&project=study-test-none`;
+    document.body.append(frame);
+    let cw = null;
+    const t0 = performance.now();
+    while (performance.now() - t0 < 20000) {
+      try { cw = frame.contentWindow; if (cw && cw.__tower && cw.document.readyState === 'complete' && cw.document.getElementById('tbEditTower')) break; } catch (e) { /* not ready */ }
+      cw = null;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    await new Promise((r) => setTimeout(r, 300));
+    const info = () => cw.__tower.studyInfo();
+    const doc = () => cw.document;
+    await t('Sun Study mode: the page loads with the study flag (UI.studyMode, data-study="sun")', () => cw ? eq([info().study, doc().documentElement.getAttribute('data-study')], [true, 'sun']) : 'the study page did not load');
+    await t('Sun Study mode: the tab row shows View only (Form, Program, Site hidden) and View is the open tab', () => {
+      const d = doc();
+      const shown = [...d.querySelectorAll('#panelTabs .tab')].filter((b) => !b.hidden && b.offsetParent !== null).map((b) => b.dataset.tab);
+      const hidden = [...d.querySelectorAll('#panelTabs .tab')].filter((b) => b.hidden || b.offsetParent === null).map((b) => b.dataset.tab);
+      const refused = cw.__tower.setTab('form');
+      return eq([shown, hidden, cw.__tower.getTab(), refused, info().tabs], [['view'], ['form', 'program', 'site'], 'view', false, ['view']]);
+    });
+    await t('Sun Study mode: the Sun section is open, Display and Context and envelope are collapsed', () => eq([info().open.sun, info().open.display, info().open.scene], [true, false, false]));
+    await t('Sun Study mode: the Sun section offers Date and time controls and the shadow study sheet button', () => {
+      const d = doc();
+      return eq([!!d.querySelector('[data-sun="mode"]'), !!d.querySelector('[data-sun="sheet"]'), !!d.querySelector('[data-sun="compute"]')], [true, true, true]);
+    });
+    await t('Sun Study mode: the title reads "Tower Generator · Sun Study" (page and browser tab)', () => eq([doc().querySelector('.app-title').textContent, doc().title], ['Tower Generator · Sun Study', 'Tower Generator · Sun Study']));
+    await t('Sun Study mode: no selection handles and no placement gizmo (a click on the model selects nothing)', () => {
+      const d = doc();
+      // a click on the middle of the model: with the selection off nothing gets selected
+      const cv = d.querySelector('#canvasHost canvas');
+      if (cv) {
+        const r = cv.getBoundingClientRect();
+        for (const type of ['pointerdown', 'pointerup']) {
+          try { cv.dispatchEvent(new cw.PointerEvent(type, { clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, button: 0, pointerId: 7, pointerType: 'mouse', bubbles: true })); } catch (e) { /* a synthetic pointer id has no capture */ }
+        }
+      }
+      const sel = cw.__tower.getSelection().length;
+      let hdl = 0;
+      try { hdl = cw.__tower.visibleHandles().length; } catch (e) { hdl = 0; }
+      const shownHdl = [...d.querySelectorAll('.hdl')].filter((e) => e.offsetParent !== null).length;
+      return eq([shownHdl, hdl, sel, cw.__tower.placementGizmo.info().active, cw.__tower.placementGizmo.info().handles, d.getElementById('selection-card').hidden], [0, 0, 0, false, 0, true]);
+    });
+    await t('Sun Study mode: the Export menu keeps Image, AI-ready image, Shadow study sheet and Send to; it drops AI Prompts, SketchUp and the JSON files', () => {
+      const d = doc();
+      d.getElementById('btnExport').click();
+      const ids = [...d.querySelectorAll('#exportMenu .pop-item')].map((b) => b.id);
+      cw.__tower.closePop();
+      const has = (id) => ids.includes(id);
+      return eq([has('miImage'), has('miAiReady'), has('miShadowSheet'), has('miSendPlate'), has('miAiPrompts'), has('miSketchup'), has('miExportJson'), has('miImportJson')], [true, true, true, true, false, false, false, false]);
+    });
+    await t('Sun Study mode: the "Edit the tower" link opens the same address without ?study and keeps ?project=', () => {
+      const a = doc().getElementById('tbEditTower');
+      return eq([a && a.tagName, a && a.textContent.trim(), a && a.getAttribute('href')], ['A', 'Edit the tower', `${location.pathname}?project=study-test-none`]);
+    });
+    await t('Sun Study mode: the shadows draw with the stronger light (the boost is on while shadows are on)', () => (info().ready ? eq([info().boosted, info().light.sun, info().light.hemi], [true, 2.3, 1.1]) : true));
+    frame.remove();
   }
 
   const failed = results.filter((r) => !r.ok);

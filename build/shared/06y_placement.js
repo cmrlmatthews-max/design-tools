@@ -16,6 +16,8 @@
      (when the page has it) carries the camera along with the local frame, so the site stays still on screen and the building
      follows the finger. Without that export the building stays still and the site slides: same numbers, less natural.
    - Orbit is off from the pointer down on the model until the pointer is released; it starts on empty ground as before.
+   - Hit rule: a move starts only from a press whose target is the canvas itself (never a .hdl, a card or a button) and only while
+     Select.handlesShown() is false (no selection with handles). Pin placement: opts.locked() true makes the gizmo inactive.
    - The Store notifies live sets with live = true: 09b_project.js (Tower, Mid-Rise) re-runs Context from site only on the
      commit notification, so a drag never rewrites the context blocks per frame.
 
@@ -55,10 +57,14 @@ const PlacementGizmo = (() => {
     if (typeof p.baseMode === 'string') out.baseMode = p.baseMode;       // Follow ground / Typed: a move never drops it
     return out;
   }
+  /** Pin placement (PinUI, 08y_pin.js): a locked placement has no drag, no ring and no grip. */
+  function locked() {
+    try { return !!(opts && typeof opts.locked === 'function' && opts.locked()); } catch (e) { return false; }
+  }
   function active() {
     if (!opts || !ready) return false;
     try {
-      if (!Render.ready() || Render.comparing()) return false;
+      if (!Render.ready() || Render.comparing() || locked()) return false;
       return !!ProjectUI.has() && !!readPlacement() && !!opts.enabled();
     } catch (e) { return false; }
   }
@@ -344,6 +350,10 @@ const PlacementGizmo = (() => {
     if (pend || drag) return;
     if (!active() || Store.gestureActive()) return;
     if (typeof Select !== 'undefined' && Select.dragging && Select.dragging()) return;
+    // The hit rule (batch fixes plan 2.3): only a press on the canvas itself can move the building, never one on a handle, a card or a button,
+    // and never while the selection shows handles (a press on the model then selects or edits; Escape clears the selection first).
+    if (e.target !== Render.canvas()) return;
+    try { if (typeof Select !== 'undefined' && Select.handlesShown && Select.handlesShown()) return; } catch (err) { /* no select layer */ }
     const hit = hitModel(e.clientX, e.clientY);
     if (!hit) return;
     const rect = canvasRect();
@@ -429,9 +439,9 @@ const PlacementGizmo = (() => {
 
   /* ---- public ------------------------------------------------------------------------------- */
   /** Wires the handlers once. opts: { enabled: () => bool, bounds: () => { minX, maxX, minY, maxY } (local building box),
-   *  path: 'placement', onCommit: () => void }. Returns false when the page has no 3D view. */
+   *  path: 'placement', onCommit: () => void, locked: () => bool (Pin placement: true turns the drag and the ring off) }. Returns false when the page has no 3D view. */
   function init(o) {
-    opts = { path: 'placement', enabled: () => true, bounds: () => null, onCommit: null, ...(o || {}) };
+    opts = { path: 'placement', enabled: () => true, bounds: () => null, onCommit: null, locked: null, ...(o || {}) };
     if (wired) return true;
     ready = !!Render.ready();
     if (!ready) return false;
@@ -488,7 +498,7 @@ const PlacementGizmo = (() => {
 
   return {
     init, sync,
-    info: () => { sync(); return { active: active(), dragging: drag ? drag.kind : null, handles: layer && !layer.hidden && rotEl && !rotEl.hidden ? 1 : 0, label: lastLabel }; },
+    info: () => { sync(); return { active: active(), locked: locked(), dragging: drag ? drag.kind : null, handles: layer && !layer.hidden && rotEl && !rotEl.hidden ? 1 : 0, label: lastLabel }; },
     /** Synthetic drags for tests: begin(kind, cx, cy) -> move(cx, cy, { shift, alt }) -> end(ok). kind: 'move' | 'rotate'. */
     begin: (kind, cx, cy) => startDrag(kind, cx, cy, {}),
     move: (cx, cy, mods) => applyMove(cx, cy, mods || {}),

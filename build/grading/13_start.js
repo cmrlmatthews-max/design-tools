@@ -12,6 +12,8 @@ Select.init();
 SectionView.init();
 ProjectUI.start();
 
+TopBar.init({ tool: 'grading', sections: () => UI.sectionCtl, remember: UI.rememberSection, onSite: () => Render.frameSite(), onBuilding: () => Render.frameBuilding() });   // 08z_topbar.js: Collapse all and the zoom buttons
+
 const optionInfo = (o) => ({ id: o.id, name: o.name, updatedAt: o.updatedAt });
 window.__grading = {
   getState: () => Store.snapshot(),

@@ -169,6 +169,7 @@ PARTS = [
     '06c_site.js',                                  # SiteLayer adapter
     '07_controls.js',
     '08_ui.js',
+    os.path.join(SHARED, '08y_pin.js'),           # PinUI: Pin placement / Unpin in the top bar (shared; batch fixes plan 2.2)
     '08b_prompts.js',
     '08c_sketchup.js',
     '08e_help.js',
@@ -184,6 +185,7 @@ PARTS = [
     '12j_tests_gizmo.js',
     '12k_tests_base.js',      # base elevation follows the ground (site base style plan, section 1)
     '12l_tests_sections.js',  # collapsed sections and the prompt panel (site base style plan, section 4)
+    os.path.join(SHARED, '08z_topbar.js'),           # TopBar: Collapse all and the Site / Building zoom buttons (shared page part)
     '13_start.js',
 ]
 missing = [p for p in PARTS if not os.path.isfile(os.path.join(HERE, p))]

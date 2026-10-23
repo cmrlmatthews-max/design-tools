@@ -85,6 +85,7 @@ const Prompts = (() => {
       podium: podiumPhrase(state, d),
       form: formPhrase(state, d),
       hero: PromptsMod.heroFor('facade', state, d),
+      heroColor: CONFIG.heroColorName,
     };
   }
   const currentAuto = () => autoValues(Store.raw(), Derived.get());

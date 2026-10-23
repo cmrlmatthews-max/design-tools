@@ -37,6 +37,10 @@ export const DXF_LAYERS = [
 ];
 
 export const CREDITS = "Elevation: USGS 3D Elevation Program. Buildings, roads, trees, water: Overture Maps Foundation, © OpenStreetMap contributors (ODbL), Microsoft ML Buildings. Geocoding: Nominatim / OpenStreetMap.";
+/** The credits line of a model that has no trees: the same text without the word "trees". */
+export const CREDITS_NO_TREES = CREDITS.replace("Buildings, roads, trees, water:", "Buildings, roads, water:");
+/** CREDITS when the model has trees, CREDITS_NO_TREES when it has none. */
+export const creditsFor = (model) => (model && model.trees && model.trees.length ? CREDITS : CREDITS_NO_TREES);
 
 /* ---------------- removed buildings ---------------- */
 
@@ -276,9 +280,10 @@ export function siteDxf(model, opts = {}) {
   head.g(0, "LTYPE"); head.g(2, "DASHED"); head.g(70, 0); head.g(3, "Dashed __ __ __"); head.g(72, 65); head.g(73, 2); head.g(40, 6);
   head.g(49, 4); head.g(49, -2);
   head.g(0, "ENDTAB");
-  head.g(0, "TABLE"); head.g(2, "LAYER"); head.g(70, DXF_LAYERS.length + 1);
+  const layers = DXF_LAYERS.filter(([name]) => name !== "TREE" || trees.length > 0);       // no TREE layer when the model has no trees
+  head.g(0, "TABLE"); head.g(2, "LAYER"); head.g(70, layers.length + 1);
   head.g(0, "LAYER"); head.g(2, "0"); head.g(70, 0); head.g(62, 7); head.g(6, "CONTINUOUS");
-  for (const [name, color, ltype] of DXF_LAYERS) { head.g(0, "LAYER"); head.g(2, name); head.g(70, 0); head.g(62, color); head.g(6, ltype || "CONTINUOUS"); }
+  for (const [name, color, ltype] of layers) { head.g(0, "LAYER"); head.g(2, name); head.g(70, 0); head.g(62, color); head.g(6, ltype || "CONTINUOUS"); }
   head.g(0, "ENDTAB");
   head.g(0, "ENDSEC");
   head.g(0, "SECTION"); head.g(2, "ENTITIES");
@@ -329,7 +334,7 @@ export function notesMarkdown(model, meta) {
     `- Road centerlines: ${n0(s.roadsFt)} ft in ${model.roads.segments.length} segments`,
     `- Pavement areas: ${model.roads.pavement.length}`,
     `- Walk areas: ${model.roads.walks ? model.roads.walks.length : "not included"}`,
-    `- Trees: ${s.trees}`,
+    ...(s.trees > 0 ? [`- Trees: ${s.trees}`] : []),
     `- Water areas: ${s.waterAreas}`,
     `- Water lines: ${model.water.lines.length}`,
     `- Ground elevation: ${n1(s.groundMin)} ft to ${n1(s.groundMax)} ft (NAVD88)`,
@@ -356,7 +361,7 @@ export function notesMarkdown(model, meta) {
     "",
     "## Data credits",
     "",
-    CREDITS,
+    creditsFor(model),
     "",
     "## Revit import",
     "",

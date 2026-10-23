@@ -99,6 +99,25 @@ async function runSiteTests() {
       return eq([seen && seen.site, [cf.site, cf.boundary, cf.arrow, cf.grid, cf.figure, cf.overlay], cf.siteObjects > 2, Render.sceneFlags().site, eq(marks, before)], [true, [true, false, false, false, false, false], true, true, true]);
     });
 
+    await t('5b the AI-ready image draws the hero in CONFIG.heroColor (captureFlags reports it), the neighbors and context stay as drawn, and the live materials come back', async () => {
+      const heroHex = CONFIG.heroColor.toLowerCase();
+      const orig = ShotMod.captureView;
+      const hx = (m) => `#${m.color.getHexString()}`;
+      const hasColor = (x) => x.isMesh && x.material && !Array.isArray(x.material) && x.material.color;
+      let seen = null;
+      ShotMod.captureView = async (o) => {
+        const heroes = [], others = [];
+        o.scene.traverse((x) => { if (x.isMesh) (x.userData.hero ? heroes : others).push(x); });
+        seen = { scene: o.scene, flags: Render.captureFlags(), n: heroes.length, heroHexes: heroes.filter(hasColor).map((x) => hx(x.material)), othersHero: others.filter((x) => hasColor(x) && hx(x.material) === heroHex).length };
+        return new Blob(['x']);
+      };
+      try { await Render.captureClean(1); } finally { ShotMod.captureView = orig; }
+      await frames(3);
+      let liveHero = 0;
+      seen.scene.traverse((x) => { if (hasColor(x) && hx(x.material) === heroHex) liveHero++; });
+      return eq([seen.n > 0, seen.heroHexes.includes(heroHex), seen.flags.heroColor, Render.captureFlags().heroColor, seen.othersHero, liveHero], [true, true, CONFIG.heroColor, CONFIG.heroColor, 0, 0]);
+    });
+
     await t('6 a theme change rebuilds the layer (the key carries the theme epoch)', async () => {
       const k0 = SiteLayer.info().key, m0 = siteMesh('site-buildings');
       Render.themeChanged();

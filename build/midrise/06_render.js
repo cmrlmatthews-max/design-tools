@@ -146,7 +146,7 @@ const Render = (() => {
     // Shadow catcher on the ground.
     const sp = new THREE.PlaneGeometry(8000, 8000);
     sp.applyMatrix4(planMatrix(0));
-    shadowPlane = new THREE.Mesh(sp, new THREE.ShadowMaterial({ opacity: 0.24, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }));
+    shadowPlane = new THREE.Mesh(sp, new THREE.ShadowMaterial({ opacity: CONFIG.shadowStrength, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }));
     shadowPlane.receiveShadow = true;
     shadowPlane.renderOrder = 1;
     scene.add(shadowPlane);
@@ -608,8 +608,9 @@ const Render = (() => {
 
   function setView(id, animate = true) {
     if (!renderer) return;
-    const goal = viewTarget(id, framingBox(id), framingAspect());
-    preset = id;
+    const custom = !!id && typeof id === 'object';       // a goal from fitBox (the zoom buttons) instead of a preset id
+    const goal = custom ? id : viewTarget(id, framingBox(id), framingAspect());
+    preset = custom ? null : id;
     overlayVis = null;
     tween = null;
     if (goal.type !== camType) switchCamera(goal.type);
@@ -640,6 +641,64 @@ const Render = (() => {
     needsRender = true;
     viewListeners.forEach((fn) => fn(preset));
   }
+
+  /* ---- zoom buttons: Site and Building (docs/batch-fixes-technical-plan.md section 5) ---------------------------------
+     Both keep the camera direction and refit the distance and the target (fitBox). Neither turns the view or picks a preset. */
+  /** Fits `box` ({ minX, maxX, minY, maxY, height, minZ? } in plan feet) in the current camera direction, with the usual FIT_MARGIN. Returns the goal it flew to. */
+  function fitBox(box, animate = true) {
+    if (!renderer || !cam || !controls || !box) return null;
+    const dir = cam.position.clone().sub(controls.target).normalize();
+    const aspect = framingAspect();
+    const z0 = box.minZ || 0, H = Math.max(box.height || 0, z0 + 20);
+    let goal;
+    if (camType === 'persp') {
+      const f = fitPersp(box, dir, aspect, H);
+      goal = { type: 'persp', dist: f.dist, target: f.target, dir };
+    } else {
+      const fwd = dir.clone().negate();
+      const cr = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0));
+      const right = cr.length() < 1e-6 ? new THREE.Vector3(1, 0, 0) : cr.normalize();
+      const up = new THREE.Vector3().crossVectors(right, fwd).normalize();
+      let r0 = Infinity, r1 = -Infinity, u0 = Infinity, u1 = -Infinity;
+      for (const x of [box.minX, box.maxX]) for (const y of [box.minY, box.maxY]) for (const z of [z0, H]) {
+        const p = worldVec(x, y, z), r = p.dot(right), u = p.dot(up);
+        r0 = Math.min(r0, r); r1 = Math.max(r1, r); u0 = Math.min(u0, u); u1 = Math.max(u1, u);
+      }
+      const c = worldVec((box.minX + box.maxX) / 2, (box.minY + box.maxY) / 2, (z0 + H) / 2);
+      const target = c.clone().addScaledVector(right, (r0 + r1) / 2 - c.dot(right)).addScaledVector(up, (u0 + u1) / 2 - c.dot(up));
+      const fit = 1 - 2 * FIT_MARGIN;
+      const vis = Math.max((u1 - u0) / fit, (r1 - r0) / (aspect * fit), 30);
+      const ex = box.maxX - box.minX, ey = box.maxY - box.minY;
+      goal = { type: 'ortho', zoom: (2 * ORTHO_HALF) / vis, minDist: 0.55 * Math.sqrt(ex * ex + ey * ey + (H - z0) * (H - z0)), target, dir };
+    }
+    setView(goal, animate);
+    return goal;
+  }
+  /** The model box: the building without its site, its neighbors or the envelope. */
+  function buildingBox() {
+    if (cmp) return framingBox('n');
+    const d = Derived.get();
+    const b = boxOf({ ...d, bounds: { ...d.bounds, union: d.bounds.model } }, false);
+    b.minZ = 0;
+    return b;
+  }
+
+  /** The site box: the whole site square plus the model (a building that sticks out stays inside). With no site open it is the model, its own parcel and the neighbors. */
+  function siteBox() {
+    if (cmp) return framingBox('n');
+    const b = boxOf(Derived.get(), !!Store.raw().view.envelope);
+    const sb = SiteLayer.frameBounds();
+    if (sb) {
+      b.minX = Math.min(b.minX, sb.minX); b.maxX = Math.max(b.maxX, sb.maxX); b.minY = Math.min(b.minY, sb.minY); b.maxY = Math.max(b.maxY, sb.maxY);
+      b.minZ = Math.min(0, sb.zMin); b.height = Math.max(b.height, sb.zMax);
+    }
+    return b;
+  }
+
+  /** Site: the whole site square in the current direction (the model when no site is open). */
+  function frameSite(animate = true) { return fitBox(siteBox(), animate); }
+  /** Building: the hero building fills the view, the model box plus the margin. */
+  function frameBuilding(animate = true) { return fitBox(buildingBox(), animate); }
 
   function stepTween(now) {
     const k = tween;
@@ -846,6 +905,15 @@ const Render = (() => {
    *  only its dashed boundary and its north arrow are hidden (docs/site-base-style-technical-plan.md section 3.1).
    *  Nothing in the store is touched: the live layers are hidden, a throwaway group is drawn, then everything is put back. */
   async function captureClean(scale = 2) {
+    // The AI-ready image always shows the neighbors as a solid white model (Glass or Wireframe on screen reads as glass to image AIs).
+    const liveState = Store.raw();
+    const solidSite = SiteLayer.isOn(liveState) && liveState.view && liveState.view.siteStyle && liveState.view.siteStyle !== 'solid';
+    const siteKit = () => ({ syncLayer, clearGroup, materialFor, lineMaterial, themeEpoch: () => themeEpoch });
+    if (solidSite) SiteLayer.update(layers.site, { ...liveState, view: { ...liveState.view, siteStyle: 'solid' } }, Derived.get(), siteKit());
+    try { return await captureCleanInner(scale); }
+    finally { if (solidSite) { SiteLayer.update(layers.site, Store.raw(), Derived.get(), siteKit()); needsRender = true; } }
+  }
+  async function captureCleanInner(scale = 2) {
     if (!renderer) throw new Error('The 3D view is not available.');
     if (cmp) throw new Error('Leave Compare to save an AI-ready image.');
     const state = Store.raw();
@@ -862,10 +930,24 @@ const Render = (() => {
     const ctxMat = new THREE.MeshStandardMaterial({ color: new THREE.Color('#c9cdd2'), roughness: 0.95, metalness: 0 });
     const cap = new THREE.Group();
     const siteOn = SiteLayer.isOn(state);        // the site layer draws the site buildings: their context blocks are left out, as in the live view
-    for (const o of [...buildFloorObjects(st, disp), ...buildContextObjects(st, siteOn)]) {
+    // Hero color (batch-fixes plan 7): the model draws in CONFIG.heroColor for this picture only; its edges, the context blocks and the site layer stay as drawn.
+    // The live materials are shared and never touched: each hero mesh of the throwaway group gets its own copy (shade kept), disposed again in restore.
+    const heroMats = [];
+    const heroColor = new THREE.Color(CONFIG.heroColor);
+    const heroRef = materialFor('model').color;
+    const heroOf = (mat) => {
+      const m = mat.clone();
+      m.color.copy(heroColor).multiplyScalar(heroRef.r > 0 ? Math.min(1, mat.color.r / heroRef.r) : 1);
+      heroMats.push(m);
+      return m;
+    };
+    const floorObjects = buildFloorObjects(st, disp);
+    const floorSet = new Set(floorObjects);
+    for (const o of [...floorObjects, ...buildContextObjects(st, siteOn)]) {
       if (o.isLineLoop) { if (o.geometry) o.geometry.dispose(); continue; }       // no site outline
       if (o.isMesh) {
         if (o.material.transparent) o.material = ctxMat;
+        else if (floorSet.has(o) && o.material.isMeshStandardMaterial) { o.material = heroOf(o.material); o.userData.hero = true; }
         o.castShadow = shadowsOn; o.receiveShadow = shadowsOn;
       }
       cap.add(o);
@@ -880,6 +962,7 @@ const Render = (() => {
       scene.remove(cap);
       clearGroup(cap);
       ctxMat.dispose();
+      for (const m of heroMats) m.dispose();
       showMarks();
       scene.background = prev.bg;
       ground.material.color.copy(prev.ground);
@@ -907,6 +990,7 @@ const Render = (() => {
         layers.model.group.visible = layers.context.group.visible = layers.envelope.group.visible = layers.overlay.group.visible = false;
         showMarks = hideSiteMarks();
         lastCapture = {
+          heroColor: CONFIG.heroColor,
           site: layers.site.group.visible, boundary: siteMarkFlag('site-boundary'), arrow: siteMarkFlag('site-arrow'),
           grid: gridMesh.visible, figure: figure.visible, overlay: selOverlay.visible || layers.overlay.group.visible, envelope: layers.envelope.group.visible,
           siteObjects: layers.site.group.children.filter((o) => o.visible).length,
@@ -983,7 +1067,8 @@ const Render = (() => {
     onViewChange: (fn) => viewListeners.push(fn),
     onResize: (fn) => resizeListeners.push(fn),
     overlayInfo: () => { const kids = layers.overlay.group.children; return { total: kids.length, plan: kids.filter((o) => o.userData.plan).length, planVisible: kids.some((o) => o.userData.plan && o.visible), labels: kids.filter((o) => o.userData.label).map((o) => o.userData.label) }; },
-    framedBox: (id = 'axon') => framingBox(id),       // tests: the box a preset frames
+    frameSite, frameBuilding, fitBox,       // the zoom buttons (TopBar); fitBox keeps the camera direction
+    framedBox: (id = 'axon') => (id === 'site' ? siteBox() : id === 'building' ? buildingBox() : framingBox(id)),       // tests: the box a preset frames, or the box Site / Building fit
     info: () => ({ siteLines: layers ? layers.model.group.children.filter((o) => o.isLineLoop).length : 0, envelopeLines: layers ? layers.envelope.group.children.length : 0, camera: camType, preset, meshes: layers ? layers.model.group.children.length : 0, tweening: !!tween, distance: cam ? cam.position.distanceTo(controls.target) : 0, zoom: cam ? cam.zoom : 0, compare: !!cmp, drawQuality: derived ? Derived.display(Store.gestureActive() && !Store.gesturePath().startsWith('view')).quality : null }),
     ready: () => !!renderer,
     comparing: () => !!cmp,

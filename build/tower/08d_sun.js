@@ -100,6 +100,18 @@ const SunUI = (() => {
 
   /* ---- writing the store ------------------------------------------------------------------------------- */
   let shadowsAutoOff = false, sheetMode = false, fixing = false;
+
+  /* Shadow strength (batch-fixes plan 3.2): the light contrast goes up (Render.shadowBoost) while the sheet runs, in the Sun Study mode
+     (?study=sun) and during a date and time study, whenever shadows are on in the Model style. Everywhere else the model keeps its look. */
+  function boostWanted() {
+    if (sheetMode) return true;
+    const st = Store.raw();
+    if (!st.view || !st.view.shadows || st.view.style === 'diagram') return false;
+    return !!((typeof UI !== 'undefined' && UI.studyMode) || (st.sun && st.sun.mode === 'study'));
+  }
+  function syncBoost() {
+    try { if (Render.ready()) Render.shadowBoost(boostWanted()); } catch (e) { console.error(e); }
+  }
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
   function shadowOp(below) {
@@ -504,8 +516,12 @@ const SunUI = (() => {
     const study = Controls.when(isStudy, studyBody);
     const manual = Controls.when(() => !isStudy(), legacy.children);
     refreshers.push(() => { study.refresh(); });
+    // Sun Study mode hides the Site tab, so Context from site is offered here (batch-fixes plan 11).
+    const ctxSite = Controls.when(() => !!(typeof UI !== 'undefined' && UI.studyMode) && ProjectUI.has() && ProjectUI.hasSite(),
+      [h('div', { class: 'add-row' }, Controls.button('Context from site', () => ProjectUI.contextFromSite(), 'outline sm'), Controls.help('Loads the neighbors around the tower from the project site so their shadows show.'))]);
+    refreshers.push(() => { ctxSite.refresh(); });
     refreshAll();
-    return { children: [modeSel, manual.el, study.el] };
+    return { children: [modeSel, ctxSite.el, manual.el, study.el] };
   }
 
   async function sheetClick() {
@@ -519,6 +535,7 @@ const SunUI = (() => {
     if (kind === 'replace') shadowsAutoOff = false;
     if (!fixing && kind !== 'undo' && kind !== 'redo') ensureConsistent();
     restoreStored();
+    syncBoost();
     refreshAll();
   }
   /** Called once from 13_start.js after UI.init() and before ProjectUI.start(). */
@@ -532,6 +549,7 @@ const SunUI = (() => {
       if (touch() && raw.sun && raw.sun.hours && raw.sun.hours.spacing === 10 && raw.sun.hours.step === 30 && !raw.sun.hours.on) { raw.sun.hours.spacing = 20; raw.sun.hours.step = 60; }
     } catch (e) { /* ignore */ }
     ensureConsistent();
+    syncBoost();
     refreshAll();
   }
   /** For tests and the __tower hooks. */
@@ -553,7 +571,8 @@ const SunUI = (() => {
     tzText: () => { const s = sunOf(); return s.tz.zone === 'fixed' ? `Fixed ${offsetText(num(s.tz.offset, -5))}` : zoneLabel(s.tz.zone); },
     dayOffsetText: (md) => { const s = sunOf(); return offsetText(SolarMod.tzOffset(s.tz.zone, isoOf(md), 720, s.tz.offset)); },
     calcAt: (md, minutes) => calcAt(sunOf(), md, minutes),
-    sheetMode: (on) => { sheetMode = !!on; },
+    sheetMode: (on) => { sheetMode = !!on; syncBoost(); },
+    syncBoost, boostWanted,
     fmtMD, hm, isoOf,
   };
 })();

@@ -23,10 +23,13 @@ const CONFIG = {
   coreColors: { stair: '#d9731a', elevator: '#7a5cc2' },
   presets: PresetsMod.PRESETS,
   storageKey: 'parking.options.v1',
+  heroColor: '#E0A458',    // AI-ready image: the hero model draws in this color, everything else stays white (batch-fixes plan 7); one value
+  heroColorName: 'amber',  // the name the Hero render prompt uses for it
   schema: 1,
   projectSchema: 1,        // schema of the "parking" section this tool writes
   projectSaveMs: 1000,     // project autosave delay (spec section 8)
   projectListMax: 8,
+  shadowStrength: 0.55,   // opacity of the flat ground shadow (batch-fixes plan 3.2); the Tower also boosts the light contrast for the Sun Study
   tool: 'parking',
   snapGrids: [1, 5],
   slabThickness: 1,        // ft

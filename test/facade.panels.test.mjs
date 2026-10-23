@@ -391,5 +391,54 @@ t("project source: placement rotation turns the sectors", () => {
   same(b.faces.filter((f) => f.length === 300).map((f) => f.orientation).sort(), ["E", "W"]);
 });
 
+/* ------------------------------------------------- the crown ---- */
+
+t("crown: ruleFor is a solid screen by default and follows a rule", () => {
+  const st = defaultState();
+  eq(P.ruleFor(st, "crown", "N").system, "solid");
+  eq(P.ruleFor({ zones: { rules: {}, overrides: {} }, systems: {} }, "crown", "S").system, "solid", "no rule at all still gives solid");
+  st.zones.rules.crown = { system: "curtainWall" };
+  eq(P.ruleFor(st, "crown", "N").system, "curtainWall");
+  st.zones.overrides = { crown: { W: { system: "punched" } } };
+  eq(P.ruleFor(st, "crown", "W").system, "punched");
+  eq(P.ruleFor(st, "crown", "E").system, "curtainWall");
+});
+
+function crownProject(withCrown) {
+  const ring = [{ outer: [[-50, -25], [50, -25], [50, 25], [-50, 25]], holes: [] }];
+  const screen = [{ outer: [[-30, -15], [30, -15], [30, 15], [-30, 15]], holes: [] }];
+  const levels = [1, 2, 3].map((i) => ({ index: i, name: `Floor ${i}`, zone: "tower", z: (i - 1) * 10, ftf: 10, program: "residential", plates: ring, core: null, spines: [] }));
+  if (withCrown) levels.push({ index: 4, name: "Crown", zone: "crown", z: 30, ftf: 20, program: null, plates: screen, core: null, spines: [] });
+  let doc = PJ.newProject({ name: "t" });
+  return PJ.writeSection(doc, "massing", { tool: "tower", schema: 1, placement: { x: 0, y: 0, rotation: 0, baseZ: 0 }, state: {}, derived: { levels, metrics: {} } });
+}
+
+t("crown: faces and a zone row exist, solid by default, and the crown stays out of the building and orientation WWR", () => {
+  const st = defaultState(); st.source = "project"; st.balconies.on = true; st.balconies.zones = ["middle", "top", "crown"];
+  st.zones.rules.crown = { system: "solid" };
+  const withC = P.buildFacade(st, { project: crownProject(true) }), without = P.buildFacade(st, { project: crownProject(false) });
+  eq(withC.levels.length, 4); eq(without.levels.length, 3);
+  const cf = withC.faces.filter((f) => f.zone === "crown");
+  ok(cf.length > 0, "crown faces");
+  ok(cf.every((f) => f.glazing === 0 && f.wall > 0), "a solid screen: wall, no glass");
+  ok(cf.every((f) => f.rule.system === "solid"), "rule is solid");
+  eq(withC.balconies.filter((b) => b.zone === "crown").length, 0, "no balconies on the crown");
+  const mw = M.computeMetrics(st, withC, null), mo = M.computeMetrics(st, without, null);
+  eq(mw.wwr, mo.wwr, "building WWR ignores the crown"); eq(mw.wall, mo.wall); eq(mw.glazing, mo.glazing);
+  same(mw.wwrByOrientation, mo.wwrByOrientation);
+  same(mw.areas.byOrientation, mo.areas.byOrientation);
+  same(mw.areas.bySystem, mo.areas.bySystem);
+  ok(mw.areas.byZone.crown && mw.areas.byZone.crown.wall > 0, "zones.crown exists");
+  eq(mw.areas.byZone.crown.glazing, 0); eq(mw.wwrByZone.crown, 0);
+  eq(mw.hasCrown, true); eq(mo.hasCrown, false);
+  eq(mw.levels, 4);
+  // another system on the crown still stays out of the building sums, and its glass shows in the crown row only
+  const cw = clone(st); cw.zones.rules.crown = { system: "curtainWall" };
+  const cb = P.buildFacade(cw, { project: crownProject(true) }), cm = M.computeMetrics(cw, cb, null);
+  ok(cm.areas.byZone.crown.glazing > 0, "curtain wall crown has glass");
+  eq(cm.wwr, mo.wwr, "building WWR still ignores the crown");
+  eq(cm.balconyCount, cb.balconies.filter((b) => b.zone !== "crown").length);
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

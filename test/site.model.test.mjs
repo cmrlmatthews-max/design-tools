@@ -399,6 +399,32 @@ t("notes: required content", () => {
   ok(!/\b(don't|doesn't|isn't|can't|won't|it's)\b/i.test(md), "no contractions");
 });
 
+/* ---------- trees off (docs/batch-fixes-technical-plan.md section 6) ---------- */
+console.log("trees off");
+const treeTiles = [mkTile(tA, { land: { extent: EXT, features: [{ id: "p1", type: 1, properties: { class: "tree" }, geometry: [toTile(tA, 450, 450)] }, { id: "p2", type: 1, properties: { class: "tree" }, geometry: [toTile(tA, 460, 440)] }] } })];
+t("buildModel: trees by default (the tree code stays), none with { trees: false }, same everything else", () => {
+  const on = M.buildModel(frame, { dem, tiles: treeTiles }), off = M.buildModel(frame, { dem, tiles: treeTiles, trees: false });
+  eq(on.trees.length, 2); eq(off.trees.length, 0); ok(Array.isArray(off.trees));
+  eq(M.summarize(off).trees, 0); eq(Object.keys(off.errors).length, 0);
+  eq(off.buildings.length, on.buildings.length); eq(off.water.areas.length, on.water.areas.length); eq(off.ground.n, on.ground.n);
+});
+const noTrees = { ...model, trees: [] };
+t("DXF: a model without trees has no TREE layer in the table and no TREE or CIRCLE entity; a model with trees keeps both", () => {
+  const p0 = parseDxf(X.siteDxf(noTrees));
+  ok(!p0.some((p) => p[1] === "TREE"), "no TREE name"); ok(!p0.some((p) => p[0] === 0 && p[1] === "CIRCLE"), "no circles");
+  ok(p0.some((p) => p[1] === "WATER-LINE"), "other layers stay");
+  ok(pairs.some((p) => p[1] === "TREE") && pairs.some((p) => p[0] === 0 && p[1] === "CIRCLE"), "trees stay when present");
+  const layerCount = (pp) => { const i = pp.findIndex((q, k) => q[0] === 2 && q[1] === "LAYER" && pp[k - 1][1] === "TABLE"); return +pp[i + 1][1]; };
+  eq(layerCount(p0), layerCount(pairs) - 1);
+});
+t("notes and credits: no Trees line and no word trees without trees; both stay with trees", () => {
+  const meta = { address: "123 Test St", lat: midLat, lon: edgeLon, size: 500, release: "r", date: "2026-10-21" };
+  const off = X.notesMarkdown(noTrees, meta), on = X.notesMarkdown(model, meta);
+  ok(!off.includes("- Trees:") && !/trees/i.test(off), "off"); ok(off.includes(X.CREDITS_NO_TREES) && off.includes("Buildings, roads, water:"));
+  ok(on.includes("- Trees:") && on.includes(X.CREDITS));
+  eq(X.creditsFor(noTrees), X.CREDITS_NO_TREES); eq(X.creditsFor(model), X.CREDITS); eq(X.creditsFor(null), X.CREDITS_NO_TREES);
+});
+
 /* ---------- real-data smoke test (Tampa) ---------- */
 console.log("real data");
 const FX = "/home/claude/sqwork/fixtures";

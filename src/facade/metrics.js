@@ -14,6 +14,9 @@
    - wwrByOrientation holds a number, or null for an orientation with no wall.
      wwrByZone and wwrBySystem are { key: wwr }. `areas` holds
      { byOrientation, byZone, bySystem } as { wall, glazing } for the tables.
+   - The crown (zone "crown") counts in wwrByZone and areas.byZone only. It is
+     left out of wall, glazing, wwr, the orientation and system sums, and
+     hasCrown tells the page to say "crown not counted".
    - worst = { orientation, wwr } for the highest orientation WWR; a tie goes
      to the first of N, E, S, W. null when there is no wall.
    - transparency = glass inside the band on street faces / sum of
@@ -124,7 +127,7 @@ function ratio(glazing, wall) {
 
 /** Plan 3.10 to 3.12. project: the loaded project document or null (reads sections.sun.derived).
     → { wall, glazing, wwr, wwrByOrientation, wwrByZone, wwrBySystem, areas, worst, transparency, balconyCount,
-        balconyArea, projectionFactors, exposure, envelope, wwrLimit, levels, buildWarnings } */
+        balconyArea, projectionFactors, exposure, envelope, wwrLimit, levels, hasCrown, buildWarnings } */
 export function computeMetrics(state, built, project) {
   need(state, "computeMetrics", "state");
   need(built && Array.isArray(built.faces) && Array.isArray(built.levels), "computeMetrics", "built.faces and built.levels");
@@ -132,12 +135,15 @@ export function computeMetrics(state, built, project) {
   const byO = Object.fromEntries(ORIENTATIONS.map((o) => [o, bucket()]));
   const byZ = {}, byS = {};
   let wall = 0, glazing = 0;
+  let hasCrown = false;
   for (const f of built.faces) {
+    const z = byZ[f.zone] || (byZ[f.zone] = bucket());
+    z.wall += f.wall; z.glazing += f.glazing;
+    // The crown is a screen, not a floor of the building: it has its own zone row and stays out of every other sum.
+    if (f.zone === "crown") { hasCrown = true; continue; }
     wall += f.wall; glazing += f.glazing;
     const o = byO[f.orientation] || (byO[f.orientation] = bucket());
     o.wall += f.wall; o.glazing += f.glazing;
-    const z = byZ[f.zone] || (byZ[f.zone] = bucket());
-    z.wall += f.wall; z.glazing += f.glazing;
     const sys = f.rule && f.rule.system ? f.rule.system : "punched";
     const s = byS[sys] || (byS[sys] = bucket());
     s.wall += f.wall; s.glazing += f.glazing;
@@ -200,6 +206,7 @@ export function computeMetrics(state, built, project) {
     envelope: envelopeNote(state, built),
     wwrLimit: isNum(chk.wwrLimit) ? chk.wwrLimit : 0.4,
     levels: built.levels.length,
+    hasCrown,
     buildWarnings: (Array.isArray(built.warnings) ? built.warnings : []).map((w) => ({ ...w, floors: Array.isArray(w.floors) ? w.floors.slice() : [] })),
   };
 }

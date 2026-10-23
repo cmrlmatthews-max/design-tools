@@ -65,6 +65,7 @@ const Prompts = (() => {
       podium: podiumPhrase(state),
       form: formPhrase(state),
       hero: PromptsMod.heroFor('midrise', state, metrics),
+      heroColor: CONFIG.heroColorName,
     };
   }
   const currentAuto = () => autoValues(Store.raw(), Derived.get().metrics);

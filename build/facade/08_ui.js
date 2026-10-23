@@ -173,6 +173,7 @@ const UI = (() => {
   let rangesList = null, bandsList = null;
   const ORIENT_OPTS = CONFIG.orientations.map((o) => ({ value: o, label: o }));
   const BASE_ZONES = ['base', 'middle', 'top'];
+  CONFIG.zoneLabels.crown = CONFIG.zoneLabels.crown || 'Crown';   // the crown zone (a tower crown level), shown after Top when the massing has one
   const zoneIds = () => [...BASE_ZONES, ...(get('zones.ranges') || []).map((r) => r.id)];
   const zoneName = (id) => CONFIG.zoneLabels[id] || ((get('zones.ranges') || []).find((r) => r.id === id) || {}).name || id;
   const lenB = (label, bind, min, max, extra = {}) => Controls.slider({
@@ -633,6 +634,7 @@ const UI = (() => {
     { id: 'zone-base', tab: 'facade', title: 'Base zone', open: false, build: () => zoneSection('base') },
     { id: 'zone-middle', tab: 'facade', title: 'Middle zone', open: false, build: () => zoneSection('middle') },
     { id: 'zone-top', tab: 'facade', title: 'Top zone', build: () => zoneSection('top') },
+    { id: 'zone-crown', tab: 'facade', title: 'Crown', open: false, build: () => zoneSection('crown') },
     { id: 'zone-ranges', tab: 'facade', title: 'Level ranges', build: buildRangeZones },
     { id: 'balconies', tab: 'facade', title: 'Balconies', open: false, build: buildBalconies },
     { id: 'fins', tab: 'facade', title: 'Fins', build: buildFins },
@@ -717,7 +719,7 @@ const UI = (() => {
     const g = D().groups.find((x) => x.id === item.id);
     if (!g) return false;
     setTab('facade');
-    const direct = BASE_ZONES.includes(g.zone);
+    const direct = BASE_ZONES.includes(g.zone) || g.zone === 'crown';
     const secId = direct ? `zone-${g.zone}` : 'zone-ranges';
     const sec = sectionCtl[secId];
     if (!sec) return false;
@@ -958,7 +960,9 @@ const UI = (() => {
     const cw = $('checksWarnings');
     if (cw) { cw.textContent = ''; if (!d.warnings.length) cw.append(h('li', { class: 'none' }, 'No warnings')); for (const w of d.warnings) cw.append(warnItem(w)); }
     const wn = $('wwrNote');
-    if (wn) wn.textContent = `Now ${pct1(m.wwr)} overall${m.over ? ', above the check value' : ''}.`;
+    if (wn) wn.textContent = `Now ${pct1(m.wwr)} overall${m.over ? ', above the check value' : ''}.${m.crown ? ' Crown not counted.' : ''}`;
+    const crownSec = sectionCtl['zone-crown'];
+    if (crownSec) crownSec.el.hidden = !m.crown;
     const tn = $('transNote');
     if (tn) tn.textContent = m.transparency == null ? 'No street faces, so no ground transparency.' : `Ground transparency ${pct1(m.transparency)}${m.target == null ? ' (no target set)' : m.targetMet ? `, at or above the ${pct1(m.target)} target` : `, below the ${pct1(m.target)} target`}.`;
     const tbl = (o) => [CONFIG.orientationLabels[o] || o, '', ''];
@@ -1084,7 +1088,7 @@ const UI = (() => {
   return {
     init, updateHud, rebuildPanel: () => { Controls.refreshAll(); },
     // test hooks: the section controllers, and a rebuild of the panel from the saved UI prefs (a simulated reload)
-    sectionCtl, rebuildSections: () => { buildPanel(); setTab(activeTab, { remember: false }); Controls.refreshAll(); },
+    rememberSection, sectionCtl, rebuildSections: () => { buildPanel(); setTab(activeTab, { remember: false }); Controls.refreshAll(); },
     // hooks for the face card and the street pick mode
     openItem, setTab, activeTab: () => activeTab, tabs: () => TABS.map((t) => t.id), setStreetPick,
     setHudOpen, hudOpen: () => $('hud').dataset.collapsed === 'false', sections: () => SECTIONS.map((s) => ({ id: s.id, tab: s.tab })),

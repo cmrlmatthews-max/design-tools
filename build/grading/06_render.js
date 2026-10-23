@@ -405,8 +405,9 @@ const Render = (() => {
 
   function setView(id, animate = true) {
     if (!renderer) return;
-    const goal = viewTarget(id, framingBox(id === 'axon'), framingAspect(), cmp ? 0 : num(Derived.get().rotation, 0));
-    preset = id;
+    const custom = !!id && typeof id === 'object';       // a goal from fitBox (the zoom buttons) instead of a preset id
+    const goal = custom ? id : viewTarget(id, framingBox(id === 'axon'), framingAspect(), cmp ? 0 : num(Derived.get().rotation, 0));
+    preset = custom ? null : id;
     overlayVis = null;
     tween = null;
     if (goal.type !== camType) switchCamera(goal.type);
@@ -437,6 +438,62 @@ const Render = (() => {
     needsRender = true;
     viewListeners.forEach((fn) => fn(preset));
   }
+
+  /* ---- zoom buttons: Site and Building (docs/batch-fixes-technical-plan.md section 5) ---------------------------------
+     Both keep the camera direction and refit the distance and the target (fitBox). Neither turns the view or picks a preset. */
+  /** Fits `box` ({ minX, maxX, minY, maxY, height, minZ? } in plan feet) in the current camera direction, with the usual FIT_MARGIN. Returns the goal it flew to. */
+  function fitBox(box, animate = true) {
+    if (!renderer || !cam || !controls || !box) return null;
+    const dir = cam.position.clone().sub(controls.target).normalize();
+    const aspect = framingAspect();
+    const z0 = box.minZ || 0, H = Math.max(box.height || 0, z0 + 20);
+    let goal;
+    if (camType === 'persp') {
+      const f = fitPersp(box, dir, aspect, H);
+      goal = { type: 'persp', dist: f.dist, target: f.target, dir };
+    } else {
+      const fwd = dir.clone().negate();
+      const cr = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0));
+      const right = cr.length() < 1e-6 ? new THREE.Vector3(1, 0, 0) : cr.normalize();
+      const up = new THREE.Vector3().crossVectors(right, fwd).normalize();
+      let r0 = Infinity, r1 = -Infinity, u0 = Infinity, u1 = -Infinity;
+      for (const x of [box.minX, box.maxX]) for (const y of [box.minY, box.maxY]) for (const z of [z0, H]) {
+        const p = worldVec(x, y, z), r = p.dot(right), u = p.dot(up);
+        r0 = Math.min(r0, r); r1 = Math.max(r1, r); u0 = Math.min(u0, u); u1 = Math.max(u1, u);
+      }
+      const c = worldVec((box.minX + box.maxX) / 2, (box.minY + box.maxY) / 2, (z0 + H) / 2);
+      const target = c.clone().addScaledVector(right, (r0 + r1) / 2 - c.dot(right)).addScaledVector(up, (u0 + u1) / 2 - c.dot(up));
+      const fit = 1 - 2 * FIT_MARGIN;
+      const vis = Math.max((u1 - u0) / fit, (r1 - r0) / (aspect * fit), 30);
+      const ex = box.maxX - box.minX, ey = box.maxY - box.minY;
+      goal = { type: 'ortho', zoom: (2 * ORTHO_HALF) / vis, minDist: 0.55 * Math.sqrt(ex * ex + ey * ey + (H - z0) * (H - z0)), target, dir };
+    }
+    setView(goal, animate);
+    return goal;
+  }
+  /** The model box: the building without its site, its neighbors or the envelope. */
+  function buildingBox() {
+    if (cmp) return framingBox(false);
+    const d = Derived.get();
+    const b = boxOf({ ...d, bounds: { ...d.bounds, union: d.bounds.model } });
+    return b;
+  }
+
+  /** The site box: the whole site square plus the model (a building that sticks out stays inside). With no site open it is the model, its own parcel and the neighbors. */
+  function siteBox() {
+    if (cmp) return framingBox(false);
+    const b = boxOf({ ...Derived.get(), bounds: { ...Derived.get().bounds, union: Derived.get().bounds.site } });       // the whole grid
+    const m = Derived.get().bounds.model;       // work that sticks out of the grid stays inside the box
+    b.minX = Math.min(b.minX, m.minX); b.maxX = Math.max(b.maxX, m.maxX); b.minY = Math.min(b.minY, m.minY); b.maxY = Math.max(b.maxY, m.maxY);
+    const sb = SiteLayer.frameBox(Store.raw());
+    if (sb) { b.minX = Math.min(b.minX, sb.minX); b.maxX = Math.max(b.maxX, sb.maxX); b.minY = Math.min(b.minY, sb.minY); b.maxY = Math.max(b.maxY, sb.maxY); }
+    return b;
+  }
+
+  /** Site: the whole site square in the current direction (the model when no site is open). */
+  function frameSite(animate = true) { return fitBox(siteBox(), animate); }
+  /** Building: the hero building fills the view, the model box plus the margin. */
+  function frameBuilding(animate = true) { return fitBox(buildingBox(), animate); }
 
   function stepTween(now) {
     const k = tween;
@@ -645,6 +702,15 @@ const Render = (() => {
    *  comes from the throwaway group. Only the dashed boundary and the north arrow are hidden (docs/site-base-style-technical-plan.md section 3.1).
    *  Nothing in the store is touched: the live layers are hidden, a throwaway group is drawn, then everything is put back. */
   async function captureClean(scale = 2) {
+    // The AI-ready image always shows the neighbors as a solid white model (Glass or Wireframe on screen reads as glass to image AIs).
+    const liveState = Store.raw();
+    const solidSite = SiteLayer.info().shown && liveState.view && liveState.view.siteStyle && liveState.view.siteStyle !== 'solid';
+    const siteKit = () => ({ syncLayer, clearGroup, cssColor, themeEpoch: () => themeEpoch, mapper: () => Ground3D.mapper(Derived.get(), Store.raw()) });
+    if (solidSite) SiteLayer.update(layers.site, { ...liveState, view: { ...liveState.view, siteStyle: 'solid' } }, Derived.get(), siteKit());
+    try { return await captureCleanInner(scale); }
+    finally { if (solidSite) { SiteLayer.update(layers.site, Store.raw(), Derived.get(), siteKit()); needsRender = true; } }
+  }
+  async function captureCleanInner(scale = 2) {
     if (!renderer) throw new Error('The 3D view is not available.');
     if (cmp) throw new Error('Leave Compare to save an AI-ready image.');
     const state = Store.raw();
@@ -653,6 +719,15 @@ const Render = (() => {
     const shadowsOn = !!st.view.shadows;
     const cap = new THREE.Group();
     const built = Ground3D.build(d, st, { quality: 'full', key: 'ai' }, { clean: true });
+    // Hero color (batch-fixes plan 7): every project building block (massing and deck) draws in CONFIG.heroColor for this picture only; its edges, the graded ground,
+    // the pads, the walls and the site layer stay as drawn. The blocks share one throwaway material: the first block owns the copy, so clearGroup disposes it.
+    const blocks = built.model.filter((o) => o.isMesh && o.userData.block);
+    if (blocks.length) {
+      const old = blocks[0].material, heroMat = old.clone();
+      heroMat.color.set(CONFIG.heroColor);
+      for (const o of blocks) { o.material = heroMat; o.userData.hero = true; }
+      old.dispose();
+    }
     for (const o of built.model) {
       if (o.isMesh) { o.castShadow = shadowsOn && !o.userData.skirt; o.receiveShadow = shadowsOn; }
       cap.add(o);
@@ -684,6 +759,7 @@ const Render = (() => {
         layers.model.group.visible = layers.overlay.group.visible = false;
         showMarks = hideSiteMarks();
         lastCapture = {
+          heroColor: CONFIG.heroColor,
           site: layers.site.group.visible, boundary: siteMarkFlag('site-boundary'), arrow: siteMarkFlag('site-arrow'),
           grid: gridMesh.visible, figure: figure.visible, overlay: selOverlay.visible || layers.overlay.group.visible,
           siteObjects: layers.site.group.children.filter((o) => o.visible).length,
@@ -763,7 +839,8 @@ const Render = (() => {
     overlayInfo: () => { const kids = layers.overlay.group.children; return { total: kids.length, plan: kids.filter((o) => o.userData.plan).length, planVisible: kids.some((o) => o.userData.plan && o.visible), labels: kids.filter((o) => o.userData.label).map((o) => o.userData.label) }; },
     /** Sizes of the drawn layers (tests): lines, labels, tubes, meshes. */
     layerInfo: () => { const cnt = (g) => g.children.reduce((a, o) => { const k = o.userData.contour ? `contour-${o.userData.contour}` : o.userData.pads ? 'pads' : o.userData.zeroLine ? 'zero' : o.userData.wallTop ? 'wallTop' : o.userData.route ? 'route' : o.userData.conflict ? 'conflict' : o.userData.labelId ? 'label' : o.userData.wire ? 'wire' : o.userData.sectionLine ? 'section' : 'other'; a[k] = (a[k] || 0) + 1; return a; }, {}); return { overlay: cnt(layers.overlay.group), model: layers.model.group.children.reduce((a, o) => { const k = o.userData.ground ? 'ground' : o.userData.skirt ? 'skirt' : o.userData.block ? 'block' : o.userData.wallKind ? 'wall' : o.userData.padCap ? 'padCap' : 'other'; a[k] = (a[k] || 0) + 1; return a; }, {}) }; },
-    framedBox: (id = 'axon') => framingBox(id === 'axon'),       // tests: the box a preset frames
+    frameSite, frameBuilding, fitBox,       // the zoom buttons (TopBar); fitBox keeps the camera direction
+    framedBox: (id = 'axon') => (id === 'site' ? siteBox() : id === 'building' ? buildingBox() : framingBox(id === 'axon')),       // tests: the box a preset frames, or the box Site / Building fit
     info: () => ({ camera: camType, preset, meshes: layers ? layers.model.group.children.length : 0, tweening: !!tween, distance: cam ? cam.position.distanceTo(controls.target) : 0, zoom: cam ? cam.zoom : 0, compare: !!cmp, drawQuality: derived ? Derived.display().quality : null }),
     ready: () => !!renderer,
     comparing: () => !!cmp,

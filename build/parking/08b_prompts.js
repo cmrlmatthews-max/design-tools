@@ -45,6 +45,7 @@ const Prompts = (() => {
       podium: podiumPhrase(state),
       form: formPhrase(state, metrics),
       hero: PromptsMod.heroFor('parking', state, metrics),
+      heroColor: CONFIG.heroColorName,
     };
   }
   const currentAuto = () => autoValues(Store.raw(), Derived.get().hud);

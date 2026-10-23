@@ -266,3 +266,127 @@ runAllTests = ((base) => async function runAllWithGizmo() {
   console.log(`[tests] gizmo ${g.length - bad.length}/${g.length} passed`, bad.length ? JSON.stringify(bad) : '');
   return r;
 })(runAllTests);
+
+
+/* ==========================================================================
+   TESTS: the placement hit rule (docs/batch-fixes-technical-plan.md sections 2.3 and 2.4) - Tower
+   A placement move needs a press whose target is the canvas itself (never a .hdl or a card) and no selection with handles shown.
+   ========================================================================== */
+async function runHitRuleTests() {
+  const results = [];
+  const eq = (a, b) => (JSON.stringify(a) === JSON.stringify(b) ? true : `got ${JSON.stringify(a)}, expected ${JSON.stringify(b)}`);
+  const t = async (name, fn) => {
+    let r;
+    try { r = await fn(); } catch (e) { r = `threw ${e && e.message}`; }
+    results.push({ name, ok: r === true, detail: r === true ? '' : String(r) });
+  };
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const G = PlacementGizmo;
+  const savedState = Store.snapshot();
+  Options.holdAutosave(true);
+  const mem = GizmoFixture.memory();
+  ProjectUI.reset();
+  ProjectUI.configure({ storage: mem, navigate: () => {}, updateUrl: () => {} });
+  const pl = () => Store.get('placement');
+  const ev = (type, x, y, id) => new PointerEvent(type, { pointerId: id, pointerType: 'mouse', button: 0, buttons: type === 'pointerup' ? 0 : 1, clientX: x, clientY: y, bubbles: true, cancelable: true });
+  /** A press at (x, y) on `target`, then 60 px of travel and a release. Returns true when the placement moved. */
+  const dragOn = async (target, pt, id) => {
+    const p0 = JSON.stringify(pl());
+    const canvas = Render.canvas(), cap = canvas.setPointerCapture;
+    canvas.setPointerCapture = () => {};                  // a synthetic pointer has no capture to take (orbit may take the press when the gizmo yields)
+    let during;
+    try {
+      target.dispatchEvent(ev('pointerdown', pt.x, pt.y, id));
+      window.dispatchEvent(ev('pointermove', pt.x + 60, pt.y + 10, id));
+      await wait(60);
+      during = G.info().dragging;
+      window.dispatchEvent(ev('pointerup', pt.x + 60, pt.y + 10, id));
+    } finally { canvas.setPointerCapture = cap; }
+    return { moved: JSON.stringify(pl()) !== p0, during, orbit: Render.orbitEnabled() };
+  };
+
+  try {
+    Store.replace(fillDefaults(defaultState()), { resetHistory: true });
+    const doc = GizmoFixture.siteProject();
+    ProjectMod.saveProject(mem, doc);
+    ProjectUI.openDoc(doc);
+    await wait(300);
+    Select.clear();
+
+    await t('2.3 with nothing selected a press on the canvas still moves the placement (control)', async () => {
+      if (!Render.ready()) return true;
+      const pt = G.modelPoint();
+      if (!pt) return 'no model point on screen';
+      const r = await dragOn(Render.canvas(), pt, 51);
+      return (r.moved && r.during === 'move' && r.orbit) || JSON.stringify(r);
+    });
+
+    await t('2.3 a press whose target is a .hdl element over the model never starts a placement move', async () => {
+      if (!Render.ready()) return true;
+      const pt = G.modelPoint();
+      if (!pt) return 'no model point on screen';
+      const fake = h('div', { class: 'hdl', 'data-handle': 'test' });
+      Render.canvas().parentNode.append(fake);
+      try {
+        const r = await dragOn(fake, pt, 52);
+        return (!r.moved && r.during === null && r.orbit) || JSON.stringify(r);
+      } finally { fake.remove(); }
+    });
+
+    await t('2.3 a press whose target is a card or a button inside the canvas host never starts a placement move', async () => {
+      if (!Render.ready()) return true;
+      const pt = G.modelPoint();
+      if (!pt) return 'no model point on screen';
+      const out = [];
+      for (const [tag, cls] of [['div', 'sel-card'], ['button', 'btn']]) {
+        const fake = h(tag, { class: cls });
+        Render.canvas().parentNode.append(fake);
+        try { const r = await dragOn(fake, pt, 53); out.push(!r.moved && r.during === null && r.orbit); } finally { fake.remove(); }
+      }
+      return eq(out, [true, true]);
+    });
+
+    await t('2.3 Select.handlesShown() is false with nothing selected and true with an item selected', () => {
+      Select.clear();
+      const none = Select.handlesShown();
+      Select.select([{ kind: 'segment', index: 0 }]);
+      const one = Select.handlesShown();
+      Select.clear();
+      return eq([none, one], [false, true]);
+    });
+
+    await t('2.3 with an item selected and handles shown, a press on the model does not move the placement; Escape-clear gives the move back', async () => {
+      if (!Render.ready()) return true;
+      Select.select([{ kind: 'segment', index: 0 }]);
+      const shown = Select.handlesShown();
+      const pt = G.modelPoint();
+      if (!pt) return 'no model point on screen';
+      const r = await dragOn(Render.canvas(), pt, 54);
+      Select.clear();
+      const pt2 = G.modelPoint();
+      const r2 = await dragOn(Render.canvas(), pt2, 55);
+      return (shown && !r.moved && r.during === null && r.orbit && r2.moved) || `shown ${shown} selected ${JSON.stringify(r)} cleared ${JSON.stringify(r2)}`;
+    });
+  } finally {
+    try { G.end(false); } catch (e) { /* no drag open */ }
+    ProjectUI.reset();
+    ProjectUI.restoreDefaults();
+    Select.clear();
+    Store.replace(savedState);
+    Options.holdAutosave(false);
+  }
+  return results;
+}
+
+/* Extend runAllTests with the hit rule tests. */
+runAllTests = ((base) => async function runAllWithHitRule() {
+  const r = await base();
+  const g = await runHitRuleTests();
+  const bad = g.filter((x) => !x.ok);
+  r.results.push(...g);
+  r.total += g.length;
+  r.passed += g.length - bad.length;
+  r.failed.push(...bad);
+  console.log(`[tests] hit rule ${g.length - bad.length}/${g.length} passed`, bad.length ? JSON.stringify(bad) : '');
+  return r;
+})(runAllTests);

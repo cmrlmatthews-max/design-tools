@@ -29,7 +29,7 @@
    ========================================================================== */
 
 import { cleanRing2, cleanRing3, makeDoc } from "../shared/sketchup-format.js";
-import { CREDITS, removedIds, isRemovedId } from "./exports.js";
+import { creditsFor, removedIds, isRemovedId } from "./exports.js";
 
 const K = 1000;                       // Clipper scale: 0.001 ft
 const BIG = 100000;                   // ft: "infinity" for the outer cells
@@ -424,7 +424,7 @@ export function siteToSketchup(model, meta = {}) {
     `Origin at ${oLat.toFixed(6)}, ${oLon.toFixed(6)} (latitude, longitude). Site size ${S} ft by ${S} ft. Ground grid ${n} by ${n} points, spacing ${ground.spacing} ft.`,
     "Roads, streams, centerlines and the site boundary are draped on the ground triangles. The Road centerlines tag is hidden.",
     "This model is for conceptual design only. Ground is within about 3 ft, building height within 1 floor, building position within 10 ft.",
-    CREDITS,
+    creditsFor(model),
   ];
 
   const root = {

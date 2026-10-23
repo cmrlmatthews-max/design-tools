@@ -837,7 +837,7 @@ const UI = (() => {
   return {
     init, updateHud, rebuildPanel: () => { Controls.refreshAll(); },
     // test hooks: the section controllers, and a rebuild of the panel from the saved UI prefs (a simulated reload)
-    sectionCtl, rebuildSections: () => { buildPanel(); setTab(activeTab, { remember: false }); Controls.refreshAll(); },
+    rememberSection, sectionCtl, rebuildSections: () => { buildPanel(); setTab(activeTab, { remember: false }); Controls.refreshAll(); },
     setTab, activeTab: () => activeTab, tabs: () => TABS.map((t) => t.id),
     setHudOpen, hudOpen: () => $('hud').dataset.collapsed === 'false', sections: () => SECTIONS.map((s) => ({ id: s.id, tab: s.tab })),
     openSection,

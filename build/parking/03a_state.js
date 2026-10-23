@@ -33,6 +33,7 @@ function fillDefaults(src) {
   merge(s, base);
   if (keepPlacement === null || keepPlacement === undefined) s.placement = null;
   if (isObj(s.placement)) s.placement.baseMode = s.placement.baseMode === 'typed' ? 'typed' : 'follow';       // base elevation: Follow ground (default, and the migration for old saves) | Typed
+  if (isObj(s.placement) && s.placement.pinned !== true) delete s.placement.pinned;       // Pin placement (batch fixes plan 2.2): true only while pinned, a missing value is false
   if (!['standalone', 'wrap', 'podium'].includes(s.source)) s.source = 'standalone';
   if (s.footprint.shape !== 'polygon') s.footprint.shape = 'rect';
   if (!Array.isArray(s.footprint.points)) s.footprint.points = [];

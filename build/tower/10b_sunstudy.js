@@ -5,6 +5,9 @@
    CMRLM footer. Downloads <option>-shadow-study.png. Restores the view after.
    While it runs it changes the sun, the shadows switch, the style and the camera as one open drag; at the end every
    value goes back and the drag closes with no net change, so the sheet adds no undo step.
+   Shadow strength (batch-fixes plan 3.2): SunUI.sheetMode(true) turns Render.shadowBoost on (a stronger sun, a weaker sky light) for the
+   panels, and the flat ground shadow draws at CONFIG.shadowStrength, so the shadows read dark on the sheet. The result also carries the
+   sheet canvas and a cell list ({ row, col, x, y, w, h, sun, at(planX, planY) -> sheet pixel }) so a test can read the pixels.
    ========================================================================== */
 const SunStudy = (() => {
   let working = false;
@@ -41,7 +44,8 @@ const SunStudy = (() => {
     };
     let sheet = null, sctx = null, cellH = 0, cols = 0;
     const lay = { margin: 36, rowLabel: 92, head: 84, colLabel: 40, foot: 56, gap: 12 };
-    const captions = [];
+    const captions = [], cells = [];
+    let boostDuring = false;
     try {
       SunUI.sheetMode(true);
       SunLayer.suppress(true);
@@ -57,6 +61,9 @@ const SunStudy = (() => {
           const up = info.altitude > 0;
           if (!!Store.raw().view.shadows !== up) Store.set('view.shadows', up, { live: true });
           await frames(3);
+          boostDuring = boostDuring || Render.shadowBoosted();
+          const proj0 = Render.projectPlan(0, 0, 0), projX = Render.projectPlan(100, 0, 0), projY = Render.projectPlan(0, 100, 0);
+          const sunNow = deepClone(Store.raw().view.sun);
           const blob = await Render.capture(null, 1);
           const bmp = await toBitmap(blob);
           if (!sheet) {
@@ -73,6 +80,13 @@ const SunStudy = (() => {
           const x = lay.margin + lay.rowLabel + c * (CELL_W + lay.gap);
           const y = lay.margin + lay.head + lay.colLabel + r * (cellH + lay.gap);
           sctx.drawImage(bmp, x, y, CELL_W, cellH);
+          if (proj0 && projX && projY) {
+            const k = CELL_W / proj0.w;       // sheet pixels per canvas CSS pixel (the panel is the whole canvas)
+            cells.push({
+              row: r, col: c, x, y, w: CELL_W, h: cellH, up, sun: sunNow,
+              at: (px, py) => ({ x: x + (proj0.x + (projX.x - proj0.x) * px / 100 + (projY.x - proj0.x) * py / 100) * k, y: y + (proj0.y + (projX.y - proj0.y) * px / 100 + (projY.y - proj0.y) * py / 100) * k }),
+            });
+          }
           if (bmp.close) bmp.close();
           sctx.strokeStyle = '#d5d9de'; sctx.lineWidth = 1;
           sctx.strokeRect(x + 0.5, y + 0.5, CELL_W - 1, cellH - 1);
@@ -111,7 +125,7 @@ const SunStudy = (() => {
       sctx.fillText('CMRLM', sheet.width - lay.margin, fy);
     } finally {
       // Put everything back. The drag closes with the original values, so the history gets nothing.
-      SunUI.sheetMode(false);
+      SunUI.sheetMode(false);          // also turns the shadow boost off again (unless the Sun Study mode or a date and time study wants it)
       SunLayer.suppress(false);
       try {
         Store.set('sun', saved.sun === undefined ? { mode: 'manual' } : saved.sun, { live: true });
@@ -120,13 +134,14 @@ const SunStudy = (() => {
         Store.set('view.style', saved.style, { live: true });
         Store.commit();
         Render.setView(saved.preset || 'axon', false);
+        SunUI.syncBoost();
       } catch (e) { console.error(e); }
       working = false;
     }
     const blob = await new Promise((resolve, reject) => sheet.toBlob((b) => (b ? resolve(b) : reject(new Error('The sheet could not be saved as a PNG.'))), 'image/png'));
     const slug = String(Store.get('name') || 'tower').trim().replace(/[^\w\-]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'tower';
     const filename = `${slug}-shadow-study.png`;
-    const out = { blob, width: sheet.width, height: sheet.height, panels: dates.length * times.length, rows: dates.length, cols: times.length, filename };
+    const out = { blob, width: sheet.width, height: sheet.height, panels: dates.length * times.length, rows: dates.length, cols: times.length, filename, canvas: sheet, cells, boostDuring };
     if (deliver) {
       const result = await ShotMod.deliverImage(blob, filename);
       if (result === 'downloaded') Toast.show('Shadow study sheet saved to your downloads.');

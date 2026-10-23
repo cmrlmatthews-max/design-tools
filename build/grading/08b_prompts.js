@@ -69,6 +69,7 @@ const Prompts = (() => {
       podium: 'no podium',
       walls: d.hud.wallCount ? `${d.hud.wallCount} wall${d.hud.wallCount === 1 ? '' : 's'}, up to ${ft1(d.hud.wallMax)} feet tall` : 'no walls',
       hero: PromptsMod.heroFor('grading', state, d),
+      heroColor: CONFIG.heroColorName,
       ground: state.ground.mode === 'plane' ? `falling ${ft1(state.ground.plane.slope)} percent toward the ${dirWord(state.ground.plane.downhill)}` : 'the project site ground',
     };
   }

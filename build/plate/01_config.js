@@ -21,6 +21,7 @@ const CONFIG = {
   projectSaveMs: 1000,     // project autosave delay (spec section 8)
   projectListMax: 8,
   contextRadius: 900,      // ft, site neighbors drawn around the work
+  shadowStrength: 0.55,   // opacity of the flat ground shadow (batch-fixes plan 3.2); the Tower also boosts the light contrast for the Sun Study
   tool: 'plate',
   title: 'Plate Planner',
   // Scene colors by role (the model style uses these; the diagram style colors units by type)

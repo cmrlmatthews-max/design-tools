@@ -1038,6 +1038,7 @@ const Select = (() => {
     releaseHandleDrag: () => { flushMove(); endDrag(true); },
     cancelHandleDrag: () => endDrag(false),
     dragging: () => !!drag, lastDrag: () => lastDrag,
+    handlesShown: () => handlesWanted(),     // read-only: a selection with visible handles (the placement gizmo yields to it)
     onChange: (fn) => listeners.push(fn),
     refreshOverlay,
     overlayInfo: () => ({ outline: outlineGroup ? outlineGroup.children.length : 0, guides: guideGroup ? guideGroup.children.length : 0 }),

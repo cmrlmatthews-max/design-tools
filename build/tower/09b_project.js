@@ -355,6 +355,7 @@ const ProjectUI = (() => {
         ? `Grading Sketch sets the ground floor at ${Units.formatFeetInches(tier.ffe)}. The other tools read that height; the base elevation below stays editable.`
         : 'No Grading Sketch height yet, so the tools read the base elevation below as the ground floor.';
     }
+    try { if (typeof PinUI !== 'undefined') PinUI.sync(); } catch (e) { /* the Pin button is optional */ }
   }
   function openCheck(doc) {
     let sec = null, sunSec = null;
@@ -395,6 +396,7 @@ const ProjectUI = (() => {
     const d = Derived.get();
     const derived = TowerDerivedMod.towerDerived(st, d, d.metrics);
     const pl = { ...placement(), baseMode: baseMode() };
+    if (isObjP(Store.raw().placement) && Store.raw().placement.pinned === true) pl.pinned = true;     // Pin placement: saved with the section, a missing value is false
     return { tool: CONFIG.tool, schema: CONFIG.projectSchema, placement: pl, state: { ...st, placement: pl }, derived, note: st.name };
   }
   /**
@@ -496,6 +498,11 @@ const ProjectUI = (() => {
       if (!project.readOnly) markDirty();              // the new massing section is written (another tool's massing waits for the question)
     }
     if (!project.readOnly) followGround({ merge: true });     // the base elevation is the lowest ground under the footprint (Follow ground)
+    if (hasSite()) {                // Glass on open (batch fixes plan 2.1): this session only; the saved option keeps its style, Pin sets Solid
+      const was = project.loading;
+      project.loading = true;
+      try { Store.set('view.siteStyle', isObjP(Store.raw().placement) && Store.raw().placement.pinned === true ? 'solid' : 'glass', { live: false, merge: true }); } finally { project.loading = was; }
+    }
     renderPill();
     if (Render.ready()) Render.setView(Render.info().preset || 'axon', true);
     return doc;
@@ -573,7 +580,7 @@ const ProjectUI = (() => {
     project.navigate(url);
     return url;
   }
-  function openById(id) { flush(); project.navigate(`${location.pathname}?project=${encodeURIComponent(id)}`); }
+  function openById(id) { flush(); project.navigate(`${location.pathname}?${typeof UI !== 'undefined' && UI.studyMode ? 'study=sun&' : ''}project=${encodeURIComponent(id)}`); }
   async function exportFile() {
     const doc = project.doc;
     if (!doc) return false;
