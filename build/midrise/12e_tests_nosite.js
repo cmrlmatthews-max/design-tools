@@ -109,6 +109,7 @@ async function runNoSiteTests() {
     await t('Site tab with Unlimited: the Shape control lists it, one help line shows, width, depth, setbacks, stepback, density cap and open space hide; the height limit, separation and courtyard stay', async () => {
       Store.replace(fillDefaults(defaultState()));
       UI.setTab('site');
+      TestHelp.openSection('site'); TestHelp.openSection('height');          // every section starts collapsed
       if (rulesSec().dataset.open !== 'true') rulesSec().querySelector('.acc-head').click();
       await frames();
       const opts = [...document.querySelectorAll('#tabpanel-site select')[0].options].map((o) => o.textContent);

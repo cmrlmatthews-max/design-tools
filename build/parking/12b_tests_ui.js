@@ -56,7 +56,7 @@ async function runUiTests() {
     });
     await t('ramp type buttons set the ramp type; the speed card shows only for a speed ramp', () => {
       Store.replace(fillDefaults(defaultState()));
-      UI.setTab('ramp');
+      UI.setTab('ramp'); TestHelp.openSection('speed');
       const speedShown = () => visible(document.querySelector('[data-section="speed"] .when:not([hidden])'));
       click(document.querySelector('#rampTypes [data-ramp="speed"]'));
       const a = [Store.get('ramp.type'), speedShown()];

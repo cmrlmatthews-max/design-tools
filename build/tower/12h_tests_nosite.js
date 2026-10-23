@@ -106,6 +106,7 @@ async function runNoSiteTests() {
     await t('Site tab with Unlimited: the Shape control lists it, one help line shows, width, depth, corners, setbacks and stepback hide, the height limit stays', async () => {
       Store.replace(fillDefaults(defaultState()));
       UI.setTab('site');
+      openSection('site'); openSection('height');          // every section starts collapsed
       await frames();
       const opts = [...document.querySelectorAll('#tabpanel-site select')[0].options].map((o) => o.textContent);
       const help = [...document.querySelectorAll('#tabpanel-site .help')].filter(visible).map((e) => e.textContent);

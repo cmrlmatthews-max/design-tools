@@ -458,11 +458,25 @@ const UI = (() => {
       ]),
     };
   }
+  /** View tab: the site style chips (Solid, Glass, Wireframe) for the neighbor buildings; shown while the Site toggle is on. */
+  function siteStyleRow() {
+    const btns = [['solid', 'Solid'], ['glass', 'Glass'], ['wireframe', 'Wireframe']].map(([value, text]) => {
+      const b = h('button', { class: 'chip', type: 'button', 'aria-pressed': 'false', 'data-value': value }, text);
+      b.addEventListener('click', () => Store.set('view.siteStyle', value, { live: false }));
+      return b;
+    });
+    return Controls.when(() => {
+      const cur = Store.get('view.siteStyle') || 'solid';
+      btns.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.value === cur)));
+      return Store.get('view.site') !== false;
+    }, [h('div', { class: 'ctl', id: 'siteStyleChips' }, h('div', { class: 'ctl-label' }, 'Site style'), h('div', { class: 'chips', role: 'group', 'aria-label': 'Site style' }, btns))]);
+  }
   function buildScene() {
     return {
       children: els([
         Controls.toggle({ label: 'Site', bind: bs('view.site') }),
         Controls.help('The ground, roads, water, trees, and neighbors of the project site. From the Site Model.'),
+        siteStyleRow(),
         Controls.toggle({ label: 'Show zoning envelope', bind: bs('view.envelope') }),
         Controls.toggle({ label: 'Show context blocks', bind: bs('context.show') }),
         Controls.help('Edit the context blocks in the Site tab.'),
@@ -488,22 +502,22 @@ const UI = (() => {
   ];
   const SECTIONS = [
     { id: 'podium', tab: 'form', title: 'Podium', build: buildPodium },
-    { id: 'segments', tab: 'form', title: 'Segments', open: true, build: buildSegments },
+    { id: 'segments', tab: 'form', title: 'Segments', open: false, build: buildSegments },
     { id: 'moves', tab: 'form', title: 'Form moves', build: buildMoves },
     { id: 'carves', tab: 'form', title: 'Carves', build: buildCarves },
     { id: 'crown', tab: 'form', title: 'Crown', build: buildCrown },
     { id: 'core', tab: 'form', title: 'Core', build: buildCore },
-    { id: 'programs', tab: 'program', title: 'Programs', open: true, build: buildPrograms },
-    { id: 'targets', tab: 'program', title: 'Targets', open: true, build: buildTargets },
-    { id: 'display', tab: 'view', title: 'Display', open: true, build: buildDisplay },
-    { id: 'scene', tab: 'view', title: 'Context and envelope', open: true, build: buildScene },
+    { id: 'programs', tab: 'program', title: 'Programs', open: false, build: buildPrograms },
+    { id: 'targets', tab: 'program', title: 'Targets', open: false, build: buildTargets },
+    { id: 'display', tab: 'view', title: 'Display', open: false, build: buildDisplay },
+    { id: 'scene', tab: 'view', title: 'Context and envelope', open: false, build: buildScene },
     // The Sun section is SunUI's (08d_sun.js); buildSun above is its Manual mode (the schema 1 sliders).
-    { id: 'sun', tab: 'view', title: 'Sun', open: true, build: () => SunUI.build({ bs, els, degS, get, legacy: buildSun }) },
+    { id: 'sun', tab: 'view', title: 'Sun', open: false, build: () => SunUI.build({ bs, els, degS, get, legacy: buildSun }) },
     // Project site (09b_project.js): the first Site section, shown only while a project is open.
-    { id: 'project', tab: 'site', title: 'Project site', open: true, build: () => ProjectUI.buildSite({ bs, els, lenF, degS, get }), when: () => ProjectUI.has() },
-    { id: 'site', tab: 'site', title: 'Site', open: true, build: buildSite },
-    { id: 'setbacks', tab: 'site', title: 'Setbacks', open: true, build: buildSetbacks, when: hasSiteNow },
-    { id: 'height', tab: 'site', title: 'Height limit and stepback', open: true, build: buildHeight },
+    { id: 'project', tab: 'site', title: 'Project site', open: false, build: () => ProjectUI.buildSite({ bs, els, lenF, degS, get }), when: () => ProjectUI.has() },
+    { id: 'site', tab: 'site', title: 'Site', open: false, build: buildSite },
+    { id: 'setbacks', tab: 'site', title: 'Setbacks', open: false, build: buildSetbacks, when: hasSiteNow },
+    { id: 'height', tab: 'site', title: 'Height limit and stepback', open: false, build: buildHeight },
     { id: 'context', tab: 'site', title: 'Context blocks', build: buildContext },
   ];
   const sectionCtl = {};          // id -> Controls.section result
@@ -998,6 +1012,8 @@ const UI = (() => {
   }
   return {
     init, updateHud, rebuildPanel: () => { Controls.refreshAll(); },
+    // test hooks: the section controllers, and a rebuild of the panel from the saved UI prefs (a simulated reload)
+    sectionCtl, rebuildSections: () => { buildPanel(); setTab(activeTab, { remember: false }); Controls.refreshAll(); swatchSyncs.forEach((fn) => fn()); },
     // v1.1 hooks for the selection card
     openItem, setProgramForItems, setTab, activeTab: () => activeTab, tabs: () => TABS.map((t) => t.id),
     setHudOpen, hudOpen: () => $('hud').dataset.collapsed === 'false',

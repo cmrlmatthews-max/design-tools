@@ -190,6 +190,8 @@
 .removed-line { display: flex; align-items: center; gap: 6px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink-2); }
 .removed-line .dot { color: var(--ink-3); }
 .link-btn { min-height: 32px; padding: 0 2px; border: 0; background: transparent; color: var(--accent); font-size: 13px; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+.sec-body { padding: 2px 0 6px; }
+.sec-body[hidden] { display: none; }
 .help-sec { padding-bottom: 8px; }
 .help-sec > summary { display: flex; align-items: center; min-height: 40px; cursor: pointer; list-style: none; }
 .help-sec > summary::-webkit-details-marker { display: none; }

@@ -661,6 +661,29 @@ const App = (() => {
     return g;
   }
 
+  /* ---- collapsible blocks (docs/site-base-style-technical-plan.md section 4.3) ----------------------------------
+     Location, Layers, View, Site data and Remove buildings fold under a header button. All start folded except Location (the address
+     field must show). The open state of each block is remembered in localStorage under cmrlm.site.sections ({ id: true | false }). */
+  const BLOCKS_KEY = 'cmrlm.site.sections';
+  const blockPrefs = () => { const m = Local.get(BLOCKS_KEY, {}); return m && typeof m === 'object' && !Array.isArray(m) ? m : {}; };
+  function setBlockOpen(sec, open, remember = true) {
+    const head = sec.querySelector(':scope > .sec-head'), body = sec.querySelector(':scope > .sec-body');
+    head.setAttribute('aria-expanded', String(open));
+    body.hidden = !open;
+    if (remember) Local.set(BLOCKS_KEY, { ...blockPrefs(), [sec.dataset.block]: open });
+  }
+  /** One block: a header button with a chevron and a body. `open` is the default when nothing is remembered. */
+  function block(id, title, children, o = {}) {
+    const prefs = blockPrefs();
+    const open = id in prefs ? !!prefs[id] : !!o.open;
+    const head = h('button', { class: 'label sec-head', type: 'button', id: `blockHead-${id}`, 'aria-expanded': 'false', 'aria-controls': `blockBody-${id}`, onclick: () => setBlockOpen(sec, head.getAttribute('aria-expanded') !== 'true') },
+      h('span', { class: 'sec-title' }, h('span', { html: ICONS.chev, style: 'display:contents' }), title));
+    const body = h('div', { class: 'sec-body', id: `blockBody-${id}` }, children);
+    const sec = h('div', { class: 'sec', 'data-block': id, ...(o.id ? { id: o.id } : {}) }, head, body);
+    setBlockOpen(sec, open, false);
+    return sec;
+  }
+
   function buildPanel() {
     const sections = $('sections');
 
@@ -674,12 +697,11 @@ const App = (() => {
     els.size.addEventListener('change', () => { state.size = Number(els.size.value); });
     els.recents = h('div', { class: 'recents' });
     els.recentsWrap = h('div', null, h('div', { class: 'label', style: 'padding:10px 0 2px' }, 'Recent sites'), els.recents);
-    sections.append(h('div', { class: 'sec' },
-      h('div', { class: 'label' }, 'Location'),
+    sections.append(block('location', 'Location', [
       h('div', { class: 'addr-row' }, els.addr, els.go),
       h('p', { class: 'help', id: 'addrHint' }, 'Address, lat/lon, or a Google Maps link'),
       h('div', { class: 'select-row' }, h('label', { for: 'sizeSel' }, 'Site size (square)'), els.size),
-      els.recentsWrap));
+      els.recentsWrap], { open: true }));
 
     // Progress
     els.steps = h('ul', { class: 'steps', id: 'steps' }, CONFIG.steps.map(([k, label]) =>
@@ -692,24 +714,22 @@ const App = (() => {
 
     // Layers
     els.toggles = h('div', { class: 'toggles' }, CONFIG.layers.map(([k, l]) => toggleRow(k, l)));
-    sections.append(h('div', { class: 'sec' }, h('div', { class: 'label' }, 'Layers'), els.toggles));
+    sections.append(block('layers', 'Layers', [els.toggles]));
 
     // View
     els.scaleSeg = seg(CONFIG.scales, 'scale', 'Vertical scale', state.vscale, setVScale, (v) => `${v}×`);
     els.contourSeg = seg(CONFIG.contours, 'contour', 'Contour lines', state.contour, setContour, (v) => (v ? `${v} ft` : 'Off'));
-    sections.append(h('div', { class: 'sec' }, h('div', { class: 'label' }, 'View'),
+    sections.append(block('view', 'View', [
       h('div', { class: 'ctl-block' }, h('span', { class: 'ctl-label' }, 'Vertical scale'), els.scaleSeg),
-      h('div', { class: 'ctl-block' }, h('span', { class: 'ctl-label' }, 'Contour lines'), els.contourSeg)));
+      h('div', { class: 'ctl-block' }, h('span', { class: 'ctl-label' }, 'Contour lines'), els.contourSeg)]));
 
     // Metrics
     els.metrics = h('div', { id: 'metrics' });
-    sections.append(h('div', { class: 'sec' }, h('div', { class: 'label' }, 'Site data'), els.metrics));
+    sections.append(block('data', 'Site data', [els.metrics]));
     renderMetrics();
 
     // Help: remove buildings (copy in docs/site-remove-copy.md)
-    els.help = h('details', { class: 'sec help-sec', id: 'helpSec' },
-      h('summary', { class: 'label' }, h('span', { class: 'sec-title' }, h('span', { html: ICONS.chev, style: 'display:contents' }), 'Remove buildings')),
-      h('p', { class: 'help-text', id: 'helpRemove' }, HELP_REMOVE));
+    els.help = block('help', 'Remove buildings', [h('p', { class: 'help-text', id: 'helpRemove' }, HELP_REMOVE)], { id: 'helpSec' });
     sections.append(els.help);
 
     sections.append(h('p', { class: 'credits' }, CREDITS));
@@ -812,6 +832,7 @@ const App = (() => {
     init, go, buildCompass, screenshot, download, fileFor, sketchupDoc, openDownloads, toggleLayer, setVScale, setContour, setSize, openMaps, syncActions,
     setRemoved, removeBuilding, restoreBuilding, restoreAll, selectHit, renderCard,
     state, els, metaOf, slugOf, renderMetrics, setStep,
+    BLOCKS_KEY, blockPrefs, setBlockOpen, rebuildBlocks: () => { $('sections').textContent = ''; buildPanel(); renderMetrics(); renderRecents(); syncActions(); },
     project, startProject, openProjectDoc, projectClose, projectCreate, projectWrite, projectSend, scheduleProjectSave, flushProject, siteRequest, openProjectMenu, projectMeta,
   };
 })();

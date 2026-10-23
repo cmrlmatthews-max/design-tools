@@ -18,11 +18,14 @@ const Prompts = (() => {
     out.material.default = DESIGN_VALUE;
     return out;
   })();
-  const GROUPS = [['time', 'Time'], ['material', 'Material'], ['context', 'Context'], ['camera', 'Camera'], ['custom', 'My prompts']];
+  const FIELD_ORDER = ['time', 'material', 'location', 'season'];
+  const ROW_LABELS = { time: 'Time', material: 'Material', location: 'Context', season: 'Season' };
+  /** The rows to show for a prompt: its pick fields in the panel order (Time, Material, Context, Season). */
+  const rowKeys = (uses) => [...FIELD_ORDER.filter((k) => uses.includes(k)), ...uses.filter((k) => !FIELD_ORDER.includes(k))].filter((k) => PROMPT_FIELDS[k]);
   const AUTO = [['floors', 'Floors'], ['height', 'Height'], ['program', 'Program'], ['podium', 'Podium'], ['form', 'Form']];
   const FIELD_KEYS = Object.keys(PROMPT_FIELDS);
   const NUMBER_WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
-  const TOKEN_HELP = 'Sentence slots: "The facade is {{material}}." · "The setting is {{location}}" · "photographed {{time}}" · ", {{season}}." From your design: {{floors}} {{height}} {{program}} {{podium}} {{form}}. Tick a menu below to let the user choose that slot. The fixed form-lock text is added in front of every prompt.';
+  const TOKEN_HELP = 'Sentence slots: "The facade is {{material}}." · "The setting is {{location}}" · "photographed {{time}}" · ", {{season}}." From your design: {{floors}} {{height}} {{program}} {{podium}} {{form}}. Tick a choice below to show a row of chips for that slot. The fixed form-lock text is added in front of every prompt.';
   const STARTER = 'Make a photorealistic render of this {{height}} {{program}} building in {{location}} at {{time}}.';
   // Added to the form-lock text: the facade layout is as fixed as the massing.
   const FACADE_LOCK = 'Keep every window, door, balcony, fin and shade exactly where the model shows it, with the same panel rhythm and the same proportion of glass to wall. Change only materials, colors, reflections and lighting.';
@@ -81,6 +84,7 @@ const Prompts = (() => {
       program: programPhrase(state, d),
       podium: podiumPhrase(state, d),
       form: formPhrase(state, d),
+      hero: PromptsMod.heroFor('facade', state, d),
     };
   }
   const currentAuto = () => autoValues(Store.raw(), Derived.get());
@@ -90,7 +94,6 @@ const Prompts = (() => {
   const customList = () => Options.storage.listPrompts();
   const allPrompts = () => [...PROMPTS, ...customList()];
   const findPrompt = (id) => allPrompts().find((p) => p.id === id) || null;
-  const groupPrompts = (g) => (g === 'custom' ? customList() : PROMPTS.filter((p) => p.group === g));
 
   /** Menu value: field default, then the prompt's own default, then the user's last pick for THIS prompt (remembered per prompt id). */
   function fieldValue(prompt, key) {
@@ -98,7 +101,8 @@ const Prompts = (() => {
     const shown = !prompt || (prompt.uses || []).includes(key);       // a choice only counts where the prompt shows that menu
     const remembered = shown && prompt ? ((prefs().fields || {})[prompt.id] || {})[key] : null;
     if (remembered != null && f.options.some((o) => o.value === remembered)) return remembered;
-    const d = prompt && prompt.defaults && prompt.defaults[key];
+    // The Hero render's own material is the fritted glass; here the design is the material, so only the other fields take its defaults.
+    const d = prompt && prompt.defaults && !(key === 'material' && prompt.id === 'hero-render') ? prompt.defaults[key] : null;
     if (d != null && f.options.some((o) => o.value === d)) return d;
     return f.default != null ? f.default : (f.options[0] || {}).value;
   }
@@ -125,21 +129,24 @@ const Prompts = (() => {
   const wordCount = (t) => (t.trim() ? t.trim().split(/\s+/).length : 0);
 
   /* ---- view state ------------------------------------------------------------------ */
-  const ui = { open: false, group: null, editing: null, el: null, restoreFocus: null, raf: 0, busy: false, error: '' };
+  // Mode 'lib': one of the built-in prompts is selected. Mode 'custom': the My prompts chip is on and a saved prompt is selected.
+  const ui = { open: false, mode: null, editing: null, el: null, restoreFocus: null, raf: 0, busy: false, error: '' };
   const selectedId = (g) => (prefs().selected || {})[g];
-  function currentGroup() {
-    const g = ui.group || prefs().group;
-    return GROUPS.some((x) => x[0] === g) ? g : 'time';
-  }
+  const currentMode = () => ui.mode || (prefs().group === 'custom' ? 'custom' : 'lib');
   function currentPrompt() {
-    const g = currentGroup(), list = groupPrompts(g);
-    return list.find((p) => p.id === selectedId(g)) || list[0] || null;
+    if (currentMode() === 'custom') {
+      const list = customList();
+      return list.find((p) => p.id === selectedId('custom')) || list[0] || null;
+    }
+    return PROMPTS.find((p) => p.id === selectedId('lib')) || PROMPTS[0] || null;     // a fresh profile starts on the Hero render
   }
+  /** select('custom', id) picks a saved prompt; select(any other word, id) picks a built-in prompt. */
   function select(group, id) {
+    const custom = group === 'custom';
     const p = prefs();
-    p.group = group;
-    p.selected = { ...(p.selected || {}), [group]: id };
-    ui.group = group;
+    p.group = custom ? 'custom' : 'lib';
+    p.selected = { ...(p.selected || {}), [custom ? 'custom' : 'lib']: id };
+    ui.mode = custom ? 'custom' : 'lib';
     saveUiPrefs(uiPrefs);
   }
   /** The prompt the preview and Copy use: the draft while editing, else the selected one. */
@@ -196,7 +203,7 @@ const Prompts = (() => {
   function startNew() {
     ui.error = '';
     ui.editing = { id: null, title: StorageMod.uniqueName('New prompt', customList().map((p) => p.title)), template: STARTER, uses: ['location', 'time'], focus: 'title' };
-    ui.group = 'custom';
+    ui.mode = 'custom';
     render();
   }
   function startEdit(p) {
@@ -207,7 +214,7 @@ const Prompts = (() => {
   function duplicateToEdit(p) {
     ui.error = '';
     ui.editing = { id: null, title: StorageMod.uniqueName(`${p.title} (copy)`, customList().map((x) => x.title)), template: p.template, uses: [...(p.uses || [])], focus: 'title' };
-    ui.group = 'custom';
+    ui.mode = 'custom';
     render();
     notify('Copied to My prompts. Change it and press Save.');
   }
@@ -255,47 +262,60 @@ const Prompts = (() => {
   }
   function syncSteps() { if (ui.saveBtn) { ui.saveBtn.disabled = ui.busy; ui.saveBtn.textContent = ui.busy ? 'Saving image…' : '1. Save AI-ready image'; } }
 
-  function tabsEl() {
-    const g = currentGroup();
-    const tabs = h('div', { class: 'ai-tabs', role: 'tablist', 'aria-label': 'Prompt groups' });
-    for (const [id, label] of GROUPS) {
-      tabs.append(h('button', {
-        class: 'ai-tab', type: 'button', role: 'tab', id: `aiTab-${id}`, 'aria-selected': String(id === g), 'data-group': id,
-        onclick: () => { if (ui.editing && id !== 'custom') ui.editing = null; ui.group = id; select(id, selectedId(id) || (groupPrompts(id)[0] || {}).id); render(); },
-      }, label));
+  /* The Prompt row: one chip per built-in prompt (the Hero render first) and a My prompts chip at the end. */
+  function promptRowEl() {
+    const mode = currentMode(), cur = currentPrompt();
+    const chips = h('div', { class: 'chips', role: 'group', 'aria-label': 'Prompt', id: 'aiPromptRow' });
+    for (const p of PROMPTS) {
+      chips.append(h('button', {
+        class: 'chip', type: 'button', 'aria-pressed': String(mode === 'lib' && !ui.editing && !!cur && cur.id === p.id), 'data-id': p.id, 'data-group': p.group,
+        onclick: () => { ui.editing = null; select('lib', p.id); render(); },
+      }, p.title));
     }
-    return tabs;
+    chips.append(h('button', {
+      class: 'chip ai-mine', type: 'button', id: 'aiMine', 'aria-pressed': String(mode === 'custom'),
+      onclick: () => { ui.editing = null; select('custom', selectedId('custom')); render(); },
+    }, 'My prompts'));
+    return h('div', { class: 'ai-row' }, h('div', { class: 'ai-row-label' }, 'Prompt'), chips);
   }
 
-  function listEl() {
-    const g = currentGroup(), list = groupPrompts(g), cur = currentPrompt();
-    const wrap = h('div', { class: 'ai-listwrap' });
-    if (g === 'custom') {
-      wrap.append(h('div', { class: 'ai-listbar' }, h('button', { class: 'btn outline sm', type: 'button', id: 'aiNew', onclick: startNew }, '+ New prompt')));
-      if (!list.length && !ui.editing) wrap.append(h('p', { class: 'help ai-empty' }, 'Nothing here yet. Use New prompt, or open any other tab and press Duplicate to edit.'));
-    }
-    const ul = h('div', { class: 'ai-list', role: 'group', 'aria-label': 'Prompts' });
+  /* The My prompts row: the saved prompts as chips and a New prompt chip. Only while the My prompts chip is on. */
+  function customRowEl() {
+    if (currentMode() !== 'custom') return null;
+    const list = customList(), cur = currentPrompt();
+    const chips = h('div', { class: 'chips', role: 'group', 'aria-label': 'My prompts', id: 'aiCustomRow' });
     for (const p of list) {
-      ul.append(h('button', {
-        class: 'ai-item', type: 'button', 'aria-pressed': String(ui.editing ? ui.editing.id === p.id : !!cur && cur.id === p.id), 'data-id': p.id,
-        onclick: () => { ui.editing = null; select(g, p.id); render(); },
-      }, h('span', { class: 'ai-item-title' }, p.title), p.description ? h('span', { class: 'ai-item-desc' }, p.description) : null));
+      chips.append(h('button', {
+        class: 'chip', type: 'button', 'aria-pressed': String(ui.editing ? ui.editing.id === p.id : !!cur && cur.id === p.id), 'data-id': p.id,
+        onclick: () => { ui.editing = null; select('custom', p.id); render(); },
+      }, p.title));
     }
-    if (ui.editing && !ui.editing.id) ul.append(h('div', { class: 'ai-item is-draft', 'aria-pressed': 'true' }, h('span', { class: 'ai-item-title' }, ui.editing.title || 'New prompt'), h('span', { class: 'ai-item-desc' }, 'Not saved yet')));
-    wrap.append(ul);
-    return wrap;
+    if (ui.editing && !ui.editing.id) chips.append(h('span', { class: 'chip is-draft', 'aria-pressed': 'true' }, ui.editing.title || 'New prompt'));
+    chips.append(h('button', { class: 'chip ai-new', type: 'button', id: 'aiNew', onclick: startNew }, '+ New prompt'));
+    const row = h('div', { class: 'ai-row' }, h('div', { class: 'ai-row-label' }, 'Mine'), chips);
+    if (!list.length && !ui.editing) row.append(h('p', { class: 'help ai-empty' }, 'Nothing here yet. Use New prompt, or pick a built-in prompt and press Duplicate to edit.'));
+    return row;
   }
 
+  /* One chip row per field the prompt uses (Time, Material, Context, Season). A pick is remembered for this prompt. */
   function fieldsEl(prompt, uses, onPick) {
     const wrap = h('div', { class: 'ai-fields' });
-    for (const key of uses) {
+    for (const key of rowKeys(uses)) {
       const f = PROMPT_FIELDS[key];
-      if (!f) continue;
-      const id = `aiField-${key}`;
-      const sel = h('select', { id }, f.options.map((o) => h('option', { value: o.value }, o.label)));
-      sel.value = fieldValue(prompt, key);
-      sel.addEventListener('change', () => { rememberField(prompt, key, sel.value); if (onPick) onPick(); updatePreview(); });
-      wrap.append(h('div', { class: 'ctl select-row' }, h('label', { for: id }, f.label), sel));
+      const label = ROW_LABELS[key] || f.label;
+      const group = h('div', { class: 'chips', role: 'group', 'aria-label': label, id: `aiField-${key}`, 'data-field': key });
+      const current = fieldValue(prompt, key);
+      for (const o of f.options) {
+        const b = h('button', { class: 'chip', type: 'button', 'aria-pressed': String(o.value === current), 'data-value': o.value }, o.label);
+        b.addEventListener('click', () => {
+          rememberField(prompt, key, o.value);
+          for (const x of group.children) x.setAttribute('aria-pressed', String(x === b));
+          if (onPick) onPick();
+          updatePreview();
+        });
+        group.append(b);
+      }
+      wrap.append(h('div', { class: 'ai-row' }, h('div', { class: 'ai-row-label' }, label), group));
     }
     return wrap;
   }
@@ -347,9 +367,9 @@ const Prompts = (() => {
       h('label', { class: 'ai-lab', for: 'aiEditTitle' }, 'Title'), title,
       h('label', { class: 'ai-lab', for: 'aiEditTemplate' }, 'Prompt text'), tpl,
       h('p', { class: 'points-note', id: 'aiTokenHelp' }, TOKEN_HELP),
-      h('div', { class: 'label' }, 'Menus to show'),
+      h('div', { class: 'label' }, 'Choices to show'),
     );
-    const uses = h('div', { class: 'ai-uses', role: 'group', 'aria-label': 'Menus to show' });
+    const uses = h('div', { class: 'ai-uses', role: 'group', 'aria-label': 'Choices to show' });
     for (const k of FIELD_KEYS) {
       const cb = h('input', { type: 'checkbox', id: `aiUse-${k}` });
       cb.checked = e.uses.includes(k);
@@ -374,10 +394,11 @@ const Prompts = (() => {
       return wrap;
     }
     const p = currentPrompt();
-    if (!p) { wrap.append(h('p', { class: 'help' }, 'Select a prompt to see its fields.')); ui.preview = null; ui.chips = null; return wrap; }
+    if (!p) { ui.preview = null; ui.chips = null; return wrap; }
     const custom = p.group === 'custom';
-    const head = h('div', { class: 'ai-dhead' }, h('div', { class: 'ai-dtitle' }, p.title));
-    const desc = p.description ? h('p', { class: 'ai-ddesc', id: 'aiDesc' }, p.description) : null;
+    if (p.description) wrap.append(h('p', { class: 'ai-ddesc', id: 'aiDesc' }, p.description));
+    const uses = (p.uses || []).filter((k) => PROMPT_FIELDS[k]);
+    if (uses.length) wrap.append(fieldsEl(p, uses, null));
     const acts = h('div', { class: 'ai-dacts' });
     if (custom) {
       acts.append(
@@ -386,12 +407,7 @@ const Prompts = (() => {
     } else {
       acts.append(h('button', { class: 'btn outline sm', type: 'button', id: 'aiDuplicate', onclick: () => duplicateToEdit(p) }, 'Duplicate to edit'));
     }
-    head.append(acts);
-    wrap.append(head);
-    if (desc) wrap.append(desc);
-    const uses = (p.uses || []).filter((k) => PROMPT_FIELDS[k]);
-    if (uses.length) wrap.append(h('div', { class: 'label' }, 'Choose'), fieldsEl(p, uses, null));
-    wrap.append(autoEl(), previewEl());
+    wrap.append(autoEl(), previewEl(), acts);
     return wrap;
   }
 
@@ -399,7 +415,10 @@ const Prompts = (() => {
     if (!ui.el) return;
     const keepScroll = ui.body.scrollTop;
     ui.body.textContent = '';
-    ui.body.append(tabsEl(), listEl(), detailEl());
+    ui.body.append(promptRowEl());
+    const mine = customRowEl();
+    if (mine) ui.body.append(mine);
+    ui.body.append(detailEl());
     updateChips();
     updatePreview();
     syncSteps();

@@ -32,6 +32,7 @@ function fillDefaults(src) {
   const keepPlacement = s.placement;
   merge(s, base);
   if (keepPlacement === null || keepPlacement === undefined) s.placement = null;
+  if (isObj(s.placement)) s.placement.baseMode = s.placement.baseMode === 'typed' ? 'typed' : 'follow';       // base elevation: Follow ground (default, and the migration for old saves) | Typed
   if (!['standalone', 'wrap', 'podium'].includes(s.source)) s.source = 'standalone';
   if (s.footprint.shape !== 'polygon') s.footprint.shape = 'rect';
   if (!Array.isArray(s.footprint.points)) s.footprint.points = [];
@@ -60,6 +61,7 @@ function fillDefaults(src) {
   if (s.bike.rack !== 'two-tier') s.bike.rack = 'single';
   const v = s.view;
   v.site = v.site !== false;                       // the project site layer (ground, roads, water, trees, neighbors); on unless switched off
+  v.siteStyle = ['solid', 'glass', 'wireframe'].includes(v.siteStyle) ? v.siteStyle : 'solid';     // neighbor buildings in the site layer: solid, glass or wireframe
   if (v.colorBy !== 'slope') v.colorBy = 'kind';
   if (v.style !== 'diagram') v.style = 'model';
   v.level = Math.round(clamp(num(v.level, 0), 0, s.levels.count));

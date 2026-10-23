@@ -786,8 +786,23 @@ const Render = (() => {
     }
   }
 
+  /** What was visible while captureClean drew its picture ({ site, boundary, arrow, grid, figure, overlay, ... }), or null before the first one. */
+  let lastCapture = null;
+  /** Hides the dashed site boundary and the north arrow inside the site layer. Returns the function that shows them again. */
+  function hideSiteMarks() {
+    const hid = [];
+    for (const o of layers.site.group.children) {
+      const k = o.userData && o.userData.kind;
+      if ((k === 'site-boundary' || k === 'site-arrow') && o.visible) { o.visible = false; hid.push(o); }
+    }
+    return () => { for (const o of hid) o.visible = true; };
+  }
+  const siteMarkFlag = (kind) => layers.site.group.children.some((o) => o.userData && o.userData.kind === kind && o.visible);
+
   /** AI-ready picture (main view only): Model style, no grid / scale figure / envelope wireframe / overlay, plates that are
    *  outside the envelope drawn like the rest (white, not red), a plain light sky and ground. Context blocks stay.
+   *  The site layer stays on screen as drawn (ground, roads, walks, water, trees, neighbor buildings, in the site style that is on);
+   *  only its dashed boundary and its north arrow are hidden (docs/site-base-style-technical-plan.md section 3.1).
    *  Nothing in the store is touched: the live layers are hidden, a throwaway group is drawn, then everything is put back. */
   async function captureClean(scale = 2) {
     if (!renderer) throw new Error('The 3D view is not available.');
@@ -805,7 +820,8 @@ const Render = (() => {
     // Opaque context blocks: see-through blocks read as glass to image AIs, and the prompts call them "light-gray blocks".
     const ctxMat = new THREE.MeshStandardMaterial({ color: new THREE.Color('#c9cdd2'), roughness: 0.95, metalness: 0 });
     const cap = new THREE.Group();
-    for (const o of [...buildFloorObjects(st, disp), ...buildContextObjects(st)]) {
+    const siteOn = SiteLayer.isOn(state);        // the site layer draws the site buildings: their context blocks are left out, as in the live view
+    for (const o of [...buildFloorObjects(st, disp), ...buildContextObjects(st, siteOn)]) {
       if (o.isLineLoop) { if (o.geometry) o.geometry.dispose(); continue; }       // no site outline
       if (o.isMesh) {
         if (o.material.transparent) o.material = ctxMat;
@@ -818,10 +834,12 @@ const Render = (() => {
       model: layers.model.group.visible, ctx: layers.context.group.visible, env: layers.envelope.group.visible, shadow: shadowPlane.visible,
       site: layers.site.group.visible, sun: layers.sun.group.visible, groundY: ground.position.y,
     };
+    let showMarks = () => {};
     const restore = () => {
       scene.remove(cap);
       clearGroup(cap);
       ctxMat.dispose();
+      showMarks();
       scene.background = prev.bg;
       ground.material.color.copy(prev.ground);
       gridMesh.visible = prev.grid; figure.visible = prev.fig; shadowPlane.visible = prev.shadow;
@@ -840,10 +858,19 @@ const Render = (() => {
         scene.add(cap);
         scene.background = new THREE.Color('#f3f5f7');
         ground.material.color.set('#e4e7ea');
-        gridMesh.visible = false; figure.visible = false; shadowPlane.visible = shadowsOn;
-        ground.position.y = 0;
+        // The site layer stays on screen: the flat slab drops under its lowest ground, as in the live view.
+        const siteInfo = SiteLayer.info();
+        const siteGround = layers.site.group.visible && siteInfo.ground && !!siteInfo.bounds;
+        gridMesh.visible = false; figure.visible = false; shadowPlane.visible = shadowsOn && !siteGround;
+        ground.position.y = siteGround ? siteInfo.bounds.zMin - 4 : 0;
         layers.model.group.visible = layers.context.group.visible = layers.envelope.group.visible = false;
-        layers.site.group.visible = layers.sun.group.visible = false;
+        layers.sun.group.visible = false;
+        showMarks = hideSiteMarks();
+        lastCapture = {
+          site: layers.site.group.visible, boundary: siteMarkFlag('site-boundary'), arrow: siteMarkFlag('site-arrow'),
+          grid: gridMesh.visible, figure: figure.visible, overlay: selOverlay.visible, envelope: layers.envelope.group.visible, sun: layers.sun.group.visible,
+          siteObjects: layers.site.group.children.filter((o) => o.visible).length,
+        };
         for (const c of [persp, ortho]) c.clearViewOffset();
         pending = ShotMod.captureView({ renderer, scene, camera: cam, scale });
       } finally { restore(); }
@@ -905,7 +932,7 @@ const Render = (() => {
   }
 
   return {
-    init, setView, capture, captureClean, enterCompare, exitCompare,
+    init, setView, capture, captureClean, captureFlags: () => (lastCapture ? { ...lastCapture } : null), enterCompare, exitCompare,
     sceneFlags: () => ({ grid: gridMesh.visible, figure: figure.visible, model: layers.model.group.visible, context: layers.context.group.visible, envelope: layers.envelope.group.visible, children: scene.children.length }),
     setInsetProvider: (fn) => { insetProvider = fn; },
     refreshInsets: (animate = true) => { if (!renderer) return; applyViewOffset(); if (preset) setView(preset, animate); else needsRender = true; },

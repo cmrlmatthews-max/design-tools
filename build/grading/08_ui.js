@@ -478,6 +478,7 @@ const UI = (() => {
           h('div', { class: 'add-row' }, Controls.button('Draw section', () => Select.startDraw('section'), 'outline sm'), Controls.button('Clear section', () => Store.set('view.section', null, { live: false }), 'outline sm'))),
         Controls.toggle({ label: 'Site', bind: v('site') }),
         Controls.help('Site context from the Site Model: neighbor buildings, roads, walks, water, and trees. The ground stays the one you grade.'),
+        Controls.when(() => get('view.site') !== false, [choice('Site style', 'view.siteStyle', [['solid', 'Solid'], ['glass', 'Glass'], ['wireframe', 'Wireframe']], { id: 'siteStyleChips' })]),
         Controls.toggle({ label: 'Shadows', bind: v('shadows') }),
         Controls.toggle({ label: 'Grid', bind: v('grid') }),
         Controls.toggle({ label: 'Scale figure', bind: v('figure') }),
@@ -494,20 +495,20 @@ const UI = (() => {
     { id: 'view', title: 'View' },
   ];
   const SECTIONS = [
-    { id: 'source', tab: 'buildings', title: 'Source', open: true, build: buildSource },
-    { id: 'ground', tab: 'buildings', title: 'Existing ground', open: true, build: buildGround },
-    { id: 'buildings', tab: 'buildings', title: 'Buildings and floor elevations', open: true, build: buildBuildings },
+    { id: 'source', tab: 'buildings', title: 'Source', open: false, build: buildSource },
+    { id: 'ground', tab: 'buildings', title: 'Existing ground', open: false, build: buildGround },
+    { id: 'buildings', tab: 'buildings', title: 'Buildings and floor elevations', open: false, build: buildBuildings },
     { id: 'balance', tab: 'buildings', title: 'Balance and steps', build: buildBalance },
-    { id: 'tiertable', tab: 'buildings', title: 'Tier table', open: true, build: buildTierTable },
+    { id: 'tiertable', tab: 'buildings', title: 'Tier table', open: false, build: buildTierTable },
     { id: 'property', tab: 'site', title: 'Property line', build: buildProperty },
-    { id: 'drives', tab: 'site', title: 'Drives', open: true, build: buildDrives },
+    { id: 'drives', tab: 'site', title: 'Drives', open: false, build: buildDrives },
     { id: 'lots', tab: 'site', title: 'Lots', build: buildLots },
-    { id: 'walls', tab: 'site', title: 'Walls', open: true, build: buildWalls },
+    { id: 'walls', tab: 'site', title: 'Walls', open: false, build: buildWalls },
     { id: 'routes', tab: 'site', title: 'Routes', build: buildRoutes },
-    { id: 'checkslist', tab: 'checks', title: 'Warnings', open: true, build: buildChecksList },
-    { id: 'limits', tab: 'checks', title: 'Limits', open: true, build: buildLimits },
-    { id: 'earthtable', tab: 'checks', title: 'Earthwork table', open: true, build: buildEarthTable },
-    { id: 'display', tab: 'view', title: 'Display', open: true, build: buildDisplay },
+    { id: 'checkslist', tab: 'checks', title: 'Warnings', open: false, build: buildChecksList },
+    { id: 'limits', tab: 'checks', title: 'Limits', open: false, build: buildLimits },
+    { id: 'earthtable', tab: 'checks', title: 'Earthwork table', open: false, build: buildEarthTable },
+    { id: 'display', tab: 'view', title: 'Display', open: false, build: buildDisplay },
   ];
   const sectionCtl = {};
   let activeTab = 'buildings';
@@ -961,6 +962,8 @@ const UI = (() => {
   }
   return {
     init, updateHud, rebuildPanel: () => { Controls.refreshAll(); },
+    // test hooks: the section controllers, and a rebuild of the panel from the saved UI prefs (a simulated reload)
+    sectionCtl, rebuildSections: () => { buildPanel(); setTab(activeTab, { remember: false }); Controls.refreshAll(); },
     openItem, toggleAutoWall, applySteps, setTab, activeTab: () => activeTab, tabs: () => TABS.map((t) => t.id),
     setHudOpen, hudOpen: () => $('hud').dataset.collapsed === 'false', sections: () => SECTIONS.map((s) => ({ id: s.id, tab: s.tab })),
     openSection: (id) => { const s = sectionCtl[id]; if (s && !s.isOpen()) s.setOpen(true); return !!s; },

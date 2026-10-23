@@ -607,6 +607,7 @@ const UI = (() => {
         Controls.when(() => { sync(); return true; }, [h('div', { class: 'ctl' }, h('div', { class: 'ctl-label' }, 'View'), wrap)]),
         Controls.toggle({ label: 'Site', bind: v('site') }),
         Controls.help('The ground, roads, water, trees, and neighbors of the project site. From the Site Model.'),
+        Controls.when(() => get('view.site') !== false, [choice('Site style', 'view.siteStyle', [['solid', 'Solid'], ['glass', 'Glass'], ['wireframe', 'Wireframe']], { id: 'siteStyleChips' })]),
         Controls.toggle({ label: 'Mullions', bind: v('mullions') }),
         Controls.toggle({ label: 'Site context (ghost)', bind: v('context') }),
         Controls.toggle({ label: 'Shadows', bind: v('shadows') }),
@@ -625,24 +626,24 @@ const UI = (() => {
     { id: 'view', title: 'View' },
   ];
   const SECTIONS = [
-    { id: 'source', tab: 'massing', title: 'Source', open: true, build: buildSource },
-    { id: 'standalone', tab: 'massing', title: 'Standalone massing', open: true, build: buildStandalone },
-    { id: 'zones', tab: 'massing', title: 'Zones', open: true, build: buildZones },
+    { id: 'source', tab: 'massing', title: 'Source', open: false, build: buildSource },
+    { id: 'standalone', tab: 'massing', title: 'Standalone massing', open: false, build: buildStandalone },
+    { id: 'zones', tab: 'massing', title: 'Zones', open: false, build: buildZones },
     { id: 'street', tab: 'massing', title: 'Street faces', build: buildStreet },
-    { id: 'zone-base', tab: 'facade', title: 'Base zone', open: true, build: () => zoneSection('base') },
-    { id: 'zone-middle', tab: 'facade', title: 'Middle zone', open: true, build: () => zoneSection('middle') },
+    { id: 'zone-base', tab: 'facade', title: 'Base zone', open: false, build: () => zoneSection('base') },
+    { id: 'zone-middle', tab: 'facade', title: 'Middle zone', open: false, build: () => zoneSection('middle') },
     { id: 'zone-top', tab: 'facade', title: 'Top zone', build: () => zoneSection('top') },
     { id: 'zone-ranges', tab: 'facade', title: 'Level ranges', build: buildRangeZones },
-    { id: 'balconies', tab: 'facade', title: 'Balconies', open: true, build: buildBalconies },
+    { id: 'balconies', tab: 'facade', title: 'Balconies', open: false, build: buildBalconies },
     { id: 'fins', tab: 'facade', title: 'Fins', build: buildFins },
     { id: 'shades', tab: 'facade', title: 'Shades', build: buildShades },
     { id: 'bands', tab: 'facade', title: 'Bands', build: buildBands },
     { id: 'corners', tab: 'facade', title: 'Corners', build: buildCorners },
-    { id: 'checkslist', tab: 'checks', title: 'Warnings', open: true, build: buildChecksList },
-    { id: 'limits', tab: 'checks', title: 'Limits', open: true, build: buildLimits },
-    { id: 'wwrtables', tab: 'checks', title: 'Window-to-wall tables', open: true, build: buildWwrTables },
+    { id: 'checkslist', tab: 'checks', title: 'Warnings', open: false, build: buildChecksList },
+    { id: 'limits', tab: 'checks', title: 'Limits', open: false, build: buildLimits },
+    { id: 'wwrtables', tab: 'checks', title: 'Window-to-wall tables', open: false, build: buildWwrTables },
     { id: 'envelope', tab: 'checks', title: 'Envelope note', build: buildEnvelope },
-    { id: 'display', tab: 'view', title: 'Display', open: true, build: buildDisplay },
+    { id: 'display', tab: 'view', title: 'Display', open: false, build: buildDisplay },
   ];
   const sectionCtl = {};          // id -> Controls.section result
   let activeTab = 'massing';
@@ -1082,6 +1083,8 @@ const UI = (() => {
   }
   return {
     init, updateHud, rebuildPanel: () => { Controls.refreshAll(); },
+    // test hooks: the section controllers, and a rebuild of the panel from the saved UI prefs (a simulated reload)
+    sectionCtl, rebuildSections: () => { buildPanel(); setTab(activeTab, { remember: false }); Controls.refreshAll(); },
     // hooks for the face card and the street pick mode
     openItem, setTab, activeTab: () => activeTab, tabs: () => TABS.map((t) => t.id), setStreetPick,
     setHudOpen, hudOpen: () => $('hud').dataset.collapsed === 'false', sections: () => SECTIONS.map((s) => ({ id: s.id, tab: s.tab })),

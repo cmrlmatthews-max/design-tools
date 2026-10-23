@@ -185,6 +185,7 @@ PARTS = [
     '12c_tests_select.js',
     '12d_tests_project.js',
     '12e_tests_site.js',
+    '12l_tests_sections.js',  # collapsed sections and the prompt panel (site base style plan, section 4)
     '13_start.js',
 ]
 missing = [p for p in PARTS if not os.path.isfile(os.path.join(HERE, p))]

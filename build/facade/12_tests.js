@@ -32,7 +32,9 @@ const TestHelp = (() => {
     console.log(`[tests] ${name} ${results.length - bad.length}/${results.length} passed`, bad.length ? JSON.stringify(bad) : '');
   };
   const presetState = (id) => fillDefaults(deepClone(CONFIG.presets.find((p) => p.id === id).state));
-  return { eq, near, within, make, $, frames, wait, visible, snap, oneStep, toastText, merged, presetState };
+  /** Opens one panel section (every section starts collapsed: docs/site-base-style-technical-plan.md section 4.4). Does not touch the saved choice. */
+  const openSection = (id) => { const c = UI.sectionCtl[id]; if (c && !c.isOpen()) c.setOpen(true); return !!c; };
+  return { openSection, eq, near, within, make, $, frames, wait, visible, snap, oneStep, toastText, merged, presetState };
 })();
 
 async function runTests() {
@@ -194,6 +196,25 @@ async function runTests() {
     return eq([a.floors, a.height, /five-story rectangular building/.test(a.form)], ['5', '52 feet', true]);
   });
 
+  await t('Hero render: the first prompt, no form lock; the hero text carries the numbers of the design and the chosen material', () => {
+    const p0 = PromptsMod.PROMPTS[0];
+    if (p0.id !== 'hero-render' || !p0.noLock) return `first prompt ${p0.id}`;
+    const st = def(), d = computeDerived(st);
+    const hero = PromptsMod.heroFor('facade', st, d);
+    const text = PromptsMod.fillPrompt(p0, { hero, material: 'warm red-brown brick with tall windows set in deep reveals' });
+    const checks = {
+      opens: text.startsWith('Edit the attached massing model image'), sections: ['KEEP EXACTLY AS SHOWN', 'CONTEXT BUILDINGS — KEEP AS WHITE MODEL', 'GROUND PLANE — RENDER PHOTOREAL', 'LIGHT AND SKY'].every((x) => text.includes(x)),
+      material: text.includes('The facade is warm red-brown brick with tall windows set in deep reveals.'), noTower: !/tower/i.test(text), clean: !/\[|\{\{/.test(text),
+      levels: text.includes(`${d.hud.levels}-story`), height: text.includes(`${Math.round(d.hud.height)} feet`), glass: text.includes(`about ${Math.round(d.hud.wwr * 100)} percent of the facade is glass`), zone: /zone: /.test(text),
+    };
+    const bad = Object.entries(checks).filter(([, v]) => v !== true).map(([k]) => k);
+    return bad.length ? `failed: ${bad.join(', ')} | ${hero}` : true;
+  });
+  await t('Hero render in the panel: promptText fills the hero from the current design', () => {
+    const text = Prompts.promptText('hero-render');
+    const d = Derived.get();
+    return eq([!!text && text.startsWith('Edit the attached massing model image'), text.includes(`${d.hud.levels}-story`), text.includes(`about ${Math.round(d.hud.wwr * 100)} percent of the facade is glass`), text.includes('Keep every window, door, balcony'), /\[|\{\{|__design__/.test(text)], [true, true, true, true, false]);
+  });
   /* ---- save / export / import ---- */
   await t('state survives a JSON round trip and fillDefaults', () => {
     const s = def(), back = fillDefaults(JSON.parse(JSON.stringify(s)));

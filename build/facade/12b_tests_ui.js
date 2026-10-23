@@ -54,7 +54,7 @@ async function runUiTests() {
       return eq([Store.get('standalone.width'), oneStep(before)], [320, true]);
     });
     await t('the shape menu offers rectangle, L, U and courtyard; the court size shows only for O', () => {
-      fresh(); UI.setTab('massing');
+      fresh(); UI.setTab('massing'); TestHelp.openSection('standalone');
       const sel = document.querySelector('[data-section="standalone"] select');
       const opts = [...sel.options].map((o) => o.value);
       const courtShown = () => [...document.querySelectorAll('[data-section="standalone"] .ctl-label')].some((l) => /Court width/.test(l.textContent) && visible(l));
@@ -70,7 +70,7 @@ async function runUiTests() {
       return eq([Store.get('zones.rules.middle.system'), after > before], ['windowWall', true]);
     });
     await t('the system dimensions follow the system (a window width only for punched windows)', () => {
-      fresh(); UI.setTab('facade');
+      fresh(); UI.setTab('facade'); TestHelp.openSection('zone-middle');
       const labels = () => [...document.querySelectorAll('[data-section="zone-middle"] .ctl-label')].filter(visible).map((l) => l.textContent);
       const punched = labels().includes('Window width');
       click(document.querySelector('[data-section="zone-middle"] [data-system="curtainWall"]'));
@@ -258,17 +258,19 @@ async function runUiTests() {
       fresh();
       click($('btnExport')); click($('miAiPrompts'));
       await frames(2);
+      Prompts.select('time', 'time-golden-hour'); Prompts.render();       // the Hero render has its own opening; the lock sits on the other prompts
       const open = Prompts.isOpen();
       const chips = [...document.querySelectorAll('#aiAuto .ai-chip')].map((c) => c.textContent);
       const preview = $('aiPreview') ? $('aiPreview').value : '';
       Prompts.close();
       return eq([open, chips.some((c) => /Floors5/.test(c)), /Keep every window, door, balcony/.test(preview), /percent glass/.test(preview)], [true, true, true, true]);
     });
-    await t('the Material menu has a "From the design" choice that is the default', async () => {
+    await t('the Material row has a "From the design" chip that is the first chip and the default', async () => {
       Prompts.open(); Prompts.select('time', 'time-golden-hour'); Prompts.render();
       await frames(1);
-      const sel = $('aiField-material');
-      const out = sel ? [sel.options[0].textContent, sel.value] : null;
+      const row = $('aiField-material');
+      const on = row ? row.querySelector('[aria-pressed="true"]') : null;
+      const out = row ? [row.children[0].textContent, on && on.dataset.value] : null;
       Prompts.close();
       return eq(out, ['From the design', '__design__']);
     });
