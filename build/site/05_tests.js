@@ -578,6 +578,37 @@ const SiteTests = (() => {
       return !gl || gl.getError() === 0 || `gl error ${gl.getError()}`;
     }));
 
+    /* ---- collapsible blocks (docs/site-base-style-technical-plan.md section 4.3): Location open, the rest folded, the choice remembered ---- */
+    const blockState = () => Object.fromEntries([...document.querySelectorAll('#sections [data-block]')].map((b) => [b.dataset.block, b.querySelector(':scope > .sec-head').getAttribute('aria-expanded') === 'true' && !b.querySelector(':scope > .sec-body').hidden]));
+    const withBlocks = async (fn) => {
+      const saved = Local.get(App.BLOCKS_KEY, null);
+      try { localStorage.removeItem(App.BLOCKS_KEY); } catch (e) { /* no storage */ }
+      App.rebuildBlocks();
+      try { return await fn(); } finally {
+        try { if (saved == null) localStorage.removeItem(App.BLOCKS_KEY); else Local.set(App.BLOCKS_KEY, saved); } catch (e) { /* no storage */ }
+        App.rebuildBlocks();
+      }
+    };
+    await t('blocks: on a fresh profile only Location is open (Layers, View, Site data and Remove buildings are folded)', () => withBlocks(() =>
+      eq(blockState(), { location: true, layers: false, view: false, data: false, help: false })));
+    await t('blocks: the address field and the Go button show while the other blocks are folded', () => withBlocks(() => {
+      const vis = (el) => !!el && el.getClientRects().length > 0;
+      return eq([vis($('addr')), vis($('goBtn')), vis(document.querySelector('[data-layer]')), vis($('metrics'))], [true, true, false, false]);
+    }));
+    await t('blocks: a block opens on its header button, stays open after a rebuild from the saved choice, and Location folds the same way', () => withBlocks(() => {
+      $('blockHead-layers').click();
+      $('blockHead-location').click();
+      const saved = App.blockPrefs();
+      App.rebuildBlocks();
+      return eq([saved, blockState()], [{ layers: true, location: false }, { location: false, layers: true, view: false, data: false, help: false }]);
+    }));
+    await t('blocks: the saved choice sits in localStorage under cmrlm.site.sections', () => withBlocks(() => {
+      $('blockHead-view').click();
+      let raw = null;
+      try { raw = JSON.parse(localStorage.getItem('cmrlm.site.sections')); } catch (e) { raw = null; }
+      return eq([App.BLOCKS_KEY, raw && raw.view], ['cmrlm.site.sections', true]);
+    }));
+
     return results;
   }
 

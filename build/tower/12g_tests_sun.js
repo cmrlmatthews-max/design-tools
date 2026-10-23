@@ -34,6 +34,7 @@ async function runSunTests() {
 
   try {
     fresh();
+    openSection('sun');                                   // every section starts collapsed
 
     /* ---- the section ---- */
     await t('the Sun section starts in Manual mode with the azimuth and altitude sliders, and no study controls', () => {

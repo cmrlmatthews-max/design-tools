@@ -103,13 +103,17 @@ async function runSiteTests() {
       return eq([during, Render.sceneFlags().site, SiteLayer.info().shown], [[true, false, 0, true], true, true]);
     });
 
-    await t('5 the AI-ready image hides the layer while it is drawn and puts it back after', async () => {
+    await t('5 the AI-ready image keeps the site layer on screen, hides the boundary and the north arrow, then puts everything back', async () => {
       const orig = ShotMod.captureView;
       let seen = null;
-      ShotMod.captureView = (o) => { seen = { site: Render.sceneFlags().site, slabY: Render.sceneFlags().slabY }; return orig(o); };
+      const markState = () => ['site-boundary', 'site-arrow'].map((k) => Render.sceneObjects().some((o) => o.userData && o.userData.kind === k && o.visible));
+      const before = markState();
+      ShotMod.captureView = (o) => { seen = { site: Render.sceneFlags().site, slab: Render.sceneFlags().slabY, flags: Render.captureFlags() }; return orig(o); };
       try { await Shots.aiReady({ deliver: false }); } finally { ShotMod.captureView = orig; }
       await frames(3);
-      return eq([seen, Render.sceneFlags().site, Render.sceneFlags().slabY < 0], [{ site: false, slabY: 0 }, true, true]);
+      const cf = Render.captureFlags();
+      const marks = markState();
+      return eq([seen && seen.site, [cf.site, cf.boundary, cf.arrow, cf.grid, cf.figure, cf.overlay], cf.siteObjects > 2, Render.sceneFlags().site, eq(marks, before)], [true, [true, false, false, false, false, false], true, true, true]);
     });
 
     await t('6 a theme change rebuilds the layer (the key carries the theme epoch)', async () => {
@@ -142,6 +146,60 @@ async function runSiteTests() {
       const margin = [on.minX - Math.min(off.minX, Math.max(off.minX - m, sb.minX)), on.maxX - Math.max(off.maxX, Math.min(off.maxX + m, sb.maxX)), on.minY - Math.min(off.minY, Math.max(off.minY - m, sb.minY)), on.maxY - Math.max(off.maxY, Math.min(off.maxY + m, sb.maxY))].every((v) => Math.abs(v) < 1e-6);
       return eq([holds, smaller, margin, a > b * 1.1, Math.abs(a - c) < a * 0.01, m >= 150], [true, true, true, true, true, true]);
     });
+    await t('8s site style: glass draws the neighbors transparent (opacity 0.25, no depth write, drawn after the ground) with their edges kept; wireframe draws edges only; solid is opaque again; the ground and roads do not change; info.style and the layer key follow', async () => {
+      if (!SiteLayer.info().shown) open();
+      await frames(4);
+      const objs = () => Render.sceneObjects();
+      const read = () => {
+        const o = objs(), m = o.find((x) => x.userData.kind === 'site-buildings'), e = o.filter((x) => x.userData.kind === 'site-building-edges'), r = o.find((x) => x.userData.kind === 'site-roads') || o.find((x) => x.userData.kind === 'site-ground');
+        return {
+          style: SiteLayer.info().style, mesh: !!m, transparent: m ? m.material.transparent : null, opacity: m ? m.material.opacity : null, depthWrite: m ? m.material.depthWrite : null,
+          order: m ? m.renderOrder : null, edges: e.length, edgeOrder: e.length ? e[0].renderOrder : null, roads: r ? [r.material.transparent, r.material.opacity] : null, buildings: SiteLayer.info().buildings,
+        };
+      };
+      const keys = [];
+      const out = {};
+      for (const s of ['solid', 'glass', 'wireframe', 'solid']) {
+        Store.set('view.siteStyle', s, { live: false });
+        await frames(4);
+        out[s] = read();
+        keys.push(SiteLayer.info().key);
+      }
+      const n = out.solid.edges;
+      const ok = {
+        solid: eq(out.solid, { style: 'solid', mesh: true, transparent: false, opacity: 1, depthWrite: true, order: 0, edges: n, edgeOrder: 0, roads: [false, 1], buildings: 2 }),
+        glass: eq(out.glass, { style: 'glass', mesh: true, transparent: true, opacity: 0.25, depthWrite: false, order: 2, edges: n, edgeOrder: 3, roads: [false, 1], buildings: 2 }),
+        wire: eq(out.wireframe, { style: 'wireframe', mesh: false, transparent: null, opacity: null, depthWrite: null, order: null, edges: n, edgeOrder: 3, roads: [false, 1], buildings: 2 }),
+        keys: keys[0] !== keys[1] && keys[1] !== keys[2] && keys[0] !== keys[2] && keys[3] === keys[0],
+        edges: n > 0, errors: errors.length,
+      };
+      const bad = Object.entries(ok).filter(([k, v]) => k === 'errors' ? v !== 0 : v !== true);
+      return bad.length ? JSON.stringify(bad) : true;
+    });
+
+    await t('8t site style chips: the View tab has Site style Solid, Glass, Wireframe under the Site toggle (hidden while Site is off); a click sets view.siteStyle; an unknown saved value fills as solid', async () => {
+      if (!SiteLayer.info().shown) open();
+      await frames(4);
+      const q = (v) => document.querySelector(`#siteStyleChips [data-value="${v}"]`);
+      const row = document.getElementById('siteStyleChips');
+      const labels = row ? [...row.querySelectorAll('[data-value]')].map((b) => b.textContent.trim()) : [];
+      const visible = () => !!row && !row.closest('.when[hidden]');
+      Store.set('view.siteStyle', 'solid', { live: false });
+      await frames(4);
+      const a = [visible(), q('solid') && q('solid').getAttribute('aria-pressed')];
+      q('glass').click();
+      await frames(4);
+      const b = [Store.get('view.siteStyle'), q('glass').getAttribute('aria-pressed'), q('solid').getAttribute('aria-pressed')];
+      Store.set('view.site', false, { live: false });
+      await frames(4);
+      const hidden = !visible();
+      Store.set('view.site', true, { live: false });
+      Store.set('view.siteStyle', 'solid', { live: false });
+      await frames(4);
+      const fill = [fillDefaults({ view: { siteStyle: 'bogus' } }).view.siteStyle, fillDefaults({ view: { siteStyle: 'glass' } }).view.siteStyle, fillDefaults({}).view.siteStyle];
+      return eq([labels, a, b, hidden, fill], [['Solid', 'Glass', 'Wireframe'], [true, 'true'], ['glass', 'true', 'false'], true, ['solid', 'glass', 'solid']]);
+    });
+
     await t('8 closing the project removes the layer', async () => {
       ProjectUI.close();
       await frames(3);

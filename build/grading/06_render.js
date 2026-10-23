@@ -627,7 +627,22 @@ const Render = (() => {
     }
   }
 
+  /** What was visible while captureClean drew its picture ({ site, boundary, arrow, grid, figure, overlay, ... }), or null before the first one. */
+  let lastCapture = null;
+  /** Hides the dashed site boundary and the north arrow inside the site layer. Returns the function that shows them again. */
+  function hideSiteMarks() {
+    const hid = [];
+    for (const o of layers.site.group.children) {
+      const k = o.userData && o.userData.kind;
+      if ((k === 'site-boundary' || k === 'site-arrow') && o.visible) { o.visible = false; hid.push(o); }
+    }
+    return () => { for (const o of hid) o.visible = true; };
+  }
+  const siteMarkFlag = (kind) => layers.site.group.children.some((o) => o.userData && o.userData.kind === kind && o.visible);
+
   /** AI-ready picture (main view only): Model style, no grid / scale figure / overlay, a plain light sky.
+   *  The site layer (roads, walks, water, trees, neighbor buildings, in the site style that is on) stays on screen as drawn; the graded ground
+   *  comes from the throwaway group. Only the dashed boundary and the north arrow are hidden (docs/site-base-style-technical-plan.md section 3.1).
    *  Nothing in the store is touched: the live layers are hidden, a throwaway group is drawn, then everything is put back. */
   async function captureClean(scale = 2) {
     if (!renderer) throw new Error('The 3D view is not available.');
@@ -646,9 +661,11 @@ const Render = (() => {
       bg: scene.background, grid: gridMesh.visible, fig: figure.visible,
       model: layers.model.group.visible, site: layers.site.group.visible, ov: layers.overlay.group.visible,
     };
+    let showMarks = () => {};
     const restore = () => {
       scene.remove(cap);
       clearGroup(cap);
+      showMarks();
       scene.background = prev.bg;
       gridMesh.visible = prev.grid; figure.visible = prev.fig;
       layers.model.group.visible = prev.model; layers.site.group.visible = prev.site; layers.overlay.group.visible = prev.ov;
@@ -664,7 +681,13 @@ const Render = (() => {
         scene.add(cap);
         scene.background = new THREE.Color('#f3f5f7');
         gridMesh.visible = false; figure.visible = false;
-        layers.model.group.visible = layers.site.group.visible = layers.overlay.group.visible = false;      // the AI-ready picture has no site layer
+        layers.model.group.visible = layers.overlay.group.visible = false;
+        showMarks = hideSiteMarks();
+        lastCapture = {
+          site: layers.site.group.visible, boundary: siteMarkFlag('site-boundary'), arrow: siteMarkFlag('site-arrow'),
+          grid: gridMesh.visible, figure: figure.visible, overlay: selOverlay.visible || layers.overlay.group.visible,
+          siteObjects: layers.site.group.children.filter((o) => o.visible).length,
+        };
         for (const c of [persp, ortho]) c.clearViewOffset();
         syncLineResolution();
         pending = ShotMod.captureView({ renderer, scene, camera: cam, scale });
@@ -727,7 +750,7 @@ const Render = (() => {
   }
 
   return {
-    init, setView, capture, captureClean, enterCompare, exitCompare,
+    init, setView, capture, captureClean, captureFlags: () => (lastCapture ? { ...lastCapture } : null), enterCompare, exitCompare,
     sceneFlags: () => ({ grid: gridMesh.visible, figure: figure.visible, model: layers.model.group.visible, site: layers.site.group.visible, overlay: layers.overlay.group.visible, children: scene.children.length }),
     setInsetProvider: (fn) => { insetProvider = fn; },
     refreshInsets: (animate = true) => { if (!renderer) return; applyViewOffset(); if (preset) setView(preset, animate); else needsRender = true; },

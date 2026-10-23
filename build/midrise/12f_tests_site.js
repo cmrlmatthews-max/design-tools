@@ -101,14 +101,17 @@ async function runSiteLayerTests() {
       return eq([inCmp, back], [[false, 0, true], [true, true, 2]]);
     });
 
-    await t('5. the AI-ready image hides the layer and puts the flat ground back, then restores both', async () => {
+    await t('5. the AI-ready image keeps the site layer on screen, hides the boundary and the north arrow, then puts everything back', async () => {
       if (!live) return true;
       const real = ShotMod.captureView, seen = [];
-      ShotMod.captureView = async () => { const f = Render.siteFlags(); seen.push([f.siteVisible, f.slabY, f.shadowPlane]); return new Blob(['x']); };
+      ShotMod.captureView = async () => { const f = Render.siteFlags(); seen.push([f.siteVisible, f.slabY < -10, f.shadowPlane]); return new Blob(['x']); };
       try { await Render.captureClean(1); } finally { ShotMod.captureView = real; }
       await wait(150);
-      const f = Render.siteFlags();
-      return eq([seen, f.siteVisible, f.slabY < -10, SiteLayer.info().shown], [[[false, 0, Store.get('view.shadows')]], true, true, true]);
+      const f = Render.siteFlags(), cf = Render.captureFlags();
+      const kids = SiteLayer.groundMesh().parent.children;
+      const marks = ['site-boundary', 'site-arrow'].map((k) => kids.some((o) => o.userData.kind === k && o.visible));
+      return eq([seen, [cf.site, cf.boundary, cf.arrow, cf.grid, cf.figure, cf.overlay], cf.siteObjects > 2, [f.siteVisible, f.slabY < -10, marks], SiteLayer.info().shown],
+        [[[true, true, false]], [true, false, false, false, false, false], true, [true, true, [true, true]], true]);
     });
 
     await t('6. a theme change rebuilds the layer (the key carries the theme epoch)', async () => {
@@ -154,6 +157,60 @@ async function runSiteLayerTests() {
       Store.set('placement', pl, { live: false });
       await wait(300);
       return eq([during, after], [[true, -40, 0], [true, 0, true]]);
+    });
+
+    await t('8s site style: glass draws the neighbors transparent (opacity 0.25, no depth write, drawn after the ground) with their edges kept; wireframe draws edges only; solid is opaque again; the ground and roads do not change; info.style and the layer key follow', async () => {
+      if (!live) return true;
+      if (!SiteLayer.info().shown) await openSite();
+      const objs = () => { const g = SiteLayer.groundMesh(); return g && g.parent ? g.parent.children : []; };
+      const read = () => {
+        const o = objs(), m = o.find((x) => x.userData.kind === 'site-buildings'), e = o.filter((x) => x.userData.kind === 'site-building-edges'), r = o.find((x) => x.userData.kind === 'site-roads') || o.find((x) => x.userData.kind === 'site-ground');
+        return {
+          style: SiteLayer.info().style, mesh: !!m, transparent: m ? m.material.transparent : null, opacity: m ? m.material.opacity : null, depthWrite: m ? m.material.depthWrite : null,
+          order: m ? m.renderOrder : null, edges: e.length, edgeOrder: e.length ? e[0].renderOrder : null, roads: r ? [r.material.transparent, r.material.opacity] : null, buildings: SiteLayer.info().buildings,
+        };
+      };
+      const keys = [];
+      const out = {};
+      for (const s of ['solid', 'glass', 'wireframe', 'solid']) {
+        Store.set('view.siteStyle', s, { live: false });
+        await wait(350);
+        out[s] = read();
+        keys.push(SiteLayer.info().key);
+      }
+      const n = out.solid.edges;
+      const ok = {
+        solid: eq(out.solid, { style: 'solid', mesh: true, transparent: false, opacity: 1, depthWrite: true, order: 0, edges: n, edgeOrder: 0, roads: [false, 1], buildings: 2 }),
+        glass: eq(out.glass, { style: 'glass', mesh: true, transparent: true, opacity: 0.25, depthWrite: false, order: 2, edges: n, edgeOrder: 3, roads: [false, 1], buildings: 2 }),
+        wire: eq(out.wireframe, { style: 'wireframe', mesh: false, transparent: null, opacity: null, depthWrite: null, order: null, edges: n, edgeOrder: 3, roads: [false, 1], buildings: 2 }),
+        keys: keys[0] !== keys[1] && keys[1] !== keys[2] && keys[0] !== keys[2] && keys[3] === keys[0],
+        edges: n > 0, errors: errors.length,
+      };
+      const bad = Object.entries(ok).filter(([k, v]) => k === 'errors' ? v !== 0 : v !== true);
+      return bad.length ? JSON.stringify(bad) : true;
+    });
+
+    await t('8t site style chips: the View tab has Site style Solid, Glass, Wireframe under the Site toggle (hidden while Site is off); a click sets view.siteStyle; an unknown saved value fills as solid', async () => {
+      if (!live) return true;
+      if (!SiteLayer.info().shown) await openSite();
+      const q = (v) => document.querySelector(`#siteStyleChips [data-value="${v}"]`);
+      const row = document.getElementById('siteStyleChips');
+      const labels = row ? [...row.querySelectorAll('[data-value]')].map((b) => b.textContent.trim()) : [];
+      const visible = () => !!row && !row.closest('.when[hidden]');
+      Store.set('view.siteStyle', 'solid', { live: false });
+      await wait(350);
+      const a = [visible(), q('solid') && q('solid').getAttribute('aria-pressed')];
+      q('glass').click();
+      await wait(350);
+      const b = [Store.get('view.siteStyle'), q('glass').getAttribute('aria-pressed'), q('solid').getAttribute('aria-pressed')];
+      Store.set('view.site', false, { live: false });
+      await wait(350);
+      const hidden = !visible();
+      Store.set('view.site', true, { live: false });
+      Store.set('view.siteStyle', 'solid', { live: false });
+      await wait(350);
+      const fill = [fillDefaults({ view: { siteStyle: 'bogus' } }).view.siteStyle, fillDefaults({ view: { siteStyle: 'glass' } }).view.siteStyle, fillDefaults({}).view.siteStyle];
+      return eq([labels, a, b, hidden, fill], [['Solid', 'Glass', 'Wireframe'], [true, 'true'], ['glass', 'true', 'false'], true, ['solid', 'glass', 'solid']]);
     });
 
     await t('7. closing the project removes the layer; the slab and shadow plane come back', async () => {

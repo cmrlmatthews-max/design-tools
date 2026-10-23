@@ -98,6 +98,7 @@ function defaultState() {
       figure: true,
       envelope: true,
       site: true,                // the project site (ground, boundary, neighbors, roads, water, trees) while a project with a site is open
+      siteStyle: 'solid',        // neighbor buildings of the site layer: 'solid' | 'glass' | 'wireframe'
       shot: { title: true, date: true, metrics: true, mark: true },
     },
   };
@@ -109,6 +110,7 @@ function migrateView(v) {
   if (v.colorBy !== 'zone' && v.colorBy !== 'program') v.colorBy = 'program';
   if (!v.snap || typeof v.snap !== 'object') v.snap = { on: true, grid: 5 };
   v.snap = { on: v.snap.on !== false, grid: v.snap.grid === 10 ? 10 : 5 };
+  v.siteStyle = ['solid', 'glass', 'wireframe'].includes(v.siteStyle) ? v.siteStyle : 'solid';
   return v;
 }
 
@@ -148,6 +150,7 @@ function fillDefaults(src) {
   const base = defaultState();
   merge(s, base);                                           // a state with no colorBy gets "program"; an explicit "zone" or "program" is kept
   migrateView(s.view);
+  if (isObj(s.placement)) s.placement.baseMode = s.placement.baseMode === 'typed' ? 'typed' : 'follow';       // base elevation: Follow ground (default, and the migration for old saves) | Typed
   if (!Array.isArray(s.segments) || !s.segments.length) s.segments = [defaultSegment()];
   const seg0 = defaultSegment();
   s.segments.forEach((seg) => merge(seg, seg0));

@@ -8,6 +8,7 @@ const Help = (() => {
       'Pick a layout from the Option menu > New from a preset, then change the numbers. The default is a two-bay deck with single-helix ramps, five levels.',
       'Click a core, an entry or the speed ramp in the view to select it. Drag its handles to move or stretch it. The footprint of a standalone deck has handles too.',
       'Delete removes the selected core or entry. Esc clears the selection.',
+      'Each section starts collapsed. Select a section title to open it. Your choice is remembered.',
     ]],
     ['Source', [
       'Standalone is a free deck. A wrap deck or a podium takes its footprint, floor-to-floor heights and cores from the massing in the open project. Pick the first level of the deck in the Source card.',
@@ -31,12 +32,18 @@ const Help = (() => {
       'Send to Facade Studio is planned and not available yet.',
     ]],
     ['Site', [
-      'The Site toggle in the View tab shows the project site from the Site Model. It shows the real ground, roads, water, and trees. Neighbor buildings are solid grey blocks with dark edges. In a standalone deck, drag the deck on the ground to move it. Use the rotation handle to turn it. A wrap or podium deck follows its massing and does not drag.',
+      'The Site toggle in the View tab shows the project site from the Site Model. It shows the real ground, roads, water, and trees.',
+      'Site style, under the Site toggle, sets how the neighbor buildings draw. Solid draws opaque grey blocks with dark edges. Glass draws see-through blocks. Wireframe draws edges only.',
+      'In a standalone deck, drag the deck on the ground to move it. Use the rotation handle to turn it.',
+      'The Base elevation control appears only for a standalone deck, in the Site tab. Follow ground sets the base to the lowest ground under the deck. Typed keeps the value you enter.',
+      'A wrap or podium deck follows its massing. It does not drag and it has no Base elevation control.',
     ]],
     ['Files', [
       'Option menu > Save keeps the design in this browser. Export > Export JSON downloads all saved options. Import JSON adds them back.',
       'Export > SketchUp (.json) opens in SketchUp with the CMRLM extension. DXF has the slabs, stalls, ramp faces and columns for Revit. Stall list (.csv) has one row per stall.',
       'Export > Image saves a picture. AI-ready image and AI Prompts are a pair for ChatGPT or Gemini.',
+      'The AI-ready image shows the site with the deck. Set Site style to Solid before you make it.',
+      'The first prompt in AI Prompts is Hero render. It renders the deck as photoreal and keeps the neighbors as a white model.',
     ]],
   ];
   function toggle() {

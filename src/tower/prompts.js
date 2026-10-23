@@ -6,6 +6,7 @@
 //
 // Auto fields (the panel computes them from the current option):
 //   {{floors}} {{height}} {{program}} {{podium}} {{form}}
+//   {{hero}}  the Hero render prompt only: the sentences about the hero building, from heroFor() below (the panel passes it in the values)
 // Pick fields (the user chooses them in the panel): see PROMPT_FIELDS.
 // Pick values are written to read naturally in the template sentences:
 //   material -> "The facade is {{material}}."
@@ -15,7 +16,12 @@
 // Templates never write "a {{program}}" (avoids "a office"); they use "this {{program}} tower".
 // {{podium}} always follows "with" ("with a 4-story podium" / "with no podium").
 
-export const PROMPT_LIBRARY_VERSION = 1;
+export const PROMPT_LIBRARY_VERSION = 2;
+
+// The Hero render's time (Cade's reference prompt): reads after "photographed".
+const DUSK = "at dusk under a deep blue sky with a warm glow near the horizon";
+const AUTUMN = "in autumn with orange, red, and gold foliage";
+const FRITTED = "white-fritted glass with slim horizontal aluminum sunshades at each floor";
 
 export const PROMPT_FIELDS = {
   material: {
@@ -51,6 +57,7 @@ export const PROMPT_FIELDS = {
   time: {
     label: "Time of day",
     options: [
+      { value: DUSK, label: "Dusk, deep blue sky" },
       { value: "in late-afternoon golden hour light with low warm sun raking across the facade", label: "Golden hour" },
       { value: "in clear late-morning sun under a deep blue sky", label: "Late morning, clear" },
       { value: "in high afternoon sun with crisp short shadows", label: "Bright afternoon" },
@@ -94,7 +101,209 @@ const AVOID_END = "fisheye distortion, cartoon or illustration look.";
 // Shared opening. Skyline and base close-up prompts write their own.
 const OPEN = "Architectural photograph of this {{program}} tower, about {{height}} tall with {{podium}}";
 
+
+/* ------------------------------------------------------------------------------------------ the hero building
+   heroFor(tool, state, data) writes the {{hero}} text of the Hero render prompt from a tool's own state.
+   tool: 'tower' | 'midrise' | 'parking' | 'facade' | 'grading'.
+   data: the second argument of that tool's autoValues(state, data):
+         tower   Derived.get().metrics  { floorCount, totalHeight }
+         midrise Derived.get().metrics  { floors, height }
+         parking Derived.get().hud      { levels, topOfDeck }
+         facade  Derived.get()          { hud: { levels, height, wwr, zones }, faces, levels }
+         grading Derived.get()          { hud: { tierCount, wallCount, wallMax }, built: { buildings } }
+   Returns a short paragraph plus "* " lines, no tokens, no "[". It never throws: a state it cannot read gives a plain sentence. */
+const NUMBER_WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+const countWord = (n) => (n >= 0 && n < NUMBER_WORDS.length ? NUMBER_WORDS[n] : String(n));
+const oxford = (list) => (list.length <= 1 ? list.join("") : list.length === 2 ? `${list[0]} and ${list[1]}` : `${list.slice(0, -1).join(", ")}, and ${list[list.length - 1]}`);
+const nz = (v, d = 0) => (typeof v === "number" && Number.isFinite(v) ? v : d);
+const feet = (v) => `${Math.round(nz(v))} feet`;
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+const articleFor = (phrase) => (/^(?:[aeio]|L-|8|11|18)/i.test(phrase) ? "an" : "a");
+const RENDER_ONLY = "Render only this building in full photographic detail.";
+const HERO_FALLBACK = `The hero building is the building at the center of the image. ${RENDER_ONLY}`;
+const TOWER_SHAPES = { rect: "rectangular", square: "rectangular", circle: "round", ellipse: "elliptical", triangle: "triangular", L: "L-shaped", U: "U-shaped", polygon: "custom-shaped" };
+const CROWNS = { none: "a flat roof", flat: "a flat roof", stepped: "a stepped crown", sloped: "a sloped crown", spire: "a spire", screen: "a rooftop screen" };
+const COMPASS = ["north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest"];
+const FACADE_SYSTEMS = {
+  punched: "punched windows in a solid wall", windowWall: "window wall with glass between slab-edge spandrels",
+  curtainWall: "curtain wall with vision glass and opaque spandrels", storefront: "storefront glazing", solid: "solid wall panels",
+};
+
+function heroTower(state, m) {
+  const segs = (state.segments || []).filter(Boolean);
+  let tall = null, tallH = -1;
+  for (const sg of segs) { const h = nz(sg.floors) * nz(sg.ftf); if (h > tallH) { tall = sg; tallH = h; } }
+  const twist = segs.some((sg) => nz(sg.twist && sg.twist.deg) !== 0);
+  const taper = segs.some((sg) => nz(sg.taper && sg.taper.x) !== 0 || nz(sg.taper && sg.taper.y) !== 0);
+  const shape = TOWER_SHAPES[tall && tall.shape && tall.shape.type] || "custom-shaped";
+  const lead = [twist ? "twisting" : "", taper ? "tapering" : "", shape].filter(Boolean).join(" ");
+  const pod = state.podium && state.podium.on ? Math.max(1, Math.round(nz(state.podium.floors, 1))) : 0;
+  const out = [`The hero building is the ${lead} tower at the center of the image.${pod ? ` It stands on ${articleFor(String(pod))} ${pod}-story podium.` : ""} ${RENDER_ONLY}`];
+  out.push(`* Height is about ${feet(m.totalHeight)}.`);
+  const crown = CROWNS[state.crown && state.crown.type] || "a flat roof";
+  out.push(`* The tower has ${Math.round(nz(m.floorCount))} floors and ${crown}.`);
+  const nSet = (state.setbacks || []).length, nCarve = (state.carves || []).length;
+  if (nSet || nCarve) out.push(`* It has ${oxford([nSet ? plural(countWord(nSet), "setback", "setbacks") : "", nCarve ? "a sky garden" : ""].filter(Boolean))}. Keep them exactly as the massing shows them.`);
+  const prog = [];
+  for (const sg of segs) {
+    const name = sg.program ? String(sg.program) : "";
+    if (!name) continue;
+    const last = prog[prog.length - 1];
+    if (last && last.name === name) last.floors += nz(sg.floors); else prog.push({ name, floors: nz(sg.floors) });
+  }
+  if (prog.length === 1) out.push(`* The program is ${prog[0].name}.`);
+  else if (prog.length) out.push(`* From the bottom up, the floors hold ${oxford(prog.map((x) => `${Math.round(x.floors)} ${x.floors === 1 ? "floor" : "floors"} of ${x.name}`))}.`);
+  if (twist) out.push("* Each floor plate rotates slightly from the floor below. Keep the twist exactly as the massing shows it.");
+  if (taper) out.push("* The floor plates change in size with height. Keep the taper exactly as the massing shows it.");
+  return out.join("\n");
+}
+
+function heroMidrise(state, m) {
+  const bars = (state.bars || []).filter(Boolean), courts = (state.courts || []).length;
+  const deck = !!(state.deck && state.deck.on);
+  const type = state.type;
+  let adj;
+  if (type === "wrap" || (deck && bars.length >= 4)) adj = "wrap-around";
+  else if (type === "courtyard" || type === "podium") adj = courts >= 2 ? "E-shaped" : bars.length === 2 ? "L-shaped" : bars.length === 3 ? "U-shaped" : "courtyard";
+  else if (type === "garden" || type === "corridor-garden") adj = bars.length > 1 ? "low-bar" : "single-bar";
+  else adj = bars.length > 1 ? "multi-bar" : "single-bar";
+  let tall = null;
+  for (const b of bars) if (!tall || nz(b.floors) > nz(tall.floors)) tall = b;
+  const progWords = { residential: "residential", hotel: "hotel", senior: "senior living" };
+  const prog = progWords[tall && tall.program] || "mixed-use";
+  const floors = Math.round(nz(m.floors));
+  const out = [`The hero building is the ${floors}-story ${adj} ${prog} building at the center of the image. ${RENDER_ONLY}`];
+  out.push(`* Height is about ${feet(m.height)}.`);
+  const parts = [bars.length ? plural(countWord(bars.length), "bar", "bars") : ""];
+  if (courts && adj !== "wrap-around") parts.push(courts === 1 ? "a courtyard" : `${countWord(courts)} courtyards`);
+  if (deck) parts.push("a parking deck inside the wrap");
+  const podN = state.podium && state.podium.on ? Math.max(1, (state.podium.levels || []).length) : 0;
+  if (podN) parts.push(`${articleFor(String(podN))} ${podN}-story podium`);
+  out.push(`* It has ${oxford(parts.filter(Boolean))}. Keep the bars, the courtyard, and the podium exactly as the massing shows them.`);
+  out.push(`* The roof is ${state.roof && state.roof.type === "screen" ? "flat with a rooftop screen" : "flat"}.`);
+  return out.join("\n");
+}
+
+function heroParking(state, m) {
+  const n = Math.round(nz(m.levels, nz(state.levels && state.levels.count)));
+  const ramps = { "single-helix": "single helix", "double-helix": "double helix", speed: "speed", split: "split-level", "sloped-floor": "sloped-floor", none: "" };
+  const ramp = state.ramp && state.ramp.type in ramps ? ramps[state.ramp.type] : "";
+  const out = [`The hero building is the ${n}-level parking deck at the center of the image, with open sides${ramp ? ` and a ${ramp} ramp` : ""}. ${RENDER_ONLY}`];
+  out.push(`* Height is about ${feet(m.topOfDeck)} to the top of the deck.`);
+  out.push("* Each level reads as a flat slab edge with a low guard wall. The sides stay open, so cars and columns show behind the edge.");
+  if (state.source === "wrap") out.push("* A building wraps the deck. Keep the wrap exactly as the massing shows it.");
+  else if (state.source === "podium") out.push("* The deck is the podium under a building. Keep the building above exactly as the massing shows it.");
+  if (state.liner && state.liner.on) out.push("* A retail liner runs along one side of the deck. Keep it exactly as the massing shows it.");
+  return out.join("\n");
+}
+
+function heroFacade(state, d) {
+  const hud = d.hud || {};
+  const n = Math.round(nz(hud.levels));
+  let massing;
+  if (state.source === "project" && d.built && d.built.source === "project") massing = `${n}-story building from the project massing`;
+  else {
+    const sa = state.standalone || {};
+    const shape = { rect: "rectangular", L: "L-shaped", U: "U-shaped", O: "courtyard" }[sa.shape] || "rectangular";
+    massing = `${n}-story ${shape} building${sa.podium && sa.podium.on ? " on a podium" : ""}`;
+  }
+  const out = [`The hero building is the ${massing} at the center of the image. ${RENDER_ONLY}`];
+  out.push(`* Height is about ${feet(hud.height)}.`);
+  const faces = d.faces || [];
+  const zones = [];
+  for (const f of faces) if (f && f.zone != null && !zones.includes(f.zone)) zones.push(f.zone);
+  const label = (id) => {
+    const r = state.zones && Array.isArray(state.zones.ranges) ? state.zones.ranges.find((x) => x && String(x.id) === String(id)) : null;
+    return r && r.name ? String(r.name) : String(id);
+  };
+  for (const z of zones) {
+    const systems = [];
+    for (const f of faces) {
+      if (f.zone !== z) continue;
+      const k = (f.rule && f.rule.system) || "punched";
+      if (!systems.includes(k)) systems.push(k);
+    }
+    const zi = hud.zones && hud.zones[z];
+    const glass = zi ? ` About ${Math.round(nz(zi.wwr) * 100)} percent of the wall is glass.` : "";
+    out.push(`* ${label(z).charAt(0).toUpperCase()}${label(z).slice(1)} zone: ${oxford(systems.map((k) => FACADE_SYSTEMS[k] || k))}.${glass}`);
+  }
+  out.push(`* Overall, about ${Math.round(nz(hud.wwr) * 100)} percent of the facade is glass.`);
+  out.push("* Keep every window, door, balcony, fin, and shade exactly where the model shows it.");
+  return out.join("\n");
+}
+
+function heroGrading(state, d) {
+  const hud = d.hud || {};
+  const bs = (d.built && d.built.buildings) || [];
+  const pads = Math.round(nz(hud.tierCount));
+  const out = [`The hero building is the building on the graded pad at the center of the image. Show the pads, the walls, and the slopes as graded. ${RENDER_ONLY}`];
+  out.push(`* ${bs.length > 1 ? `The site has ${bs.length} buildings on ${plural(pads, "pad", "pads")}.` : `The building stands on ${pads === 1 ? "one pad" : `${countWord(pads)} pads`}.`}`);
+  const g = state.ground || {};
+  if (g.mode === "plane" && g.plane) {
+    const dir = COMPASS[Math.round((((nz(g.plane.downhill) % 360) + 360) % 360) / 45) % 8];
+    out.push(`* The ground falls ${(Math.round(nz(g.plane.slope) * 10) / 10).toFixed(1)} percent toward the ${dir}.`);
+  }
+  if (nz(hud.wallCount) > 0) out.push(`* There ${hud.wallCount === 1 ? "is one retaining wall" : `are ${hud.wallCount} retaining walls`}, up to ${(Math.round(nz(hud.wallMax) * 10) / 10).toFixed(1)} feet tall.`);
+  out.push("* Keep every slope, wall, step, and drive exactly as the model shows it.");
+  return out.join("\n");
+}
+
+export function heroFor(tool, state, data) {
+  try {
+    const st = state || {}, dt = data || {};
+    if (tool === "tower") return heroTower(st, dt);
+    if (tool === "midrise") return heroMidrise(st, dt);
+    if (tool === "parking") return heroParking(st, dt);
+    if (tool === "facade") return heroFacade(st, dt);
+    if (tool === "grading") return heroGrading(st, dt);
+  } catch (e) { /* fall through */ }
+  return HERO_FALLBACK;
+}
+
+export const HERO_PROMPT_ID = "hero-render";
+
 export const PROMPTS = [
+  // ---------------------------------------------------------------- hero (Cade's standard: the hero real, the context white, the ground real)
+  {
+    id: HERO_PROMPT_ID,
+    group: "hero",
+    title: "Hero render",
+    description: "The hero building photoreal, the context as a white model, the ground real. Cade's standard.",
+    noLock: true,
+    template:
+      "Edit the attached massing model image. Do not regenerate the scene from scratch.\n\n" +
+      "KEEP EXACTLY AS SHOWN\n" +
+      "* The camera angle, perspective, framing, and horizon line.\n" +
+      "* The footprint, height, rotation, and position of every building.\n" +
+      "* The road layout, block shapes, and site boundary.\n" +
+      "Do not add, remove, move, stretch, or reshape any volume.\n\n" +
+      "HERO BUILDING — RENDER PHOTOREAL\n" +
+      "{{hero}}\n" +
+      "* The facade is {{material}}.\n" +
+      "* Slab edges read as dark horizontal lines between floors.\n" +
+      "* Interior lights are on in most rooms, in varied warm and neutral tones. Each floor reads as its own band of light.\n\n" +
+      "CONTEXT BUILDINGS — KEEP AS WHITE MODEL\n" +
+      "Render every other building as an opaque matte white volume.\n" +
+      "* No windows. No glazing. No texture. No signage. No material.\n" +
+      "* Keep crisp clean edges and soft grey shadows.\n" +
+      "* The context must read as a physical white study model.\n\n" +
+      "GROUND PLANE — RENDER PHOTOREAL\n" +
+      "Render the ground and everything on it with real materials.\n" +
+      "* Asphalt roads with lane markings and crosswalks. Concrete sidewalks and curbs.\n" +
+      "* Parked and moving cars. Street trees {{season}}. Pedestrians at small scale. Streetlights on after dusk.\n" +
+      "* Keep every road, walk, tree, and water area where the model shows it.\n\n" +
+      "RULE\n" +
+      "Vertical building volumes stay matte white. The ground plane and the objects on it become real. The hero building is the only building that becomes real.\n\n" +
+      "LIGHT AND SKY\n" +
+      "The scene is photographed {{time}}. The white volumes catch the color of the sky. The hero building reads warm against them.\n\n" +
+      "CAMERA\n" +
+      "Architectural visualization quality. Vertical lines stay straight. Clean blacks. Sharp focus across the frame.\n\n" +
+      "DO NOT INCLUDE\n" +
+      "Text, logos, watermarks, building signage, neon colors, fisheye distortion, tilt-shift blur, cartoon or illustration style, windows on the white volumes.",
+    uses: ["material", "time", "season"],
+    defaults: { material: FRITTED, time: DUSK, season: AUTUMN },
+  },
+
   // ---------------------------------------------------------------- time / weather
   {
     id: "time-golden-hour",
@@ -421,11 +630,13 @@ export const PROMPTS = [
 ];
 
 // Full prompt text: FORM_LOCK + blank line + template, with every {{token}} replaced.
+// A prompt with noLock: true (the Hero render) starts with its own text, without the form lock.
 // Value order (later wins): PROMPT_FIELDS defaults < prompt.defaults < values.
+// {{hero}} has a plain default sentence, so a tool that does not send it still gets a whole prompt.
 // Empty, null, or undefined entries in values do not override a default.
 // Unknown tokens stay visible as [token].
 export function fillPrompt(prompt, values = {}) {
-  const merged = {};
+  const merged = { hero: HERO_FALLBACK };
   for (const [key, field] of Object.entries(PROMPT_FIELDS)) merged[key] = field.default;
   for (const [key, v] of Object.entries((prompt && prompt.defaults) || {})) {
     if (v !== undefined && v !== null && v !== "") merged[key] = v;
@@ -433,7 +644,7 @@ export function fillPrompt(prompt, values = {}) {
   for (const [key, v] of Object.entries(values || {})) {
     if (v !== undefined && v !== null && v !== "") merged[key] = v;
   }
-  const text = FORM_LOCK + "\n\n" + ((prompt && prompt.template) || "");
+  const text = (prompt && prompt.noLock ? "" : FORM_LOCK + "\n\n") + ((prompt && prompt.template) || "");
   return text
     .replace(/\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g, (_, key) =>
       Object.prototype.hasOwnProperty.call(merged, key) ? String(merged[key]) : `[${key}]`)

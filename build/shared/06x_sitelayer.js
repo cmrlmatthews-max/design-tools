@@ -14,6 +14,8 @@
 const SiteLayer3D = (() => {
   const ALL_PARTS = ['ground', 'boundary', 'buildings', 'roads', 'walks', 'water', 'trees'];
   const EDGE_ANGLE = 30;
+  const GLASS_OPACITY = 0.25;            // site style 'glass'
+  const STYLES = ['solid', 'glass', 'wireframe'];
   const BOUNDARY_COLOR = 0xc0701a;       // the Tower's dashed site loop
   const ARROW_COLOR = 0x1d2733;
 
@@ -205,25 +207,35 @@ const SiteLayer3D = (() => {
         count++;
       } catch (e) { console.warn('site building skipped', b && b.id, e); }
     }
+    const style = o.style;
     for (const [list, color] of [[plain, o.css('--scene-model')], [est, o.css('--scene-est')]]) {
       if (!list.length) continue;
       const merged = mergeAll(list);
-      const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.94, metalness: 0 });
-      mats.push(mat);
-      const mesh = new THREE.Mesh(merged, mat);
-      mesh.userData.kind = 'site-buildings';
-      mesh.userData.site = true;
-      mesh.userData.casts = true; mesh.userData.receives = true;
-      out.push(mesh);
-      info.triangles += (merged.index ? merged.index.count : merged.getAttribute('position').count) / 3;
-      if (o.edges) {
+      let tris = 0;
+      if (style !== 'wireframe') {                                  // wireframe: edges only, no faces
+        const glass = style === 'glass';
+        const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.94, metalness: 0 });
+        if (glass) { mat.transparent = true; mat.opacity = GLASS_OPACITY; mat.depthWrite = false; }
+        mats.push(mat);
+        const mesh = new THREE.Mesh(merged, mat);
+        mesh.userData.kind = 'site-buildings';
+        mesh.userData.site = true;
+        mesh.userData.casts = true; mesh.userData.receives = !glass;
+        if (glass) mesh.renderOrder = 2;                            // after the ground and the roads
+        out.push(mesh);
+        tris = (merged.index ? merged.index.count : merged.getAttribute('position').count) / 3;
+        info.triangles += tris;
+      }
+      if (o.edges || style === 'wireframe') {                       // a wireframe is its edges: they stay even when edges is off
         const emat = new THREE.LineBasicMaterial({ color: o.css('--scene-edge') });
         mats.push(emat);
         const edges = new THREE.LineSegments(new THREE.EdgesGeometry(merged, EDGE_ANGLE), emat);
         edges.userData.kind = 'site-building-edges';
         edges.userData.site = true;
+        if (style !== 'solid') edges.renderOrder = 3;
         out.push(edges);
       }
+      if (style === 'wireframe') merged.dispose();                  // no mesh holds it
     }
     info.buildings = count;
   }
@@ -315,13 +327,15 @@ const SiteLayer3D = (() => {
    *          zOf: (localZ) => worldY (default identity; the Grading Sketch passes its exaggeration mapper),
    *          css: (name, fallback) => THREE.Color, edges: true, shadows: true,
    *          rotation: placement rotation in degrees (turns the north arrow; default 0),
+   *          style: 'solid' (default) | 'glass' (buildings opacity 0.25, depthWrite off, renderOrder 2, edges 3) | 'wireframe' (buildings as edges only;
+   *                 the edges are drawn even when edges is false). Only the neighbor buildings change; an unknown value means 'solid'.
    *          zAt: (x, y) => local ground z (default: the drawn ground mesh) }
-   *  Returns { objects: [THREE.Object3D], info: { ground, buildings, roads, walks, waterAreas, trees, triangles, bounds } }.
+   *  Returns { objects: [THREE.Object3D], info: { style, ground, buildings, roads, walks, waterAreas, trees, triangles, bounds } }.
    *  Each object has userData.kind ('site-ground', 'site-skirt', 'site-boundary', 'site-arrow', 'site-buildings',
    *  'site-building-edges', 'site-roads', 'site-walks', 'site-water', 'site-water-lines', 'site-trees') and userData.site = true;
    *  userData.casts / userData.receives say which shadow flags setShadows() turns on. */
   function objects(data, opts = {}) {
-    const info = { ground: false, buildings: 0, roads: 0, walks: 0, waterAreas: 0, trees: 0, triangles: 0, bounds: data && data.bounds ? { ...data.bounds } : null };
+    const info = { style: 'solid', ground: false, buildings: 0, roads: 0, walks: 0, waterAreas: 0, trees: 0, triangles: 0, bounds: data && data.bounds ? { ...data.bounds } : null };
     const out = [], mats = [];
     if (!data || !data.ok) return { objects: out, info };
     const parts = new Set(Array.isArray(opts.parts) ? opts.parts : ALL_PARTS);
@@ -331,7 +345,9 @@ const SiteLayer3D = (() => {
       css: typeof opts.css === 'function' ? opts.css : defaultCss,
       edges: opts.edges !== false, rotation: opts.rotation || 0,
       hasGround: !!data.ground,
+      style: STYLES.includes(opts.style) ? opts.style : 'solid',
     };
+    info.style = o.style;
     const sampler = makeSampler(data.ground);
     const zAt = typeof opts.zAt === 'function' ? opts.zAt : (sampler || (() => 0));
     if (parts.has('ground')) { buildGround(data, o, mats, out, info); info.ground = !!data.ground; }
@@ -371,9 +387,9 @@ const SiteLayer3D = (() => {
     }
   }
 
-  /** The cache key for a tool's syncLayer: `${siteUpdatedAt}|${x},${y},${rot},${baseZ}|${showFlags}|${themeEpoch}`.
-   *  doc: the project document (or null); show: a string or an object of flags. */
-  function keyFor(doc, placement, show, themeEpoch) {
+  /** The cache key for a tool's syncLayer: `${siteUpdatedAt}|${x},${y},${rot},${baseZ}|${showFlags}|${themeEpoch}|${style}`.
+   *  doc: the project document (or null); show: a string or an object of flags; style: the site style ('solid' when missing). */
+  function keyFor(doc, placement, show, themeEpoch, style) {
     let stamp = '';
     try {
       const sec = ProjectMod.getSection(doc, 'site');
@@ -384,7 +400,7 @@ const SiteLayer3D = (() => {
     } catch (e) { stamp = ''; }
     const p = placement || {};
     const flags = show && typeof show === 'object' ? Object.keys(show).sort().map((k) => `${k}=${show[k] ? 1 : 0}`).join(',') : String(show === undefined ? '' : show);
-    return `${stamp}|${p.x || 0},${p.y || 0},${p.rotation || 0},${p.baseZ || 0}|${flags}|${themeEpoch || 0}`;
+    return `${stamp}|${p.x || 0},${p.y || 0},${p.rotation || 0},${p.baseZ || 0}|${flags}|${themeEpoch || 0}|${STYLES.includes(style) ? style : 'solid'}`;
   }
 
   /** The box a view frames when a site is open: the building box grown by max(150 ft, 0.6 x its larger plan span) on every side,
@@ -400,5 +416,5 @@ const SiteLayer3D = (() => {
     };
   }
 
-  return { objects, dispose, setShadows, keyFor, makeSampler, frameAround };
+  return { objects, dispose, setShadows, keyFor, makeSampler, frameAround, STYLES };
 })();

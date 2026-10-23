@@ -8527,6 +8527,7 @@ function fillDefaults(src) {
   // view
   const v = s.view;
   v.site = v.site !== false;                       // the project site layer (ground, roads, water, trees, neighbors); on unless switched off
+  v.siteStyle = ['solid', 'glass', 'wireframe'].includes(v.siteStyle) ? v.siteStyle : 'solid';     // neighbor buildings in the site layer: solid, glass or wireframe
   v.massing = v.massing !== false;                 // the project massing volume (every level as a solid, the active group highlighted); on unless switched off
   if (!STYLES.includes(v.style)) v.style = 'model';
   for (const k of ['labels', 'walls', 'bays', 'levels3d', 'context', 'grid', 'figure']) v[k] = !!v[k];
@@ -10090,6 +10091,8 @@ const Render = (() => {
 const SiteLayer3D = (() => {
   const ALL_PARTS = ['ground', 'boundary', 'buildings', 'roads', 'walks', 'water', 'trees'];
   const EDGE_ANGLE = 30;
+  const GLASS_OPACITY = 0.25;            // site style 'glass'
+  const STYLES = ['solid', 'glass', 'wireframe'];
   const BOUNDARY_COLOR = 0xc0701a;       // the Tower's dashed site loop
   const ARROW_COLOR = 0x1d2733;
 
@@ -10281,25 +10284,35 @@ const SiteLayer3D = (() => {
         count++;
       } catch (e) { console.warn('site building skipped', b && b.id, e); }
     }
+    const style = o.style;
     for (const [list, color] of [[plain, o.css('--scene-model')], [est, o.css('--scene-est')]]) {
       if (!list.length) continue;
       const merged = mergeAll(list);
-      const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.94, metalness: 0 });
-      mats.push(mat);
-      const mesh = new THREE.Mesh(merged, mat);
-      mesh.userData.kind = 'site-buildings';
-      mesh.userData.site = true;
-      mesh.userData.casts = true; mesh.userData.receives = true;
-      out.push(mesh);
-      info.triangles += (merged.index ? merged.index.count : merged.getAttribute('position').count) / 3;
-      if (o.edges) {
+      let tris = 0;
+      if (style !== 'wireframe') {                                  // wireframe: edges only, no faces
+        const glass = style === 'glass';
+        const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.94, metalness: 0 });
+        if (glass) { mat.transparent = true; mat.opacity = GLASS_OPACITY; mat.depthWrite = false; }
+        mats.push(mat);
+        const mesh = new THREE.Mesh(merged, mat);
+        mesh.userData.kind = 'site-buildings';
+        mesh.userData.site = true;
+        mesh.userData.casts = true; mesh.userData.receives = !glass;
+        if (glass) mesh.renderOrder = 2;                            // after the ground and the roads
+        out.push(mesh);
+        tris = (merged.index ? merged.index.count : merged.getAttribute('position').count) / 3;
+        info.triangles += tris;
+      }
+      if (o.edges || style === 'wireframe') {                       // a wireframe is its edges: they stay even when edges is off
         const emat = new THREE.LineBasicMaterial({ color: o.css('--scene-edge') });
         mats.push(emat);
         const edges = new THREE.LineSegments(new THREE.EdgesGeometry(merged, EDGE_ANGLE), emat);
         edges.userData.kind = 'site-building-edges';
         edges.userData.site = true;
+        if (style !== 'solid') edges.renderOrder = 3;
         out.push(edges);
       }
+      if (style === 'wireframe') merged.dispose();                  // no mesh holds it
     }
     info.buildings = count;
   }
@@ -10391,13 +10404,15 @@ const SiteLayer3D = (() => {
    *          zOf: (localZ) => worldY (default identity; the Grading Sketch passes its exaggeration mapper),
    *          css: (name, fallback) => THREE.Color, edges: true, shadows: true,
    *          rotation: placement rotation in degrees (turns the north arrow; default 0),
+   *          style: 'solid' (default) | 'glass' (buildings opacity 0.25, depthWrite off, renderOrder 2, edges 3) | 'wireframe' (buildings as edges only;
+   *                 the edges are drawn even when edges is false). Only the neighbor buildings change; an unknown value means 'solid'.
    *          zAt: (x, y) => local ground z (default: the drawn ground mesh) }
-   *  Returns { objects: [THREE.Object3D], info: { ground, buildings, roads, walks, waterAreas, trees, triangles, bounds } }.
+   *  Returns { objects: [THREE.Object3D], info: { style, ground, buildings, roads, walks, waterAreas, trees, triangles, bounds } }.
    *  Each object has userData.kind ('site-ground', 'site-skirt', 'site-boundary', 'site-arrow', 'site-buildings',
    *  'site-building-edges', 'site-roads', 'site-walks', 'site-water', 'site-water-lines', 'site-trees') and userData.site = true;
    *  userData.casts / userData.receives say which shadow flags setShadows() turns on. */
   function objects(data, opts = {}) {
-    const info = { ground: false, buildings: 0, roads: 0, walks: 0, waterAreas: 0, trees: 0, triangles: 0, bounds: data && data.bounds ? { ...data.bounds } : null };
+    const info = { style: 'solid', ground: false, buildings: 0, roads: 0, walks: 0, waterAreas: 0, trees: 0, triangles: 0, bounds: data && data.bounds ? { ...data.bounds } : null };
     const out = [], mats = [];
     if (!data || !data.ok) return { objects: out, info };
     const parts = new Set(Array.isArray(opts.parts) ? opts.parts : ALL_PARTS);
@@ -10407,7 +10422,9 @@ const SiteLayer3D = (() => {
       css: typeof opts.css === 'function' ? opts.css : defaultCss,
       edges: opts.edges !== false, rotation: opts.rotation || 0,
       hasGround: !!data.ground,
+      style: STYLES.includes(opts.style) ? opts.style : 'solid',
     };
+    info.style = o.style;
     const sampler = makeSampler(data.ground);
     const zAt = typeof opts.zAt === 'function' ? opts.zAt : (sampler || (() => 0));
     if (parts.has('ground')) { buildGround(data, o, mats, out, info); info.ground = !!data.ground; }
@@ -10447,9 +10464,9 @@ const SiteLayer3D = (() => {
     }
   }
 
-  /** The cache key for a tool's syncLayer: `${siteUpdatedAt}|${x},${y},${rot},${baseZ}|${showFlags}|${themeEpoch}`.
-   *  doc: the project document (or null); show: a string or an object of flags. */
-  function keyFor(doc, placement, show, themeEpoch) {
+  /** The cache key for a tool's syncLayer: `${siteUpdatedAt}|${x},${y},${rot},${baseZ}|${showFlags}|${themeEpoch}|${style}`.
+   *  doc: the project document (or null); show: a string or an object of flags; style: the site style ('solid' when missing). */
+  function keyFor(doc, placement, show, themeEpoch, style) {
     let stamp = '';
     try {
       const sec = ProjectMod.getSection(doc, 'site');
@@ -10460,7 +10477,7 @@ const SiteLayer3D = (() => {
     } catch (e) { stamp = ''; }
     const p = placement || {};
     const flags = show && typeof show === 'object' ? Object.keys(show).sort().map((k) => `${k}=${show[k] ? 1 : 0}`).join(',') : String(show === undefined ? '' : show);
-    return `${stamp}|${p.x || 0},${p.y || 0},${p.rotation || 0},${p.baseZ || 0}|${flags}|${themeEpoch || 0}`;
+    return `${stamp}|${p.x || 0},${p.y || 0},${p.rotation || 0},${p.baseZ || 0}|${flags}|${themeEpoch || 0}|${STYLES.includes(style) ? style : 'solid'}`;
   }
 
   /** The box a view frames when a site is open: the building box grown by max(150 ft, 0.6 x its larger plan span) on every side,
@@ -10476,7 +10493,7 @@ const SiteLayer3D = (() => {
     };
   }
 
-  return { objects, dispose, setShadows, keyFor, makeSampler, frameAround };
+  return { objects, dispose, setShadows, keyFor, makeSampler, frameAround, STYLES };
 })();
 
 /* ==========================================================================
@@ -11392,7 +11409,7 @@ const Select = (() => {
    ========================================================================== */
 
 const SiteLayer = (() => {
-  const OFF = { shown: false, ground: false, buildings: 0, roads: 0, walks: 0, waterAreas: 0, trees: 0, key: 'off' };
+  const OFF = { style: 'solid', shown: false, ground: false, buildings: 0, roads: 0, walks: 0, waterAreas: 0, trees: 0, key: 'off' };
   let drawn = { ...OFF };
   let mesh = null, zBottom = 0, drop = 0, foot = 0;
 
@@ -11431,6 +11448,9 @@ const SiteLayer = (() => {
     return low < Infinity ? Math.min(80, Math.max(0, dropNow - low)) : 0;
   }
 
+  /** The site style of the View tab: 'solid' | 'glass' | 'wireframe' (anything else is 'solid'). Only the neighbor buildings change. */
+  const styleOf = (state) => { const v = state && state.view && state.view.siteStyle; return v === 'glass' || v === 'wireframe' ? v : 'solid'; };
+
   /** Called by Render.syncMain on every frame of the main view (never in Compare).
    *  layer = { group, key } (a THREE.Group already in the scene, hidden in Compare and in the AI-ready image);
    *  state = Store.raw(); d = Derived.get(); kit = { syncLayer, clearGroup, cssColor, themeEpoch }.
@@ -11440,7 +11460,7 @@ const SiteLayer = (() => {
     const dv = state.view && state.view.site !== false ? siteDerived() : null;
     const doc = dv ? ProjectUI.doc() : null;
     const pl = dv ? ProjectUI.placement() : null;
-    const key = dv ? SiteLayer3D.keyFor(doc, pl, { site: true, buildings: true }, kit.themeEpoch ? kit.themeEpoch() : 0) : 'off';
+    const key = dv ? SiteLayer3D.keyFor(doc, pl, { site: true, buildings: true }, kit.themeEpoch ? kit.themeEpoch() : 0, styleOf(state)) : 'off';
     if (layer.key !== key) SiteLayer3D.dispose(layer.group.children);       // the materials; kit.syncLayer frees the geometry
     const changed = kit.syncLayer(layer, key, () => {
       mesh = null; zBottom = 0; drawn = { ...OFF, key };
@@ -11449,11 +11469,11 @@ const SiteLayer = (() => {
       try { data = SiteLayerMod.buildSiteLayerData(dv, pl, { contextIds: new Set() }); } catch (e) { console.error(e); return []; }
       if (!data || !data.ok) return [];
       let res = null;
-      try { res = SiteLayer3D.objects(data, { css: kit.cssColor, rotation: pl.rotation, edges: true, shadows: false }); } catch (e) { console.error(e); return []; }
+      try { res = SiteLayer3D.objects(data, { style: styleOf(state), css: kit.cssColor, rotation: pl.rotation, edges: true, shadows: false }); } catch (e) { console.error(e); return []; }
       mesh = res.objects.find((o) => o.userData.kind === 'site-ground') || null;
       zBottom = data.bounds ? data.bounds.zMin : 0;
       const i = res.info;
-      drawn = { shown: true, ground: !!i.ground, buildings: i.buildings, roads: i.roads, walks: i.walks, waterAreas: i.waterAreas, trees: i.trees, key };
+      drawn = { style: styleOf(state), shown: true, ground: !!i.ground, buildings: i.buildings, roads: i.roads, walks: i.walks, waterAreas: i.waterAreas, trees: i.trees, key };
       return res.objects;
     });
     const next = dv ? dropFor(d, dv, pl) : 0;
@@ -12247,6 +12267,7 @@ const UI = (() => {
         choice('Style', 'view.style', [['model', 'Model'], ['diagram', 'Diagram']], { id: 'styleChips' }),
         Controls.toggle({ label: 'Site', bind: v('site') }),
         Controls.help('The ground, roads, water, trees, and neighbors of the project site. From the Site Model.'),
+        Controls.when(() => get('view.site') !== false, [choice('Site style', 'view.siteStyle', [['solid', 'Solid'], ['glass', 'Glass'], ['wireframe', 'Wireframe']], { id: 'siteStyleChips' })]),
         Controls.toggle({ label: 'Massing', bind: v('massing') }),
         Controls.help('The whole project massing as a solid, with the level group you are filling highlighted and its plate drawn at its own height. Plan shows the massing as outlines.'),
         Controls.toggle({ label: 'Unit labels', bind: v('labels') }),
@@ -12269,18 +12290,18 @@ const UI = (() => {
     { id: 'view', title: 'View' },
   ];
   const SECTIONS = [
-    { id: 'source', tab: 'plate', title: 'Source and program', open: true, build: buildSource },
-    { id: 'shape', tab: 'plate', title: 'Plate shape', open: true, build: buildShape },
-    { id: 'levels', tab: 'plate', title: 'Level groups', open: true, build: buildLevels },
-    { id: 'corridor', tab: 'plate', title: 'Corridor', open: true, build: buildCorridor },
-    { id: 'blocks', tab: 'plate', title: 'Blocks', open: true, build: buildBlocks },
-    { id: 'mix', tab: 'units', title: 'Unit mix', open: true, build: buildMix },
-    { id: 'locks', tab: 'units', title: 'Locks and re-fill', open: true, build: buildLocks },
+    { id: 'source', tab: 'plate', title: 'Source and program', open: false, build: buildSource },
+    { id: 'shape', tab: 'plate', title: 'Plate shape', open: false, build: buildShape },
+    { id: 'levels', tab: 'plate', title: 'Level groups', open: false, build: buildLevels },
+    { id: 'corridor', tab: 'plate', title: 'Corridor', open: false, build: buildCorridor },
+    { id: 'blocks', tab: 'plate', title: 'Blocks', open: false, build: buildBlocks },
+    { id: 'mix', tab: 'units', title: 'Unit mix', open: false, build: buildMix },
+    { id: 'locks', tab: 'units', title: 'Locks and re-fill', open: false, build: buildLocks },
     { id: 'accessible', tab: 'units', title: 'Accessible', build: buildAccessible },
-    { id: 'checkslist', tab: 'checks', title: 'Warnings', open: true, build: buildChecksList },
-    { id: 'numbers', tab: 'checks', title: 'Numbers', open: true, build: buildNumbers },
-    { id: 'mixtable', tab: 'checks', title: 'Mix against target', open: true, build: buildMixTable },
-    { id: 'display', tab: 'view', title: 'Display', open: true, build: buildDisplay },
+    { id: 'checkslist', tab: 'checks', title: 'Warnings', open: false, build: buildChecksList },
+    { id: 'numbers', tab: 'checks', title: 'Numbers', open: false, build: buildNumbers },
+    { id: 'mixtable', tab: 'checks', title: 'Mix against target', open: false, build: buildMixTable },
+    { id: 'display', tab: 'view', title: 'Display', open: false, build: buildDisplay },
   ];
   const sectionCtl = {};
   let activeTab = 'plate';
@@ -12671,6 +12692,8 @@ const UI = (() => {
   }
   return {
     init, updateHud, rebuildPanel: () => { Controls.refreshAll(); },
+    // test hooks: the section controllers, and a rebuild of the panel from the saved UI prefs (a simulated reload)
+    sectionCtl, rebuildSections: () => { buildPanel(); setTab(activeTab, { remember: false }); Controls.refreshAll(); },
     setTab, activeTab: () => activeTab, tabs: () => TABS.map((t) => t.id),
     setHudOpen, hudOpen: () => $('hud').dataset.collapsed === 'false', sections: () => SECTIONS.map((s) => ({ id: s.id, tab: s.tab })),
     openSection,
@@ -12781,6 +12804,7 @@ const Help = (() => {
       'Pick a plate from the Option menu > New from a preset, then change the numbers. The default is a 300 by 65 ft double-loaded bar: 17 units, NRSF 15,078 sf, efficiency 77.3 percent.',
       'The Plan view is the default. The HUD shows units (or keys), NRSF, efficiency and the warnings. Tap the HUD for the mix, the corridor, the stair door path, dead ends, support space and the building totals.',
       'Keys: 1 to 6 change the view (Plan is 6), D switches Model and Diagram, L locks the selected unit, F re-fills, Delete removes a selected block, Esc clears.',
+      'Each section starts collapsed. Select a section title to open it. Your choice is remembered.',
     ]],
     ['Plate tab', [
       'A drawn plate is a rectangle, L, U, courtyard (O), circle or a polygon. Draw outline starts a polygon in the Plan view: tap the points, tap the first point or press Enter to finish.',
@@ -12803,7 +12827,9 @@ const Help = (() => {
       'Levels in 3D stacks every filled level of the project at its height. The grid and the snap set the step for moving blocks and bay lines. Hold Option to skip snapping.',
     ]],
     ['Site', [
-      'The Site toggle in the View tab shows the project site from the Site Model. It shows the real ground, roads, water, and trees. Neighbor buildings are solid grey blocks with dark edges. Buildings removed in the Site Model do not show here. This tool does not drag. Move the building in the Tower Generator or the Mid-Rise Generator.',
+      'The Site toggle in the View tab shows the project site from the Site Model. It shows the real ground, roads, water, and trees.',
+      'Site style, under the Site toggle, sets how the neighbor buildings draw. Solid draws opaque grey blocks with dark edges. Glass draws see-through blocks. Wireframe draws edges only.',
+      'Buildings removed in the Site Model do not show here. This tool does not drag. Move the building in the Tower Generator or the Mid-Rise Generator.',
     ]],
     ['Projects', [
       'A project holds the site, the massing and the work of other tools in one file. The Plate Planner reads the massing levels and writes a plates section with the units, so the Parking Deck and the Facade Studio can read it.',
@@ -13812,7 +13838,9 @@ const TestHelp = (() => {
   };
   const presetState = (id) => fillDefaults(deepClone(CONFIG.presets.find((p) => p.id === id).state));
   const cases = () => TestCasesMod.TEST_CASES;
-  return { eq, near, within, make, $, frames, wait, visible, snap, oneStep, toastText, merged, presetState, cases };
+  /** Opens one panel section (every section starts collapsed: docs/site-base-style-technical-plan.md section 4.4). Does not touch the saved choice. */
+  const openSection = (id) => { const c = UI.sectionCtl[id]; if (c && !c.isOpen()) c.setOpen(true); return !!c; };
+  return { openSection, eq, near, within, make, $, frames, wait, visible, snap, oneStep, toastText, merged, presetState, cases };
 })();
 
 async function runTests() {
@@ -14775,6 +14803,60 @@ async function runSiteTests() {
       const margin = [on.minX - Math.min(off.minX, Math.max(off.minX - m, sb.minX)), on.maxX - Math.max(off.maxX, Math.min(off.maxX + m, sb.maxX)), on.minY - Math.min(off.minY, Math.max(off.minY - m, sb.minY)), on.maxY - Math.max(off.maxY, Math.min(off.maxY + m, sb.maxY))].every((v) => Math.abs(v) < 1e-6);
       return eq([holds, smaller, margin, a > b * 1.1, Math.abs(a - c) < a * 0.01, m >= 150], [true, true, true, true, true, true]);
     });
+    await t('8s site style: glass draws the neighbors transparent (opacity 0.25, no depth write, drawn after the ground) with their edges kept; wireframe draws edges only; solid is opaque again; the ground and roads do not change; info.style and the layer key follow', async () => {
+      if (!SiteLayer.info().shown) open();
+      await frames(4);
+      const objs = () => Render.sceneObjects();
+      const read = () => {
+        const o = objs(), m = o.find((x) => x.userData.kind === 'site-buildings'), e = o.filter((x) => x.userData.kind === 'site-building-edges'), r = o.find((x) => x.userData.kind === 'site-roads') || o.find((x) => x.userData.kind === 'site-ground');
+        return {
+          style: SiteLayer.info().style, mesh: !!m, transparent: m ? m.material.transparent : null, opacity: m ? m.material.opacity : null, depthWrite: m ? m.material.depthWrite : null,
+          order: m ? m.renderOrder : null, edges: e.length, edgeOrder: e.length ? e[0].renderOrder : null, roads: r ? [r.material.transparent, r.material.opacity] : null, buildings: SiteLayer.info().buildings,
+        };
+      };
+      const keys = [];
+      const out = {};
+      for (const s of ['solid', 'glass', 'wireframe', 'solid']) {
+        Store.set('view.siteStyle', s, { live: false });
+        await frames(4);
+        out[s] = read();
+        keys.push(SiteLayer.info().key);
+      }
+      const n = out.solid.edges;
+      const ok = {
+        solid: eq(out.solid, { style: 'solid', mesh: true, transparent: false, opacity: 1, depthWrite: true, order: 0, edges: n, edgeOrder: 0, roads: [false, 1], buildings: 2 }),
+        glass: eq(out.glass, { style: 'glass', mesh: true, transparent: true, opacity: 0.25, depthWrite: false, order: 2, edges: n, edgeOrder: 3, roads: [false, 1], buildings: 2 }),
+        wire: eq(out.wireframe, { style: 'wireframe', mesh: false, transparent: null, opacity: null, depthWrite: null, order: null, edges: n, edgeOrder: 3, roads: [false, 1], buildings: 2 }),
+        keys: keys[0] !== keys[1] && keys[1] !== keys[2] && keys[0] !== keys[2] && keys[3] === keys[0],
+        edges: n > 0, errors: errors.length,
+      };
+      const bad = Object.entries(ok).filter(([k, v]) => k === 'errors' ? v !== 0 : v !== true);
+      return bad.length ? JSON.stringify(bad) : true;
+    });
+
+    await t('8t site style chips: the View tab has Site style Solid, Glass, Wireframe under the Site toggle (hidden while Site is off); a click sets view.siteStyle; an unknown saved value fills as solid', async () => {
+      if (!SiteLayer.info().shown) open();
+      await frames(4);
+      const q = (v) => document.querySelector(`#siteStyleChips [data-value="${v}"]`);
+      const row = document.getElementById('siteStyleChips');
+      const labels = row ? [...row.querySelectorAll('[data-value]')].map((b) => b.textContent.trim()) : [];
+      const visible = () => !!row && !row.closest('.when[hidden]');
+      Store.set('view.siteStyle', 'solid', { live: false });
+      await frames(4);
+      const a = [visible(), q('solid') && q('solid').getAttribute('aria-pressed')];
+      q('glass').click();
+      await frames(4);
+      const b = [Store.get('view.siteStyle'), q('glass').getAttribute('aria-pressed'), q('solid').getAttribute('aria-pressed')];
+      Store.set('view.site', false, { live: false });
+      await frames(4);
+      const hidden = !visible();
+      Store.set('view.site', true, { live: false });
+      Store.set('view.siteStyle', 'solid', { live: false });
+      await frames(4);
+      const fill = [fillDefaults({ view: { siteStyle: 'bogus' } }).view.siteStyle, fillDefaults({ view: { siteStyle: 'glass' } }).view.siteStyle, fillDefaults({}).view.siteStyle];
+      return eq([labels, a, b, hidden, fill], [['Solid', 'Glass', 'Wireframe'], [true, 'true'], ['glass', 'true', 'false'], true, ['solid', 'glass', 'solid']]);
+    });
+
     await t('8 closing the project removes the layer', async () => {
       ProjectUI.close();
       await frames(3);
@@ -14968,6 +15050,106 @@ async function runMassingTests() {
     return r;
   };
 }
+
+/* ==========================================================================
+   TESTS: collapsed panel sections (docs/site-base-style-technical-plan.md section 4)
+   Every panel section starts collapsed on a fresh profile. A click on a section title opens it and saves the choice in the UI prefs
+   (localStorage key plate.ui.v1, prefs.sections); a rebuild of the panel from the saved prefs (a simulated reload) brings the
+   choice back.
+   The tests restore the UI prefs and the panel when they finish. runAllTests is extended at the end of this file.
+   ========================================================================== */
+async function runSectionTests() {
+  const results = [];
+  const eq = (a, b) => (JSON.stringify(a) === JSON.stringify(b) ? true : `got ${JSON.stringify(a)}, expected ${JSON.stringify(b)}`);
+  const t = async (name, fn) => {
+    let r;
+    try { r = await fn(); } catch (e) { r = `threw ${e && e.message}`; }
+    results.push({ name, ok: r === true, detail: r === true ? '' : String(r) });
+  };
+  const $ = (id) => document.getElementById(id);
+  const frames = (n = 2) => new Promise((res) => { const f = () => (--n <= 0 ? res() : requestAnimationFrame(f)); requestAnimationFrame(f); });
+  const savedState = Store.snapshot(), savedTab = UI.activeTab();
+  const savedSections = uiPrefs.sections === undefined ? undefined : JSON.parse(JSON.stringify(uiPrefs.sections));
+  Options.holdAutosave(true);
+  const accs = () => [...document.querySelectorAll('#sections section.acc')];
+  const openIds = () => accs().filter((a) => a.dataset.open === 'true').map((a) => a.dataset.section);
+  const stored = () => { try { return JSON.parse(localStorage.getItem(UI_STORAGE_KEY)) || {}; } catch (e) { return {}; } };
+  /** A fresh profile: no remembered choice. The panel is rebuilt from the prefs, as at load. */
+  const freshProfile = () => { uiPrefs.sections = {}; saveUiPrefs(uiPrefs); UI.rebuildSections(); };
+  /** A reload: the prefs are read again from localStorage and the panel is rebuilt from them. */
+  const reload = () => { uiPrefs.sections = stored().sections; UI.rebuildSections(); };
+  const firstShown = () => accs().find((a) => !a.hidden);
+
+  try {
+    await t('S1. every panel section starts collapsed on a fresh profile (and there are sections to collapse)', () => {
+      freshProfile();
+      const all = accs();
+      const ctl = Object.keys(UI.sectionCtl);
+      return eq([all.length >= 8, all.length === ctl.length, openIds(), ctl.filter((id) => UI.sectionCtl[id].isOpen())], [true, true, [], []]);
+    });
+    await t('S2. a collapsed section keeps its controls in the page, hidden by the style sheet (value tests still see them)', () => {
+      freshProfile();
+      const acc = firstShown();
+      const body = acc.querySelector('.acc-body');
+      const rendered = getComputedStyle(body).display !== 'none';
+      return eq([acc.dataset.open, !!body.querySelector('input, button, select, textarea'), rendered], ['false', true, false]);
+    });
+    await t('S3. a click on a section title opens it and saves the choice under the tool UI key; a second click closes it and saves that', () => {
+      freshProfile();
+      const acc = firstShown(), id = acc.dataset.section;
+      acc.querySelector('.acc-head').click();
+      const afterOpen = [acc.dataset.open, (stored().sections || {})[id]];
+      acc.querySelector('.acc-head').click();
+      const afterClose = [acc.dataset.open, (stored().sections || {})[id]];
+      return eq([afterOpen, afterClose], [['true', true], ['false', false]]);
+    });
+    await t('S4. an open section is open again after a simulated reload, and the other sections stay collapsed', () => {
+      freshProfile();
+      const ids = accs().filter((a) => !a.hidden).map((a) => a.dataset.section);
+      const a = ids[0], b = ids[ids.length - 1];
+      document.querySelector(`#sections section.acc[data-section="${a}"] .acc-head`).click();
+      document.querySelector(`#sections section.acc[data-section="${b}"] .acc-head`).click();
+      reload();
+      return eq([new Set(openIds())].map((s) => [...s].sort()), [[a, b].sort()]);
+    });
+    await t('S5. a section the user closed stays closed after a reload (the saved choice wins over the default)', () => {
+      freshProfile();
+      const id = firstShown().dataset.section;
+      const head = () => document.querySelector(`#sections section.acc[data-section="${id}"] .acc-head`);
+      head().click(); reload();
+      const reopened = openIds().includes(id);
+      head().click(); reload();
+      return eq([reopened, openIds().includes(id), (stored().sections || {})[id]], [true, false, false]);
+    });
+    await t('S6. the HUD and the selection card are not panel sections', () => {
+      const hud = $('hud'), card = $('selection-card');
+      return eq([!!hud && !hud.closest('.acc'), !card || !card.closest('.acc')], [true, true]);
+    });
+    await t('S7. the UI prefs key is this tool\'s own (plate.ui.v1)', () => eq(UI_STORAGE_KEY, 'plate.ui.v1'));
+
+  } finally {
+    try { const p = document.querySelector('#aiPanel'); if (p && typeof Prompts !== 'undefined' && Prompts.isOpen()) Prompts.close(); } catch (e) { /* no prompt panel */ }
+    if (savedSections === undefined) delete uiPrefs.sections; else uiPrefs.sections = savedSections;
+    saveUiPrefs(uiPrefs);
+    UI.rebuildSections();
+    Store.replace(savedState); UI.setTab(savedTab);
+    Options.holdAutosave(false);
+  }
+  return results;
+}
+
+/* Extend runAllTests with the section tests (the other test files stay as they are). */
+runAllTests = ((base) => async function runAllWithSections() {
+  const r = await base();
+  const g = await runSectionTests();
+  const bad = g.filter((x) => !x.ok);
+  r.results.push(...g);
+  r.total += g.length;
+  r.passed += g.length - bad.length;
+  r.failed.push(...bad);
+  console.log(`[tests] sections ${g.length - bad.length}/${g.length} passed`, bad.length ? JSON.stringify(bad) : '');
+  return r;
+})(runAllTests);
 
 /* ==========================================================================
    Start-up and test hook

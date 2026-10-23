@@ -129,7 +129,7 @@ async function runSelectTests() {
       return eq(seen, ['n', 'e', 's', 'w', 'plan', 'axon']);
     });
     await t('D switches Model and Diagram; keys are ignored while typing in a field', () => {
-      fresh(); blur(); UI.setTab('massing');
+      fresh(); blur(); UI.setTab('massing'); TestHelp.openSection('standalone');
       key('d');
       const a = Store.get('view.style');
       const input = document.querySelector('#panelScroll input.numfield');

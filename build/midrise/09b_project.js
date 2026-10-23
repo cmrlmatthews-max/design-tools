@@ -99,13 +99,15 @@ const ProjectUI = (() => {
     const info = siteInfo();
     if (!info) { if (!quiet) Toast.show('This project has no site yet. Send a site from the Site Model first.', 'warn'); return false; }
     const z = groundAt(info.center[0], info.center[1]);
-    const next = { x: Math.round(info.center[0] * 100) / 100, y: Math.round(info.center[1] * 100) / 100, rotation: placement().rotation, baseZ: z == null ? placement().baseZ : Math.round(z * 10) / 10 };
+    const typed = baseMode() === 'typed';
+    const next = { ...(isObjP(Store.raw().placement) ? Store.raw().placement : {}), x: Math.round(info.center[0] * 100) / 100, y: Math.round(info.center[1] * 100) / 100, rotation: placement().rotation, baseZ: z == null || typed ? placement().baseZ : Math.round(z * 10) / 10, baseMode: baseMode() };
     Store.set('placement', next, { live: false });
-    if (!quiet) Toast.show(z == null ? 'Centered on the site.' : `Centered on the site. Floor at ${Units.formatFeetInches(next.baseZ)} above sea level.`);
+    followGround({ merge: true });                     // the base follows the lowest ground under the footprint (the Store hook has done it already)
+    if (!quiet) Toast.show(z == null || typed ? 'Centered on the site.' : `Centered on the site. Floor at ${Units.formatFeetInches(placement().baseZ)} above sea level.`);
     return true;
   }
   /** The site buildings near the building become context blocks (fromSite = true). One undo step. Returns the count, or -1. */
-  function contextFromSite(radius, { quiet = false, merge = false } = {}) {
+  function contextFromSite(radius, { quiet = false, merge = false, follow = true } = {}) {
     if (!project.doc) { if (!quiet) Toast.show('Open a project first.', 'warn'); return -1; }
     if (!hasSite()) { if (!quiet) Toast.show('This project has no site, so there are no neighbors to load.', 'warn'); return -1; }
     const r = Number.isFinite(radius) && radius > 0 ? radius : num(Store.get('context.radius'), CONFIG.contextRadius);
@@ -120,8 +122,92 @@ const ProjectUI = (() => {
     }
     const cur = Store.raw().context;
     Store.set('context', { ...deepClone(cur), blocks, fromSite: true, show: true, radius: r }, { live: false, merge });
+    if (follow) followGround({ merge: true });         // the neighbors' base is relative to baseZ; followGround refreshes them when the base moves
     if (!quiet) Toast.show(blocks.length ? `Loaded ${blocks.length} neighbor${blocks.length === 1 ? '' : 's'} within ${Units.formatFeetInches(r)}.${trimmed ? ` ${trimmed} farther ones were left out.` : ''}` : `No site buildings within ${Units.formatFeetInches(r)}.`);
     return blocks.length;
+  }
+
+  /* ---- base elevation: Follow ground or Typed (docs/site-base-style-technical-plan.md section 1) ------------------------------- */
+  // A committed change under one of these paths moves the footprint, so followGround runs again.
+  const FOOTPRINT_KEYS = ['placement', 'type', 'bars', 'courts', 'deck', 'podium'];
+  const footprintPath = (path) => FOOTPRINT_KEYS.some((k) => path === k || path.startsWith(`${k}.`));
+  const r1 = (v) => Math.round(v * 10) / 10;
+  /** The base elevation mode of the open design: 'follow' (the default, and an old save) or 'typed'. */
+  const baseMode = () => { const p = Store.raw().placement; return isObjP(p) && p.baseMode === 'typed' ? 'typed' : 'follow'; };
+  /** site.derived of the open project, or null. */
+  function siteDerived() {
+    const sec = sectionOf('site');
+    return sec && isObjP(sec.derived) ? sec.derived : null;
+  }
+  /** The lowest ground under the model footprint (project frame, ft NAVD88), or null without a site grid.
+   *  A 9 x 9 grid over the plan box of the model, each point turned into the project frame and read from the site ground. Rounded to 0.1 ft. */
+  function groundUnderFootprint(pl = placement(), bounds) {
+    const dv = siteDerived();
+    if (!dv) return null;
+    let b = bounds;
+    if (!b) { try { b = Derived.get().bounds.model; } catch (e) { b = null; } }
+    if (!b || ![b.minX, b.maxX, b.minY, b.maxY].every(Number.isFinite)) return null;
+    const N = 9;
+    let low = Infinity;
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+      const p = ProjectMod.toProject(pl, [b.minX + ((b.maxX - b.minX) * i) / (N - 1), b.minY + ((b.maxY - b.minY) * j) / (N - 1)]);
+      const z = SiteLayerMod.groundZAt(dv, p[0], p[1]);
+      if (Number.isFinite(z) && z < low) low = z;
+    }
+    return Number.isFinite(low) ? r1(low) : null;
+  }
+  /** True when the base elevation follows the ground now: a project is open, the mode is Follow. */
+  const followsGround = () => !!project.doc && isObjP(Store.raw().placement) && baseMode() === 'follow';
+  /** For the placement gizmo: the base elevation for the moved placement `pl`, or null to leave the base alone. */
+  function baseFor(pl) {
+    return followsGround() ? groundUnderFootprint(pl) : null;
+  }
+  /** Sets placement.baseZ to the lowest ground under the footprint when the mode is Follow and the project has a site ground.
+   *  opts.merge: no new undo step (the change joins the one before). Returns true when the base changed. */
+  function followGround({ merge = false } = {}) {
+    if (!followsGround() || Store.gestureActive()) return false;
+    const z = groundUnderFootprint();
+    if (z == null || Math.abs(z - placement().baseZ) < 1e-9) return false;
+    const was = project.loading;
+    project.loading = true;                 // the Store hook ignores this write; the context below follows once
+    try {
+      Store.set('placement.baseZ', z, { live: false, merge });
+      if (Store.raw().context && Store.raw().context.fromSite) contextFromSite(undefined, { quiet: true, merge: true, follow: false });
+    } finally { project.loading = was; }
+    if (!was) markDirty();
+    return true;
+  }
+  /** Follow ground or Typed. Switching to Follow runs followGround once. */
+  function setBaseMode(mode) {
+    if (!project.doc || !isObjP(Store.raw().placement) || (mode !== 'follow' && mode !== 'typed') || baseMode() === mode) return false;
+    Store.set('placement.baseMode', mode, { live: false });
+    if (mode === 'follow') followGround({ merge: true });
+    return true;
+  }
+  /** The line under the chips in Follow mode. */
+  function baseLineText() {
+    const ft = (v) => `${(Math.round(v * 10) / 10).toLocaleString('en-US', { maximumFractionDigits: 1 })} ft`;
+    const z = placement().baseZ;
+    return siteDerived() && groundUnderFootprint() != null ? `Ground floor at ${ft(z)} above sea level.` : `This project has no site ground. The base stays at ${ft(z)}.`;
+  }
+  /** The base elevation control for the Site tab: Follow ground / Typed chips, a read-only line (Follow) or the typed field (Typed).
+   *  lenF = the page's length field maker. Returns a list of elements. */
+  function baseControl(lenF) {
+    const chips = h('div', { class: 'chips', role: 'group', 'aria-label': 'Base elevation mode', id: 'baseModeChips' });
+    const btns = [['follow', 'Follow ground'], ['typed', 'Typed']].map(([mode, text]) => {
+      const b = h('button', { class: 'chip', type: 'button', 'aria-pressed': 'false', 'data-base-mode': mode, onclick: () => setBaseMode(mode) }, text);
+      chips.append(b);
+      return b;
+    });
+    const line = h('p', { class: 'help', id: 'baseLine' });
+    const typed = lenF('Base elevation (ft)', 'placement.baseZ', { hardMin: -1e5, hardMax: 1e5, step: 0.5 });
+    return [
+      Controls.when(() => { btns.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.baseMode === baseMode()))); return true; },
+        [h('div', { class: 'ctl' }, h('div', { class: 'ctl-label' }, 'Base elevation'), chips)]).el,
+      Controls.when(() => { line.textContent = baseLineText(); return baseMode() === 'follow'; }, [line]).el,
+      Controls.when(() => baseMode() === 'typed', [typed.el]).el,
+      Controls.help('Follow ground sets the base to the lowest ground under the building. Typed keeps the value you enter.'),
+    ];
   }
 
   /* ---- writing the project ---------------------------------------------------------------------- */
@@ -176,7 +262,7 @@ const ProjectUI = (() => {
     const st = Store.snapshot();
     const d = Derived.get();
     const derived = MidDerivedMod.midriseDerived(st, d.built, d.metrics);
-    const pl = placement();
+    const pl = { ...placement(), baseMode: baseMode() };
     return { tool: CONFIG.tool, schema: CONFIG.projectSchema, placement: pl, state: { ...st, placement: pl }, derived, note: st.name };
   }
   /**
@@ -261,6 +347,7 @@ const ProjectUI = (() => {
         markDirty();                                     // the new massing section is written (a tower project waits for the question)
       } else if (!project.replaceNeeded && !project.readOnly) markDirty();
     }
+    if (!project.readOnly) followGround({ merge: true });     // the base elevation is the lowest ground under the footprint (Follow ground)
     renderPill();
     if (Render.ready()) Render.setView(Render.info().preset || 'axon', true);
     return doc;
@@ -295,7 +382,7 @@ const ProjectUI = (() => {
     Object.assign(project, { doc, timer: 0, dirty: true, readOnly: false, replaceNeeded: false, confirmed: false, renamed: null });
     bCache = { key: null, ring: null };
     project.loading = true;
-    try { Store.set('placement', ZERO(), { live: false }); } finally { project.loading = false; }
+    try { Store.set('placement', { ...ZERO(), baseMode: 'follow' }, { live: false }); } finally { project.loading = false; }
     const saved = flush();
     project.updateUrl(doc.id);
     renderPill();
@@ -415,6 +502,8 @@ const ProjectUI = (() => {
     Store.subscribe((s, info) => {
       if (project.doc && !project.loading && info && !info.live) {
         const path = String(info.path || '');
+        // a change that moves the footprint (or a whole new state): the base elevation follows the ground in the same undo step
+        if ((info.kind === 'replace' || footprintPath(path)) && info.kind !== 'undo' && info.kind !== 'redo') followGround({ merge: true });
         // placement or radius changes keep site neighbors in step
         if (s.context && s.context.fromSite && (path === 'context.radius' || path.startsWith('placement'))) {
           project.loading = true;
@@ -461,6 +550,7 @@ const ProjectUI = (() => {
 
   return {
     has, hasSite, siteInfo, groundAt, boundaryKey, boundaryLocal, placement,
+    baseMode, setBaseMode, groundUnderFootprint, followGround, baseFor, baseControl, siteDerived,
     start, openDoc, close, create, rename, flush, send, openMenu, exportFile, importFile, nameControl,
     centerOnSite, contextFromSite, markDirty, askReplace, renderPill,
     doc: () => project.doc,

@@ -93,6 +93,7 @@ function fillDefaults(src) {
   if (!Array.isArray(s.materials) || !s.materials.length) s.materials = deepClone(base.materials);
   const v = s.view;
   v.site = v.site !== false;                       // the project site layer (ground, roads, water, trees, neighbors); on unless switched off
+  v.siteStyle = ['solid', 'glass', 'wireframe'].includes(v.siteStyle) ? v.siteStyle : 'solid';     // neighbor buildings in the site layer: solid, glass or wireframe
   if (v.style !== 'diagram') v.style = 'model';
   if (v.colorBy !== 'wwr') v.colorBy = 'system';
   if (!CONFIG.orientations.includes(v.elevation)) v.elevation = null;

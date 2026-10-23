@@ -33,7 +33,9 @@ const TestHelp = (() => {
   };
   const presetState = (id) => fillDefaults(deepClone(CONFIG.presets.find((p) => p.id === id).state));
   const cases = () => TestCasesMod.TEST_CASES;
-  return { eq, near, within, make, $, frames, wait, visible, snap, oneStep, toastText, merged, presetState, cases };
+  /** Opens one panel section (every section starts collapsed: docs/site-base-style-technical-plan.md section 4.4). Does not touch the saved choice. */
+  const openSection = (id) => { const c = UI.sectionCtl[id]; if (c && !c.isOpen()) c.setOpen(true); return !!c; };
+  return { openSection, eq, near, within, make, $, frames, wait, visible, snap, oneStep, toastText, merged, presetState, cases };
 })();
 
 async function runTests() {

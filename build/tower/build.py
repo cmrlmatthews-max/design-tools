@@ -220,6 +220,8 @@ PARTS = [
     '12h_tests_nosite.js',
     '12i_tests_site.js',      # the site layer (tests 1 to 6)
     '12j_tests_gizmo.js',     # placement gizmo tests (phase C)
+    '12k_tests_base.js',      # base elevation follows the ground (site base style plan, section 1)
+    '12l_tests_sections.js',  # collapsed sections and the prompt panel (site base style plan, section 4)
     '13_start.js',
 ]
 # parts another build phase writes: left out until the file exists

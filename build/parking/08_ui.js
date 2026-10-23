@@ -230,6 +230,7 @@ const UI = (() => {
         ]).el,
         h('div', { class: 'proj-line', id: 'projLine' }),
         Controls.when(() => ProjectUI.has(), [ProjectUI.nameControl().el]).el,
+        Controls.when(() => ProjectUI.has() && get('source') === 'standalone', ProjectUI.baseControl(lenF)).el,     // base elevation: Follow ground / Typed (a wrap or podium deck follows its massing)
       ],
     };
   }
@@ -641,6 +642,7 @@ const UI = (() => {
         Controls.slider({ label: 'Level (0 = all levels)', bind: levelBind, min: 0, max: 10, step: 1, hardMin: 0, hardMax: CONFIG.limits.maxLevels, integer: true, format: (x) => (x === 0 ? 'All' : String(x)), inputMode: 'numeric', compact: true }),
         Controls.toggle({ label: 'Site', bind: v('site') }),
         Controls.help('The ground, roads, water, trees, and neighbors of the project site. From the Site Model.'),
+        Controls.when(() => get('view.site') !== false, [choice('Site style', 'view.siteStyle', [['solid', 'Solid'], ['glass', 'Glass'], ['wireframe', 'Wireframe']], { id: 'siteStyleChips' })]),
         Controls.toggle({ label: 'Stall numbers', bind: v('stallNumbers') }),
         Controls.toggle({ label: 'Column overlay (demising lines, conflicts)', bind: v('overlay') }),
         Controls.toggle({ label: 'Massing context (ghost)', bind: v('context') }),
@@ -659,24 +661,24 @@ const UI = (() => {
     { id: 'view', title: 'View' },
   ];
   const SECTIONS = [
-    { id: 'source', tab: 'layout', title: 'Source', open: true, build: buildSource },
-    { id: 'footprint', tab: 'layout', title: 'Footprint', open: true, build: buildFootprint },
-    { id: 'levels', tab: 'layout', title: 'Levels', open: true, build: buildLevels },
+    { id: 'source', tab: 'layout', title: 'Source', open: false, build: buildSource },
+    { id: 'footprint', tab: 'layout', title: 'Footprint', open: false, build: buildFootprint },
+    { id: 'levels', tab: 'layout', title: 'Levels', open: false, build: buildLevels },
     { id: 'bays', tab: 'layout', title: 'Bays and stalls', build: buildBays },
     { id: 'grid', tab: 'layout', title: 'Column grid', build: buildGrid },
-    { id: 'cores', tab: 'layout', title: 'Cores', open: true, build: buildCores },
+    { id: 'cores', tab: 'layout', title: 'Cores', open: false, build: buildCores },
     { id: 'entries', tab: 'layout', title: 'Entries', build: buildEntries },
     { id: 'liner', tab: 'layout', title: 'Liner', build: buildLiner },
-    { id: 'ramptype', tab: 'ramp', title: 'Ramp type', open: true, build: buildRampType },
-    { id: 'speed', tab: 'ramp', title: 'Speed ramp', open: true, build: buildSpeed },
-    { id: 'rampslopes', tab: 'ramp', title: 'Slopes', open: true, build: buildRampSlopes },
-    { id: 'checkslist', tab: 'checks', title: 'Warnings', open: true, build: buildChecksList },
+    { id: 'ramptype', tab: 'ramp', title: 'Ramp type', open: false, build: buildRampType },
+    { id: 'speed', tab: 'ramp', title: 'Speed ramp', open: false, build: buildSpeed },
+    { id: 'rampslopes', tab: 'ramp', title: 'Slopes', open: false, build: buildRampSlopes },
+    { id: 'checkslist', tab: 'checks', title: 'Warnings', open: false, build: buildChecksList },
     { id: 'limits', tab: 'checks', title: 'Limits', build: buildLimits },
-    { id: 'accessible', tab: 'checks', title: 'Accessible stalls', open: true, build: buildAccessible },
+    { id: 'accessible', tab: 'checks', title: 'Accessible stalls', open: false, build: buildAccessible },
     { id: 'ev', tab: 'checks', title: 'EV', build: buildEv },
     { id: 'bike', tab: 'checks', title: 'Bicycles', build: buildBike },
-    { id: 'required', tab: 'checks', title: 'Required parking', open: true, build: buildRequired },
-    { id: 'display', tab: 'view', title: 'Display', open: true, build: buildDisplay },
+    { id: 'required', tab: 'checks', title: 'Required parking', open: false, build: buildRequired },
+    { id: 'display', tab: 'view', title: 'Display', open: false, build: buildDisplay },
   ];
   const sectionCtl = {};          // id -> Controls.section result
   let activeTab = 'layout';
@@ -1155,6 +1157,8 @@ const UI = (() => {
   }
   return {
     init, updateHud, rebuildPanel: () => { Controls.refreshAll(); },
+    // test hooks: the section controllers, and a rebuild of the panel from the saved UI prefs (a simulated reload)
+    sectionCtl, rebuildSections: () => { buildPanel(); setTab(activeTab, { remember: false }); Controls.refreshAll(); },
     // hooks for the selection card
     openItem, setTab, activeTab: () => activeTab, tabs: () => TABS.map((t) => t.id),
     moveCoreById, moveAllCoresToRows, makeCoresEditable,

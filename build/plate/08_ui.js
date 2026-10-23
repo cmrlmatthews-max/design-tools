@@ -411,6 +411,7 @@ const UI = (() => {
         choice('Style', 'view.style', [['model', 'Model'], ['diagram', 'Diagram']], { id: 'styleChips' }),
         Controls.toggle({ label: 'Site', bind: v('site') }),
         Controls.help('The ground, roads, water, trees, and neighbors of the project site. From the Site Model.'),
+        Controls.when(() => get('view.site') !== false, [choice('Site style', 'view.siteStyle', [['solid', 'Solid'], ['glass', 'Glass'], ['wireframe', 'Wireframe']], { id: 'siteStyleChips' })]),
         Controls.toggle({ label: 'Massing', bind: v('massing') }),
         Controls.help('The whole project massing as a solid, with the level group you are filling highlighted and its plate drawn at its own height. Plan shows the massing as outlines.'),
         Controls.toggle({ label: 'Unit labels', bind: v('labels') }),
@@ -433,18 +434,18 @@ const UI = (() => {
     { id: 'view', title: 'View' },
   ];
   const SECTIONS = [
-    { id: 'source', tab: 'plate', title: 'Source and program', open: true, build: buildSource },
-    { id: 'shape', tab: 'plate', title: 'Plate shape', open: true, build: buildShape },
-    { id: 'levels', tab: 'plate', title: 'Level groups', open: true, build: buildLevels },
-    { id: 'corridor', tab: 'plate', title: 'Corridor', open: true, build: buildCorridor },
-    { id: 'blocks', tab: 'plate', title: 'Blocks', open: true, build: buildBlocks },
-    { id: 'mix', tab: 'units', title: 'Unit mix', open: true, build: buildMix },
-    { id: 'locks', tab: 'units', title: 'Locks and re-fill', open: true, build: buildLocks },
+    { id: 'source', tab: 'plate', title: 'Source and program', open: false, build: buildSource },
+    { id: 'shape', tab: 'plate', title: 'Plate shape', open: false, build: buildShape },
+    { id: 'levels', tab: 'plate', title: 'Level groups', open: false, build: buildLevels },
+    { id: 'corridor', tab: 'plate', title: 'Corridor', open: false, build: buildCorridor },
+    { id: 'blocks', tab: 'plate', title: 'Blocks', open: false, build: buildBlocks },
+    { id: 'mix', tab: 'units', title: 'Unit mix', open: false, build: buildMix },
+    { id: 'locks', tab: 'units', title: 'Locks and re-fill', open: false, build: buildLocks },
     { id: 'accessible', tab: 'units', title: 'Accessible', build: buildAccessible },
-    { id: 'checkslist', tab: 'checks', title: 'Warnings', open: true, build: buildChecksList },
-    { id: 'numbers', tab: 'checks', title: 'Numbers', open: true, build: buildNumbers },
-    { id: 'mixtable', tab: 'checks', title: 'Mix against target', open: true, build: buildMixTable },
-    { id: 'display', tab: 'view', title: 'Display', open: true, build: buildDisplay },
+    { id: 'checkslist', tab: 'checks', title: 'Warnings', open: false, build: buildChecksList },
+    { id: 'numbers', tab: 'checks', title: 'Numbers', open: false, build: buildNumbers },
+    { id: 'mixtable', tab: 'checks', title: 'Mix against target', open: false, build: buildMixTable },
+    { id: 'display', tab: 'view', title: 'Display', open: false, build: buildDisplay },
   ];
   const sectionCtl = {};
   let activeTab = 'plate';
@@ -835,6 +836,8 @@ const UI = (() => {
   }
   return {
     init, updateHud, rebuildPanel: () => { Controls.refreshAll(); },
+    // test hooks: the section controllers, and a rebuild of the panel from the saved UI prefs (a simulated reload)
+    sectionCtl, rebuildSections: () => { buildPanel(); setTab(activeTab, { remember: false }); Controls.refreshAll(); },
     setTab, activeTab: () => activeTab, tabs: () => TABS.map((t) => t.id),
     setHudOpen, hudOpen: () => $('hud').dataset.collapsed === 'false', sections: () => SECTIONS.map((s) => ({ id: s.id, tab: s.tab })),
     openSection,

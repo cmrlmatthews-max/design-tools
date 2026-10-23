@@ -535,35 +535,21 @@ table.cmp td[title], table.cmp th[title] { cursor: help; }
 .ai-step-row .step.solid { border-color: var(--accent); }
 .ai-steps .help { margin: 8px 0 0; }
 .ai-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 10px 16px max(28px, env(safe-area-inset-bottom)); }
-.ai-tabs { display: flex; gap: 2px; padding: 3px; margin: 0 0 10px; background: var(--surface-2); border-radius: 10px; overflow-x: auto; scrollbar-width: none; }
-.ai-tabs::-webkit-scrollbar { display: none; }
-.ai-tab {
-  flex: 1 0 auto; min-height: 40px; padding: 0 10px; border: 0; border-radius: 7px; background: transparent;
-  color: var(--ink-2); font-size: 13px; font-weight: 500; white-space: nowrap;
-}
-.ai-tab[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(16, 20, 26, .14); }
-.ai-listbar { display: flex; margin: 0 0 8px; }
+.ai-row { display: grid; grid-template-columns: 62px minmax(0, 1fr); gap: 0 8px; align-items: start; margin: 0 0 2px; }
+.ai-row-label { padding-top: 11px; font-size: 12px; font-weight: 600; color: var(--ink-3); }
+.ai-row .chips { padding: 2px 0 4px; gap: 5px; }
+.ai-row .chip { min-height: 36px; min-width: 0; padding: 0 9px; font-size: 12.5px; line-height: 1.2; }
+.ai-row .chip.is-draft { border-style: dashed; }
+.ai-row .help { grid-column: 2; margin: 0 0 4px; }
 .ai-empty { margin: 4px 0 8px; }
-.ai-list { display: grid; gap: 6px; }
-.ai-item {
-  display: grid; gap: 1px; width: 100%; min-height: var(--hit); padding: 8px 12px; text-align: left;
-  border: 1px solid var(--line); border-radius: 10px; background: var(--surface);
-}
-.ai-item:hover { background: var(--surface-2); }
-.ai-item[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: var(--accent-soft); }
-.ai-item.is-draft { border-style: dashed; }
-.ai-item-title { font-size: 13.5px; font-weight: 600; }
-.ai-item-desc { font-size: 12.5px; line-height: 1.35; color: var(--ink-3); }
-.ai-detail { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.ai-detail { margin-top: 6px; }
 .ai-dhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
 .ai-dtitle { font-size: 14px; font-weight: 600; min-width: 0; }
 .ai-ddesc { margin: 0 0 8px; padding: 8px 10px; border-left: 3px solid var(--accent); border-radius: 0 6px 6px 0; background: var(--accent-soft); font-size: 13px; line-height: 1.45; color: var(--ink); }
-.ai-dacts { display: flex; gap: 6px; flex-wrap: wrap; }
+.ai-dacts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
 .btn.danger-text { color: var(--bad); }
 .ai-fields { margin: 2px 0 4px; }
-.ai-fields .select-row select { min-width: 0; width: min(220px, 55%); }
-.ai-fields .select-row label { min-width: 0; }
-.ai-auto { margin: 10px 0 4px; }
+.ai-auto { margin: 8px 0 4px; padding-top: 10px; border-top: 1px solid var(--line); }
 .ai-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .ai-chip {
   display: inline-flex; align-items: baseline; gap: 6px; max-width: 100%; padding: 4px 9px; border-radius: 999px;
@@ -3077,6 +3063,7 @@ const PromptsMod = (() => {
 //
 // Auto fields (the panel computes them from the current option):
 //   {{floors}} {{height}} {{program}} {{podium}} {{form}}
+//   {{hero}}  the Hero render prompt only: the sentences about the hero building, from heroFor() below (the panel passes it in the values)
 // Pick fields (the user chooses them in the panel): see PROMPT_FIELDS.
 // Pick values are written to read naturally in the template sentences:
 //   material -> "The facade is {{material}}."
@@ -3086,7 +3073,12 @@ const PromptsMod = (() => {
 // Templates never write "a {{program}}" (avoids "a office"); they use "this {{program}} tower".
 // {{podium}} always follows "with" ("with a 4-story podium" / "with no podium").
 
-const PROMPT_LIBRARY_VERSION = 1;
+const PROMPT_LIBRARY_VERSION = 2;
+
+// The Hero render's time (Cade's reference prompt): reads after "photographed".
+const DUSK = "at dusk under a deep blue sky with a warm glow near the horizon";
+const AUTUMN = "in autumn with orange, red, and gold foliage";
+const FRITTED = "white-fritted glass with slim horizontal aluminum sunshades at each floor";
 
 const PROMPT_FIELDS = {
   material: {
@@ -3122,6 +3114,7 @@ const PROMPT_FIELDS = {
   time: {
     label: "Time of day",
     options: [
+      { value: DUSK, label: "Dusk, deep blue sky" },
       { value: "in late-afternoon golden hour light with low warm sun raking across the facade", label: "Golden hour" },
       { value: "in clear late-morning sun under a deep blue sky", label: "Late morning, clear" },
       { value: "in high afternoon sun with crisp short shadows", label: "Bright afternoon" },
@@ -3165,7 +3158,209 @@ const AVOID_END = "fisheye distortion, cartoon or illustration look.";
 // Shared opening. Skyline and base close-up prompts write their own.
 const OPEN = "Architectural photograph of this {{program}} tower, about {{height}} tall with {{podium}}";
 
+
+/* ------------------------------------------------------------------------------------------ the hero building
+   heroFor(tool, state, data) writes the {{hero}} text of the Hero render prompt from a tool's own state.
+   tool: 'tower' | 'midrise' | 'parking' | 'facade' | 'grading'.
+   data: the second argument of that tool's autoValues(state, data):
+         tower   Derived.get().metrics  { floorCount, totalHeight }
+         midrise Derived.get().metrics  { floors, height }
+         parking Derived.get().hud      { levels, topOfDeck }
+         facade  Derived.get()          { hud: { levels, height, wwr, zones }, faces, levels }
+         grading Derived.get()          { hud: { tierCount, wallCount, wallMax }, built: { buildings } }
+   Returns a short paragraph plus "* " lines, no tokens, no "[". It never throws: a state it cannot read gives a plain sentence. */
+const NUMBER_WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+const countWord = (n) => (n >= 0 && n < NUMBER_WORDS.length ? NUMBER_WORDS[n] : String(n));
+const oxford = (list) => (list.length <= 1 ? list.join("") : list.length === 2 ? `${list[0]} and ${list[1]}` : `${list.slice(0, -1).join(", ")}, and ${list[list.length - 1]}`);
+const nz = (v, d = 0) => (typeof v === "number" && Number.isFinite(v) ? v : d);
+const feet = (v) => `${Math.round(nz(v))} feet`;
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+const articleFor = (phrase) => (/^(?:[aeio]|L-|8|11|18)/i.test(phrase) ? "an" : "a");
+const RENDER_ONLY = "Render only this building in full photographic detail.";
+const HERO_FALLBACK = `The hero building is the building at the center of the image. ${RENDER_ONLY}`;
+const TOWER_SHAPES = { rect: "rectangular", square: "rectangular", circle: "round", ellipse: "elliptical", triangle: "triangular", L: "L-shaped", U: "U-shaped", polygon: "custom-shaped" };
+const CROWNS = { none: "a flat roof", flat: "a flat roof", stepped: "a stepped crown", sloped: "a sloped crown", spire: "a spire", screen: "a rooftop screen" };
+const COMPASS = ["north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest"];
+const FACADE_SYSTEMS = {
+  punched: "punched windows in a solid wall", windowWall: "window wall with glass between slab-edge spandrels",
+  curtainWall: "curtain wall with vision glass and opaque spandrels", storefront: "storefront glazing", solid: "solid wall panels",
+};
+
+function heroTower(state, m) {
+  const segs = (state.segments || []).filter(Boolean);
+  let tall = null, tallH = -1;
+  for (const sg of segs) { const h = nz(sg.floors) * nz(sg.ftf); if (h > tallH) { tall = sg; tallH = h; } }
+  const twist = segs.some((sg) => nz(sg.twist && sg.twist.deg) !== 0);
+  const taper = segs.some((sg) => nz(sg.taper && sg.taper.x) !== 0 || nz(sg.taper && sg.taper.y) !== 0);
+  const shape = TOWER_SHAPES[tall && tall.shape && tall.shape.type] || "custom-shaped";
+  const lead = [twist ? "twisting" : "", taper ? "tapering" : "", shape].filter(Boolean).join(" ");
+  const pod = state.podium && state.podium.on ? Math.max(1, Math.round(nz(state.podium.floors, 1))) : 0;
+  const out = [`The hero building is the ${lead} tower at the center of the image.${pod ? ` It stands on ${articleFor(String(pod))} ${pod}-story podium.` : ""} ${RENDER_ONLY}`];
+  out.push(`* Height is about ${feet(m.totalHeight)}.`);
+  const crown = CROWNS[state.crown && state.crown.type] || "a flat roof";
+  out.push(`* The tower has ${Math.round(nz(m.floorCount))} floors and ${crown}.`);
+  const nSet = (state.setbacks || []).length, nCarve = (state.carves || []).length;
+  if (nSet || nCarve) out.push(`* It has ${oxford([nSet ? plural(countWord(nSet), "setback", "setbacks") : "", nCarve ? "a sky garden" : ""].filter(Boolean))}. Keep them exactly as the massing shows them.`);
+  const prog = [];
+  for (const sg of segs) {
+    const name = sg.program ? String(sg.program) : "";
+    if (!name) continue;
+    const last = prog[prog.length - 1];
+    if (last && last.name === name) last.floors += nz(sg.floors); else prog.push({ name, floors: nz(sg.floors) });
+  }
+  if (prog.length === 1) out.push(`* The program is ${prog[0].name}.`);
+  else if (prog.length) out.push(`* From the bottom up, the floors hold ${oxford(prog.map((x) => `${Math.round(x.floors)} ${x.floors === 1 ? "floor" : "floors"} of ${x.name}`))}.`);
+  if (twist) out.push("* Each floor plate rotates slightly from the floor below. Keep the twist exactly as the massing shows it.");
+  if (taper) out.push("* The floor plates change in size with height. Keep the taper exactly as the massing shows it.");
+  return out.join("\n");
+}
+
+function heroMidrise(state, m) {
+  const bars = (state.bars || []).filter(Boolean), courts = (state.courts || []).length;
+  const deck = !!(state.deck && state.deck.on);
+  const type = state.type;
+  let adj;
+  if (type === "wrap" || (deck && bars.length >= 4)) adj = "wrap-around";
+  else if (type === "courtyard" || type === "podium") adj = courts >= 2 ? "E-shaped" : bars.length === 2 ? "L-shaped" : bars.length === 3 ? "U-shaped" : "courtyard";
+  else if (type === "garden" || type === "corridor-garden") adj = bars.length > 1 ? "low-bar" : "single-bar";
+  else adj = bars.length > 1 ? "multi-bar" : "single-bar";
+  let tall = null;
+  for (const b of bars) if (!tall || nz(b.floors) > nz(tall.floors)) tall = b;
+  const progWords = { residential: "residential", hotel: "hotel", senior: "senior living" };
+  const prog = progWords[tall && tall.program] || "mixed-use";
+  const floors = Math.round(nz(m.floors));
+  const out = [`The hero building is the ${floors}-story ${adj} ${prog} building at the center of the image. ${RENDER_ONLY}`];
+  out.push(`* Height is about ${feet(m.height)}.`);
+  const parts = [bars.length ? plural(countWord(bars.length), "bar", "bars") : ""];
+  if (courts && adj !== "wrap-around") parts.push(courts === 1 ? "a courtyard" : `${countWord(courts)} courtyards`);
+  if (deck) parts.push("a parking deck inside the wrap");
+  const podN = state.podium && state.podium.on ? Math.max(1, (state.podium.levels || []).length) : 0;
+  if (podN) parts.push(`${articleFor(String(podN))} ${podN}-story podium`);
+  out.push(`* It has ${oxford(parts.filter(Boolean))}. Keep the bars, the courtyard, and the podium exactly as the massing shows them.`);
+  out.push(`* The roof is ${state.roof && state.roof.type === "screen" ? "flat with a rooftop screen" : "flat"}.`);
+  return out.join("\n");
+}
+
+function heroParking(state, m) {
+  const n = Math.round(nz(m.levels, nz(state.levels && state.levels.count)));
+  const ramps = { "single-helix": "single helix", "double-helix": "double helix", speed: "speed", split: "split-level", "sloped-floor": "sloped-floor", none: "" };
+  const ramp = state.ramp && state.ramp.type in ramps ? ramps[state.ramp.type] : "";
+  const out = [`The hero building is the ${n}-level parking deck at the center of the image, with open sides${ramp ? ` and a ${ramp} ramp` : ""}. ${RENDER_ONLY}`];
+  out.push(`* Height is about ${feet(m.topOfDeck)} to the top of the deck.`);
+  out.push("* Each level reads as a flat slab edge with a low guard wall. The sides stay open, so cars and columns show behind the edge.");
+  if (state.source === "wrap") out.push("* A building wraps the deck. Keep the wrap exactly as the massing shows it.");
+  else if (state.source === "podium") out.push("* The deck is the podium under a building. Keep the building above exactly as the massing shows it.");
+  if (state.liner && state.liner.on) out.push("* A retail liner runs along one side of the deck. Keep it exactly as the massing shows it.");
+  return out.join("\n");
+}
+
+function heroFacade(state, d) {
+  const hud = d.hud || {};
+  const n = Math.round(nz(hud.levels));
+  let massing;
+  if (state.source === "project" && d.built && d.built.source === "project") massing = `${n}-story building from the project massing`;
+  else {
+    const sa = state.standalone || {};
+    const shape = { rect: "rectangular", L: "L-shaped", U: "U-shaped", O: "courtyard" }[sa.shape] || "rectangular";
+    massing = `${n}-story ${shape} building${sa.podium && sa.podium.on ? " on a podium" : ""}`;
+  }
+  const out = [`The hero building is the ${massing} at the center of the image. ${RENDER_ONLY}`];
+  out.push(`* Height is about ${feet(hud.height)}.`);
+  const faces = d.faces || [];
+  const zones = [];
+  for (const f of faces) if (f && f.zone != null && !zones.includes(f.zone)) zones.push(f.zone);
+  const label = (id) => {
+    const r = state.zones && Array.isArray(state.zones.ranges) ? state.zones.ranges.find((x) => x && String(x.id) === String(id)) : null;
+    return r && r.name ? String(r.name) : String(id);
+  };
+  for (const z of zones) {
+    const systems = [];
+    for (const f of faces) {
+      if (f.zone !== z) continue;
+      const k = (f.rule && f.rule.system) || "punched";
+      if (!systems.includes(k)) systems.push(k);
+    }
+    const zi = hud.zones && hud.zones[z];
+    const glass = zi ? ` About ${Math.round(nz(zi.wwr) * 100)} percent of the wall is glass.` : "";
+    out.push(`* ${label(z).charAt(0).toUpperCase()}${label(z).slice(1)} zone: ${oxford(systems.map((k) => FACADE_SYSTEMS[k] || k))}.${glass}`);
+  }
+  out.push(`* Overall, about ${Math.round(nz(hud.wwr) * 100)} percent of the facade is glass.`);
+  out.push("* Keep every window, door, balcony, fin, and shade exactly where the model shows it.");
+  return out.join("\n");
+}
+
+function heroGrading(state, d) {
+  const hud = d.hud || {};
+  const bs = (d.built && d.built.buildings) || [];
+  const pads = Math.round(nz(hud.tierCount));
+  const out = [`The hero building is the building on the graded pad at the center of the image. Show the pads, the walls, and the slopes as graded. ${RENDER_ONLY}`];
+  out.push(`* ${bs.length > 1 ? `The site has ${bs.length} buildings on ${plural(pads, "pad", "pads")}.` : `The building stands on ${pads === 1 ? "one pad" : `${countWord(pads)} pads`}.`}`);
+  const g = state.ground || {};
+  if (g.mode === "plane" && g.plane) {
+    const dir = COMPASS[Math.round((((nz(g.plane.downhill) % 360) + 360) % 360) / 45) % 8];
+    out.push(`* The ground falls ${(Math.round(nz(g.plane.slope) * 10) / 10).toFixed(1)} percent toward the ${dir}.`);
+  }
+  if (nz(hud.wallCount) > 0) out.push(`* There ${hud.wallCount === 1 ? "is one retaining wall" : `are ${hud.wallCount} retaining walls`}, up to ${(Math.round(nz(hud.wallMax) * 10) / 10).toFixed(1)} feet tall.`);
+  out.push("* Keep every slope, wall, step, and drive exactly as the model shows it.");
+  return out.join("\n");
+}
+
+function heroFor(tool, state, data) {
+  try {
+    const st = state || {}, dt = data || {};
+    if (tool === "tower") return heroTower(st, dt);
+    if (tool === "midrise") return heroMidrise(st, dt);
+    if (tool === "parking") return heroParking(st, dt);
+    if (tool === "facade") return heroFacade(st, dt);
+    if (tool === "grading") return heroGrading(st, dt);
+  } catch (e) { /* fall through */ }
+  return HERO_FALLBACK;
+}
+
+const HERO_PROMPT_ID = "hero-render";
+
 const PROMPTS = [
+  // ---------------------------------------------------------------- hero (Cade's standard: the hero real, the context white, the ground real)
+  {
+    id: HERO_PROMPT_ID,
+    group: "hero",
+    title: "Hero render",
+    description: "The hero building photoreal, the context as a white model, the ground real. Cade's standard.",
+    noLock: true,
+    template:
+      "Edit the attached massing model image. Do not regenerate the scene from scratch.\n\n" +
+      "KEEP EXACTLY AS SHOWN\n" +
+      "* The camera angle, perspective, framing, and horizon line.\n" +
+      "* The footprint, height, rotation, and position of every building.\n" +
+      "* The road layout, block shapes, and site boundary.\n" +
+      "Do not add, remove, move, stretch, or reshape any volume.\n\n" +
+      "HERO BUILDING — RENDER PHOTOREAL\n" +
+      "{{hero}}\n" +
+      "* The facade is {{material}}.\n" +
+      "* Slab edges read as dark horizontal lines between floors.\n" +
+      "* Interior lights are on in most rooms, in varied warm and neutral tones. Each floor reads as its own band of light.\n\n" +
+      "CONTEXT BUILDINGS — KEEP AS WHITE MODEL\n" +
+      "Render every other building as an opaque matte white volume.\n" +
+      "* No windows. No glazing. No texture. No signage. No material.\n" +
+      "* Keep crisp clean edges and soft grey shadows.\n" +
+      "* The context must read as a physical white study model.\n\n" +
+      "GROUND PLANE — RENDER PHOTOREAL\n" +
+      "Render the ground and everything on it with real materials.\n" +
+      "* Asphalt roads with lane markings and crosswalks. Concrete sidewalks and curbs.\n" +
+      "* Parked and moving cars. Street trees {{season}}. Pedestrians at small scale. Streetlights on after dusk.\n" +
+      "* Keep every road, walk, tree, and water area where the model shows it.\n\n" +
+      "RULE\n" +
+      "Vertical building volumes stay matte white. The ground plane and the objects on it become real. The hero building is the only building that becomes real.\n\n" +
+      "LIGHT AND SKY\n" +
+      "The scene is photographed {{time}}. The white volumes catch the color of the sky. The hero building reads warm against them.\n\n" +
+      "CAMERA\n" +
+      "Architectural visualization quality. Vertical lines stay straight. Clean blacks. Sharp focus across the frame.\n\n" +
+      "DO NOT INCLUDE\n" +
+      "Text, logos, watermarks, building signage, neon colors, fisheye distortion, tilt-shift blur, cartoon or illustration style, windows on the white volumes.",
+    uses: ["material", "time", "season"],
+    defaults: { material: FRITTED, time: DUSK, season: AUTUMN },
+  },
+
   // ---------------------------------------------------------------- time / weather
   {
     id: "time-golden-hour",
@@ -3492,11 +3687,13 @@ const PROMPTS = [
 ];
 
 // Full prompt text: FORM_LOCK + blank line + template, with every {{token}} replaced.
+// A prompt with noLock: true (the Hero render) starts with its own text, without the form lock.
 // Value order (later wins): PROMPT_FIELDS defaults < prompt.defaults < values.
+// {{hero}} has a plain default sentence, so a tool that does not send it still gets a whole prompt.
 // Empty, null, or undefined entries in values do not override a default.
 // Unknown tokens stay visible as [token].
 function fillPrompt(prompt, values = {}) {
-  const merged = {};
+  const merged = { hero: HERO_FALLBACK };
   for (const [key, field] of Object.entries(PROMPT_FIELDS)) merged[key] = field.default;
   for (const [key, v] of Object.entries((prompt && prompt.defaults) || {})) {
     if (v !== undefined && v !== null && v !== "") merged[key] = v;
@@ -3504,7 +3701,7 @@ function fillPrompt(prompt, values = {}) {
   for (const [key, v] of Object.entries(values || {})) {
     if (v !== undefined && v !== null && v !== "") merged[key] = v;
   }
-  const text = FORM_LOCK + "\n\n" + ((prompt && prompt.template) || "");
+  const text = (prompt && prompt.noLock ? "" : FORM_LOCK + "\n\n") + ((prompt && prompt.template) || "");
   return text
     .replace(/\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g, (_, key) =>
       Object.prototype.hasOwnProperty.call(merged, key) ? String(merged[key]) : `[${key}]`)
@@ -3513,7 +3710,7 @@ function fillPrompt(prompt, values = {}) {
     .trim();
 }
 
-return { PROMPT_LIBRARY_VERSION, PROMPT_FIELDS, FORM_LOCK, PROMPTS, fillPrompt };
+return { PROMPT_LIBRARY_VERSION, PROMPT_FIELDS, FORM_LOCK, heroFor, HERO_PROMPT_ID, PROMPTS, fillPrompt };
 })();
 
 /* ---- src/facade/faces.js ---- */
@@ -6189,6 +6386,7 @@ function fillDefaults(src) {
   if (!Array.isArray(s.materials) || !s.materials.length) s.materials = deepClone(base.materials);
   const v = s.view;
   v.site = v.site !== false;                       // the project site layer (ground, roads, water, trees, neighbors); on unless switched off
+  v.siteStyle = ['solid', 'glass', 'wireframe'].includes(v.siteStyle) ? v.siteStyle : 'solid';     // neighbor buildings in the site layer: solid, glass or wireframe
   if (v.style !== 'diagram') v.style = 'model';
   if (v.colorBy !== 'wwr') v.colorBy = 'system';
   if (!CONFIG.orientations.includes(v.elevation)) v.elevation = null;
@@ -7429,7 +7627,22 @@ const Render = (() => {
     }
   }
 
+  /** What was visible while captureClean drew its picture ({ site, boundary, arrow, grid, figure, overlay, ... }), or null before the first one. */
+  let lastCapture = null;
+  /** Hides the dashed site boundary and the north arrow inside the site layer. Returns the function that shows them again. */
+  function hideSiteMarks() {
+    const hid = [];
+    for (const o of layers.site.group.children) {
+      const k = o.userData && o.userData.kind;
+      if ((k === 'site-boundary' || k === 'site-arrow') && o.visible) { o.visible = false; hid.push(o); }
+    }
+    return () => { for (const o of hid) o.visible = true; };
+  }
+  const siteMarkFlag = (kind) => layers.site.group.children.some((o) => o.userData && o.userData.kind === kind && o.visible);
+
   /** AI-ready picture (main view only): Model style, no grid / scale figure / overlay, a plain light sky and ground.
+   *  The site layer stays on screen as drawn (ground, roads, walks, water, trees, neighbor buildings, in the site style that is on);
+   *  only its dashed boundary and its north arrow are hidden (docs/site-base-style-technical-plan.md section 3.1).
    *  Nothing in the store is touched: the live layers are hidden, a throwaway group is drawn, then everything is put back. */
   async function captureClean(scale = 2) {
     if (!renderer) throw new Error('The 3D view is not available.');
@@ -7449,7 +7662,8 @@ const Render = (() => {
       sub.add(o);
     }
     cap.add(sub);
-    for (const o of buildContextObjects(st)) {
+    // The site layer draws the site buildings (the context ghost is empty while it has buildings, as in the live view).
+    for (const o of (SiteLayer.info().buildings > 0 ? [] : buildContextObjects(st))) {
       if (o.isMesh) { o.material = ctxMat; o.castShadow = shadowsOn; o.receiveShadow = shadowsOn; }
       cap.add(o);
     }
@@ -7458,10 +7672,12 @@ const Render = (() => {
       model: layers.model.group.visible, ctx: layers.context.group.visible, ov: layers.overlay.group.visible, shadow: shadowPlane.visible,
       site: layers.site.group.visible, slabY: ground.position.y,
     };
+    let showMarks = () => {};
     const restore = () => {
       scene.remove(cap);
       clearGroup(sub); clearGroup(cap);
       ctxMat.dispose();
+      showMarks();
       scene.background = prev.bg;
       ground.material.color.copy(prev.ground);
       gridMesh.visible = prev.grid; figure.visible = prev.fig; shadowPlane.visible = prev.shadow;
@@ -7479,9 +7695,18 @@ const Render = (() => {
         scene.add(cap);
         scene.background = new THREE.Color('#f3f5f7');
         ground.material.color.set('#e4e7ea');
-        gridMesh.visible = false; figure.visible = false; shadowPlane.visible = shadowsOn;
+        // The site layer stays on screen: the flat slab drops under its ground, as in the live view.
+        const siteGround = layers.site.group.visible && SiteLayer.info().ground;
+        const bottom = siteGround ? SiteLayer.groundBottom() : null;
+        gridMesh.visible = false; figure.visible = false; shadowPlane.visible = shadowsOn && !siteGround;
         layers.model.group.visible = layers.context.group.visible = layers.overlay.group.visible = false;
-        layers.site.group.visible = false; ground.position.y = 0;          // the AI-ready picture has no site layer
+        ground.position.y = bottom == null ? 0 : bottom - SLAB_DROP;
+        showMarks = hideSiteMarks();
+        lastCapture = {
+          site: layers.site.group.visible, boundary: siteMarkFlag('site-boundary'), arrow: siteMarkFlag('site-arrow'),
+          grid: gridMesh.visible, figure: figure.visible, overlay: selOverlay.visible || layers.overlay.group.visible,
+          siteObjects: layers.site.group.children.filter((o) => o.visible).length,
+        };
         for (const c of [persp, ortho]) c.clearViewOffset();
         pending = ShotMod.captureView({ renderer, scene, camera: cam, scale });
       } finally { restore(); }
@@ -7543,7 +7768,7 @@ const Render = (() => {
   }
 
   return {
-    init, setView, capture, captureClean, enterCompare, exitCompare,
+    init, setView, capture, captureClean, captureFlags: () => (lastCapture ? { ...lastCapture } : null), enterCompare, exitCompare,
     sceneFlags: () => ({ site: layers.site.group.visible, slabY: ground.position.y, shadowPlane: shadowPlane.visible, grid: gridMesh.visible, figure: figure.visible, model: layers.model.group.visible, context: layers.context.group.visible, overlay: layers.overlay.group.visible, children: scene.children.length }),
     setInsetProvider: (fn) => { insetProvider = fn; },
     refreshInsets: (animate = true) => { if (!renderer) return; applyViewOffset(); if (preset) setView(preset, animate); else needsRender = true; },
@@ -7589,6 +7814,8 @@ const Render = (() => {
 const SiteLayer3D = (() => {
   const ALL_PARTS = ['ground', 'boundary', 'buildings', 'roads', 'walks', 'water', 'trees'];
   const EDGE_ANGLE = 30;
+  const GLASS_OPACITY = 0.25;            // site style 'glass'
+  const STYLES = ['solid', 'glass', 'wireframe'];
   const BOUNDARY_COLOR = 0xc0701a;       // the Tower's dashed site loop
   const ARROW_COLOR = 0x1d2733;
 
@@ -7780,25 +8007,35 @@ const SiteLayer3D = (() => {
         count++;
       } catch (e) { console.warn('site building skipped', b && b.id, e); }
     }
+    const style = o.style;
     for (const [list, color] of [[plain, o.css('--scene-model')], [est, o.css('--scene-est')]]) {
       if (!list.length) continue;
       const merged = mergeAll(list);
-      const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.94, metalness: 0 });
-      mats.push(mat);
-      const mesh = new THREE.Mesh(merged, mat);
-      mesh.userData.kind = 'site-buildings';
-      mesh.userData.site = true;
-      mesh.userData.casts = true; mesh.userData.receives = true;
-      out.push(mesh);
-      info.triangles += (merged.index ? merged.index.count : merged.getAttribute('position').count) / 3;
-      if (o.edges) {
+      let tris = 0;
+      if (style !== 'wireframe') {                                  // wireframe: edges only, no faces
+        const glass = style === 'glass';
+        const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.94, metalness: 0 });
+        if (glass) { mat.transparent = true; mat.opacity = GLASS_OPACITY; mat.depthWrite = false; }
+        mats.push(mat);
+        const mesh = new THREE.Mesh(merged, mat);
+        mesh.userData.kind = 'site-buildings';
+        mesh.userData.site = true;
+        mesh.userData.casts = true; mesh.userData.receives = !glass;
+        if (glass) mesh.renderOrder = 2;                            // after the ground and the roads
+        out.push(mesh);
+        tris = (merged.index ? merged.index.count : merged.getAttribute('position').count) / 3;
+        info.triangles += tris;
+      }
+      if (o.edges || style === 'wireframe') {                       // a wireframe is its edges: they stay even when edges is off
         const emat = new THREE.LineBasicMaterial({ color: o.css('--scene-edge') });
         mats.push(emat);
         const edges = new THREE.LineSegments(new THREE.EdgesGeometry(merged, EDGE_ANGLE), emat);
         edges.userData.kind = 'site-building-edges';
         edges.userData.site = true;
+        if (style !== 'solid') edges.renderOrder = 3;
         out.push(edges);
       }
+      if (style === 'wireframe') merged.dispose();                  // no mesh holds it
     }
     info.buildings = count;
   }
@@ -7890,13 +8127,15 @@ const SiteLayer3D = (() => {
    *          zOf: (localZ) => worldY (default identity; the Grading Sketch passes its exaggeration mapper),
    *          css: (name, fallback) => THREE.Color, edges: true, shadows: true,
    *          rotation: placement rotation in degrees (turns the north arrow; default 0),
+   *          style: 'solid' (default) | 'glass' (buildings opacity 0.25, depthWrite off, renderOrder 2, edges 3) | 'wireframe' (buildings as edges only;
+   *                 the edges are drawn even when edges is false). Only the neighbor buildings change; an unknown value means 'solid'.
    *          zAt: (x, y) => local ground z (default: the drawn ground mesh) }
-   *  Returns { objects: [THREE.Object3D], info: { ground, buildings, roads, walks, waterAreas, trees, triangles, bounds } }.
+   *  Returns { objects: [THREE.Object3D], info: { style, ground, buildings, roads, walks, waterAreas, trees, triangles, bounds } }.
    *  Each object has userData.kind ('site-ground', 'site-skirt', 'site-boundary', 'site-arrow', 'site-buildings',
    *  'site-building-edges', 'site-roads', 'site-walks', 'site-water', 'site-water-lines', 'site-trees') and userData.site = true;
    *  userData.casts / userData.receives say which shadow flags setShadows() turns on. */
   function objects(data, opts = {}) {
-    const info = { ground: false, buildings: 0, roads: 0, walks: 0, waterAreas: 0, trees: 0, triangles: 0, bounds: data && data.bounds ? { ...data.bounds } : null };
+    const info = { style: 'solid', ground: false, buildings: 0, roads: 0, walks: 0, waterAreas: 0, trees: 0, triangles: 0, bounds: data && data.bounds ? { ...data.bounds } : null };
     const out = [], mats = [];
     if (!data || !data.ok) return { objects: out, info };
     const parts = new Set(Array.isArray(opts.parts) ? opts.parts : ALL_PARTS);
@@ -7906,7 +8145,9 @@ const SiteLayer3D = (() => {
       css: typeof opts.css === 'function' ? opts.css : defaultCss,
       edges: opts.edges !== false, rotation: opts.rotation || 0,
       hasGround: !!data.ground,
+      style: STYLES.includes(opts.style) ? opts.style : 'solid',
     };
+    info.style = o.style;
     const sampler = makeSampler(data.ground);
     const zAt = typeof opts.zAt === 'function' ? opts.zAt : (sampler || (() => 0));
     if (parts.has('ground')) { buildGround(data, o, mats, out, info); info.ground = !!data.ground; }
@@ -7946,9 +8187,9 @@ const SiteLayer3D = (() => {
     }
   }
 
-  /** The cache key for a tool's syncLayer: `${siteUpdatedAt}|${x},${y},${rot},${baseZ}|${showFlags}|${themeEpoch}`.
-   *  doc: the project document (or null); show: a string or an object of flags. */
-  function keyFor(doc, placement, show, themeEpoch) {
+  /** The cache key for a tool's syncLayer: `${siteUpdatedAt}|${x},${y},${rot},${baseZ}|${showFlags}|${themeEpoch}|${style}`.
+   *  doc: the project document (or null); show: a string or an object of flags; style: the site style ('solid' when missing). */
+  function keyFor(doc, placement, show, themeEpoch, style) {
     let stamp = '';
     try {
       const sec = ProjectMod.getSection(doc, 'site');
@@ -7959,7 +8200,7 @@ const SiteLayer3D = (() => {
     } catch (e) { stamp = ''; }
     const p = placement || {};
     const flags = show && typeof show === 'object' ? Object.keys(show).sort().map((k) => `${k}=${show[k] ? 1 : 0}`).join(',') : String(show === undefined ? '' : show);
-    return `${stamp}|${p.x || 0},${p.y || 0},${p.rotation || 0},${p.baseZ || 0}|${flags}|${themeEpoch || 0}`;
+    return `${stamp}|${p.x || 0},${p.y || 0},${p.rotation || 0},${p.baseZ || 0}|${flags}|${themeEpoch || 0}|${STYLES.includes(style) ? style : 'solid'}`;
   }
 
   /** The box a view frames when a site is open: the building box grown by max(150 ft, 0.6 x its larger plan span) on every side,
@@ -7975,7 +8216,7 @@ const SiteLayer3D = (() => {
     };
   }
 
-  return { objects, dispose, setShadows, keyFor, makeSampler, frameAround };
+  return { objects, dispose, setShadows, keyFor, makeSampler, frameAround, STYLES };
 })();
 
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
@@ -8258,7 +8499,7 @@ const Select = (() => {
    ========================================================================== */
 
 const SiteLayer = (() => {
-  const OFF = { shown: false, ground: false, buildings: 0, roads: 0, walks: 0, waterAreas: 0, trees: 0, key: 'off' };
+  const OFF = { style: 'solid', shown: false, ground: false, buildings: 0, roads: 0, walks: 0, waterAreas: 0, trees: 0, key: 'off' };
   let drawn = { ...OFF };
   let mesh = null, zBottom = 0;
 
@@ -8274,6 +8515,9 @@ const SiteLayer = (() => {
   /** The layer shows with View > Site, but not in an elevation view: that view is flat, like the DXF sheet, and neighbors in front would hide the facade. */
   const wanted = (state) => !!state.view && state.view.site !== false && !state.view.elevation;
 
+  /** The site style of the View tab: 'solid' | 'glass' | 'wireframe' (anything else is 'solid'). Only the neighbor buildings change. */
+  const styleOf = (state) => { const v = state && state.view && state.view.siteStyle; return v === 'glass' || v === 'wireframe' ? v : 'solid'; };
+
   /** Called by Render.syncMain on every frame of the main view (never in Compare).
    *  layer = { group, key } (a THREE.Group already in the scene, hidden in Compare and in the AI-ready image);
    *  state = Store.raw(); d = Derived.get(); kit = { syncLayer, clearGroup, cssColor, themeEpoch }.
@@ -8283,7 +8527,7 @@ const SiteLayer = (() => {
     const dv = wanted(state) ? siteDerived() : null;
     const doc = dv ? ProjectUI.doc() : null;
     const pl = dv ? ProjectUI.placement() : null;
-    const key = dv ? SiteLayer3D.keyFor(doc, pl, { site: true, buildings: true }, kit.themeEpoch ? kit.themeEpoch() : 0) : 'off';
+    const key = dv ? SiteLayer3D.keyFor(doc, pl, { site: true, buildings: true }, kit.themeEpoch ? kit.themeEpoch() : 0, styleOf(state)) : 'off';
     if (layer.key !== key) SiteLayer3D.dispose(layer.group.children);       // the materials; kit.syncLayer frees the geometry
     return kit.syncLayer(layer, key, () => {
       mesh = null; zBottom = 0; drawn = { ...OFF, key };
@@ -8292,11 +8536,11 @@ const SiteLayer = (() => {
       try { data = SiteLayerMod.buildSiteLayerData(dv, pl, { contextIds: new Set() }); } catch (e) { console.error(e); return []; }
       if (!data || !data.ok) return [];
       let res = null;
-      try { res = SiteLayer3D.objects(data, { css: kit.cssColor, rotation: pl.rotation, edges: true, shadows: true }); } catch (e) { console.error(e); return []; }
+      try { res = SiteLayer3D.objects(data, { style: styleOf(state), css: kit.cssColor, rotation: pl.rotation, edges: true, shadows: true }); } catch (e) { console.error(e); return []; }
       mesh = res.objects.find((o) => o.userData.kind === 'site-ground') || null;
       zBottom = data.bounds ? data.bounds.zMin : 0;
       const i = res.info;
-      drawn = { shown: true, ground: !!i.ground, buildings: i.buildings, roads: i.roads, walks: i.walks, waterAreas: i.waterAreas, trees: i.trees, key };
+      drawn = { style: styleOf(state), shown: true, ground: !!i.ground, buildings: i.buildings, roads: i.roads, walks: i.walks, waterAreas: i.waterAreas, trees: i.trees, key };
       return res.objects;
     });
   }
@@ -9279,6 +9523,7 @@ const UI = (() => {
         Controls.when(() => { sync(); return true; }, [h('div', { class: 'ctl' }, h('div', { class: 'ctl-label' }, 'View'), wrap)]),
         Controls.toggle({ label: 'Site', bind: v('site') }),
         Controls.help('The ground, roads, water, trees, and neighbors of the project site. From the Site Model.'),
+        Controls.when(() => get('view.site') !== false, [choice('Site style', 'view.siteStyle', [['solid', 'Solid'], ['glass', 'Glass'], ['wireframe', 'Wireframe']], { id: 'siteStyleChips' })]),
         Controls.toggle({ label: 'Mullions', bind: v('mullions') }),
         Controls.toggle({ label: 'Site context (ghost)', bind: v('context') }),
         Controls.toggle({ label: 'Shadows', bind: v('shadows') }),
@@ -9297,24 +9542,24 @@ const UI = (() => {
     { id: 'view', title: 'View' },
   ];
   const SECTIONS = [
-    { id: 'source', tab: 'massing', title: 'Source', open: true, build: buildSource },
-    { id: 'standalone', tab: 'massing', title: 'Standalone massing', open: true, build: buildStandalone },
-    { id: 'zones', tab: 'massing', title: 'Zones', open: true, build: buildZones },
+    { id: 'source', tab: 'massing', title: 'Source', open: false, build: buildSource },
+    { id: 'standalone', tab: 'massing', title: 'Standalone massing', open: false, build: buildStandalone },
+    { id: 'zones', tab: 'massing', title: 'Zones', open: false, build: buildZones },
     { id: 'street', tab: 'massing', title: 'Street faces', build: buildStreet },
-    { id: 'zone-base', tab: 'facade', title: 'Base zone', open: true, build: () => zoneSection('base') },
-    { id: 'zone-middle', tab: 'facade', title: 'Middle zone', open: true, build: () => zoneSection('middle') },
+    { id: 'zone-base', tab: 'facade', title: 'Base zone', open: false, build: () => zoneSection('base') },
+    { id: 'zone-middle', tab: 'facade', title: 'Middle zone', open: false, build: () => zoneSection('middle') },
     { id: 'zone-top', tab: 'facade', title: 'Top zone', build: () => zoneSection('top') },
     { id: 'zone-ranges', tab: 'facade', title: 'Level ranges', build: buildRangeZones },
-    { id: 'balconies', tab: 'facade', title: 'Balconies', open: true, build: buildBalconies },
+    { id: 'balconies', tab: 'facade', title: 'Balconies', open: false, build: buildBalconies },
     { id: 'fins', tab: 'facade', title: 'Fins', build: buildFins },
     { id: 'shades', tab: 'facade', title: 'Shades', build: buildShades },
     { id: 'bands', tab: 'facade', title: 'Bands', build: buildBands },
     { id: 'corners', tab: 'facade', title: 'Corners', build: buildCorners },
-    { id: 'checkslist', tab: 'checks', title: 'Warnings', open: true, build: buildChecksList },
-    { id: 'limits', tab: 'checks', title: 'Limits', open: true, build: buildLimits },
-    { id: 'wwrtables', tab: 'checks', title: 'Window-to-wall tables', open: true, build: buildWwrTables },
+    { id: 'checkslist', tab: 'checks', title: 'Warnings', open: false, build: buildChecksList },
+    { id: 'limits', tab: 'checks', title: 'Limits', open: false, build: buildLimits },
+    { id: 'wwrtables', tab: 'checks', title: 'Window-to-wall tables', open: false, build: buildWwrTables },
     { id: 'envelope', tab: 'checks', title: 'Envelope note', build: buildEnvelope },
-    { id: 'display', tab: 'view', title: 'Display', open: true, build: buildDisplay },
+    { id: 'display', tab: 'view', title: 'Display', open: false, build: buildDisplay },
   ];
   const sectionCtl = {};          // id -> Controls.section result
   let activeTab = 'massing';
@@ -9754,6 +9999,8 @@ const UI = (() => {
   }
   return {
     init, updateHud, rebuildPanel: () => { Controls.refreshAll(); },
+    // test hooks: the section controllers, and a rebuild of the panel from the saved UI prefs (a simulated reload)
+    sectionCtl, rebuildSections: () => { buildPanel(); setTab(activeTab, { remember: false }); Controls.refreshAll(); },
     // hooks for the face card and the street pick mode
     openItem, setTab, activeTab: () => activeTab, tabs: () => TABS.map((t) => t.id), setStreetPick,
     setHudOpen, hudOpen: () => $('hud').dataset.collapsed === 'false', sections: () => SECTIONS.map((s) => ({ id: s.id, tab: s.tab })),
@@ -9784,11 +10031,14 @@ const Prompts = (() => {
     out.material.default = DESIGN_VALUE;
     return out;
   })();
-  const GROUPS = [['time', 'Time'], ['material', 'Material'], ['context', 'Context'], ['camera', 'Camera'], ['custom', 'My prompts']];
+  const FIELD_ORDER = ['time', 'material', 'location', 'season'];
+  const ROW_LABELS = { time: 'Time', material: 'Material', location: 'Context', season: 'Season' };
+  /** The rows to show for a prompt: its pick fields in the panel order (Time, Material, Context, Season). */
+  const rowKeys = (uses) => [...FIELD_ORDER.filter((k) => uses.includes(k)), ...uses.filter((k) => !FIELD_ORDER.includes(k))].filter((k) => PROMPT_FIELDS[k]);
   const AUTO = [['floors', 'Floors'], ['height', 'Height'], ['program', 'Program'], ['podium', 'Podium'], ['form', 'Form']];
   const FIELD_KEYS = Object.keys(PROMPT_FIELDS);
   const NUMBER_WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
-  const TOKEN_HELP = 'Sentence slots: "The facade is {{material}}." · "The setting is {{location}}" · "photographed {{time}}" · ", {{season}}." From your design: {{floors}} {{height}} {{program}} {{podium}} {{form}}. Tick a menu below to let the user choose that slot. The fixed form-lock text is added in front of every prompt.';
+  const TOKEN_HELP = 'Sentence slots: "The facade is {{material}}." · "The setting is {{location}}" · "photographed {{time}}" · ", {{season}}." From your design: {{floors}} {{height}} {{program}} {{podium}} {{form}}. Tick a choice below to show a row of chips for that slot. The fixed form-lock text is added in front of every prompt.';
   const STARTER = 'Make a photorealistic render of this {{height}} {{program}} building in {{location}} at {{time}}.';
   // Added to the form-lock text: the facade layout is as fixed as the massing.
   const FACADE_LOCK = 'Keep every window, door, balcony, fin and shade exactly where the model shows it, with the same panel rhythm and the same proportion of glass to wall. Change only materials, colors, reflections and lighting.';
@@ -9847,6 +10097,7 @@ const Prompts = (() => {
       program: programPhrase(state, d),
       podium: podiumPhrase(state, d),
       form: formPhrase(state, d),
+      hero: PromptsMod.heroFor('facade', state, d),
     };
   }
   const currentAuto = () => autoValues(Store.raw(), Derived.get());
@@ -9856,7 +10107,6 @@ const Prompts = (() => {
   const customList = () => Options.storage.listPrompts();
   const allPrompts = () => [...PROMPTS, ...customList()];
   const findPrompt = (id) => allPrompts().find((p) => p.id === id) || null;
-  const groupPrompts = (g) => (g === 'custom' ? customList() : PROMPTS.filter((p) => p.group === g));
 
   /** Menu value: field default, then the prompt's own default, then the user's last pick for THIS prompt (remembered per prompt id). */
   function fieldValue(prompt, key) {
@@ -9864,7 +10114,8 @@ const Prompts = (() => {
     const shown = !prompt || (prompt.uses || []).includes(key);       // a choice only counts where the prompt shows that menu
     const remembered = shown && prompt ? ((prefs().fields || {})[prompt.id] || {})[key] : null;
     if (remembered != null && f.options.some((o) => o.value === remembered)) return remembered;
-    const d = prompt && prompt.defaults && prompt.defaults[key];
+    // The Hero render's own material is the fritted glass; here the design is the material, so only the other fields take its defaults.
+    const d = prompt && prompt.defaults && !(key === 'material' && prompt.id === 'hero-render') ? prompt.defaults[key] : null;
     if (d != null && f.options.some((o) => o.value === d)) return d;
     return f.default != null ? f.default : (f.options[0] || {}).value;
   }
@@ -9891,21 +10142,24 @@ const Prompts = (() => {
   const wordCount = (t) => (t.trim() ? t.trim().split(/\s+/).length : 0);
 
   /* ---- view state ------------------------------------------------------------------ */
-  const ui = { open: false, group: null, editing: null, el: null, restoreFocus: null, raf: 0, busy: false, error: '' };
+  // Mode 'lib': one of the built-in prompts is selected. Mode 'custom': the My prompts chip is on and a saved prompt is selected.
+  const ui = { open: false, mode: null, editing: null, el: null, restoreFocus: null, raf: 0, busy: false, error: '' };
   const selectedId = (g) => (prefs().selected || {})[g];
-  function currentGroup() {
-    const g = ui.group || prefs().group;
-    return GROUPS.some((x) => x[0] === g) ? g : 'time';
-  }
+  const currentMode = () => ui.mode || (prefs().group === 'custom' ? 'custom' : 'lib');
   function currentPrompt() {
-    const g = currentGroup(), list = groupPrompts(g);
-    return list.find((p) => p.id === selectedId(g)) || list[0] || null;
+    if (currentMode() === 'custom') {
+      const list = customList();
+      return list.find((p) => p.id === selectedId('custom')) || list[0] || null;
+    }
+    return PROMPTS.find((p) => p.id === selectedId('lib')) || PROMPTS[0] || null;     // a fresh profile starts on the Hero render
   }
+  /** select('custom', id) picks a saved prompt; select(any other word, id) picks a built-in prompt. */
   function select(group, id) {
+    const custom = group === 'custom';
     const p = prefs();
-    p.group = group;
-    p.selected = { ...(p.selected || {}), [group]: id };
-    ui.group = group;
+    p.group = custom ? 'custom' : 'lib';
+    p.selected = { ...(p.selected || {}), [custom ? 'custom' : 'lib']: id };
+    ui.mode = custom ? 'custom' : 'lib';
     saveUiPrefs(uiPrefs);
   }
   /** The prompt the preview and Copy use: the draft while editing, else the selected one. */
@@ -9962,7 +10216,7 @@ const Prompts = (() => {
   function startNew() {
     ui.error = '';
     ui.editing = { id: null, title: StorageMod.uniqueName('New prompt', customList().map((p) => p.title)), template: STARTER, uses: ['location', 'time'], focus: 'title' };
-    ui.group = 'custom';
+    ui.mode = 'custom';
     render();
   }
   function startEdit(p) {
@@ -9973,7 +10227,7 @@ const Prompts = (() => {
   function duplicateToEdit(p) {
     ui.error = '';
     ui.editing = { id: null, title: StorageMod.uniqueName(`${p.title} (copy)`, customList().map((x) => x.title)), template: p.template, uses: [...(p.uses || [])], focus: 'title' };
-    ui.group = 'custom';
+    ui.mode = 'custom';
     render();
     notify('Copied to My prompts. Change it and press Save.');
   }
@@ -10021,47 +10275,60 @@ const Prompts = (() => {
   }
   function syncSteps() { if (ui.saveBtn) { ui.saveBtn.disabled = ui.busy; ui.saveBtn.textContent = ui.busy ? 'Saving image…' : '1. Save AI-ready image'; } }
 
-  function tabsEl() {
-    const g = currentGroup();
-    const tabs = h('div', { class: 'ai-tabs', role: 'tablist', 'aria-label': 'Prompt groups' });
-    for (const [id, label] of GROUPS) {
-      tabs.append(h('button', {
-        class: 'ai-tab', type: 'button', role: 'tab', id: `aiTab-${id}`, 'aria-selected': String(id === g), 'data-group': id,
-        onclick: () => { if (ui.editing && id !== 'custom') ui.editing = null; ui.group = id; select(id, selectedId(id) || (groupPrompts(id)[0] || {}).id); render(); },
-      }, label));
+  /* The Prompt row: one chip per built-in prompt (the Hero render first) and a My prompts chip at the end. */
+  function promptRowEl() {
+    const mode = currentMode(), cur = currentPrompt();
+    const chips = h('div', { class: 'chips', role: 'group', 'aria-label': 'Prompt', id: 'aiPromptRow' });
+    for (const p of PROMPTS) {
+      chips.append(h('button', {
+        class: 'chip', type: 'button', 'aria-pressed': String(mode === 'lib' && !ui.editing && !!cur && cur.id === p.id), 'data-id': p.id, 'data-group': p.group,
+        onclick: () => { ui.editing = null; select('lib', p.id); render(); },
+      }, p.title));
     }
-    return tabs;
+    chips.append(h('button', {
+      class: 'chip ai-mine', type: 'button', id: 'aiMine', 'aria-pressed': String(mode === 'custom'),
+      onclick: () => { ui.editing = null; select('custom', selectedId('custom')); render(); },
+    }, 'My prompts'));
+    return h('div', { class: 'ai-row' }, h('div', { class: 'ai-row-label' }, 'Prompt'), chips);
   }
 
-  function listEl() {
-    const g = currentGroup(), list = groupPrompts(g), cur = currentPrompt();
-    const wrap = h('div', { class: 'ai-listwrap' });
-    if (g === 'custom') {
-      wrap.append(h('div', { class: 'ai-listbar' }, h('button', { class: 'btn outline sm', type: 'button', id: 'aiNew', onclick: startNew }, '+ New prompt')));
-      if (!list.length && !ui.editing) wrap.append(h('p', { class: 'help ai-empty' }, 'Nothing here yet. Use New prompt, or open any other tab and press Duplicate to edit.'));
-    }
-    const ul = h('div', { class: 'ai-list', role: 'group', 'aria-label': 'Prompts' });
+  /* The My prompts row: the saved prompts as chips and a New prompt chip. Only while the My prompts chip is on. */
+  function customRowEl() {
+    if (currentMode() !== 'custom') return null;
+    const list = customList(), cur = currentPrompt();
+    const chips = h('div', { class: 'chips', role: 'group', 'aria-label': 'My prompts', id: 'aiCustomRow' });
     for (const p of list) {
-      ul.append(h('button', {
-        class: 'ai-item', type: 'button', 'aria-pressed': String(ui.editing ? ui.editing.id === p.id : !!cur && cur.id === p.id), 'data-id': p.id,
-        onclick: () => { ui.editing = null; select(g, p.id); render(); },
-      }, h('span', { class: 'ai-item-title' }, p.title), p.description ? h('span', { class: 'ai-item-desc' }, p.description) : null));
+      chips.append(h('button', {
+        class: 'chip', type: 'button', 'aria-pressed': String(ui.editing ? ui.editing.id === p.id : !!cur && cur.id === p.id), 'data-id': p.id,
+        onclick: () => { ui.editing = null; select('custom', p.id); render(); },
+      }, p.title));
     }
-    if (ui.editing && !ui.editing.id) ul.append(h('div', { class: 'ai-item is-draft', 'aria-pressed': 'true' }, h('span', { class: 'ai-item-title' }, ui.editing.title || 'New prompt'), h('span', { class: 'ai-item-desc' }, 'Not saved yet')));
-    wrap.append(ul);
-    return wrap;
+    if (ui.editing && !ui.editing.id) chips.append(h('span', { class: 'chip is-draft', 'aria-pressed': 'true' }, ui.editing.title || 'New prompt'));
+    chips.append(h('button', { class: 'chip ai-new', type: 'button', id: 'aiNew', onclick: startNew }, '+ New prompt'));
+    const row = h('div', { class: 'ai-row' }, h('div', { class: 'ai-row-label' }, 'Mine'), chips);
+    if (!list.length && !ui.editing) row.append(h('p', { class: 'help ai-empty' }, 'Nothing here yet. Use New prompt, or pick a built-in prompt and press Duplicate to edit.'));
+    return row;
   }
 
+  /* One chip row per field the prompt uses (Time, Material, Context, Season). A pick is remembered for this prompt. */
   function fieldsEl(prompt, uses, onPick) {
     const wrap = h('div', { class: 'ai-fields' });
-    for (const key of uses) {
+    for (const key of rowKeys(uses)) {
       const f = PROMPT_FIELDS[key];
-      if (!f) continue;
-      const id = `aiField-${key}`;
-      const sel = h('select', { id }, f.options.map((o) => h('option', { value: o.value }, o.label)));
-      sel.value = fieldValue(prompt, key);
-      sel.addEventListener('change', () => { rememberField(prompt, key, sel.value); if (onPick) onPick(); updatePreview(); });
-      wrap.append(h('div', { class: 'ctl select-row' }, h('label', { for: id }, f.label), sel));
+      const label = ROW_LABELS[key] || f.label;
+      const group = h('div', { class: 'chips', role: 'group', 'aria-label': label, id: `aiField-${key}`, 'data-field': key });
+      const current = fieldValue(prompt, key);
+      for (const o of f.options) {
+        const b = h('button', { class: 'chip', type: 'button', 'aria-pressed': String(o.value === current), 'data-value': o.value }, o.label);
+        b.addEventListener('click', () => {
+          rememberField(prompt, key, o.value);
+          for (const x of group.children) x.setAttribute('aria-pressed', String(x === b));
+          if (onPick) onPick();
+          updatePreview();
+        });
+        group.append(b);
+      }
+      wrap.append(h('div', { class: 'ai-row' }, h('div', { class: 'ai-row-label' }, label), group));
     }
     return wrap;
   }
@@ -10113,9 +10380,9 @@ const Prompts = (() => {
       h('label', { class: 'ai-lab', for: 'aiEditTitle' }, 'Title'), title,
       h('label', { class: 'ai-lab', for: 'aiEditTemplate' }, 'Prompt text'), tpl,
       h('p', { class: 'points-note', id: 'aiTokenHelp' }, TOKEN_HELP),
-      h('div', { class: 'label' }, 'Menus to show'),
+      h('div', { class: 'label' }, 'Choices to show'),
     );
-    const uses = h('div', { class: 'ai-uses', role: 'group', 'aria-label': 'Menus to show' });
+    const uses = h('div', { class: 'ai-uses', role: 'group', 'aria-label': 'Choices to show' });
     for (const k of FIELD_KEYS) {
       const cb = h('input', { type: 'checkbox', id: `aiUse-${k}` });
       cb.checked = e.uses.includes(k);
@@ -10140,10 +10407,11 @@ const Prompts = (() => {
       return wrap;
     }
     const p = currentPrompt();
-    if (!p) { wrap.append(h('p', { class: 'help' }, 'Select a prompt to see its fields.')); ui.preview = null; ui.chips = null; return wrap; }
+    if (!p) { ui.preview = null; ui.chips = null; return wrap; }
     const custom = p.group === 'custom';
-    const head = h('div', { class: 'ai-dhead' }, h('div', { class: 'ai-dtitle' }, p.title));
-    const desc = p.description ? h('p', { class: 'ai-ddesc', id: 'aiDesc' }, p.description) : null;
+    if (p.description) wrap.append(h('p', { class: 'ai-ddesc', id: 'aiDesc' }, p.description));
+    const uses = (p.uses || []).filter((k) => PROMPT_FIELDS[k]);
+    if (uses.length) wrap.append(fieldsEl(p, uses, null));
     const acts = h('div', { class: 'ai-dacts' });
     if (custom) {
       acts.append(
@@ -10152,12 +10420,7 @@ const Prompts = (() => {
     } else {
       acts.append(h('button', { class: 'btn outline sm', type: 'button', id: 'aiDuplicate', onclick: () => duplicateToEdit(p) }, 'Duplicate to edit'));
     }
-    head.append(acts);
-    wrap.append(head);
-    if (desc) wrap.append(desc);
-    const uses = (p.uses || []).filter((k) => PROMPT_FIELDS[k]);
-    if (uses.length) wrap.append(h('div', { class: 'label' }, 'Choose'), fieldsEl(p, uses, null));
-    wrap.append(autoEl(), previewEl());
+    wrap.append(autoEl(), previewEl(), acts);
     return wrap;
   }
 
@@ -10165,7 +10428,10 @@ const Prompts = (() => {
     if (!ui.el) return;
     const keepScroll = ui.body.scrollTop;
     ui.body.textContent = '';
-    ui.body.append(tabsEl(), listEl(), detailEl());
+    ui.body.append(promptRowEl());
+    const mine = customRowEl();
+    if (mine) ui.body.append(mine);
+    ui.body.append(detailEl());
     updateChips();
     updatePreview();
     syncSteps();
@@ -10302,6 +10568,7 @@ const Help = (() => {
       'Pick a design from the Option menu > New from a preset, then change the numbers. The default is a 300 by 65 ft residential bar, five levels, with punched windows and inset balconies on the north and south faces.',
       'Click a face in the view to select it. The card at the top of the panel shows its orientation, level range, zone, system and window-to-wall ratio, with a street-face switch. Esc clears the selection.',
       'There are no geometry handles in this version. The massing comes from the source: a standalone shape, or the open project.',
+      'Each section starts collapsed. Select a section title to open it. Your choice is remembered.',
     ]],
     ['Massing', [
       'Standalone is a rectangle, an L, a U or a courtyard (O) with an optional podium. Every shape is centered on its bounding box. The angle turns the whole massing.',
@@ -10325,7 +10592,9 @@ const Help = (() => {
       'While you drag a slider the picture drops the mullions and fins. They come back when you let go.',
     ]],
     ['Site', [
-      'The Site toggle in the View tab shows the project site from the Site Model. It shows the real ground, roads, water, and trees. Neighbor buildings are solid grey blocks with dark edges. This tool does not drag. Move the building in the Tower Generator or the Mid-Rise Generator.',
+      'The Site toggle in the View tab shows the project site from the Site Model. It shows the real ground, roads, water, and trees.',
+      'Site style, under the Site toggle, sets how the neighbor buildings draw. Solid draws opaque grey blocks with dark edges. Glass draws see-through blocks. Wireframe draws edges only.',
+      'This tool does not drag. Move the building in the Tower Generator or the Mid-Rise Generator.',
     ]],
     ['Projects', [
       'A project holds the site, the massing and the work of other tools in one file. Use Project > New, or open a project from the Mid-Rise or the Tower.',
@@ -10335,6 +10604,8 @@ const Help = (() => {
       'Option menu > Save keeps the design in this browser. Export > Export JSON downloads all saved options. Import JSON adds them back.',
       'Export > SketchUp (.json) opens in SketchUp with the CMRLM extension. Elevations (.dxf) has four sheets with panels, glass, balconies, fins and shades for Revit or AutoCAD.',
       'Export > Image saves a picture. AI-ready image and AI Prompts are a pair for ChatGPT or Gemini; the prompt keeps every window and balcony where the model shows it.',
+      'The AI-ready image shows the site with the building. Set Site style to Solid before you make it.',
+      'The first prompt in AI Prompts is Hero render. It renders the hero building as photoreal and keeps the neighbors as a white model.',
     ]],
   ];
   function toggle() {
@@ -11300,7 +11571,9 @@ const TestHelp = (() => {
     console.log(`[tests] ${name} ${results.length - bad.length}/${results.length} passed`, bad.length ? JSON.stringify(bad) : '');
   };
   const presetState = (id) => fillDefaults(deepClone(CONFIG.presets.find((p) => p.id === id).state));
-  return { eq, near, within, make, $, frames, wait, visible, snap, oneStep, toastText, merged, presetState };
+  /** Opens one panel section (every section starts collapsed: docs/site-base-style-technical-plan.md section 4.4). Does not touch the saved choice. */
+  const openSection = (id) => { const c = UI.sectionCtl[id]; if (c && !c.isOpen()) c.setOpen(true); return !!c; };
+  return { openSection, eq, near, within, make, $, frames, wait, visible, snap, oneStep, toastText, merged, presetState };
 })();
 
 async function runTests() {
@@ -11462,6 +11735,25 @@ async function runTests() {
     return eq([a.floors, a.height, /five-story rectangular building/.test(a.form)], ['5', '52 feet', true]);
   });
 
+  await t('Hero render: the first prompt, no form lock; the hero text carries the numbers of the design and the chosen material', () => {
+    const p0 = PromptsMod.PROMPTS[0];
+    if (p0.id !== 'hero-render' || !p0.noLock) return `first prompt ${p0.id}`;
+    const st = def(), d = computeDerived(st);
+    const hero = PromptsMod.heroFor('facade', st, d);
+    const text = PromptsMod.fillPrompt(p0, { hero, material: 'warm red-brown brick with tall windows set in deep reveals' });
+    const checks = {
+      opens: text.startsWith('Edit the attached massing model image'), sections: ['KEEP EXACTLY AS SHOWN', 'CONTEXT BUILDINGS — KEEP AS WHITE MODEL', 'GROUND PLANE — RENDER PHOTOREAL', 'LIGHT AND SKY'].every((x) => text.includes(x)),
+      material: text.includes('The facade is warm red-brown brick with tall windows set in deep reveals.'), noTower: !/tower/i.test(text), clean: !/\[|\{\{/.test(text),
+      levels: text.includes(`${d.hud.levels}-story`), height: text.includes(`${Math.round(d.hud.height)} feet`), glass: text.includes(`about ${Math.round(d.hud.wwr * 100)} percent of the facade is glass`), zone: /zone: /.test(text),
+    };
+    const bad = Object.entries(checks).filter(([, v]) => v !== true).map(([k]) => k);
+    return bad.length ? `failed: ${bad.join(', ')} | ${hero}` : true;
+  });
+  await t('Hero render in the panel: promptText fills the hero from the current design', () => {
+    const text = Prompts.promptText('hero-render');
+    const d = Derived.get();
+    return eq([!!text && text.startsWith('Edit the attached massing model image'), text.includes(`${d.hud.levels}-story`), text.includes(`about ${Math.round(d.hud.wwr * 100)} percent of the facade is glass`), text.includes('Keep every window, door, balcony'), /\[|\{\{|__design__/.test(text)], [true, true, true, true, false]);
+  });
   /* ---- save / export / import ---- */
   await t('state survives a JSON round trip and fillDefaults', () => {
     const s = def(), back = fillDefaults(JSON.parse(JSON.stringify(s)));
@@ -11542,7 +11834,7 @@ async function runUiTests() {
       return eq([Store.get('standalone.width'), oneStep(before)], [320, true]);
     });
     await t('the shape menu offers rectangle, L, U and courtyard; the court size shows only for O', () => {
-      fresh(); UI.setTab('massing');
+      fresh(); UI.setTab('massing'); TestHelp.openSection('standalone');
       const sel = document.querySelector('[data-section="standalone"] select');
       const opts = [...sel.options].map((o) => o.value);
       const courtShown = () => [...document.querySelectorAll('[data-section="standalone"] .ctl-label')].some((l) => /Court width/.test(l.textContent) && visible(l));
@@ -11558,7 +11850,7 @@ async function runUiTests() {
       return eq([Store.get('zones.rules.middle.system'), after > before], ['windowWall', true]);
     });
     await t('the system dimensions follow the system (a window width only for punched windows)', () => {
-      fresh(); UI.setTab('facade');
+      fresh(); UI.setTab('facade'); TestHelp.openSection('zone-middle');
       const labels = () => [...document.querySelectorAll('[data-section="zone-middle"] .ctl-label')].filter(visible).map((l) => l.textContent);
       const punched = labels().includes('Window width');
       click(document.querySelector('[data-section="zone-middle"] [data-system="curtainWall"]'));
@@ -11746,17 +12038,19 @@ async function runUiTests() {
       fresh();
       click($('btnExport')); click($('miAiPrompts'));
       await frames(2);
+      Prompts.select('time', 'time-golden-hour'); Prompts.render();       // the Hero render has its own opening; the lock sits on the other prompts
       const open = Prompts.isOpen();
       const chips = [...document.querySelectorAll('#aiAuto .ai-chip')].map((c) => c.textContent);
       const preview = $('aiPreview') ? $('aiPreview').value : '';
       Prompts.close();
       return eq([open, chips.some((c) => /Floors5/.test(c)), /Keep every window, door, balcony/.test(preview), /percent glass/.test(preview)], [true, true, true, true]);
     });
-    await t('the Material menu has a "From the design" choice that is the default', async () => {
+    await t('the Material row has a "From the design" chip that is the first chip and the default', async () => {
       Prompts.open(); Prompts.select('time', 'time-golden-hour'); Prompts.render();
       await frames(1);
-      const sel = $('aiField-material');
-      const out = sel ? [sel.options[0].textContent, sel.value] : null;
+      const row = $('aiField-material');
+      const on = row ? row.querySelector('[aria-pressed="true"]') : null;
+      const out = row ? [row.children[0].textContent, on && on.dataset.value] : null;
       Prompts.close();
       return eq(out, ['From the design', '__design__']);
     });
@@ -11910,7 +12204,7 @@ async function runSelectTests() {
       return eq(seen, ['n', 'e', 's', 'w', 'plan', 'axon']);
     });
     await t('D switches Model and Diagram; keys are ignored while typing in a field', () => {
-      fresh(); blur(); UI.setTab('massing');
+      fresh(); blur(); UI.setTab('massing'); TestHelp.openSection('standalone');
       key('d');
       const a = Store.get('view.style');
       const input = document.querySelector('#panelScroll input.numfield');
@@ -12196,14 +12490,19 @@ async function runSiteTests() {
       for (const o of Options.list()) Options.storage.remove(o.id);
       return eq([during, Render.sceneFlags().site, SiteLayer.info().shown], [[true, false, 0, true], true, true]);
     });
-    await t('5 the AI-ready image hides the layer while it is drawn and puts it back after', async () => {
+    await t('5 the AI-ready image keeps the site layer on screen, hides the boundary and the north arrow, then puts everything back', async () => {
       const orig = ShotMod.captureView;
       let seen = null;
-      ShotMod.captureView = (o) => { seen = { site: Render.sceneFlags().site, slabY: Render.sceneFlags().slabY }; return orig(o); };
+      const markState = () => ['site-boundary', 'site-arrow'].map((k) => Render.sceneObjects().some((o) => o.userData && o.userData.kind === k && o.visible));
+      const before = markState();
+      ShotMod.captureView = (o) => { seen = { site: Render.sceneFlags().site, slab: Render.sceneFlags().slabY, flags: Render.captureFlags() }; return orig(o); };
       try { await Shots.aiReady({ deliver: false }); } finally { ShotMod.captureView = orig; }
       await frames(3);
-      return eq([seen, Render.sceneFlags().site], [{ site: false, slabY: 0 }, true]);
+      const cf = Render.captureFlags();
+      const marks = markState();
+      return eq([seen && seen.site, [cf.site, cf.boundary, cf.arrow, cf.grid, cf.figure, cf.overlay], cf.siteObjects > 2, Render.sceneFlags().site, eq(marks, before)], [true, [true, false, false, false, false, false], true, true, true]);
     });
+
     await t('6 a theme change rebuilds the layer (the key carries the theme epoch)', async () => {
       const k0 = SiteLayer.info().key, m0 = siteMesh('site-buildings');
       Render.themeChanged();
@@ -12260,6 +12559,60 @@ async function runSiteTests() {
       const margin = [on.minX - Math.min(off.minX, Math.max(off.minX - m, sb.minX)), on.maxX - Math.max(off.maxX, Math.min(off.maxX + m, sb.maxX)), on.minY - Math.min(off.minY, Math.max(off.minY - m, sb.minY)), on.maxY - Math.max(off.maxY, Math.min(off.maxY + m, sb.maxY))].every((v) => Math.abs(v) < 1e-6);
       return eq([holds, smaller, margin, a > b * 1.1, Math.abs(a - c) < a * 0.01, m >= 150], [true, true, true, true, true, true]);
     });
+    await t('8s site style: glass draws the neighbors transparent (opacity 0.25, no depth write, drawn after the ground) with their edges kept; wireframe draws edges only; solid is opaque again; the ground and roads do not change; info.style and the layer key follow', async () => {
+      if (!SiteLayer.info().shown) open();
+      await frames(4);
+      const objs = () => Render.sceneObjects();
+      const read = () => {
+        const o = objs(), m = o.find((x) => x.userData.kind === 'site-buildings'), e = o.filter((x) => x.userData.kind === 'site-building-edges'), r = o.find((x) => x.userData.kind === 'site-roads') || o.find((x) => x.userData.kind === 'site-ground');
+        return {
+          style: SiteLayer.info().style, mesh: !!m, transparent: m ? m.material.transparent : null, opacity: m ? m.material.opacity : null, depthWrite: m ? m.material.depthWrite : null,
+          order: m ? m.renderOrder : null, edges: e.length, edgeOrder: e.length ? e[0].renderOrder : null, roads: r ? [r.material.transparent, r.material.opacity] : null, buildings: SiteLayer.info().buildings,
+        };
+      };
+      const keys = [];
+      const out = {};
+      for (const s of ['solid', 'glass', 'wireframe', 'solid']) {
+        Store.set('view.siteStyle', s, { live: false });
+        await frames(4);
+        out[s] = read();
+        keys.push(SiteLayer.info().key);
+      }
+      const n = out.solid.edges;
+      const ok = {
+        solid: eq(out.solid, { style: 'solid', mesh: true, transparent: false, opacity: 1, depthWrite: true, order: 0, edges: n, edgeOrder: 0, roads: [false, 1], buildings: 2 }),
+        glass: eq(out.glass, { style: 'glass', mesh: true, transparent: true, opacity: 0.25, depthWrite: false, order: 2, edges: n, edgeOrder: 3, roads: [false, 1], buildings: 2 }),
+        wire: eq(out.wireframe, { style: 'wireframe', mesh: false, transparent: null, opacity: null, depthWrite: null, order: null, edges: n, edgeOrder: 3, roads: [false, 1], buildings: 2 }),
+        keys: keys[0] !== keys[1] && keys[1] !== keys[2] && keys[0] !== keys[2] && keys[3] === keys[0],
+        edges: n > 0, errors: errors.length,
+      };
+      const bad = Object.entries(ok).filter(([k, v]) => k === 'errors' ? v !== 0 : v !== true);
+      return bad.length ? JSON.stringify(bad) : true;
+    });
+
+    await t('8t site style chips: the View tab has Site style Solid, Glass, Wireframe under the Site toggle (hidden while Site is off); a click sets view.siteStyle; an unknown saved value fills as solid', async () => {
+      if (!SiteLayer.info().shown) open();
+      await frames(4);
+      const q = (v) => document.querySelector(`#siteStyleChips [data-value="${v}"]`);
+      const row = document.getElementById('siteStyleChips');
+      const labels = row ? [...row.querySelectorAll('[data-value]')].map((b) => b.textContent.trim()) : [];
+      const visible = () => !!row && !row.closest('.when[hidden]');
+      Store.set('view.siteStyle', 'solid', { live: false });
+      await frames(4);
+      const a = [visible(), q('solid') && q('solid').getAttribute('aria-pressed')];
+      q('glass').click();
+      await frames(4);
+      const b = [Store.get('view.siteStyle'), q('glass').getAttribute('aria-pressed'), q('solid').getAttribute('aria-pressed')];
+      Store.set('view.site', false, { live: false });
+      await frames(4);
+      const hidden = !visible();
+      Store.set('view.site', true, { live: false });
+      Store.set('view.siteStyle', 'solid', { live: false });
+      await frames(4);
+      const fill = [fillDefaults({ view: { siteStyle: 'bogus' } }).view.siteStyle, fillDefaults({ view: { siteStyle: 'glass' } }).view.siteStyle, fillDefaults({}).view.siteStyle];
+      return eq([labels, a, b, hidden, fill], [['Solid', 'Glass', 'Wireframe'], [true, 'true'], ['glass', 'true', 'false'], true, ['solid', 'glass', 'solid']]);
+    });
+
     await t('8 closing the project removes the layer', async () => {
       ProjectUI.close();
       await frames(3);
@@ -12293,6 +12646,203 @@ async function runSiteTests() {
     return r;
   };
 }
+
+/* ==========================================================================
+   TESTS: collapsed panel sections and the prompt panel (docs/site-base-style-technical-plan.md section 4)
+   Every panel section starts collapsed on a fresh profile. A click on a section title opens it and saves the choice in the UI prefs
+   (localStorage key facade.ui.v1, prefs.sections); a rebuild of the panel from the saved prefs (a simulated reload) brings the
+   choice back.
+   The prompt panel has no group tabs and no dropdowns: one Prompt chip row (Hero render first, My prompts last) and a chip row
+   for each field the prompt uses.
+   The tests restore the UI prefs and the panel when they finish. runAllTests is extended at the end of this file.
+   ========================================================================== */
+async function runSectionTests() {
+  const results = [];
+  const eq = (a, b) => (JSON.stringify(a) === JSON.stringify(b) ? true : `got ${JSON.stringify(a)}, expected ${JSON.stringify(b)}`);
+  const t = async (name, fn) => {
+    let r;
+    try { r = await fn(); } catch (e) { r = `threw ${e && e.message}`; }
+    results.push({ name, ok: r === true, detail: r === true ? '' : String(r) });
+  };
+  const $ = (id) => document.getElementById(id);
+  const frames = (n = 2) => new Promise((res) => { const f = () => (--n <= 0 ? res() : requestAnimationFrame(f)); requestAnimationFrame(f); });
+  const savedState = Store.snapshot(), savedTab = UI.activeTab();
+  const savedSections = uiPrefs.sections === undefined ? undefined : JSON.parse(JSON.stringify(uiPrefs.sections));
+  const savedPrompts = uiPrefs.prompts === undefined ? undefined : JSON.parse(JSON.stringify(uiPrefs.prompts));
+  Options.holdAutosave(true);
+  const accs = () => [...document.querySelectorAll('#sections section.acc')];
+  const openIds = () => accs().filter((a) => a.dataset.open === 'true').map((a) => a.dataset.section);
+  const stored = () => { try { return JSON.parse(localStorage.getItem(UI_STORAGE_KEY)) || {}; } catch (e) { return {}; } };
+  /** A fresh profile: no remembered choice. The panel is rebuilt from the prefs, as at load. */
+  const freshProfile = () => { uiPrefs.sections = {}; saveUiPrefs(uiPrefs); UI.rebuildSections(); };
+  /** A reload: the prefs are read again from localStorage and the panel is rebuilt from them. */
+  const reload = () => { uiPrefs.sections = stored().sections; UI.rebuildSections(); };
+  const firstShown = () => accs().find((a) => !a.hidden);
+
+  try {
+    await t('S1. every panel section starts collapsed on a fresh profile (and there are sections to collapse)', () => {
+      freshProfile();
+      const all = accs();
+      const ctl = Object.keys(UI.sectionCtl);
+      return eq([all.length >= 8, all.length === ctl.length, openIds(), ctl.filter((id) => UI.sectionCtl[id].isOpen())], [true, true, [], []]);
+    });
+    await t('S2. a collapsed section keeps its controls in the page, hidden by the style sheet (value tests still see them)', () => {
+      freshProfile();
+      const acc = firstShown();
+      const body = acc.querySelector('.acc-body');
+      const rendered = getComputedStyle(body).display !== 'none';
+      return eq([acc.dataset.open, !!body.querySelector('input, button, select, textarea'), rendered], ['false', true, false]);
+    });
+    await t('S3. a click on a section title opens it and saves the choice under the tool UI key; a second click closes it and saves that', () => {
+      freshProfile();
+      const acc = firstShown(), id = acc.dataset.section;
+      acc.querySelector('.acc-head').click();
+      const afterOpen = [acc.dataset.open, (stored().sections || {})[id]];
+      acc.querySelector('.acc-head').click();
+      const afterClose = [acc.dataset.open, (stored().sections || {})[id]];
+      return eq([afterOpen, afterClose], [['true', true], ['false', false]]);
+    });
+    await t('S4. an open section is open again after a simulated reload, and the other sections stay collapsed', () => {
+      freshProfile();
+      const ids = accs().filter((a) => !a.hidden).map((a) => a.dataset.section);
+      const a = ids[0], b = ids[ids.length - 1];
+      document.querySelector(`#sections section.acc[data-section="${a}"] .acc-head`).click();
+      document.querySelector(`#sections section.acc[data-section="${b}"] .acc-head`).click();
+      reload();
+      return eq([new Set(openIds())].map((s) => [...s].sort()), [[a, b].sort()]);
+    });
+    await t('S5. a section the user closed stays closed after a reload (the saved choice wins over the default)', () => {
+      freshProfile();
+      const id = firstShown().dataset.section;
+      const head = () => document.querySelector(`#sections section.acc[data-section="${id}"] .acc-head`);
+      head().click(); reload();
+      const reopened = openIds().includes(id);
+      head().click(); reload();
+      return eq([reopened, openIds().includes(id), (stored().sections || {})[id]], [true, false, false]);
+    });
+    await t('S6. the HUD and the selection card are not panel sections', () => {
+      const hud = $('hud'), card = $('selection-card');
+      return eq([!!hud && !hud.closest('.acc'), !card || !card.closest('.acc')], [true, true]);
+    });
+    await t('S7. the UI prefs key is this tool\'s own (facade.ui.v1)', () => eq(UI_STORAGE_KEY, 'facade.ui.v1'));
+
+    /* ---- the prompt panel (section 4.2): no group tabs, no dropdowns, chip rows ---- */
+    const openPanel = async () => { uiPrefs.prompts = {}; saveUiPrefs(uiPrefs); Prompts.open(); Prompts.render(); await frames(2); };
+    const panelRows = () => [...document.querySelectorAll('#aiBody .ai-row-label')].map((l) => l.textContent);
+    await t('P1. the prompt panel has no select elements and no group tabs (Hero render, a time prompt, My prompts, the editor)', async () => {
+      await openPanel();
+      const count = () => [document.querySelectorAll('#aiPanel select').length, document.querySelectorAll('#aiPanel [role="tab"], #aiPanel .ai-tabs').length];
+      const out = [count()];
+      Prompts.select('time', 'time-golden-hour'); Prompts.render(); out.push(count());
+      $('aiMine').click(); out.push(count());
+      $('aiNew').click(); out.push(count(), !!$('aiEditTitle'));
+      Prompts.cancelEditing(); Prompts.select('hero', PromptsMod.PROMPTS[0].id); Prompts.close();
+      return eq(out, [[0, 0], [0, 0], [0, 0], [0, 0], true]);
+    });
+    await t('P2. Hero render is the first chip of the Prompt row, it is selected on a fresh profile, and My prompts is the last chip', async () => {
+      await openPanel();
+      const chips = [...$('aiPromptRow').children];
+      const out = [chips[0].textContent, chips[0].getAttribute('aria-pressed'), chips[0].dataset.id, chips.filter((c) => c.getAttribute('aria-pressed') === 'true').length, chips[chips.length - 1].id, chips[chips.length - 1].textContent];
+      Prompts.close();
+      return eq(out, ['Hero render', 'true', 'hero-render', 1, 'aiMine', 'My prompts']);
+    });
+    await t('P3. the Prompt row has one chip for every built-in prompt in library order, then My prompts', async () => {
+      await openPanel();
+      const ids = [...$('aiPromptRow').children].map((c) => c.dataset.id).filter(Boolean);
+      Prompts.close();
+      return eq(ids, PromptsMod.PROMPTS.map((p) => p.id));
+    });
+    await t('P4. the Hero render shows chip rows Time, Material and Season (the fields it uses), one chip pressed in each, and no Context row', async () => {
+      await openPanel();
+      const rows = panelRows();
+      const pressed = ['time', 'material', 'season'].map((k) => $(`aiField-${k}`) ? $(`aiField-${k}`).querySelectorAll('[aria-pressed="true"]').length : -1);
+      const hasContext = !!$('aiField-location');
+      Prompts.close();
+      return eq([rows.filter((r) => r !== 'Prompt'), pressed, hasContext], [['Time', 'Material', 'Season'], [1, 1, 1], false]);
+    });
+    await t('P5. a row appears only when the selected prompt uses that field', async () => {
+      await openPanel();
+      const bad = [];
+      for (const p of PromptsMod.PROMPTS) {
+        Prompts.select('lib', p.id); Prompts.render();
+        const shown = [...document.querySelectorAll('#aiBody .ai-fields [data-field]')].map((g) => g.dataset.field).sort();
+        const want = [...(p.uses || [])].sort();
+        if (JSON.stringify(shown) !== JSON.stringify(want)) bad.push(`${p.id}: ${shown} vs ${want}`);
+      }
+      Prompts.select('lib', PromptsMod.PROMPTS[0].id); Prompts.close();
+      return eq(bad, []);
+    });
+    await t('P6. a field chip changes the preview text and is remembered for that prompt (not for the others)', async () => {
+      await openPanel();
+      const before = $('aiPreview').value;
+      const row = $('aiField-time');
+      const other = [...row.children].find((c) => c.getAttribute('aria-pressed') !== 'true');
+      other.click();
+      const after = $('aiPreview').value;
+      Prompts.select('lib', PromptsMod.PROMPTS[1].id); Prompts.render();
+      Prompts.select('lib', PromptsMod.PROMPTS[0].id); Prompts.render();
+      const back = $('aiField-time').querySelector('[aria-pressed="true"]');
+      const out = [before !== after, !!back && back.dataset.value === other.dataset.value, ((uiPrefs.prompts.fields || {})[PromptsMod.PROMPTS[0].id] || {}).time === other.dataset.value];
+      Prompts.close();
+      return eq(out, [true, true, true]);
+    });
+    await t('P7. the My prompts chip opens a row with a New prompt chip; New prompt opens the editor with checkboxes (no select), Cancel returns', async () => {
+      await openPanel();
+      const before = !!$('aiCustomRow');
+      $('aiMine').click();
+      const row = !!$('aiCustomRow'), newChip = !!$('aiNew');
+      $('aiNew').click();
+      const editor = [!!$('aiEditTitle'), !!$('aiEditTemplate'), document.querySelectorAll('#aiPanel .ai-uses input[type="checkbox"]').length > 0, document.querySelectorAll('#aiPanel select').length];
+      Prompts.cancelEditing();
+      const back = [Prompts.editing(), !!$('aiNew')];
+      Prompts.select('lib', PromptsMod.PROMPTS[0].id); Prompts.render(); Prompts.close();
+      return eq([before, row, newChip, editor, back], [false, true, true, [true, true, true, 0], [null, true]]);
+    });
+    await t('P8. the Hero render is a built-in prompt: Duplicate to edit shows, Delete and Edit do not', async () => {
+      await openPanel();
+      const out = [!!$('aiDuplicate'), !!$('aiDelete'), !!$('aiEdit'), Prompts.allPrompts().filter((p) => p.id === 'hero-render').length];
+      Prompts.close();
+      return eq(out, [true, false, false, 1]);
+    });
+    await t('P9. the panel keeps the two steps (Save AI-ready image, Copy prompt), the From your design chips and the preview', async () => {
+      await openPanel();
+      const out = [$('aiStepImage').textContent, $('aiStepCopy').textContent, document.querySelectorAll('#aiAuto .ai-chip').length > 0, !!$('aiPreview') && $('aiPreview').value.length > 100];
+      Prompts.close();
+      return eq(out, ['1. Save AI-ready image', '2. Copy prompt', true, true]);
+    });
+    await t('P10. the Hero render material row starts on From the design (the first chip)', async () => {
+      await openPanel();
+      const row = $('aiField-material');
+      const on = row.querySelector('[aria-pressed="true"]');
+      const out = [row.children[0].textContent, on && on.dataset.value];
+      Prompts.close();
+      return eq(out, ['From the design', '__design__']);
+    });
+
+  } finally {
+    try { const p = document.querySelector('#aiPanel'); if (p && typeof Prompts !== 'undefined' && Prompts.isOpen()) Prompts.close(); } catch (e) { /* no prompt panel */ }
+    if (savedSections === undefined) delete uiPrefs.sections; else uiPrefs.sections = savedSections;
+    if (savedPrompts === undefined) delete uiPrefs.prompts; else uiPrefs.prompts = savedPrompts;
+    saveUiPrefs(uiPrefs);
+    UI.rebuildSections();
+    Store.replace(savedState); UI.setTab(savedTab);
+    Options.holdAutosave(false);
+  }
+  return results;
+}
+
+/* Extend runAllTests with the section tests (the other test files stay as they are). */
+runAllTests = ((base) => async function runAllWithSections() {
+  const r = await base();
+  const g = await runSectionTests();
+  const bad = g.filter((x) => !x.ok);
+  r.results.push(...g);
+  r.total += g.length;
+  r.passed += g.length - bad.length;
+  r.failed.push(...bad);
+  console.log(`[tests] sections ${g.length - bad.length}/${g.length} passed`, bad.length ? JSON.stringify(bad) : '');
+  return r;
+})(runAllTests);
 
 /* ==========================================================================
    Start-up and test hook

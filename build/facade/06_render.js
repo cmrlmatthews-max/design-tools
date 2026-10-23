@@ -716,7 +716,22 @@ const Render = (() => {
     }
   }
 
+  /** What was visible while captureClean drew its picture ({ site, boundary, arrow, grid, figure, overlay, ... }), or null before the first one. */
+  let lastCapture = null;
+  /** Hides the dashed site boundary and the north arrow inside the site layer. Returns the function that shows them again. */
+  function hideSiteMarks() {
+    const hid = [];
+    for (const o of layers.site.group.children) {
+      const k = o.userData && o.userData.kind;
+      if ((k === 'site-boundary' || k === 'site-arrow') && o.visible) { o.visible = false; hid.push(o); }
+    }
+    return () => { for (const o of hid) o.visible = true; };
+  }
+  const siteMarkFlag = (kind) => layers.site.group.children.some((o) => o.userData && o.userData.kind === kind && o.visible);
+
   /** AI-ready picture (main view only): Model style, no grid / scale figure / overlay, a plain light sky and ground.
+   *  The site layer stays on screen as drawn (ground, roads, walks, water, trees, neighbor buildings, in the site style that is on);
+   *  only its dashed boundary and its north arrow are hidden (docs/site-base-style-technical-plan.md section 3.1).
    *  Nothing in the store is touched: the live layers are hidden, a throwaway group is drawn, then everything is put back. */
   async function captureClean(scale = 2) {
     if (!renderer) throw new Error('The 3D view is not available.');
@@ -736,7 +751,8 @@ const Render = (() => {
       sub.add(o);
     }
     cap.add(sub);
-    for (const o of buildContextObjects(st)) {
+    // The site layer draws the site buildings (the context ghost is empty while it has buildings, as in the live view).
+    for (const o of (SiteLayer.info().buildings > 0 ? [] : buildContextObjects(st))) {
       if (o.isMesh) { o.material = ctxMat; o.castShadow = shadowsOn; o.receiveShadow = shadowsOn; }
       cap.add(o);
     }
@@ -745,10 +761,12 @@ const Render = (() => {
       model: layers.model.group.visible, ctx: layers.context.group.visible, ov: layers.overlay.group.visible, shadow: shadowPlane.visible,
       site: layers.site.group.visible, slabY: ground.position.y,
     };
+    let showMarks = () => {};
     const restore = () => {
       scene.remove(cap);
       clearGroup(sub); clearGroup(cap);
       ctxMat.dispose();
+      showMarks();
       scene.background = prev.bg;
       ground.material.color.copy(prev.ground);
       gridMesh.visible = prev.grid; figure.visible = prev.fig; shadowPlane.visible = prev.shadow;
@@ -766,9 +784,18 @@ const Render = (() => {
         scene.add(cap);
         scene.background = new THREE.Color('#f3f5f7');
         ground.material.color.set('#e4e7ea');
-        gridMesh.visible = false; figure.visible = false; shadowPlane.visible = shadowsOn;
+        // The site layer stays on screen: the flat slab drops under its ground, as in the live view.
+        const siteGround = layers.site.group.visible && SiteLayer.info().ground;
+        const bottom = siteGround ? SiteLayer.groundBottom() : null;
+        gridMesh.visible = false; figure.visible = false; shadowPlane.visible = shadowsOn && !siteGround;
         layers.model.group.visible = layers.context.group.visible = layers.overlay.group.visible = false;
-        layers.site.group.visible = false; ground.position.y = 0;          // the AI-ready picture has no site layer
+        ground.position.y = bottom == null ? 0 : bottom - SLAB_DROP;
+        showMarks = hideSiteMarks();
+        lastCapture = {
+          site: layers.site.group.visible, boundary: siteMarkFlag('site-boundary'), arrow: siteMarkFlag('site-arrow'),
+          grid: gridMesh.visible, figure: figure.visible, overlay: selOverlay.visible || layers.overlay.group.visible,
+          siteObjects: layers.site.group.children.filter((o) => o.visible).length,
+        };
         for (const c of [persp, ortho]) c.clearViewOffset();
         pending = ShotMod.captureView({ renderer, scene, camera: cam, scale });
       } finally { restore(); }
@@ -830,7 +857,7 @@ const Render = (() => {
   }
 
   return {
-    init, setView, capture, captureClean, enterCompare, exitCompare,
+    init, setView, capture, captureClean, captureFlags: () => (lastCapture ? { ...lastCapture } : null), enterCompare, exitCompare,
     sceneFlags: () => ({ site: layers.site.group.visible, slabY: ground.position.y, shadowPlane: shadowPlane.visible, grid: gridMesh.visible, figure: figure.visible, model: layers.model.group.visible, context: layers.context.group.visible, overlay: layers.overlay.group.visible, children: scene.children.length }),
     setInsetProvider: (fn) => { insetProvider = fn; },
     refreshInsets: (animate = true) => { if (!renderer) return; applyViewOffset(); if (preset) setView(preset, animate); else needsRender = true; },

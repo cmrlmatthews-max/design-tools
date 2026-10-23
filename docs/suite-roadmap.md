@@ -29,6 +29,8 @@ This file is the one place that lists every tool in the suite, who builds it, an
 | — | Yield Study | — | Skipped for now | — |
 | — | Model Explorer | — | Skipped for now | — |
 
+Branch `site-base-style` (October 23, 2026): in progress, not merged. It adds the base elevation that follows the ground, the site style (Solid, Glass, Wireframe), the AI-ready image with the site and the Hero render prompt, and collapsed panel sections.
+
 ## 3. Shared parts
 
 | Part | File | Rule |

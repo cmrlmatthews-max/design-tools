@@ -128,6 +128,7 @@ function fillDefaults(src) {
   // view
   const v = s.view;
   v.site = v.site !== false;                       // the project site layer (roads, water, trees, neighbors); on unless switched off
+  v.siteStyle = ['solid', 'glass', 'wireframe'].includes(v.siteStyle) ? v.siteStyle : 'solid';     // neighbor buildings in the site layer: solid, glass or wireframe
   if (!STYLES.includes(v.style)) v.style = 'model';
   v.contours.on = !!v.contours.on;
   v.contours.interval = v.contours.interval === 2 ? 2 : 1;

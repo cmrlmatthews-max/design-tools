@@ -155,6 +155,7 @@ function fillDefaults(src) {
   // view
   const v = s.view;
   v.site = v.site !== false;                       // the project site layer (ground, roads, water, trees, neighbors); on unless switched off
+  v.siteStyle = ['solid', 'glass', 'wireframe'].includes(v.siteStyle) ? v.siteStyle : 'solid';     // neighbor buildings in the site layer: solid, glass or wireframe
   v.massing = v.massing !== false;                 // the project massing volume (every level as a solid, the active group highlighted); on unless switched off
   if (!STYLES.includes(v.style)) v.style = 'model';
   for (const k of ['labels', 'walls', 'bays', 'levels3d', 'context', 'grid', 'figure']) v[k] = !!v[k];

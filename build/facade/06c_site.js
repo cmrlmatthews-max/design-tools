@@ -8,7 +8,7 @@
    ========================================================================== */
 //@@MODULE sitelayer@@
 const SiteLayer = (() => {
-  const OFF = { shown: false, ground: false, buildings: 0, roads: 0, walks: 0, waterAreas: 0, trees: 0, key: 'off' };
+  const OFF = { style: 'solid', shown: false, ground: false, buildings: 0, roads: 0, walks: 0, waterAreas: 0, trees: 0, key: 'off' };
   let drawn = { ...OFF };
   let mesh = null, zBottom = 0;
 
@@ -24,6 +24,9 @@ const SiteLayer = (() => {
   /** The layer shows with View > Site, but not in an elevation view: that view is flat, like the DXF sheet, and neighbors in front would hide the facade. */
   const wanted = (state) => !!state.view && state.view.site !== false && !state.view.elevation;
 
+  /** The site style of the View tab: 'solid' | 'glass' | 'wireframe' (anything else is 'solid'). Only the neighbor buildings change. */
+  const styleOf = (state) => { const v = state && state.view && state.view.siteStyle; return v === 'glass' || v === 'wireframe' ? v : 'solid'; };
+
   /** Called by Render.syncMain on every frame of the main view (never in Compare).
    *  layer = { group, key } (a THREE.Group already in the scene, hidden in Compare and in the AI-ready image);
    *  state = Store.raw(); d = Derived.get(); kit = { syncLayer, clearGroup, cssColor, themeEpoch }.
@@ -33,7 +36,7 @@ const SiteLayer = (() => {
     const dv = wanted(state) ? siteDerived() : null;
     const doc = dv ? ProjectUI.doc() : null;
     const pl = dv ? ProjectUI.placement() : null;
-    const key = dv ? SiteLayer3D.keyFor(doc, pl, { site: true, buildings: true }, kit.themeEpoch ? kit.themeEpoch() : 0) : 'off';
+    const key = dv ? SiteLayer3D.keyFor(doc, pl, { site: true, buildings: true }, kit.themeEpoch ? kit.themeEpoch() : 0, styleOf(state)) : 'off';
     if (layer.key !== key) SiteLayer3D.dispose(layer.group.children);       // the materials; kit.syncLayer frees the geometry
     return kit.syncLayer(layer, key, () => {
       mesh = null; zBottom = 0; drawn = { ...OFF, key };
@@ -42,11 +45,11 @@ const SiteLayer = (() => {
       try { data = SiteLayerMod.buildSiteLayerData(dv, pl, { contextIds: new Set() }); } catch (e) { console.error(e); return []; }
       if (!data || !data.ok) return [];
       let res = null;
-      try { res = SiteLayer3D.objects(data, { css: kit.cssColor, rotation: pl.rotation, edges: true, shadows: true }); } catch (e) { console.error(e); return []; }
+      try { res = SiteLayer3D.objects(data, { style: styleOf(state), css: kit.cssColor, rotation: pl.rotation, edges: true, shadows: true }); } catch (e) { console.error(e); return []; }
       mesh = res.objects.find((o) => o.userData.kind === 'site-ground') || null;
       zBottom = data.bounds ? data.bounds.zMin : 0;
       const i = res.info;
-      drawn = { shown: true, ground: !!i.ground, buildings: i.buildings, roads: i.roads, walks: i.walks, waterAreas: i.waterAreas, trees: i.trees, key };
+      drawn = { style: styleOf(state), shown: true, ground: !!i.ground, buildings: i.buildings, roads: i.roads, walks: i.walks, waterAreas: i.waterAreas, trees: i.trees, key };
       return res.objects;
     });
   }

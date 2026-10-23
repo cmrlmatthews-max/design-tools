@@ -12,6 +12,7 @@ const Help = (() => {
       'Pick a design from the Option menu > New from a preset, then change the numbers. The default is a 300 by 65 ft bar on ground that falls 5 percent to the south, with one balanced floor elevation.',
       'The HUD shows cut, fill, net (fill minus cut) and the tallest wall. Volumes round to 10 cy there; the Checks tab shows them to 0.1 cy. Tap the HUD to see the tiers, the routes and the warnings.',
       'Click a drive, lot, wall, route, building or the property line in the view to select it. The card at the top of the panel names it. Esc clears the selection.',
+      'Each section starts collapsed. Select a section title to open it. Your choice is remembered.',
     ]],
     ['Buildings', [
       'Each building has a footprint and one or more tiers along its long axis. A tier floor (FFE) is Balance, which sets the pad so cut and fill under it are equal, or a typed elevation to 0.01 ft.',
@@ -40,7 +41,9 @@ const Help = (() => {
       'Vertical exaggeration changes only the picture. Every number uses the true heights.',
     ]],
     ['Site', [
-      'The Site toggle in the View tab shows the project site from the Site Model. It shows neighbor buildings, roads, water, and trees. They are solid grey blocks with dark edges. The sketch keeps its own ground, existing and proposed. This tool does not drag. Move a building in the tool that owns it.',
+      'The Site toggle in the View tab shows the project site from the Site Model. It shows neighbor buildings, roads, water, and trees.',
+      'Site style, under the Site toggle, sets how the neighbor buildings draw. Solid draws opaque grey blocks with dark edges. Glass draws see-through blocks. Wireframe draws edges only.',
+      'The sketch keeps its own ground, existing and proposed. This tool does not drag. Move a building in the tool that owns it.',
     ]],
     ['Projects', [
       'A project holds the site, the massing and the work of other tools in one file. With a project open, the site gives the existing ground, and the Mid-Rise massing and the Parking Deck can be buildings here.',
@@ -50,6 +53,8 @@ const Help = (() => {
       'Option menu > Save keeps the design in this browser. Export > Export JSON downloads all saved options. Import JSON adds them back.',
       'Export > SketchUp opens in SketchUp with the CMRLM extension. Revit points is a CSV of x, y, z for a toposurface. Contours (DXF) has contours, pads, walls, drives, lots and routes. Notes is a plain-text summary with the cautions.',
       'Export > Image saves a picture. AI-ready image and AI Prompts are a pair for ChatGPT or Gemini; the prompt keeps the ground, the walls and the pads where the model shows them.',
+      'The AI-ready image shows the site with the grading. Set Site style to Solid before you make it.',
+      'The first prompt in AI Prompts is Hero render. It renders the building on the graded pad as photoreal and keeps the neighbors as a white model.',
     ]],
   ];
   function toggle() {

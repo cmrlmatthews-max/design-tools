@@ -7,6 +7,9 @@
    ========================================================================== */
 //@@MODULE testcases@@
 
+/** Opens one panel section (every section starts collapsed: docs/site-base-style-technical-plan.md section 4.4). Does not touch the saved choice. */
+function openSection(id) { const c = UI.sectionCtl[id]; if (c && !c.isOpen()) c.setOpen(true); return !!c; }
+
 async function runTests() {
   const results = [];
   const eq = (a, b) => (JSON.stringify(a) === JSON.stringify(b) ? true : `got ${JSON.stringify(a)}, expected ${JSON.stringify(b)}`);
@@ -152,7 +155,7 @@ async function runTests() {
       for (const p of PromptsMod.PROMPTS) {
         const text = PromptsMod.fillPrompt(p, { ...auto, ...Object.fromEntries(Object.keys(PromptsMod.PROMPT_FIELDS).map((k) => [k, Prompts.valuesFor(p)[k]])) });
         if (text.includes('[') || text.includes('{{')) return `${p.id} (${st.name}) left a token: ${(text.match(/\[[^\]]*\]|\{\{[^}]*\}\}/) || [''])[0]}`;
-        if (!text.startsWith(PromptsMod.FORM_LOCK.slice(0, 20))) return `${p.id} does not start with the form lock`;
+        if (!p.noLock && !text.startsWith(PromptsMod.FORM_LOCK.slice(0, 20))) return `${p.id} does not start with the form lock`;      // the Hero render has its own opening (noLock)
       }
     }
     return true;
@@ -192,6 +195,41 @@ async function runTests() {
     s.podium.on = false;
     return eq([a.floors, a.height, a.program, a.podium, Prompts.autoValues(s, computeDerived(s).metrics).podium],
       [String(m.floorCount), `${Math.round(m.totalHeight)} feet`, 'hotel', 'an 8-story podium', 'no podium']);
+  });
+  await t('Hero render: the first prompt, no form lock; the hero text carries the height, floors, twist (only when twisted) and the chosen material', () => {
+    const p0 = PromptsMod.PROMPTS[0];
+    if (p0.id !== 'hero-render' || p0.group !== 'hero' || !p0.noLock || PromptsMod.PROMPTS.filter((x) => x.id === 'hero-render').length !== 1) return `first prompt ${p0.id}`;
+    const s = fillDefaults(defaultState());
+    s.segments[0].twist.deg = 25; s.crown.type = 'stepped';
+    const m = computeDerived(s).metrics;
+    const fill = (st, mm, extra) => PromptsMod.fillPrompt(p0, { ...Prompts.autoValues(st, mm), hero: PromptsMod.heroFor('tower', st, mm), ...extra });
+    const tw = fill(s, m);
+    s.segments[0].twist.deg = 0;
+    const flat = fill(s, computeDerived(s).metrics, { material: PromptsMod.PROMPT_FIELDS.material.options[7].value });
+    const checks = {
+      opens: tw.startsWith('Edit the attached massing model image'), noLock: !tw.includes('Turn the attached massing model'),
+      twist: tw.includes('rotates slightly'), height: tw.includes(`${Math.round(m.totalHeight)} feet`), floors: tw.includes(`${m.floorCount} floors`), crown: tw.includes('stepped crown'),
+      dusk: /photographed at dusk under a deep blue sky/.test(tw), fritted: tw.includes('The facade is white-fritted glass'), sections: ['KEEP EXACTLY AS SHOWN', 'HERO BUILDING — RENDER PHOTOREAL', 'CONTEXT BUILDINGS — KEEP AS WHITE MODEL', 'GROUND PLANE — RENDER PHOTOREAL', 'RULE', 'LIGHT AND SKY', 'CAMERA', 'DO NOT INCLUDE'].every((x) => tw.includes(x)),
+      noTwist: !flat.includes('rotates slightly'), material: flat.includes('The facade is dark bronze anodized metal and glass in a crisp vertical grid.'),
+      clean: !/\[|\{\{/.test(tw + flat), noContractions: !/\b(don't|doesn't|isn't|aren't|can't|it's)\b/i.test(tw),
+    };
+    const bad = Object.entries(checks).filter(([, v]) => v !== true).map(([k]) => k);
+    return bad.length ? `failed: ${bad.join(', ')}` : true;
+  });
+  await t('Hero render: taper adds its line only when the tower tapers; the time list has the Dusk option first', () => {
+    const s = fillDefaults(defaultState()), m = computeDerived(s).metrics;
+    const a = PromptsMod.heroFor('tower', s, m);
+    s.segments[0].taper.x = -10;
+    const b = PromptsMod.heroFor('tower', s, computeDerived(s).metrics);
+    const t0 = PromptsMod.PROMPT_FIELDS.time.options[0];
+    return eq([a.includes('Keep the taper'), b.includes('Keep the taper'), b.includes('tapering'), t0.label, PromptsMod.PROMPT_FIELDS.time.options.length], [false, true, true, 'Dusk, deep blue sky', 9]);
+  });
+  await t('Hero render in the panel: promptText fills the hero from the current design', () => {
+    const s = fillDefaults(defaultState());
+    s.segments[0].twist.deg = 25;
+    Store.replace(s);
+    const m = Derived.get().metrics, text = Prompts.promptText('hero-render');
+    return eq([!!text && text.startsWith('Edit the attached massing model image'), text.includes('rotates slightly'), text.includes(`${Math.round(m.totalHeight)} feet`), /\[|\{\{/.test(text)], [true, true, true, false]);
   });
   await t('custom prompts: save, export, import (title collisions become "Title (2)"), remove', async () => {
     const a = StorageMod.createStorage({ key: 'k', schema: 1, storage: memory() });

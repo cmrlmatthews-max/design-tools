@@ -66,7 +66,7 @@ async function runUiTests() {
       return true;
     });
     await t('Site tab with no project explains that none is open; with a project it shows placement', () => {
-      UI.setTab('site');
+      UI.setTab('site'); TestHelp.openSection('project');
       const note = [...document.querySelectorAll('#tabpanel-site #project-note, #tabpanel-site .help')].some((p) => /No project is open/.test(p.textContent) && visible(p));
       return note || 'the no-project note is not visible';
     });

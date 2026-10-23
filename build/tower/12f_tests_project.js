@@ -88,7 +88,9 @@ async function runProjectTests() {
       ProjectMod.saveProject(mem, doc);
       ProjectUI.openDoc(doc);
       const p = Store.get('placement'), ctx = Store.get('context');
-      return eq([p.x, p.y, p.rotation, Math.round(p.baseZ), ctx.fromSite, ctx.blocks.length, ProjectUI.has(), ProjectUI.hasSite()], [500, 500, 0, 1015, true, 1, true, true]);
+      // The base is the LOWEST ground under the footprint, not the ground at the placement origin (500, 500: 1015 ft).
+      const low = ProjectUI.groundUnderFootprint(p), atOrigin = ProjectUI.groundAt(p.x, p.y);
+      return eq([p.x, p.y, p.rotation, p.baseMode, low != null && Math.abs(p.baseZ - low) <= 0.1, atOrigin - p.baseZ >= 1, ctx.fromSite, ctx.blocks.length, ProjectUI.has(), ProjectUI.hasSite()], [500, 500, 0, 'follow', true, true, true, 1, true, true]);
     });
     await t('the project name shows next to the Project button', () => {
       const pill = $('projPill');
@@ -137,7 +139,9 @@ async function runProjectTests() {
       const b = ProjectUI.contextFromSite(2000, { quiet: true });
       const both = Store.get('context.blocks');
       const first = both.find((x) => Math.abs(x.w - 80) < 0.1);
-      return eq([a, near1[0].x, near1[0].y, near1[0].h, b, first && first.base, Store.get('context.radius'), Store.get('context.fromSite')], [1, 20, -100, 40, 2, -5, 2000, true]);
+      // The near building stands on 1010 ft in the site; its block base is relative to the placement's baseZ (the lowest ground under the footprint).
+      const baseOk = !!first && Math.abs(first.base - (1010 - Store.get('placement.baseZ'))) <= 0.1;
+      return eq([a, near1[0].x, near1[0].y, near1[0].h, b, baseOk, Store.get('context.radius'), Store.get('context.fromSite')], [1, 20, -100, 40, 2, true, 2000, true]);
     });
     await t('Context from site is one undo step', () => eq(steps(() => ProjectUI.contextFromSite(150, { quiet: true })), 1));
     await t('Context from site skips a building removed in the Site Model (removed: true): only the far one at 2000 ft', () => {
@@ -179,7 +183,8 @@ async function runProjectTests() {
       let ok;
       const n = steps(() => { ok = ProjectUI.centerOnSite({ quiet: true }); });
       const p = Store.get('placement');
-      return eq([ok, p.x, p.y, Math.round(p.baseZ), n, Store.get('context.blocks').length], [true, 500, 500, 1015, 1, 1]);
+      const low = ProjectUI.groundUnderFootprint(p);
+      return eq([ok, p.x, p.y, low != null && Math.abs(p.baseZ - low) <= 0.1, p.baseMode, n, Store.get('context.blocks').length], [true, 500, 500, true, 'follow', 1, 1]);
     });
     await t('the ground height is read from the site grid (bilinear)', () => eq([Math.round(ProjectUI.groundAt(250, 130) * 100) / 100, Math.round(ProjectUI.groundAt(0, 0))], [1005.1, 1000]));
 
@@ -264,7 +269,17 @@ async function runProjectTests() {
       const doc = ProjectFixture.siteProject({ withMassing: towerMassing(st) });
       ProjectMod.saveProject(mem, doc);
       ProjectUI.openDoc(doc);
-      return eq([Store.get('segments').length, Store.get('podium.on'), Store.get('placement'), ProjectUI.status().replaceNeeded, Store.get('schema')], [st.segments.length, true, { x: 300, y: 400, rotation: 15, baseZ: 1020 }, false, 2]);
+      // An old save has no baseMode: it opens as Follow, and the base is the lowest ground under the footprint (not the saved 1020).
+      const p = Store.get('placement'), low = ProjectUI.groundUnderFootprint(p);
+      return eq([Store.get('segments').length, Store.get('podium.on'), [p.x, p.y, p.rotation, p.baseMode], low != null && Math.abs(p.baseZ - low) <= 0.1, ProjectUI.status().replaceNeeded, Store.get('schema')], [st.segments.length, true, [300, 400, 15, 'follow'], true, false, 2]);
+    });
+    await t('a saved massing with baseMode "typed" keeps its typed base elevation when the project opens', () => {
+      fresh();
+      const st = fillDefaults(CONFIG.presets.find((p) => p.id === 'hotel-podium').state);
+      const doc = ProjectFixture.siteProject({ withMassing: towerMassing(st, { x: 300, y: 400, rotation: 15, baseZ: 1020, baseMode: 'typed' }) });
+      ProjectMod.saveProject(mem, doc);
+      ProjectUI.openDoc(doc);
+      return eq(Store.get('placement'), { x: 300, y: 400, rotation: 15, baseZ: 1020, baseMode: 'typed' });
     });
     await t('a schema 1 option state loads as schema 2 and looks the same (same view.sun, same plates, manual sun)', () => {
       const old = deepClone(CONFIG.presets.find((p) => p.id === 'point-tower').state);
@@ -294,7 +309,9 @@ async function runProjectTests() {
       const doc = ProjectFixture.siteProject({ withMassing: { tool: 'tower', schema: 1, placement: { x: 1, y: 2, rotation: 0, baseZ: 3 }, state: old, derived: { levels: [] } } });
       ProjectMod.saveProject(mem, doc);
       ProjectUI.openDoc(doc);
-      return eq([Store.get('schema'), Store.get('sun.mode'), Store.get('placement'), Store.get('view.sun')], [2, 'manual', { x: 1, y: 2, rotation: 0, baseZ: 3 }, old.view.sun]);
+      // The save has no baseMode, so it opens as Follow: the saved baseZ 3 gives way to the lowest ground under the footprint.
+      const p = Store.get('placement'), low = ProjectUI.groundUnderFootprint(p);
+      return eq([Store.get('schema'), Store.get('sun.mode'), [p.x, p.y, p.rotation, p.baseMode], low != null && Math.abs(p.baseZ - low) <= 0.1, Store.get('view.sun')], [2, 'manual', [1, 2, 0, 'follow'], true, old.view.sun]);
     });
     await t('the sun animation is never loaded as playing', () => eq(fillDefaults({ ...defaultState(), sun: { ...defaultSun(), play: true } }).sun.play, false));
 
@@ -437,7 +454,7 @@ async function runProjectTests() {
       const doc = ProjectUI.create('Local one', { quiet: true });
       const back = stored(doc.id);
       const sec = document.querySelector('#tabpanel-site [data-section="project"]');
-      return eq([back.frame.kind, back.name, ProjectMod.getSection(back, 'massing').tool, Store.get('placement'), urls.at(-1) === doc.id, sec && sec.hidden, ProjectUI.hasSite()], ['local', 'Local one', 'tower', { x: 0, y: 0, rotation: 0, baseZ: 0 }, true, false, false]);
+      return eq([back.frame.kind, back.name, ProjectMod.getSection(back, 'massing').tool, Store.get('placement'), urls.at(-1) === doc.id, sec && sec.hidden, ProjectUI.hasSite()], ['local', 'Local one', 'tower', { x: 0, y: 0, rotation: 0, baseZ: 0, baseMode: 'follow' }, true, false, false]);
     });
     await t('the Export menu has the three Send items, enabled', async () => {
       $('btnExport').click();

@@ -433,11 +433,25 @@ const UI = (() => {
       ]),
     };
   }
+  /** View tab: the site style chips (Solid, Glass, Wireframe) for the neighbor buildings; shown while the Site toggle is on. */
+  function siteStyleRow() {
+    const btns = [['solid', 'Solid'], ['glass', 'Glass'], ['wireframe', 'Wireframe']].map(([value, text]) => {
+      const b = h('button', { class: 'chip', type: 'button', 'aria-pressed': 'false', 'data-value': value }, text);
+      b.addEventListener('click', () => Store.set('view.siteStyle', value, { live: false }));
+      return b;
+    });
+    return Controls.when(() => {
+      const cur = Store.get('view.siteStyle') || 'solid';
+      btns.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.value === cur)));
+      return Store.get('view.site') !== false;
+    }, [h('div', { class: 'ctl', id: 'siteStyleChips' }, h('div', { class: 'ctl-label' }, 'Site style'), h('div', { class: 'chips', role: 'group', 'aria-label': 'Site style' }, btns))]);
+  }
   function buildScene() {
     return {
       children: els([
         Controls.toggle({ label: 'Site', bind: bs('view.site') }),
         Controls.help('The ground, roads, water, trees, and neighbors of the project site. From the Site Model.'),
+        siteStyleRow(),
         Controls.toggle({ label: 'Show zoning envelope', bind: bs('view.envelope') }),
         Controls.toggle({ label: 'Show context blocks', bind: bs('context.show') }),
         Controls.help('Edit the context blocks in the Site tab.'),
@@ -568,7 +582,7 @@ const UI = (() => {
           Controls.label('Placement of the building in the project'),
           Controls.group(els([lenF('X (east)', 'placement.x', { hardMin: -1e6, hardMax: 1e6 }), lenF('Y (north)', 'placement.y', { hardMin: -1e6, hardMax: 1e6 })])),
           degS('Rotation (5 degree steps)', 'placement.rotation', -180, 180, { step: 5, hardMin: -360, hardMax: 360 }),
-          lenF('Base elevation (FFE, ft)', 'placement.baseZ', { hardMin: -1e5, hardMax: 1e5, step: 0.5 }),
+          ...ProjectUI.baseControl(lenF),                  // Follow ground / Typed, the read-only line, the typed field
           h('div', { class: 'add-row' }, Controls.button('Center on site', () => ProjectUI.centerOnSite(), 'outline sm'), h('span', { class: 'help', style: 'margin:0' }, 'Puts the building at the site center and its floor at the ground there.')),
           Controls.when(siteOk, [
             Controls.label('Neighbors from the Site Model'),
@@ -588,26 +602,26 @@ const UI = (() => {
     { id: 'site', title: 'Site' },
   ];
   const SECTIONS = [
-    { id: 'templates', tab: 'form', title: 'Templates', open: true, build: buildTemplates },
-    { id: 'bars', tab: 'form', title: 'Bars', open: true, build: buildBars },
+    { id: 'templates', tab: 'form', title: 'Templates', open: false, build: buildTemplates },
+    { id: 'bars', tab: 'form', title: 'Bars', open: false, build: buildBars },
     { id: 'deck', tab: 'form', title: 'Deck', build: buildDeck },
     { id: 'podium', tab: 'form', title: 'Podium', build: buildPodium },
     { id: 'surface', tab: 'form', title: 'Surface parking', build: buildSurface },
     { id: 'courts', tab: 'form', title: 'Courts', build: buildCourts },
     { id: 'roof', tab: 'form', title: 'Roof and floors', build: buildRoof },
-    { id: 'programs', tab: 'program', title: 'Programs', open: true, build: buildPrograms },
-    { id: 'parking', tab: 'program', title: 'Parking', open: true, build: buildParking },
+    { id: 'programs', tab: 'program', title: 'Programs', open: false, build: buildPrograms },
+    { id: 'parking', tab: 'program', title: 'Parking', open: false, build: buildParking },
     { id: 'rules', tab: 'program', title: 'Rules', build: buildRules },
-    { id: 'display', tab: 'view', title: 'Display', open: true, build: buildDisplay },
-    { id: 'scene', tab: 'view', title: 'Context and envelope', open: true, build: buildScene },
-    { id: 'sun', tab: 'view', title: 'Sun', open: true, build: buildSun },
-    { id: 'site', tab: 'site', title: 'Site', open: true, build: buildSite },
-    { id: 'setbacks', tab: 'site', title: 'Setbacks', open: true, build: buildSetbacks, when: hasSiteNow },
-    { id: 'height', tab: 'site', title: 'Height limit and stepback', open: true, build: buildHeight },
+    { id: 'display', tab: 'view', title: 'Display', open: false, build: buildDisplay },
+    { id: 'scene', tab: 'view', title: 'Context and envelope', open: false, build: buildScene },
+    { id: 'sun', tab: 'view', title: 'Sun', open: false, build: buildSun },
+    { id: 'site', tab: 'site', title: 'Site', open: false, build: buildSite },
+    { id: 'setbacks', tab: 'site', title: 'Setbacks', open: false, build: buildSetbacks, when: hasSiteNow },
+    { id: 'height', tab: 'site', title: 'Height limit and stepback', open: false, build: buildHeight },
     { id: 'siterules', tab: 'site', title: 'Zoning rules', build: buildRulesSite },
     { id: 'targets', tab: 'site', title: 'Targets', build: buildTargets },
     { id: 'context', tab: 'site', title: 'Context blocks', build: buildContext },
-    { id: 'project', tab: 'site', title: 'Project and placement', open: true, build: buildProject },
+    { id: 'project', tab: 'site', title: 'Project and placement', open: false, build: buildProject },
   ];
   const sectionCtl = {};          // id -> Controls.section result
   const swatchSyncs = [];         // functions that repaint section-head swatches
@@ -1099,6 +1113,8 @@ const UI = (() => {
   }
   return {
     init, updateHud, rebuildPanel: () => { Controls.refreshAll(); },
+    // test hooks: the section controllers, and a rebuild of the panel from the saved UI prefs (a simulated reload)
+    sectionCtl, rebuildSections: () => { buildPanel(); setTab(activeTab, { remember: false }); Controls.refreshAll(); swatchSyncs.forEach((fn) => fn()); },
     // hooks for the selection card
     openItem, setProgramForItems, setTab, activeTab: () => activeTab, tabs: () => TABS.map((t) => t.id), reorderBars,
     setHudOpen, hudOpen: () => $('hud').dataset.collapsed === 'false', sections: () => SECTIONS.map((s) => ({ id: s.id, tab: s.tab })),

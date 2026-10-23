@@ -128,6 +128,88 @@ const ProjectUI = (() => {
     return true;
   }
 
+  /* ---- base elevation: Follow ground or Typed (docs/site-base-style-technical-plan.md section 1) ------------------------------- */
+  // A committed change under one of these paths moves the footprint, so followGround runs again.
+  const FOOTPRINT_KEYS = ['placement', 'source', 'sourceLevel', 'footprint', 'levels', 'bays', 'grid', 'ramp', 'cores', 'entries', 'liner'];
+  const footprintPath = (path) => FOOTPRINT_KEYS.some((k) => path === k || path.startsWith(`${k}.`));
+  const r1 = (v) => Math.round(v * 10) / 10;
+  /** The base elevation mode of the open design: 'follow' (the default, and an old save) or 'typed'. */
+  const baseMode = () => { const p = Store.raw().placement; return isObjP(p) && p.baseMode === 'typed' ? 'typed' : 'follow'; };
+  /** site.derived of the open project, or null. */
+  function siteDerived() {
+    const sec = sectionOf('site');
+    return sec && isObjP(sec.derived) ? sec.derived : null;
+  }
+  /** The lowest ground under the model footprint (project frame, ft NAVD88), or null without a site grid.
+   *  A 9 x 9 grid over the plan box of the model, each point turned into the project frame and read from the site ground. Rounded to 0.1 ft. */
+  function groundUnderFootprint(pl = placement(), bounds) {
+    const dv = siteDerived();
+    if (!dv) return null;
+    let b = bounds;
+    if (!b) { try { b = Derived.get().bounds.model; } catch (e) { b = null; } }
+    if (!b || ![b.minX, b.maxX, b.minY, b.maxY].every(Number.isFinite)) return null;
+    const N = 9;
+    let low = Infinity;
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+      const p = ProjectMod.toProject(pl, [b.minX + ((b.maxX - b.minX) * i) / (N - 1), b.minY + ((b.maxY - b.minY) * j) / (N - 1)]);
+      const z = SiteLayerMod.groundZAt(dv, p[0], p[1]);
+      if (Number.isFinite(z) && z < low) low = z;
+    }
+    return Number.isFinite(low) ? r1(low) : null;
+  }
+  /** True when the base elevation follows the ground now: a project is open, the mode is Follow and the deck is standalone. */
+  const followsGround = () => !!project.doc && isObjP(Store.raw().placement) && baseMode() === 'follow' && Store.raw().source === 'standalone';
+  /** For the placement gizmo: the base elevation for the moved placement `pl`, or null to leave the base alone. */
+  function baseFor(pl) {
+    return followsGround() ? groundUnderFootprint(pl) : null;
+  }
+  /** Sets placement.baseZ to the lowest ground under the footprint when the mode is Follow and the project has a site ground.
+   *  opts.merge: no new undo step (the change joins the one before). Returns true when the base changed. */
+  function followGround({ merge = false } = {}) {
+    if (!followsGround() || Store.gestureActive()) return false;
+    const z = groundUnderFootprint();
+    if (z == null || Math.abs(z - placement().baseZ) < 1e-9) return false;
+    const was = project.loading;
+    project.loading = true;                 // the Store hook ignores this write; the context below follows once
+    try {
+      Store.set('placement.baseZ', z, { live: false, merge });
+    } finally { project.loading = was; }
+    if (!was) markDirty();
+    return true;
+  }
+  /** Follow ground or Typed. Switching to Follow runs followGround once. */
+  function setBaseMode(mode) {
+    if (!project.doc || !isObjP(Store.raw().placement) || (mode !== 'follow' && mode !== 'typed') || baseMode() === mode) return false;
+    Store.set('placement.baseMode', mode, { live: false });
+    if (mode === 'follow') followGround({ merge: true });
+    return true;
+  }
+  /** The line under the chips in Follow mode. */
+  function baseLineText() {
+    const ft = (v) => `${(Math.round(v * 10) / 10).toLocaleString('en-US', { maximumFractionDigits: 1 })} ft`;
+    const z = placement().baseZ;
+    return siteDerived() && groundUnderFootprint() != null ? `Ground floor at ${ft(z)} above sea level.` : `This project has no site ground. The base stays at ${ft(z)}.`;
+  }
+  /** The base elevation control for the Site tab: Follow ground / Typed chips, a read-only line (Follow) or the typed field (Typed).
+   *  lenF = the page's length field maker. Returns a list of elements. */
+  function baseControl(lenF) {
+    const chips = h('div', { class: 'chips', role: 'group', 'aria-label': 'Base elevation mode', id: 'baseModeChips' });
+    const btns = [['follow', 'Follow ground'], ['typed', 'Typed']].map(([mode, text]) => {
+      const b = h('button', { class: 'chip', type: 'button', 'aria-pressed': 'false', 'data-base-mode': mode, onclick: () => setBaseMode(mode) }, text);
+      chips.append(b);
+      return b;
+    });
+    const line = h('p', { class: 'help', id: 'baseLine' });
+    const typed = lenF('Base elevation (ft)', 'placement.baseZ', { hardMin: -1e5, hardMax: 1e5, step: 0.5 });
+    return [
+      Controls.when(() => { btns.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.baseMode === baseMode()))); return true; },
+        [h('div', { class: 'ctl' }, h('div', { class: 'ctl-label' }, 'Base elevation'), chips)]).el,
+      Controls.when(() => { line.textContent = baseLineText(); return baseMode() === 'follow'; }, [line]).el,
+      Controls.when(() => baseMode() === 'typed', [typed.el]).el,
+      Controls.help('Follow ground sets the base to the lowest ground under the building. Typed keeps the value you enter.'),
+    ];
+  }
+
   /* ---- writing the project ---------------------------------------------------------------------- */
   function renderPill() {
     const doc = project.doc, pill = $('projPill');
@@ -163,7 +245,7 @@ const ProjectUI = (() => {
     const st = Store.snapshot();
     const d = Derived.get();
     const derived = ParkDerivedMod.parkingDerived(st, d.built, d.metrics);
-    const pl = placement();
+    const pl = { ...placement(), baseMode: baseMode() };
     return { tool: CONFIG.tool, schema: CONFIG.projectSchema, placement: pl, state: { ...st, placement: pl }, derived, note: st.name };
   }
   /**
@@ -235,6 +317,7 @@ const ProjectUI = (() => {
       try { if (found.length) useSource(found[0].source, { quiet: true }); } finally { project.loading = false; }
       if (!project.readOnly) markDirty();
     }
+    if (!project.readOnly) followGround({ merge: true });     // a standalone deck: the base elevation is the lowest ground under the footprint
     renderPill();
     if (Render.ready()) Render.setView(Render.info().preset || 'axon', true);
     return doc;
@@ -267,7 +350,7 @@ const ProjectUI = (() => {
     }
     Object.assign(project, { doc, timer: 0, dirty: true, readOnly: false, renamed: null });
     project.loading = true;
-    try { Store.set('placement', ZERO(), { live: false }); } finally { project.loading = false; }
+    try { Store.set('placement', { ...ZERO(), baseMode: 'follow' }, { live: false }); } finally { project.loading = false; }
     const saved = flush();
     project.updateUrl(doc.id);
     renderPill();
@@ -339,8 +422,11 @@ const ProjectUI = (() => {
     try { fresh = ProjectMod.loadProject(storageOf(), project.doc.id, storageNotice()); } catch (e) { fresh = null; }
     if (!fresh) return false;
     const before = dataKey();
+    const siteBefore = (sectionOf('site') || {}).updatedAt || '';
     project.doc = fresh;
-    if (dataKey() !== before) { renderPill(); Render.requestRender(); return true; }
+    const siteChanged = ((sectionOf('site') || {}).updatedAt || '') !== siteBefore;
+    if (siteChanged) followGround({ merge: true });          // a new site arrived: the base follows its ground
+    if (dataKey() !== before || siteChanged) { renderPill(); Render.requestRender(); return true; }
     return false;
   }
 
@@ -392,6 +478,11 @@ const ProjectUI = (() => {
     if (wired) return;
     wired = true;
     Store.subscribe((s, info) => {
+      if (project.doc && !project.loading && info && !info.live) {
+        const path = String(info.path || '');
+        // a change that moves the footprint (or a whole new state): the base elevation follows the ground in the same undo step
+        if ((info.kind === 'replace' || footprintPath(path)) && info.kind !== 'undo' && info.kind !== 'redo') followGround({ merge: true });
+      }
       if (project.doc && !project.loading && (!info || !info.live)) markDirty();
       renderPill();
     });
@@ -434,6 +525,7 @@ const ProjectUI = (() => {
     has, hasMassing, placement, sources, useSource, useStandalone, ghostLevels, dataDoc, dataKey, massingUnits, massingPlacement,
     start, openDoc, close, create, rename, flush, send, openMenu, exportFile, importFile, nameControl, reloadData,
     markDirty, renderPill,
+    baseMode, setBaseMode, groundUnderFootprint, followGround, baseFor, baseControl, siteDerived,
     doc: () => project.doc,
     status: () => ({ open: !!project.doc, id: project.doc && project.doc.id, name: project.doc && project.doc.name, dirty: project.dirty, readOnly: project.readOnly }),
     // tests: inject storage, navigation and the address bar

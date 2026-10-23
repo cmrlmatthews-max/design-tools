@@ -113,6 +113,7 @@ function defaultState() {
       ticks: true,                 // unit module ticks in plan
       envelope: true,
       site: true,                  // the project site (ground, boundary, neighbors, roads, water, trees) while a project with a site is open
+      siteStyle: 'solid',          // neighbor buildings of the site layer: 'solid' | 'glass' | 'wireframe'
       warnParking: true,           // the parking deficit counts as a warning (it can be turned off)
       snap: { on: true, grid: 5 },
       shot: { title: true, date: true, metrics: true, mark: true },
@@ -140,11 +141,13 @@ function fillDefaults(src) {
   const keepPlacement = s.placement;
   merge(s, base);
   if (keepPlacement === null || keepPlacement === undefined) s.placement = null;
+  if (isObj(s.placement)) s.placement.baseMode = s.placement.baseMode === 'typed' ? 'typed' : 'follow';       // base elevation: Follow ground (default, and the migration for old saves) | Typed
   // view
   const v = s.view;
   if (v.colorBy !== 'bar' && v.colorBy !== 'program') v.colorBy = 'program';
   if (v.style !== 'diagram') v.style = 'model';
   v.snap = { on: v.snap.on !== false, grid: v.snap.grid === 10 ? 10 : 5 };
+  v.siteStyle = ['solid', 'glass', 'wireframe'].includes(v.siteStyle) ? v.siteStyle : 'solid';
   // bars
   if (!Array.isArray(s.bars) || !s.bars.length) s.bars = [defaultBar('A')];
   s.bars = s.bars.filter(isObj);

@@ -217,7 +217,7 @@ async function runUiTests() {
       return eq([ok, ['Cut', 'Fill', 'Net (fill minus cut)', 'Balance', 'Tallest wall', 'Warnings'].every((r) => text.includes(r))], [true, true]);
     });
     await t('the AI Prompts panel opens with the grading lock in the preview', async () => {
-      fresh(); Prompts.open(); await frames(2);
+      fresh(); Prompts.open(); Prompts.select('time', 'time-golden-hour'); Prompts.render(); await frames(2);
       const txt = document.body.textContent;
       Prompts.close();
       return eq(/Keep the ground shape/.test(txt), true);
