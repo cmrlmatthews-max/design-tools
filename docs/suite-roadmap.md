@@ -17,8 +17,8 @@ This file is the one place that lists every tool in the suite, who builds it, an
 |---|---|---|---|---|
 | `site` | Site Model | `site/` | Version 1 live. Remove existing buildings in review | Home |
 | `tower` | Tower Generator | `tower/` | Version 1.2 built, in review (project file, Sun Study) | Home |
-| `sun` | Sun Study (inside the Tower Generator) | `tower/` | Version 1 built; rework (auto core, advisor, editing tools) October 24, 2026 | Home |
-| `plate` | Plate Planner | `plate/` | Version 1 built, in review | Home |
+| `sun` | Sun Study (inside the Tower Generator) | `tower/` | Version 1 built, in review | Home |
+| `plate` | Plate Planner | `plate/` | Version 1 built; rework (auto core, advisor, editing tools) October 24, 2026, in review | Home |
 | — | Project file (`src/shared/project.js`), Workspace page, Site Model handoff | `index.html`, `src/shared/`, `site/` | Version 1 live | Home |
 | `midrise` | Mid-Rise Generator | `midrise/` | Version 1 live | Home |
 | `parking` | Parking Deck Generator | `parking/` | Version 1 live | Home |
