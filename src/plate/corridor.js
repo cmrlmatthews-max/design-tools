@@ -6,6 +6,12 @@
    corridorPolygon(spine, width, plate)          → MultiPoly (clear corridor, clipped to the plate)
    stairBlocks(kind, spine, plate, state, seeds) → [{ id, outer, door }]
    corridorGraph(spine, stairs, units, opts)     → { lengthFt, stairPathFt, deadEnds: [{ stairId, ft }], doors, nodes, edges, reach(fromPoint, maxFt) }
+   corridorKind(plate, level, state)             → { kind, core: "manual" | "auto" | null } (rework plan 4.3)
+   coreModeOf(state)                             → "auto" | "manual" | "none" (rework plan 4.2 load rule)
+   manualCoreRect(state)                         → [x0, y0, x1, y1] | null
+   minRect(plate)                                → { u, n, long, short, area, center, aspect } (minimum-area rectangle)
+   isCompact(plate)                              → boolean (no holes, area ÷ rectangle ≥ 0.85, sides ≤ 1.6)
+   stairDoor(outer, corridor, plate)             → [x, y]
    GEO                                           shared Clipper and ring helpers (fill.js uses them)
 
    Pure ES module: no DOM, no Three.js, no hidden state, inputs are never mutated.
@@ -16,7 +22,10 @@
    - Point corridor: the spine is the ring at core + width ÷ 2, so the clear corridor runs from the core face
      to core + width (section 8.5: corridor outer square ±20.67 for a ±15 core). Section 3.2 also names the
      wall; the section 8 numbers decide (the wall belongs to the units, and there are no units on the core side).
-   - Kind "auto": point when the level has a core and no spines (massing or state), else bar.
+   - Kind "auto" (rework plan 4.3, corridorKind): spines → bar; a manual core → point; core mode "auto" on a compact
+     plate → point with an auto core (core.js); else bar. spineFor itself sees a core only in level.core or the manual
+     state rect: the fill injects the auto core into level.core before it calls spineFor.
+   - The massing level.core (old Tower files) is never read: levels.js drops it.
    - Bar spine without massing spines: a four-corner rectangle takes its long axis through the centroid. Other
      plates look for arms: two facing parallel edges whose band lies inside the plate and is longer than it is deep;
      the arm centerlines extend to the crossing of the next centerline (L, U, O). With no arm, the long axis of the
@@ -193,7 +202,7 @@ function frameRect(fr, s0, s1, t0, t1) {
   return ringArea(ring) < 0 ? ring.reverse() : ring;
 }
 
-export const GEO = { SCALE, clipper, asMP, bool, union, offsetMP, offsetSegments, mpArea, ringArea, inMP, inRing, segDist, distToBoundary, bboxOf, rectRing, centroidOf, ringsOf, at, frameRect, rr3, r3 };
+export const GEO = { SCALE, clipper, asMP, bool, union, offsetMP, offsetSegments, mpArea, ringArea, inMP, inRing, segDist, distToBoundary, bboxOf, rectRing, centroidOf, ringsOf, at, frameRect, rr3, r3, orient };
 
 /* ======================================================================= state helpers */
 
@@ -204,11 +213,34 @@ function corridorWidth(state) {
 }
 const extWallOf = (state) => (state && isNum(state.extWall) && state.extWall >= 0 ? state.extWall : 1.0);
 
+/**
+ * Core mode of a state (rework plan 4.2): state.core.mode when it is "auto", "manual" or "none"; else the load rule:
+ * a stored rect with no mode is "manual", no rect and no mode is "auto". "manual" with no valid rect falls back to
+ * "auto". → "auto" | "manual" | "none"
+ */
+export function coreModeOf(state) {
+  const c = state && state.core;
+  const rect = c && c.rect;
+  const hasRect = Array.isArray(rect) && rect.length === 4 && rect.every(isNum) && Math.abs(rect[2] - rect[0]) > 1e-6 && Math.abs(rect[3] - rect[1]) > 1e-6;
+  if (c && (c.mode === "auto" || c.mode === "none")) return c.mode;
+  if (c && c.mode === "manual") return hasRect ? "manual" : "auto";      // manual with no rectangle falls back to auto
+  return hasRect ? "manual" : "auto";
+}
+
+/** The manual core rectangle [x0, y0, x1, y1] of a state, or null (mode not manual, or no valid rect). */
+export function manualCoreRect(state) {
+  if (coreModeOf(state) !== "manual") return null;
+  const rect = state.core.rect;
+  if (!(Array.isArray(rect) && rect.length === 4 && rect.every(isNum))) return null;
+  if (Math.abs(rect[2] - rect[0]) < 1e-6 || Math.abs(rect[3] - rect[1]) < 1e-6) return null;
+  return rect.slice();
+}
+
+/** The core ring of a level: level.core (a drawn manual core, or one the fill injects), else the manual state rect. */
 function coreRingOf(level, state) {
   if (level && Array.isArray(level.core) && level.core.length >= 3) return level.core.map((p) => [p[0], p[1]]);
-  const rect = state && state.core && state.core.rect;
-  if (Array.isArray(rect) && rect.length === 4 && rect.every(isNum)) return rectRing(...rect);
-  return null;
+  const rect = manualCoreRect(state);
+  return rect ? rectRing(...rect) : null;
 }
 
 const validSegs = (list) => (Array.isArray(list) ? list : []).filter((s) => Array.isArray(s) && s.length >= 2 && isPt(s[0]) && isPt(s[s.length - 1]))
@@ -294,23 +326,77 @@ function convexHull(pts) {
   return lo.slice(0, -1).concat(hi.slice(0, -1));
 }
 
-/** Long axis direction of the minimum-area bounding rectangle (a near-square box, 1.02 or less: east-west). */
-function longAxis(plate) {
+/**
+ * Minimum-area bounding rectangle of a plate (the hull of its first outer ring).
+ * → { u, n, long, short, area, center, aspect } — u: the long-axis direction (a near-square box, aspect 1.02 or less:
+ *   east-west [1, 0]); u points east (or north when it runs north-south); n = u turned 90 degrees counter-clockwise;
+ *   long and short: the side lengths along u and n; center: the rectangle center. Null when the plate has no ring.
+ */
+export function minRect(plate) {
   const hull = convexHull(ringsOf(plate)[0] || []);
+  if (hull.length < 3) return null;
   let best = null;
   for (let i = 0; i < hull.length; i++) {
     const u = dirOf(hull[i], hull[(i + 1) % hull.length]), n = [-u[1], u[0]];
     let a0 = Infinity, a1 = -Infinity, b0 = Infinity, b1 = -Infinity;
     for (const q of hull) { const a = q[0] * u[0] + q[1] * u[1], b = q[0] * n[0] + q[1] * n[1]; a0 = Math.min(a0, a); a1 = Math.max(a1, a); b0 = Math.min(b0, b); b1 = Math.max(b1, b); }
     const area = (a1 - a0) * (b1 - b0);
-    const ax = (a1 - a0) >= (b1 - b0) - 1e-9 ? u : n;
-    const aspect = Math.max(a1 - a0, b1 - b0) / Math.max(1e-9, Math.min(a1 - a0, b1 - b0));
-    if (!best || area < best.area * (1 - 1e-9)) best = { area, ax, aspect };
+    if (!best || area < best.area * (1 - 1e-9)) best = { area, u, n, a0, a1, b0, b1 };
   }
-  if (!best || best.aspect <= 1.02) return [1, 0];             // a near-square plate (a circle): east-west
-  let [x, y] = best.ax;
+  const la = best.a1 - best.a0, lb = best.b1 - best.b0;
+  const c = [best.u[0] * (best.a0 + best.a1) / 2 + best.n[0] * (best.b0 + best.b1) / 2, best.u[1] * (best.a0 + best.a1) / 2 + best.n[1] * (best.b0 + best.b1) / 2];
+  const aspect = Math.max(la, lb) / Math.max(1e-9, Math.min(la, lb));
+  let ax = la >= lb - 1e-9 ? best.u : best.n;
+  if (aspect <= 1.02) ax = [1, 0];
+  let [x, y] = ax;
   if (x < -1e-9 || (Math.abs(x) <= 1e-9 && y < 0)) { x = -x; y = -y; }
-  return [x, y];
+  if (Math.abs(x) < 1e-12) x = 0;
+  if (Math.abs(y) < 1e-12) y = 0;
+  const along = (q) => q[0] * x + q[1] * y, across = (q) => -q[0] * y + q[1] * x;
+  let lo = Infinity, hi = -Infinity, lo2 = Infinity, hi2 = -Infinity;
+  for (const q of hull) { lo = Math.min(lo, along(q)); hi = Math.max(hi, along(q)); lo2 = Math.min(lo2, across(q)); hi2 = Math.max(hi2, across(q)); }
+  return { u: [x, y], n: [-y + 0, x], long: hi - lo, short: hi2 - lo2, area: best.area, center: c, aspect };
+}
+
+/** Long axis direction of the minimum-area bounding rectangle (a near-square box, 1.02 or less: east-west). */
+function longAxis(plate) {
+  const m = minRect(plate);
+  return m ? m.u : [1, 0];
+}
+
+/**
+ * Compact plate (rework plan 4.3): one piece, no holes, plate area ÷ minimum-area rectangle area ≥ 0.85, and that
+ * rectangle's long side ÷ short side ≤ 1.6.
+ */
+export function isCompact(plate) {
+  const P = asMP(plate);
+  if (P.length !== 1 || P[0].holes.length) return false;
+  const m = minRect(P);
+  if (!m || m.area <= 0) return false;
+  return mpArea(P) / m.area >= 0.85 - 1e-9 && m.aspect <= 1.6 + 1e-9;
+}
+
+/**
+ * Corridor kind and core source of a level (rework plan 4.3). → { kind: "bar" | "single" | "point", core: "manual" | "auto" | null }
+ * auto: massing or typed spines → bar (a manual core stays a block); a manual core (level.core or the state rect) → point;
+ * core mode "auto" on a compact plate → point with an auto core; else bar. Explicit "point" with core mode "auto" → auto core.
+ * The massing level.core never reaches here (levels.js drops it).
+ */
+export function corridorKind(plate, level, state) {
+  need(plate, "corridorKind", "plate"); need(state, "corridorKind", "state");
+  const cor = state.corridor || {};
+  const kind = cor.kind || "auto";
+  const spines = validSegs(cor.spine).length > 0 || validSegs(level && level.spines).length > 0;
+  const manual = coreRingOf(level, state) ? "manual" : null;
+  const mode = coreModeOf(state);
+  if (kind === "auto") {
+    if (spines) return { kind: "bar", core: manual };
+    if (manual) return { kind: "point", core: "manual" };
+    if (mode === "auto" && isCompact(plate)) return { kind: "point", core: "auto" };
+    return { kind: "bar", core: null };
+  }
+  if (kind === "point") return { kind: "point", core: manual || (mode === "auto" ? "auto" : null) };
+  return { kind, core: manual };
 }
 
 /** Arms: facing parallel edge pairs with the band inside the plate, longer than deep. → [{ a, b, depth }] centerline pieces */
@@ -402,6 +488,14 @@ function singleSpine(plate, side, ext, width) {
 }
 
 function pointSpine(core, width) {
+  const ring = orient(core, false);
+  const axisAligned = ring.every((p, i) => { const q = ring[(i + 1) % ring.length]; return Math.abs(p[0] - q[0]) < 1e-9 || Math.abs(p[1] - q[1]) < 1e-9; });
+  if (!axisAligned) {
+    // a turned core (an auto core on a turned plate): the core ring offset by half the corridor width, miter joins
+    const off = offsetMP([{ outer: ring, holes: [] }], width / 2);
+    const r = off.length ? (cleanRing2(off[0].outer) || off[0].outer) : ring;
+    return r.map((p, i) => { const q = r[(i + 1) % r.length]; return [[r3(p[0]), r3(p[1])], [r3(q[0]), r3(q[1])]]; });
+  }
   const [x0, y0, x1, y1] = bboxOf([core]);
   const h = width / 2;
   const p = [[x0 - h, y0 - h], [x1 + h, y0 - h], [x1 + h, y1 + h], [x0 - h, y1 + h]].map((q) => [r3(q[0]), r3(q[1])]);
@@ -447,8 +541,8 @@ export function corridorPolygon(spine, width, plate) {
 
 const ringOfBlock = (b) => (b && Array.isArray(b.outer) ? b.outer : b && Array.isArray(b.rect) && b.rect.length === 4 ? rectRing(...b.rect) : Array.isArray(b) && isPt(b[0]) ? b : null);
 
-/** The door of a stair block: the middle of its edge with clear corridor just outside. */
-function stairDoor(outer, corridor, plate) {
+/** The door of a stair block: the middle of its edge with clear corridor just outside. → [x, y] */
+export function stairDoor(outer, corridor, plate) {
   const ring = orient(outer, false);
   const c = centroidOf(plate);
   let best = null, nearest = null;

@@ -15,9 +15,12 @@
               built.massingUpdatedAt (else state.massingUpdatedAt, else null)   the massing updatedAt the fill used.
      metrics  computeMetrics result. Optional. Not read here: every number comes from the geometry.
 
-   levels[]  index, name, z, ftf, plate, corridor, core { outer, stairs, elevators }, support, units, metrics { units, nrsf, gsf, efficiency }
+   levels[]  index, name, z, ftf, plate, corridor, core { outer, stairs, elevators, rooms? }, support, units, metrics { units, nrsf, gsf, efficiency }
+             core.rooms (optional, an auto core only): [{ id, kind, outer }]; kinds stair, elevator, service-elevator, trash,
+             electrical, shaft, linen, ice, data. The rooms tile core.outer.
              (name, z and ftf are optional keys; the rooms CSV, the DXF and the SketchUp export read them.)
-   units[]   id "<level>-<nn>" (run order), type (the type NAME, e.g. "1BR"), outer, area, exposures, corner, bay, ring, demising, accessible
+   units[]   id "<level>-<nn>" (run order), type (the type NAME, e.g. "1BR"), outer, area, exposures, corner, bay, ring, demising, accessible,
+             flags? (optional, sorted): "area-high" when the fill flagged the unit larger than its type's area range (rework plan 3)
    mix[]     { type, count, share, avgArea } over the whole building (level x group floors)
    metrics   { units, nrsf, gsf, efficiency, corridorFt } over the whole building; hotel adds bays.
              corridorFt = clear corridor polygon area / clear width, summed over the levels.
@@ -255,6 +258,8 @@ function unitRecord(u, id, table) {
   rec.ring = isNum(u.ring) ? u.ring : 0;
   rec.demising = (Array.isArray(u.demising) ? u.demising : []).map(lineOf).filter(Boolean);
   rec.accessible = typeof u.accessible === "string" ? u.accessible : !!u.accessible;
+  const flags = [...(Array.isArray(u.flags) ? u.flags : []), ...(u.areaHigh ? ["area-high"] : [])];
+  if (flags.length) rec.flags = [...new Set(flags.map(String))].sort();
   return rec;
 }
 
@@ -276,6 +281,9 @@ function levelOf(rec, table, width) {
   elevIn.forEach((s, k) => { const o = cleanOuter(s.outer); if (o) elevators.push({ id: s.id ?? `E${k + 1}`, outer: o }); });
   const support = [];
   (Array.isArray(f.support) ? f.support : []).forEach((s, k) => { const o = cleanOuter(s.outer); if (o) support.push({ id: s.id ?? `B${k + 1}`, outer: o, kind: s.kind ?? "support" }); });
+  const roomsIn = Array.isArray(f.coreRooms) ? f.coreRooms : core && Array.isArray(core.rooms) ? core.rooms : [];
+  const rooms = [];
+  roomsIn.forEach((r, k) => { const o = cleanOuter(r.outer); if (o) rooms.push({ id: r.id ?? `R${k + 1}`, kind: String(r.kind ?? "shaft"), outer: o }); });
 
   const nrsfRaw = units.reduce((s, u) => s + Math.abs(ringAreaSigned(u.outer)), 0);
   const gsfRaw = multiPolyArea(plate);
@@ -283,7 +291,7 @@ function levelOf(rec, table, width) {
   const bays = units.reduce((s, u) => { const row = typeRow(table, u.type); return s + (row ? row.bays : 1); }, 0);
   const out = {
     index: rec.index, name: rec.name, z: r3(rec.z), ftf: r3(rec.ftf),
-    plate, corridor, core: { outer: coreRing, stairs, elevators }, support, units,
+    plate, corridor, core: { outer: coreRing, stairs, elevators, ...(rooms.length ? { rooms } : {}) }, support, units,
     metrics: { units: units.length, nrsf: r1(nrsfRaw), gsf: r1(gsfRaw), efficiency: gsfRaw > 0 ? r4(nrsfRaw / gsfRaw) : 0 },
   };
   return { level: out, raw: { nrsf: nrsfRaw, gsf: gsfRaw, corridorFt, bays } };

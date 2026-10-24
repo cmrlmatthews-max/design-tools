@@ -45,8 +45,9 @@
      on the corridor boundary (the unit centroid when none does). A key counts
      when its graph distance from the linen closet is at most housekeepingReach.
    - Area closure: GSF − (NRSF + clear corridor + core + stairs + elevators + support)
-     with overlaps removed, against extWall × (Σ run lengths + 2 × the wrap leg
-     of every corner). `area-closure` warns beyond ±1 sf.
+     with overlaps removed, against extWall × (Σ run lengths + the two wrap legs
+     of every corner). A run with `slots: 0` (unfilled) is left out: its remainder runs to the plate edge.
+     `area-closure` warns beyond ±1 sf.
    - Stale massing: needs built.massingUpdatedAt (used by the fill) and
      built.currentMassingUpdatedAt (the project now); checks() also takes the current time as a third
      argument { massingUpdatedAt }.
@@ -231,7 +232,11 @@ function buildGraph(spine, queries) {
     }
   });
   const nodeOf = new Map();
-  for (const [key, pr] of proj) nodeOf.set(key, node(pr.pt));
+  // the node of a query: the same rounded t as the edge cuts, so the two always meet in one node
+  for (const [key, pr] of proj) {
+    const s = segs[pr.seg], tt = Math.round(pr.t * 1e7) / 1e7;
+    nodeOf.set(key, node([s[0][0] + (s[1][0] - s[0][0]) * tt, s[0][1] + (s[1][1] - s[0][1]) * tt]));
+  }
   const ends = nodes.map((_, i) => i).filter((i) => adj[i].length === 1);
   function dist(from) {
     const d = new Array(nodes.length).fill(Infinity), done = new Array(nodes.length).fill(false);
@@ -274,7 +279,7 @@ function corridorNumbers(state, fill, width, hotel) {
   const spine = Array.isArray(fill.spine) ? fill.spine : [];
   const queries = [];
   stairs.forEach((s) => { if (isPair(s.door)) queries.push({ key: `s:${s.id}`, p: s.door }); });
-  const closets = hotel ? (fill.support || []).filter((b) => b && b.kind === "linen" && ringOf(b.outer)) : [];
+  const closets = hotel ? [...(fill.support || []), ...(Array.isArray(fill.coreRooms) ? fill.coreRooms : [])].filter((b) => b && b.kind === "linen" && ringOf(b.outer)) : [];
   closets.forEach((b, i) => queries.push({ key: `c:${i}`, p: centroid(ringOf(b.outer)) }));
   const units = Array.isArray(fill.units) ? fill.units : [];
   const doors = hotel && closets.length ? units.map((u) => doorOf(u, corridor)) : [];
@@ -425,6 +430,26 @@ function cornerSquares(plate, blocks) {
   return n;
 }
 
+/** Length of the edges of leftover and remainder pieces that lie on the area line (fill.inset rings). */
+function leftoverContact(fill) {
+  const rings = [];
+  for (const pc of Array.isArray(fill.inset) ? fill.inset : []) { if (pc && pc.outer) rings.push(pc.outer); for (const h of (pc && pc.holes) || []) rings.push(h); }
+  if (!rings.length) return 0;
+  let total = 0;
+  for (const b of fill.support || []) {
+    if (!b || (b.kind !== "leftover" && b.kind !== "remainder")) continue;
+    const r = ringOf(b.outer);
+    if (!r) continue;
+    for (let i = 0; i < r.length; i++) {
+      const a = r[i], c = r[(i + 1) % r.length], L = Math.hypot(c[0] - a[0], c[1] - a[1]);
+      if (L < 0.01) continue;
+      const on = rings.some((q) => q.some((p, k) => { const e = q[(k + 1) % q.length]; return projectOnSegment(a, p, e).dist < 0.005 && projectOnSegment(c, p, e).dist < 0.005; }));
+      if (on) total += L;
+    }
+  }
+  return total;
+}
+
 /** Plan 3.12 "Area closure". */
 function closureRows(state, fill, nrsf, gsf) {
   const corridor = Array.isArray(fill.corridor) ? fill.corridor : [];
@@ -447,14 +472,18 @@ function closureRows(state, fill, nrsf, gsf) {
   const supportSf = take((fill.support || []).map((s) => ringOf(s && s.outer)));
   const strip = gsf - (nrsf + corridorSf + coreSf + stairsSf + elevSf + supportSf);
   const ext = isNum(state.extWall) ? state.extWall : 1.0;
-  const runs = Array.isArray(fill.runs) ? fill.runs : [];
-  const legs = Array.isArray(fill.corners) ? fill.corners.reduce((s, c) => s + 2 * (isNum(c.e) ? c.e : 0), 0) : 0;
+  // a run the fill left unfilled (slots: 0) is a remainder out to the plate edge: its exterior strip is inside it
+  const runs = (Array.isArray(fill.runs) ? fill.runs : []).filter((r) => r.slots !== 0);
+  // a wrap corner covers legs[0] + legs[1] of area line (2 × e when the legs are equal; a deep corner can differ)
+  const legs = Array.isArray(fill.corners) ? fill.corners.reduce((s, c) => s + (Array.isArray(c.legs) && c.legs.length === 2 && c.legs.every(isNum) ? c.legs[0] + c.legs[1] : 2 * (isNum(c.e) ? c.e : 0)), 0) : 0;
   // Corner squares: the strip along the runs and legs is measured on the area line, so each plate corner that no block
   // covers adds one ext × ext square (convex corner) or takes one away (reflex corner). A point tower has four convex ones.
   const blocks = [core, ...stairsOf(fill).map((s) => ringOf(s.outer)), ...elevatorsOf(fill).map((s) => ringOf(s.outer)),
     ...(fill.support || []).map((s) => ringOf(s && s.outer))].filter((r) => r && r.length >= 3);
   const cornerSq = runs.length ? cornerSquares(fill.plate, blocks) : 0;
-  const expected = ext * (runs.reduce((s, r) => s + (isNum(r.length) ? r.length : 0), 0) + legs) + ext * ext * cornerSq;
+  // leftover pieces that stop at the area line (a hotel corner with no wrap unit) leave the strip along them open too
+  const contact = runs.length ? leftoverContact(fill) : 0;
+  const expected = ext * (runs.reduce((s, r) => s + (isNum(r.length) ? r.length : 0), 0) + legs + contact) + ext * ext * cornerSq;
   return {
     gsf: r1(gsf), nrsf: r1(nrsf), corridor: r1(corridorSf), core: r1(coreSf), stairs: r1(stairsSf), elevators: r1(elevSf), support: r1(supportSf),
     strip: r1(strip), expected: r1(expected), diff: r1(strip - expected), ok: runs.length === 0 || Math.abs(strip - expected) <= 1,
@@ -613,8 +642,9 @@ function later(current, used) {
 
 /**
  * Plan 3.12 "Flags". → Warning[] { code, severity, where, message }:
- * the build and fill warnings (core-blocks-corridor and the rest), type-does-not-fit, run-too-short,
- * mix-miss, area-closure and stale-massing. The optional third argument { massingUpdatedAt } is the
+ * the build and fill warnings (core-blocks-corridor, type-area-high and the rest), type-does-not-fit, run-too-short,
+ * mix-miss, area-closure and stale-massing. De-duplicated by code + where (rework plan 7.3): the page badge count
+ * is the length of this list. The optional third argument { massingUpdatedAt } is the
  * massing time now, for stale-massing when the metrics do not carry it.
  */
 export function checks(state, metrics, ctx = {}) {
@@ -654,5 +684,18 @@ export function checks(state, metrics, ctx = {}) {
   const used = metrics.massing ? metrics.massing.usedAt : null;
   const current = ctx && ctx.massingUpdatedAt !== undefined ? ctx.massingUpdatedAt : metrics.massing ? metrics.massing.currentAt : null;
   if (later(current, used)) out.push(warn("stale-massing", "The massing changed after this fill. Re-fill to follow the new plates.", { usedAt: used, currentAt: current }));
-  return out;
+  // rework plan 7.3: one list, de-duplicated by code + where (the first one stays); the page badge counts this list
+  const seenKey = new Set();
+  return out.filter((w) => {
+    const k = `${w.code}|${stableJson(w.where)}`;
+    if (seenKey.has(k)) return false;
+    seenKey.add(k);
+    return true;
+  });
+}
+
+function stableJson(v) {
+  if (v === null || typeof v !== "object") return JSON.stringify(v === undefined ? null : v);
+  if (Array.isArray(v)) return `[${v.map(stableJson).join(",")}]`;
+  return `{${Object.keys(v).sort().filter((k) => v[k] !== undefined).map((k) => `${JSON.stringify(k)}:${stableJson(v[k])}`).join(",")}}`;
 }

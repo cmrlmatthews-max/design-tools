@@ -9,8 +9,9 @@
      document ({ sections: { massing: { derived } } }), a massing section
      ({ derived }), or the massing derived itself ({ levels }).
    - A drawn level has index 1, zone "typical", z 0, ftf 10, program "residential"
-     (hotel mode: "hotel"), the typed core as a ring, the typed corridor spine
+     (hotel mode: "hotel"), the manual core as a ring (core mode "manual" only), the typed corridor spine
      (corridor.spine, else []) and no seeds.
+   - Project levels never carry the massing core (rework plan 4.2): `core` is null. The Plate Planner makes the core.
    - Project levels keep the massing order (the Mid-Rise lists podium, bars, decks;
      `index` is an id, not an elevation). They are skipped when the zone is deck,
      crown or mechanical, when `plates` has no ring of 3 points or more, and for
@@ -32,6 +33,7 @@
 
 import { shapeToRing } from "../tower/geometry.js";
 import { cleanRing2 } from "../shared/sketchup-format.js";
+import { manualCoreRect } from "./corridor.js";
 
 const isNum = (v) => typeof v === "number" && Number.isFinite(v);
 const r2 = (v) => Math.round(v * 100) / 100 + 0;
@@ -132,7 +134,7 @@ export function levelsFrom(state, project) {
         ftf: isNum(l.ftf) ? l.ftf : 10,
         program: l.program !== undefined ? l.program : "residential",
         plate: clone(l.plates),
-        core: Array.isArray(l.core) && l.core.length >= 3 ? clone(l.core) : null,
+        core: null,                     // rework plan 4.2: the massing core (old Tower files) is ignored
         spines: Array.isArray(l.spines) ? clone(l.spines) : [],
         seeds: Array.isArray(l.seeds) ? clone(l.seeds) : [],
       });
@@ -140,7 +142,7 @@ export function levelsFrom(state, project) {
     return out;
   }
   need(state.plate, "levelsFrom", "state.plate");
-  const rect = state.core && Array.isArray(state.core.rect) && state.core.rect.length === 4 && state.core.rect.every(isNum) ? state.core.rect : null;
+  const rect = manualCoreRect(state);
   const spine = state.corridor && Array.isArray(state.corridor.spine) ? state.corridor.spine : [];
   return [{
     index: 1, name: "Level 1", zone: "typical", z: 0, ftf: 10,
