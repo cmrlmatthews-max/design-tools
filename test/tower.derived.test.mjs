@@ -30,11 +30,11 @@ const areaSum = (d) => d.levels.filter((l) => l.zone !== "crown").reduce((s, l) 
 
 /* ---------- test 1: every preset (plan section 8.1) ---------- */
 const TABLE = {
-  "point-tower": { gfa: 349278.8, floors: 47, levels: 48, height: 503, far: 15.52, cov: 0.444, units: 256 },
+  "point-tower": { gfa: 349278.8, floors: 47, levels: 48, height: 503, far: 15.52, cov: 0.444, units: 329 },
   "office-slab": { gfa: 482800.0, floors: 32, levels: 32, height: 432, far: 11.61, cov: 0.433, units: 0 },
-  "hotel-podium": { gfa: 399200.0, floors: 28, levels: 29, height: 318, far: 7.98, cov: 0.748, units: 399 },
-  "l-multifamily-podium": { gfa: 591875.0, floors: 23, levels: 23, height: 245.5, far: 10.35, cov: 0.839, units: 228 },
-  "u-multifamily-podium": { gfa: 611000.0, floors: 23, levels: 23, height: 245.5, far: 10.68, cov: 0.839, units: 258 },
+  "hotel-podium": { gfa: 399200.0, floors: 28, levels: 29, height: 318, far: 7.98, cov: 0.748, units: 499 },
+  "l-multifamily-podium": { gfa: 591875.0, floors: 23, levels: 23, height: 245.5, far: 10.35, cov: 0.839, units: 286 },
+  "u-multifamily-podium": { gfa: 611000.0, floors: 23, levels: 23, height: 245.5, far: 10.68, cov: 0.839, units: 304 },
 };
 console.log("towerDerived against the presets");
 const ids = PRESETS.map((p) => p.id);

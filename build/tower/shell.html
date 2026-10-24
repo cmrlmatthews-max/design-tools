@@ -516,8 +516,6 @@ function defaultState() {
 
     crown: { type: 'flat', height: 20, steps: 3, slopeSide: 'front' },
 
-    core: { mode: 'percent', percent: 20, w: 40, d: 30 },
-
     programs,
 
     targets: { gfa: 0, far: 0 },
@@ -904,7 +902,7 @@ function computeBounds(state, plates) {
 /* ---- Derived data: one cached run of the pipeline per geometry change ------ */
 const Derived = (() => {
   let key = null, cache = null, counter = 0;
-  const geometryKey = (s) => JSON.stringify([s.site, s.podium, s.segments, s.setbacks, s.mechanical, s.carves, s.cuts, s.crown, s.core, s.programs, s.context, s.targets]);
+  const geometryKey = (s) => JSON.stringify([s.site, s.podium, s.segments, s.setbacks, s.mechanical, s.carves, s.cuts, s.crown, s.programs, s.context, s.targets]);
   function get() {
     const s = Store.raw();
     const k = geometryKey(s);
@@ -1637,7 +1635,6 @@ const UI = (() => {
     { id: 'moves', title: 'Form moves', later: 'Phase 3' },
     { id: 'carves', title: 'Carves', later: 'Phase 4' },
     { id: 'crown', title: 'Crown', later: 'Phase 3' },
-    { id: 'core', title: 'Core', later: 'Phase 3' },
     { id: 'programs', title: 'Programs', later: 'Phase 3' },
     { id: 'view', title: 'View', open: false, build: buildView },
   ];

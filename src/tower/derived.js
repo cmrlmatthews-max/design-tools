@@ -115,7 +115,6 @@ export function towerDerived(state, built, metrics) {
 
   const levels = plates.map((p) => {
     const isVoid = !!p.void || !(p.area > 0);
-    const core = !isVoid && Array.isArray(p.coreRect) ? cleanRing2(p.coreRect) : null;
     return {
       index: p.n,
       name: `Floor ${p.n}`,
@@ -124,7 +123,7 @@ export function towerDerived(state, built, metrics) {
       ftf: r3(p.ftf),
       program: p.zone === "mechanical" ? "mechanical" : (p.program === undefined ? null : p.program),
       plates: isVoid ? [] : cleanMulti(p.polygons),
-      core,
+      core: null,          // the Tower Generator makes no core; the Plate Planner does
       spines: [],
       seeds: [],
     };

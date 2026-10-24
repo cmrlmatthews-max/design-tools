@@ -33,7 +33,7 @@ async function runLayoutTests() {
       eq([[...document.querySelectorAll('#panelTabs .tab')].map((b) => b.textContent), UI.tabs()], [['Form', 'Program', 'View', 'Site'], ['form', 'program', 'view', 'site']]));
     await t('each tab shows its own sections and no others', () => {
       const want = {
-        form: ['podium', 'segments', 'moves', 'carves', 'crown', 'core'], program: ['programs', 'targets'],
+        form: ['podium', 'segments', 'moves', 'carves', 'crown'], program: ['programs', 'targets'],
         view: ['display', 'scene', 'sun'], site: ['project', 'site', 'setbacks', 'height', 'context'],   // project: hidden until a project opens
       };
       for (const [tab, ids] of Object.entries(want)) {
@@ -141,7 +141,7 @@ async function runLayoutTests() {
       const compactOk = ['mGfa', 'mFar', 'mHeight', 'mFloors', 'hudBadge'].every((id) => visible($(id)));
       const hiddenOk = !visible($('mSite')) && !visible($('warnList'));
       UI.setHudOpen(true);
-      const expandedOk = ['mSite', 'mCover', 'mEff', 'mNet', 'mCore', 'mMech', 'mCrown', 'mPlateAvg', 'warnList'].every((id) => visible($(id)));
+      const expandedOk = ['mSite', 'mCover', 'mNet', 'hudCoreHelp', 'mMech', 'mCrown', 'mPlateAvg', 'warnList'].every((id) => visible($(id)));
       return (compactOk && hiddenOk && expandedOk) || `compact ${compactOk} hidden ${hiddenOk} expanded ${expandedOk}`;
     });
     await t('the metrics card expanded or collapsed state is remembered', () => {

@@ -26,7 +26,6 @@ function defaultState() {
       taper: { x: 0, y: 0, curve: "linear" }, twist: { deg: 0, start: 0, end: 1, curve: "linear" }, lean: { x: 0, y: 0 } }],
     setbacks: [], mechanical: [], carves: [], cuts: [],
     crown: { type: "flat", height: 20, steps: 3, slopeSide: "front" },
-    core: { mode: "percent", percent: 20, w: 40, d: 30 },
     programs: Object.fromEntries(Object.entries(PROGRAM_DEFAULTS).map(([k, v]) => [k, { ...v }])),
     targets: { gfa: 0, far: 0 },
     view: { style: "model", colorBy: "program", snap: { on: true, grid: 5 } },

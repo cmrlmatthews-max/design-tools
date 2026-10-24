@@ -398,20 +398,6 @@ const UI = (() => {
     };
   }
 
-  function buildCore() {
-    const mode = () => get('core.mode');
-    return {
-      children: els([
-        sel('Size by', 'core.mode', opts([['percent', 'Percent of plate'], ['size', 'Fixed size']])),
-        Controls.when(() => mode() === 'percent', [Controls.slider({
-          label: 'Core share of the first plate', bind: bs('core.percent'), min: 5, max: 50, step: 1, hardMin: 0, hardMax: 100, format: (v) => `${round1(v)}%`, inputMode: 'decimal',
-        })]),
-        Controls.when(() => mode() !== 'percent', [lenS('Core width', 'core.w', 10, 120), lenS('Core depth', 'core.d', 10, 120)]),
-        Controls.help('One core per segment, vertical, on its first plate. A warning shows when it does not fit a plate.'),
-      ]),
-    };
-  }
-
   function buildPrograms() {
     const cards = Object.keys(CONFIG.programs).map((k) => {
       const path = `programs.${k}`;
@@ -516,7 +502,6 @@ const UI = (() => {
     { id: 'moves', tab: 'form', title: 'Form moves', build: buildMoves },
     { id: 'carves', tab: 'form', title: 'Carves', build: buildCarves },
     { id: 'crown', tab: 'form', title: 'Crown', build: buildCrown },
-    { id: 'core', tab: 'form', title: 'Core', build: buildCore },
     { id: 'programs', tab: 'program', title: 'Programs', open: false, build: buildPrograms },
     { id: 'targets', tab: 'program', title: 'Targets', open: false, build: buildTargets },
     { id: 'display', tab: 'view', title: 'Display', open: false, build: buildDisplay },
@@ -843,14 +828,13 @@ const UI = (() => {
         <dl class="metrics compact">
           <div class="m"><dt>Site area</dt><dd id="mSite">-</dd></div>
           <div class="m"><dt>Site coverage</dt><dd id="mCover">-</dd></div>
-          <div class="m"><dt>Efficiency (avg)</dt><dd id="mEff">-</dd></div>
-          <div class="m"><dt>Net area</dt><dd id="mNet">-</dd></div>
-          <div class="m"><dt>Core area</dt><dd id="mCore">-</dd></div>
+          <div class="m"><dt>Net area (before core)</dt><dd id="mNet">-</dd></div>
           <div class="m"><dt>Mechanical area</dt><dd id="mMech">-</dd></div>
           <div class="m"><dt>Crown height</dt><dd id="mCrown">-</dd></div>
           <div class="m wide"><dt>Tower plate area (sf)</dt>
             <dd class="triple"><div id="mPlateMin">-<span>min</span></div><div id="mPlateAvg">-<span>avg</span></div><div id="mPlateMax">-<span>max</span></div></dd></div>
         </dl>
+        <p class="help" id="hudCoreHelp">The Plate Planner sets the core and the efficiency.</p>
         <div class="sec" id="hudUnits" hidden><div class="label">Units (estimate)</div><dl class="kv" id="hudUnitsList"></dl></div>
         <div class="sec" id="hudTargets" hidden><div class="label">Target check</div><dl class="kv" id="hudTargetsList"></dl></div>
         <div class="warn-block" id="warnBlock" data-n="0">
@@ -891,9 +875,7 @@ const UI = (() => {
     $('mFloorsSub').textContent = floorsText(m);
     siteMetric('mSite', Units.formatArea(m.siteArea), site);
     siteMetric('mCover', pct1(m.siteCoverage), site);
-    setText('mEff', pct1(m.efficiencyAvg));
     setText('mNet', Units.formatArea(m.netArea));
-    setText('mCore', Units.formatArea(m.coreArea));
     setText('mMech', Units.formatArea(m.mechanicalArea));
     setText('mCrown', m.crownHeight > 0 ? Units.formatFeetInches(m.crownHeight) : 'none');
     setText('mPlateMin', Units.formatInt(m.plateMin));

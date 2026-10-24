@@ -47,7 +47,7 @@ const SUN_DEFAULT = {
 
 // Schema 1 top-level keys (HEAD), plus the two schema 2 top-level keys.
 const SCHEMA1_KEYS = ["name", "site", "context", "podium", "segments", "setbacks", "mechanical", "carves", "cuts",
-  "crown", "core", "programs", "targets", "view"];
+  "crown", "programs", "targets", "view"];
 const SCHEMA2_KEYS = ["schema", "placement", "sun"];
 
 t("five presets, ids unique and in the expected order", () => {
@@ -123,7 +123,7 @@ t("geometry spot values match HEAD", () => {
   eq(pt.segments[0].floors, 45); eq(pt.segments[0].ftf, 10); eq(pt.segments[0].shape.w, 90);
   eq(pt.segments[0].taper.x, -10);
   eq(pt.crown.type, "screen"); eq(pt.crown.height, 20);
-  eq(pt.core.percent, 20);
+  ok(!("core" in pt), "no core key");
 
   const of = s("office-slab");
   eq(of.site.width, 260); eq(of.site.depth, 160); eq(of.podium.on, false);
@@ -139,21 +139,21 @@ t("geometry spot values match HEAD", () => {
   eq(L.site.heightLimit, 0); eq(L.podium.floors, 6); eq(L.podium.ftf, 10.5); eq(L.podium.upperProgram, "parking");
   eq(L.segments.length, 2); eq(L.segments[0].program, "amenity"); eq(L.segments[0].shape.type, "L");
   eq(L.segments[0].shape.arm, 65); eq(L.segments[1].floors, 16); eq(L.segments[1].program, "residential");
-  eq(L.core.percent, 20);
 
   const U = s("u-multifamily-podium");
   eq(U.segments[0].shape.type, "U"); eq(U.segments[0].shape.arm, 50); eq(U.segments[1].shape.arm, 50);
-  eq(U.core.percent, 15); eq(U.crown.height, 4);
+  eq(U.crown.height, 4);
 });
 
+// Units are estimated from net area before core (GFA - mechanical), since the core moved to the Plate Planner (Oct 24, 2026).
 // Section 8.1 table: GFA, floors, height, FAR, coverage and tower units, from buildPlates and computeMetrics.
 // The "Levels written" column comes from towerDerived (phase 3), so it is not checked here.
 const SECTION_8_1 = {
-  "point-tower":           { gfa: 349278.8, floors: 47, height: 503,   far: 15.52, coverage: 0.444, units: 256 },
+  "point-tower":           { gfa: 349278.8, floors: 47, height: 503,   far: 15.52, coverage: 0.444, units: 329 },
   "office-slab":           { gfa: 482800.0, floors: 32, height: 432,   far: 11.61, coverage: 0.433, units: 0 },
-  "hotel-podium":          { gfa: 399200.0, floors: 28, height: 318,   far: 7.98,  coverage: 0.748, units: 399 },
-  "l-multifamily-podium":  { gfa: 591875.0, floors: 23, height: 245.5, far: 10.35, coverage: 0.839, units: 228 },
-  "u-multifamily-podium":  { gfa: 611000.0, floors: 23, height: 245.5, far: 10.68, coverage: 0.839, units: 258 },
+  "hotel-podium":          { gfa: 399200.0, floors: 28, height: 318,   far: 7.98,  coverage: 0.748, units: 499 },
+  "l-multifamily-podium":  { gfa: 591875.0, floors: 23, height: 245.5, far: 10.35, coverage: 0.839, units: 286 },
+  "u-multifamily-podium":  { gfa: 611000.0, floors: 23, height: 245.5, far: 10.68, coverage: 0.839, units: 304 },
 };
 const TOWER_PROGRAM = { "point-tower": "residential", "office-slab": "office", "hotel-podium": "hotel",
   "l-multifamily-podium": "residential", "u-multifamily-podium": "residential" };
@@ -170,6 +170,19 @@ for (const p of PRESETS) {
     near(m.siteCoverage, exp.coverage, 0.0005, "coverage");
     const bp = m.byProgram[TOWER_PROGRAM[p.id]];
     eq(bp ? (bp.unitsWhole || 0) : 0, exp.units, "units");
+  });
+}
+
+// Plate Planner rework plan T1: no core in the Tower Generator.
+for (const p of PRESETS) {
+  t(`T1 no core: ${p.id}`, () => {
+    ok(!("core" in p.state), "preset has no core key");
+    const r = buildPlates(structuredClone(p.state));
+    ok(r.plates.every((q) => q.coreRect === null && q.coreArea === 0), "coreRect null, coreArea 0 on every plate");
+    ok(!r.warnings.some((w) => w.code === "core-outside"), "no core-outside warning");
+    const m = computeMetrics(p.state, r.plates);
+    near(m.coreArea, 0, 0, "metrics coreArea");
+    near(m.netArea, m.gfa - m.mechanicalArea, 1e-6, "net = GFA - mechanical");
   });
 }
 

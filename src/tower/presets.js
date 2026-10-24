@@ -70,7 +70,6 @@ export const PRESETS = [
       ],
       setbacks: [], mechanical: [], carves: [], cuts: [],
       crown: { type: 'screen', height: 20, steps: 3, slopeSide: 'front' },
-      core: { mode: 'percent', percent: 20, w: 40, d: 30 },
       programs: copyPrograms(),
       targets: { gfa: 0, far: 0 },
       view: {
@@ -116,7 +115,6 @@ export const PRESETS = [
       ],
       mechanical: [], carves: [], cuts: [],
       crown: { type: 'flat', height: 4, steps: 3, slopeSide: 'front' },
-      core: { mode: 'percent', percent: 20, w: 40, d: 30 },
       programs: copyPrograms(),
       targets: { gfa: 0, far: 0 },
       view: {
@@ -158,7 +156,6 @@ export const PRESETS = [
       ],
       setbacks: [], mechanical: [], carves: [], cuts: [],
       crown: { type: 'stepped', height: 15, steps: 3, slopeSide: 'front' },
-      core: { mode: 'percent', percent: 20, w: 40, d: 30 },
       programs: copyPrograms(),
       targets: { gfa: 0, far: 0 },
       view: {
@@ -207,7 +204,6 @@ export const PRESETS = [
       ],
       setbacks: [], mechanical: [], carves: [], cuts: [],
       crown: { type: 'flat', height: 4, steps: 3, slopeSide: 'front' },
-      core: { mode: 'percent', percent: 20, w: 40, d: 30 },
       programs: copyPrograms(),
       targets: { gfa: 0, far: 0 },
       view: {
@@ -266,9 +262,6 @@ export const PRESETS = [
       ],
       setbacks: [], mechanical: [], carves: [], cuts: [],
       crown: { type: 'flat', height: 4, steps: 3, slopeSide: 'front' },
-      // The L preset's 20% core does not fit the U's 50 ft arms (about 74 x 52 ft; the base arm is 50 ft deep),
-      // so it raises a core-outside warning. 15% (about 64 x 45 ft) fits in the front arm. The core is not in GFA.
-      core: { mode: 'percent', percent: 15, w: 40, d: 30 },
       programs: copyPrograms(),
       targets: { gfa: 0, far: 0 },
       view: {
