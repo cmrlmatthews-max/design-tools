@@ -5510,7 +5510,8 @@ const CoreMod = (() => {
 /* ==========================================================================
    plate/core.js — the auto core of the Plate Planner (rework plan sections 4.2 and 4.4)
 
-   coreProgram(state, ctx)                         → { mode, cabs, autoCabs, service, units, unitArea, floors, rows, size, area, rooms, notes }
+   coreProgram(state, ctx)                         → { mode, cabs, autoCabs, service, units, unitArea, floors, rows: { top, mid, bottom, R },
+                                                       k, split, size, area, rooms, notes, options, depths? }   ctx.fit optional
    coreLayout2(program, center, axis, state, opts) → { rect, outer, rooms: [{ id, kind, outer }], size }
    autoCore(plate, level, state, ctx)              → { outer, rect, rooms, program, size, axis, center }
    coreContext(state, groups)                      → { floors, units, unitArea, perGroup } (buildPlates passes it to every level)
@@ -5528,18 +5529,23 @@ const CoreMod = (() => {
      share > 0); hotel A = 400 sf per key. ctx.units, when given, is U; else ctx.floors × round(ctx.levelGsf × 0.75 ÷ A).
    - Passenger cabs: multifamily max(2, ceil(U ÷ 90)), hotel max(2, ceil(K ÷ 100)); state.elevators.count (not null)
      overrides. Service cab: hotel 1, multifamily 1 when floors ≥ 20; state.elevators.service (not null) overrides.
-   - Core depth B = the stair depth (state.stairs.size[1], 22). Two rows of B ÷ 2 (11 ft). Cab width = state.elevators.size[0]
-     (8 ft); a cab room is 8 × 11.
-   - Row 1: the passenger cabs. Row 2: service cab 8, trash 8, electrical 8, then (hotel, back-of-house on) linen 14,
-     ice 6, data 6, and last the shaft 6. The shaft is last so that it is the room that stretches.
-   - More than 6 passenger cabs: row 1 takes ceil(n ÷ 2), row 2 floor(n ÷ 2); the row-2 rooms move to the end of row 1.
-   - Row length R = the longer row; the shorter row stretches its last room when it is a shaft, else it gets a new shaft
-     room of the missing length. Core length A = 2 × stair width + R (stairs at the two ends, full depth). Every square
-     foot of the core is a named room.
-   - Without core stairs (stairs mode "manual", or stair seeds): A = R, no stair rooms.
+   - Rows of 11 ft. Layout options (review of the rework): k = 2 or 3 rows (core depth 22 or 33), and the passenger cabs
+     n1 in the top outer row, n2 in the bottom outer row, for every n1 from n down to ceil(n ÷ 2) (two banks facing
+     opposite corridors). Cabs and service cabs sit only in the outer rows. The service cabs, then trash and electrical,
+     go to the shorter outer row (ties: bottom); with k = 3, trash and electrical go to the middle row when the outer
+     row has no room (it would pass the longest cab row), and linen, ice, data and the shaft go to the middle row.
+     With k = 2 every room goes to the shorter outer row. Each row fills to R (its last shaft stretches, else a new
+     shaft). Stairs 11 × 22 at the two ends; with k = 3 an 11 × 11 shaft beside each stair. Cab width =
+     state.elevators.size[0] (8 ft). Every square foot of the core is a named room.
+   - Choice: with ctx.fit = { long, short, width, ext } (autoCore passes the plate's minimum-area rectangle), the option
+     with the smallest |d_long − d_short|, d = (side − core side − 2 × corridor) ÷ 2 − extWall; then the smaller core
+     area; then fewer rows; then fewer split cabs. Without a fit: the smallest area, then fewer rows, then fewer split cabs.
+     program.options lists every option (with depths when a fit is given); program.k, .split, .depths the chosen one.
+   - Core length A = 2 × stair width + R. Without core stairs (stairs mode "manual", or stair seeds): A = R, no stair rooms.
    - Frame: u along the plate's long axis (minimum-area rectangle; a near-square plate: east-west), n = u turned 90
      degrees counter-clockwise; the core is centered on the plate's area centroid; row 1 is on the +n side.
-   - Room ids: S1, S2 (stairs), E1… (cabs), SE1 (service cab), TR1 (trash), EL1 (electrical), SH1… (shafts), LN1, IC1, DA1.
+   - Room ids: S1, S2 (stairs), E1… (cabs, top row then bottom row), SE1 (service cab), TR1 (trash), EL1 (electrical),
+     SH1… (shafts), LN1, IC1, DA1. Rows: bottom t 0..11, middle 11..22, top B − 11..B (t along n).
    ========================================================================== */
 
 const { GEO, minRect, coreModeOf: coreModeOf0, manualCoreRect: manualCoreRect0 } = CorridorMod;
@@ -5599,29 +5605,66 @@ function coreContext(state, groups) {
   return { mode, floors: perGroup.reduce((s, g) => s + g.floors, 0), units: perGroup.reduce((s, g) => s + g.units, 0), unitArea: A, perGroup };
 }
 
-/** The two rows of a program, in order: → { row1: [{ kind, len }], row2, R } */
-function rowsOf(cabs, service, cw, extra) {
+const rowLen = (row) => row.reduce((x, r) => x + r.len, 0);
+
+/**
+ * One layout option: k rows of 11 ft (2 or 3), n1 passenger cabs in the top outer row and n2 in the bottom outer row.
+ * Cabs and service cabs sit only in the outer rows. The service cabs, then trash and electrical, go to the shorter
+ * outer row (ties: the bottom row); with k = 3, trash and electrical move to the middle row when an outer row has no
+ * room left (it would grow past the longest cab row), and the other rooms (linen, ice, data, shaft) go to the middle
+ * row. With k = 2 every room goes to the shorter outer row. Each row then fills to R: its last room stretches when it
+ * is a shaft, else a new shaft room takes the missing length. With k = 3 an 11 × 11 shaft sits beside each stair.
+ * → { k, split: [n1, n2], rows: { top, mid, bottom, R, row1, row2 }, size: [A, B], area }
+ */
+function layoutOption(k, n1, n2, service, cw, extra, stair) {
   const cab = (kind) => ({ kind, len: cw });
-  const rooms = [...Array.from({ length: service }, () => cab("service-elevator")), ...extra];
-  let row1, row2;
-  if (cabs > 6) {
-    const n1 = Math.ceil(cabs / 2), n2 = cabs - n1;
-    row1 = [...Array.from({ length: n1 }, () => cab("elevator")), ...rooms];
-    row2 = Array.from({ length: n2 }, () => cab("elevator"));
-  } else {
-    row1 = Array.from({ length: cabs }, () => cab("elevator"));
-    row2 = rooms;
+  const top = Array.from({ length: n1 }, () => cab("elevator"));
+  const bottom = Array.from({ length: n2 }, () => cab("elevator"));
+  const mid = [];
+  const shorter = () => (rowLen(top) < rowLen(bottom) - 1e-9 ? top : bottom);
+  for (let i = 0; i < service; i++) shorter().push(cab("service-elevator"));
+  const rCab = Math.max(rowLen(top), rowLen(bottom));
+  for (const r of extra) {
+    const outerKind = r.kind === "trash" || r.kind === "electrical";
+    if (k === 2) { shorter().push({ ...r }); continue; }
+    if (outerKind) {
+      const row = shorter();
+      if (rowLen(row) + r.len <= rCab + 1e-9) { row.push({ ...r }); continue; }
+    }
+    mid.push({ ...r });
   }
-  const len = (row) => row.reduce((s, r) => s + r.len, 0);
-  const R = Math.max(len(row1), len(row2));
-  for (const row of [row1, row2]) {
-    const gap = R - len(row);
+  const rows = k === 3 ? [top, mid, bottom] : [top, bottom];
+  const R = Math.max(...rows.map(rowLen));
+  for (const row of rows) {
+    const gap = R - rowLen(row);
     if (gap <= 1e-9) continue;
     const last = row[row.length - 1];
     if (last && last.kind === "shaft") last.len += gap;
     else row.push({ kind: "shaft", len: gap });
   }
-  return { row1, row2, R };
+  const B = 11 * k;
+  const A = 2 * stair[0] + R;
+  return { k, split: [n1, n2], rows: { top, mid, bottom, R, row1: top, row2: bottom }, size: [A, B], area: A * B };
+}
+
+/**
+ * The area depths an option leaves on a plate (rework review): d_long = (long side − A − 2 × corridor) ÷ 2 − extWall,
+ * d_short = (short side − B − 2 × corridor) ÷ 2 − extWall. fit: { long, short, width, ext }.
+ */
+function depthsOf(opt, fit) {
+  return [(fit.long - opt.size[0] - 2 * fit.width) / 2 - fit.ext, (fit.short - opt.size[1] - 2 * fit.width) / 2 - fit.ext];
+}
+
+/** Option order: with a plate, the smallest |d_long − d_short|; then the smaller area; then fewer rows; then fewer split cabs. */
+function chooseOption(options, fit) {
+  const key = (o) => {
+    const d = fit ? depthsOf(o, fit) : [0, 0];
+    return [fit ? Math.round(Math.abs(d[0] - d[1]) * 1e6) : 0, Math.round(o.area * 1e6), o.k, o.split[1]];
+  };
+  let best = null, bk = null;
+  const less = (x, y) => { for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return x[i] < y[i]; return false; };
+  for (const o of options) { const kk = key(o); if (!best || less(kk, bk)) { best = o; bk = kk; } }
+  return best;
 }
 
 /**
@@ -5646,16 +5689,24 @@ function coreProgram(state, ctx = {}) {
   const service = isNum(el.service) ? Math.max(0, Math.round(el.service)) : hotel ? 1 : floors >= 20 ? 1 : 0;
   const st = state.stairs && Array.isArray(state.stairs.size) && state.stairs.size.length === 2 && state.stairs.size.every((v) => isNum(v) && v > 0) ? state.stairs.size : [11, 22];
   const cw = Array.isArray(el.size) && isNum(el.size[0]) && el.size[0] > 0 ? el.size[0] : 8;
-  const B = st[1], row = B / 2;
+  const row = 11;
   const extra = [{ kind: "trash", len: 8 }, { kind: "electrical", len: 8 }];
   if (hotel && !(state.hotelBoh && state.hotelBoh.on === false)) extra.push({ kind: "linen", len: 14 }, { kind: "ice", len: 6 }, { kind: "data", len: 6 });
   extra.push({ kind: "shaft", len: 6 });
-  const rows = rowsOf(cabs, service, cw, extra);
-  const Atot = 2 * st[0] + rows.R;
+  const st2 = [st[0], st[1]];
+  // the layout options: 2 or 3 rows; the cabs in one outer row or split between both (two banks)
+  const options = [];
+  for (const k of [2, 3]) {
+    for (let n1 = cabs; n1 >= Math.ceil(cabs / 2); n1--) options.push(layoutOption(k, n1, cabs - n1, service, cw, extra, st2));
+  }
+  const fit = c.fit && isNum(c.fit.long) && isNum(c.fit.short) ? { long: c.fit.long, short: c.fit.short, width: isNum(c.fit.width) ? c.fit.width : 5.67, ext: isNum(c.fit.ext) ? c.fit.ext : 1.0 } : null;
+  const chosen = chooseOption(options, fit);
+  const { rows, size } = chosen;
+  const Atot = size[0], Bk = size[1];
   const rooms = [
-    { kind: "stair", size: [st[0], B] }, { kind: "stair", size: [st[0], B] },
-    ...rows.row1.map((r) => ({ kind: r.kind, size: [r.len, row] })),
-    ...rows.row2.map((r) => ({ kind: r.kind, size: [r.len, row] })),
+    { kind: "stair", size: [st[0], st[1]] }, { kind: "stair", size: [st[0], st[1]] },
+    ...(chosen.k === 3 ? [{ kind: "shaft", size: [st[0], Bk - st[1]] }, { kind: "shaft", size: [st[0], Bk - st[1]] }] : []),
+    ...[rows.top, rows.mid, rows.bottom].flatMap((rw) => rw.map((r) => ({ kind: r.kind, size: [r.len, row] }))),
   ];
   const notes = [
     hotel
@@ -5666,7 +5717,9 @@ function coreProgram(state, ctx = {}) {
   ];
   return {
     mode, cabs, autoCabs, service, units, unitArea: A, floors, cab: [cw, row], stair: st.slice(), rows,
-    size: [Atot, B], area: Atot * B, rooms, notes,
+    k: chosen.k, split: chosen.split.slice(), size: [Atot, Bk], area: Atot * Bk, rooms, notes,
+    options: options.map((o) => ({ k: o.k, split: o.split.slice(), size: o.size.slice(), area: o.area, ...(fit ? { depths: depthsOf(o, fit).map((v) => Math.round(v * 1000) / 1000) } : {}) })),
+    ...(fit ? { depths: depthsOf(chosen, fit).map((v) => Math.round(v * 1000) / 1000) } : {}),
   };
 }
 
@@ -5678,7 +5731,9 @@ function coreLayout2(program, center, axis, state, { withStairs = true } = {}) {
   need(program, "coreLayout2", "program"); need(center, "coreLayout2", "center"); need(axis, "coreLayout2", "axis");
   const L = Math.hypot(axis[0], axis[1]) || 1;
   const u = [axis[0] / L, axis[1] / L], n = [-u[1] + 0, u[0]];
-  const [sa, B] = program.stair;
+  const sa = program.stair[0], sb = program.stair[1];
+  const k = program.k || 2;
+  const B = isNum(program.size && program.size[1]) ? program.size[1] : 11 * k;
   const R = program.rows.R;
   const A = (withStairs ? 2 * sa : 0) + R;
   const o = [center[0] - u[0] * A / 2 - n[0] * B / 2, center[1] - u[1] * A / 2 - n[1] * B / 2];
@@ -5686,21 +5741,23 @@ function coreLayout2(program, center, axis, state, { withStairs = true } = {}) {
   const counters = {};
   const rooms = [];
   const add = (kind, s0, s1, t0, t1) => {
-    if (s1 - s0 < 1e-9) return;
+    if (s1 - s0 < 1e-9 || t1 - t0 < 1e-9) return;
     counters[kind] = (counters[kind] || 0) + 1;
     rooms.push({ id: `${ROOM_CODE[kind] || "R"}${counters[kind]}`, kind, outer: rr3(frameRect(fr, s0, s1, t0, t1)) });
   };
   const s0 = withStairs ? sa : 0;
-  if (withStairs) add("stair", 0, sa, 0, B);
-  // passenger cabs first (ids E1… in bank order), then the other rooms
+  if (withStairs) add("stair", 0, sa, 0, sb);
+  // rows: bottom t 0..11, middle 11..22 (k = 3), top B − 11..B; passenger cabs first (ids E1… top row then bottom row)
   const placed = [];
-  let s = s0;
-  for (const r of program.rows.row1) { placed.push({ r, a: s, b: s + r.len, t0: B / 2, t1: B }); s += r.len; }
-  s = s0;
-  for (const r of program.rows.row2) { placed.push({ r, a: s, b: s + r.len, t0: 0, t1: B / 2 }); s += r.len; }
-  for (const k of ["elevator", "service-elevator"]) for (const p of placed) if (p.r.kind === k) add(k, p.a, p.b, p.t0, p.t1);
+  const lay = (row, t0, t1) => { let s = s0; for (const r of row) { placed.push({ r, a: s, b: s + r.len, t0, t1 }); s += r.len; } };
+  lay(program.rows.top || program.rows.row1, B - 11, B);
+  if (k === 3) lay(program.rows.mid || [], 11, 22);
+  lay(program.rows.bottom || program.rows.row2, 0, 11);
+  for (const kd of ["elevator", "service-elevator"]) for (const p of placed) if (p.r.kind === kd) add(kd, p.a, p.b, p.t0, p.t1);
+  if (withStairs && B > sb + 1e-9) add("shaft", 0, sa, sb, B);
   for (const p of placed) if (p.r.kind !== "elevator" && p.r.kind !== "service-elevator") add(p.r.kind, p.a, p.b, p.t0, p.t1);
-  if (withStairs) add("stair", A - sa, A, 0, B);
+  if (withStairs && B > sb + 1e-9) add("shaft", A - sa, A, sb, B);
+  if (withStairs) add("stair", A - sa, A, 0, sb);
   const outer = rr3(frameRect(fr, 0, A, 0, B));
   const aligned = Math.abs(u[0]) < 1e-12 || Math.abs(u[1]) < 1e-12;
   let rect = null;
@@ -5721,8 +5778,12 @@ function autoCore(plate, level, state, ctx = {}) {
   if (!P.length) throw new Error('autoCore: the input "plate" has no ring.');
   const c = { ...(ctx || {}) };
   if (!isNum(c.units) && !isNum(c.levelGsf)) c.levelGsf = mpArea(P);
-  const program = coreProgram(state, c);
   const m = minRect(P);
+  if (m && !c.fit) {
+    const cw = state.corridor && isNum(state.corridor.width) && state.corridor.width > 0 ? state.corridor.width : state.mode === "hotel" ? 6.0 : 5.67;
+    c.fit = { long: m.long, short: m.short, width: cw, ext: isNum(state.extWall) && state.extWall >= 0 ? state.extWall : 1.0 };
+  }
+  const program = coreProgram(state, c);
   const axis = m ? m.u : [1, 0];
   const center = centroidOf(P);
   const seeds = (level && Array.isArray(level.seeds) ? level.seeds : []).filter((x) => x && (x.kind === "stair" || x.kind === "exterior-stair"));
@@ -6864,6 +6925,8 @@ const FillMod = (() => {
    - Core (sections 4.2 to 4.4): corridorKind decides; an auto core (core.js) enters level.core before spineFor; its
      stair rooms are the stairs (doors from stairDoor), its cab rooms the elevators; no extra hotel back-of-house. A
      point corridor is the core grown by the clear width less the core. The massing level.core is never read.
+   - Short runs between wrap corners (review): a free stretch next to wrap corner legs that fits no unit joins the
+     corner units (split at its middle; with one corner, all of it). Those corners carry `absorbed: true`.
    - Depth cap (section 5): fillLevel({ maxDepth }); buildPlates passes levels.groups[gid].maxDepth, else fill.maxDepth.
      The band farther than maxDepth from the area line becomes "trim"; corners use min(d, maxDepth) as their depth.
    - buildPlates writes coreContext { floors, units, unitArea }: the building estimate the core program used.
@@ -7249,9 +7312,10 @@ function runsAndCorners(zone, plate, corridor, blocks, state, cache = null, { ma
     res.set(b.id, mergeIntervals(list));
   }
 
-  // wrap corners
+  // wrap corners: legs first (they stop at the first reservation)
   const corners = [];
   const legCuts = new Map(bands.map((b) => [b.id, []]));
+  const cl = [];
   for (const c of cz) {
     if (!cornerType || !isNum(cornerType.targetArea)) { left.push({ outer: c.piece.outer, holes: c.piece.holes, why: "corner" }); continue; }
     const ds = [c.B1, c.B2].filter(Boolean).map((b) => b.depth);
@@ -7259,7 +7323,6 @@ function runsAndCorners(zone, plate, corridor, blocks, state, cache = null, { ma
     const d = cap && d0 > cap ? cap : d0;            // rework plan 5: the depth cap is the corner depth
     const A = cornerType.targetArea;
     let e = Math.min(2 * d, Math.max(d, (A + d * d) / (2 * d)));
-    // legs stop at the first reservation
     let la = 0, lb = 0;
     if (c.B1) {
       la = Math.max(0, e - c.a);
@@ -7273,6 +7336,34 @@ function runsAndCorners(zone, plate, corridor, blocks, state, cache = null, { ma
       if (cuts.length) lb = Math.max(0, Math.min(lb, Math.min(...cuts.map((iv) => iv[0]))));
       lb = Math.min(lb, c.B2.s1);
     }
+    cl.push({ c, d, e, la, lb, absorbed: false });
+  }
+  // rework review: a free stretch between wrap corner legs that fits no unit joins the corner units (split at its middle;
+  // a stretch with one corner goes to that corner). The corner units grow and the fill flags them when they pass areaMax.
+  if (cl.length && !hotel) {
+    const effBy = new Map();
+    for (const b of bands) {
+      const startC = cl.find((x) => x.c.B2 && x.c.B2.id === b.id);
+      const endC = cl.find((x) => x.c.B1 && x.c.B1.id === b.id);
+      if (!startC && !endC) continue;
+      const cuts = mergeIntervals([...res.get(b.id), ...(startC ? [[-1, startC.lb]] : []), ...(endC ? [[b.s1 - endC.la, b.s1 + 1]] : [])]);
+      for (const [x, y] of minusIntervals([0, b.s1], cuts)) {
+        const atStart = startC && Math.abs(x - Math.max(0, startC.lb)) < 1e-6;
+        const atEnd = endC && Math.abs(y - (b.s1 - endC.la)) < 1e-6;
+        if (!atStart && !atEnd) continue;
+        const dd = cap && b.depth > cap ? cap : b.depth;
+        const dk = dd.toFixed(6);
+        if (!effBy.has(dk)) effBy.set(dk, effectiveTypes(types, dd, "multifamily"));
+        const eff = effBy.get(dk);
+        const fits = eff.types.length && slotsFor({ length: y - x }, eff.types, weightedWidth(eff.types).W) !== null;
+        if (fits) continue;
+        if (atStart && atEnd) { const m = (x + y) / 2; startC.lb = m; endC.la = b.s1 - m; startC.absorbed = endC.absorbed = true; }
+        else if (atStart) { startC.lb = y; startC.absorbed = true; }
+        else { endC.la = b.s1 - x; endC.absorbed = true; }
+      }
+    }
+  }
+  for (const { c, d, e, la, lb, absorbed } of cl) {
     const parts = [{ outer: c.piece.outer, holes: c.piece.holes }];
     if (c.B1 && la > 1e-6) { parts.push(...bool("int", c.B1.band, strip(c.B1.fr, c.B1.s1 - la, c.B1.s1 + 1))); legCuts.get(c.B1.id).push([c.B1.s1 - la, c.B1.s1 + 1]); }
     if (c.B2 && lb > 1e-6) { parts.push(...bool("int", c.B2.band, strip(c.B2.fr, -1, lb))); legCuts.get(c.B2.id).push([-1, lb]); }
@@ -7284,6 +7375,7 @@ function runsAndCorners(zone, plate, corridor, blocks, state, cache = null, { ma
       ring: c.ring, at: [r3(c.V[0]), r3(c.V[1])], e: Math.round(eOut * 1000) / 1000, eTarget: Math.round(e * 1000) / 1000,
       legs: [Math.round((c.a + la) * 1000) / 1000, Math.round((c.b + lb) * 1000) / 1000],
       outer: big.outer, d, B1: c.B1 ? c.B1.id : null, B2: c.B2 ? c.B2.id : null, la, lb, e1: c.e1, e2: c.e2,
+      ...(absorbed ? { absorbed: true } : {}),
     });
   }
 
@@ -7865,7 +7957,7 @@ function fillLevel(level, state, { counters = null, locks = null, accessible = n
     coreMode, coreRooms, coreProgram: auto ? auto.program : null, maxDepth: cap,
     stairs, elevators, support: support_, units,
     runs: runs.map((r) => ({ id: r.id, ring: r.ring, edge: r.edge, from: r3(r.from), to: r3(r.to), length: Math.round(r.length * 1000) / 1000, depth: Math.round(r.depth * 1000) / 1000, slots: r.slots || 0, start: [r3(r.start[0]), r3(r.start[1])], end: [r3(r.end[0]), r3(r.end[1])] })),
-    corners: corners.map((c) => ({ ring: rings[c.ring].id, at: c.at, e: c.e, legs: c.legs, eTarget: c.eTarget, type: cornerId, outer: rr3(c.outer) })),
+    corners: corners.map((c) => ({ ring: rings[c.ring].id, at: c.at, e: c.e, legs: c.legs, eTarget: c.eTarget, type: cornerId, outer: rr3(c.outer), ...(c.absorbed ? { absorbed: true } : {}) })),
     counts, placed: placedCount, dropped: eff.dropped.map((d) => ({ id: d.id, lo: d.lo, hi: d.hi })),
     deep: [...deepBy.values()].map((d) => ({ id: d.id, lo: d.lo, hi: d.hi, depth: Math.round(d.depth * 1000) / 1000, areaLo: r1(d.lo * d.depth), areaHi: r1(d.hi * d.depth) })),
     depth: Math.round(depth * 1000) / 1000,

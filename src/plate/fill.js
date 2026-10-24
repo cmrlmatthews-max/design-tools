@@ -63,6 +63,8 @@
    - Core (sections 4.2 to 4.4): corridorKind decides; an auto core (core.js) enters level.core before spineFor; its
      stair rooms are the stairs (doors from stairDoor), its cab rooms the elevators; no extra hotel back-of-house. A
      point corridor is the core grown by the clear width less the core. The massing level.core is never read.
+   - Short runs between wrap corners (review): a free stretch next to wrap corner legs that fits no unit joins the
+     corner units (split at its middle; with one corner, all of it). Those corners carry `absorbed: true`.
    - Depth cap (section 5): fillLevel({ maxDepth }); buildPlates passes levels.groups[gid].maxDepth, else fill.maxDepth.
      The band farther than maxDepth from the area line becomes "trim"; corners use min(d, maxDepth) as their depth.
    - buildPlates writes coreContext { floors, units, unitArea }: the building estimate the core program used.
@@ -448,9 +450,10 @@ export function runsAndCorners(zone, plate, corridor, blocks, state, cache = nul
     res.set(b.id, mergeIntervals(list));
   }
 
-  // wrap corners
+  // wrap corners: legs first (they stop at the first reservation)
   const corners = [];
   const legCuts = new Map(bands.map((b) => [b.id, []]));
+  const cl = [];
   for (const c of cz) {
     if (!cornerType || !isNum(cornerType.targetArea)) { left.push({ outer: c.piece.outer, holes: c.piece.holes, why: "corner" }); continue; }
     const ds = [c.B1, c.B2].filter(Boolean).map((b) => b.depth);
@@ -458,7 +461,6 @@ export function runsAndCorners(zone, plate, corridor, blocks, state, cache = nul
     const d = cap && d0 > cap ? cap : d0;            // rework plan 5: the depth cap is the corner depth
     const A = cornerType.targetArea;
     let e = Math.min(2 * d, Math.max(d, (A + d * d) / (2 * d)));
-    // legs stop at the first reservation
     let la = 0, lb = 0;
     if (c.B1) {
       la = Math.max(0, e - c.a);
@@ -472,6 +474,34 @@ export function runsAndCorners(zone, plate, corridor, blocks, state, cache = nul
       if (cuts.length) lb = Math.max(0, Math.min(lb, Math.min(...cuts.map((iv) => iv[0]))));
       lb = Math.min(lb, c.B2.s1);
     }
+    cl.push({ c, d, e, la, lb, absorbed: false });
+  }
+  // rework review: a free stretch between wrap corner legs that fits no unit joins the corner units (split at its middle;
+  // a stretch with one corner goes to that corner). The corner units grow and the fill flags them when they pass areaMax.
+  if (cl.length && !hotel) {
+    const effBy = new Map();
+    for (const b of bands) {
+      const startC = cl.find((x) => x.c.B2 && x.c.B2.id === b.id);
+      const endC = cl.find((x) => x.c.B1 && x.c.B1.id === b.id);
+      if (!startC && !endC) continue;
+      const cuts = mergeIntervals([...res.get(b.id), ...(startC ? [[-1, startC.lb]] : []), ...(endC ? [[b.s1 - endC.la, b.s1 + 1]] : [])]);
+      for (const [x, y] of minusIntervals([0, b.s1], cuts)) {
+        const atStart = startC && Math.abs(x - Math.max(0, startC.lb)) < 1e-6;
+        const atEnd = endC && Math.abs(y - (b.s1 - endC.la)) < 1e-6;
+        if (!atStart && !atEnd) continue;
+        const dd = cap && b.depth > cap ? cap : b.depth;
+        const dk = dd.toFixed(6);
+        if (!effBy.has(dk)) effBy.set(dk, effectiveTypes(types, dd, "multifamily"));
+        const eff = effBy.get(dk);
+        const fits = eff.types.length && slotsFor({ length: y - x }, eff.types, weightedWidth(eff.types).W) !== null;
+        if (fits) continue;
+        if (atStart && atEnd) { const m = (x + y) / 2; startC.lb = m; endC.la = b.s1 - m; startC.absorbed = endC.absorbed = true; }
+        else if (atStart) { startC.lb = y; startC.absorbed = true; }
+        else { endC.la = b.s1 - x; endC.absorbed = true; }
+      }
+    }
+  }
+  for (const { c, d, e, la, lb, absorbed } of cl) {
     const parts = [{ outer: c.piece.outer, holes: c.piece.holes }];
     if (c.B1 && la > 1e-6) { parts.push(...bool("int", c.B1.band, strip(c.B1.fr, c.B1.s1 - la, c.B1.s1 + 1))); legCuts.get(c.B1.id).push([c.B1.s1 - la, c.B1.s1 + 1]); }
     if (c.B2 && lb > 1e-6) { parts.push(...bool("int", c.B2.band, strip(c.B2.fr, -1, lb))); legCuts.get(c.B2.id).push([-1, lb]); }
@@ -483,6 +513,7 @@ export function runsAndCorners(zone, plate, corridor, blocks, state, cache = nul
       ring: c.ring, at: [r3(c.V[0]), r3(c.V[1])], e: Math.round(eOut * 1000) / 1000, eTarget: Math.round(e * 1000) / 1000,
       legs: [Math.round((c.a + la) * 1000) / 1000, Math.round((c.b + lb) * 1000) / 1000],
       outer: big.outer, d, B1: c.B1 ? c.B1.id : null, B2: c.B2 ? c.B2.id : null, la, lb, e1: c.e1, e2: c.e2,
+      ...(absorbed ? { absorbed: true } : {}),
     });
   }
 
@@ -1064,7 +1095,7 @@ export function fillLevel(level, state, { counters = null, locks = null, accessi
     coreMode, coreRooms, coreProgram: auto ? auto.program : null, maxDepth: cap,
     stairs, elevators, support: support_, units,
     runs: runs.map((r) => ({ id: r.id, ring: r.ring, edge: r.edge, from: r3(r.from), to: r3(r.to), length: Math.round(r.length * 1000) / 1000, depth: Math.round(r.depth * 1000) / 1000, slots: r.slots || 0, start: [r3(r.start[0]), r3(r.start[1])], end: [r3(r.end[0]), r3(r.end[1])] })),
-    corners: corners.map((c) => ({ ring: rings[c.ring].id, at: c.at, e: c.e, legs: c.legs, eTarget: c.eTarget, type: cornerId, outer: rr3(c.outer) })),
+    corners: corners.map((c) => ({ ring: rings[c.ring].id, at: c.at, e: c.e, legs: c.legs, eTarget: c.eTarget, type: cornerId, outer: rr3(c.outer), ...(c.absorbed ? { absorbed: true } : {}) })),
     counts, placed: placedCount, dropped: eff.dropped.map((d) => ({ id: d.id, lo: d.lo, hi: d.hi })),
     deep: [...deepBy.values()].map((d) => ({ id: d.id, lo: d.lo, hi: d.hi, depth: Math.round(d.depth * 1000) / 1000, areaLo: r1(d.lo * d.depth), areaHi: r1(d.hi * d.depth) })),
     depth: Math.round(depth * 1000) / 1000,
