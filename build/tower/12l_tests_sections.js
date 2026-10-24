@@ -366,6 +366,31 @@ async function runTopBarTests() {
       $('panelCollapse').click();
       return eq(openIds(), []);
     });
+    /* ---- the core moved to the Plate Planner (docs/plate-planner-rework-plan.md 4.1, 8.2) ---- */
+    await t('C1. no Core card in the panel and no Core area or Efficiency row in the HUD; the HUD says the Plate Planner sets the core', () => {
+      const titles = [...document.querySelectorAll('#sections section.acc')].map((a) => (a.querySelector('.acc-head') || a).textContent.trim());
+      const labels = [...document.querySelectorAll('#hud dt')].map((e) => e.textContent.trim());
+      return eq([
+        'core' in UI.sectionCtl, titles.some((x) => /^core\b/i.test(x)), $('mCore'), $('mEff'),
+        labels.some((x) => /core area|efficiency/i.test(x)), labels.includes('Net area (before core)'),
+        $('hudCoreHelp') && $('hudCoreHelp').textContent,
+      ], [false, false, null, null, false, true, 'The Plate Planner sets the core and the efficiency.']);
+    });
+    await t('C2. an old state with a core key loads without error; the key is dropped and every level has core null', () => {
+      const old = Store.snapshot(); old.core = { mode: 'size', percent: 20, w: 400, d: 300 };
+      const filled = fillDefaults(old);
+      Store.replace(filled);
+      const d = Derived.get();
+      return eq([
+        'core' in filled, 'core' in Store.raw(),
+        TowerDerivedMod.towerDerived(Store.snapshot(), d, d.metrics).levels.every((l) => l.core === null), d.plates.every((p) => p.coreRect === null && p.coreArea === 0),
+        d.warnings.some((w) => w.code === 'core-outside'), d.metrics.coreArea,
+      ], [false, false, true, true, false, 0]);
+    });
+    await t('C3. net area is GFA minus mechanical area, and the HUD shows it', () => {
+      const m = Derived.get().metrics;
+      return eq([Math.abs(m.netArea - (m.gfa - m.mechanicalArea)) < 1e-6, $('mNet').textContent.includes(Units.formatArea(m.netArea))], [true, true]);
+    });
   } finally {
     ProjectUI.reset();
     ProjectUI.restoreDefaults();

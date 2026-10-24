@@ -1,5 +1,8 @@
 # Tower Generator — Technical Plan
 
+> **Update, October 24, 2026:** the core moved to the Plate Planner. The Tower Generator no longer makes a core: no Core card, no `core` state key, no `core-outside` warning, no "Core area" or "Efficiency" row in the HUD. Every plate writes `coreRect: null` and `coreArea: 0`, and every level writes `core: null`. Net area is now GFA − mechanical area, shown as "Net area (before core)". Unit estimates use that net area, so they run higher than before. A saved state or import with a `core` key still loads; the key is dropped. Sections 3.6 (Core) and the efficiency and net-area rows in section 5 below describe the old behaviour. See `plate-planner-rework-plan.md` section 4.1.
+
+
 Version 0.1 · October 20, 2026 · Phase 1 output (Opus)
 Source: `tower-generator-concept.md` v0.1 with the decisions in section 12.
 

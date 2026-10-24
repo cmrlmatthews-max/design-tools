@@ -85,7 +85,7 @@ const Derived = (() => {
   let gKey = null, aKey = null, geomId = 0, counter = 0;
   let full = null, cache = null, draftCache = null;
   // Geometry key: everything that changes plates. Programs, targets and context only change metrics or drawing.
-  const geomKeyOf = (s) => JSON.stringify([s.site, s.podium, s.segments, s.setbacks, s.mechanical, s.carves, s.cuts, s.crown, s.core]);
+  const geomKeyOf = (s) => JSON.stringify([s.site, s.podium, s.segments, s.setbacks, s.mechanical, s.carves, s.cuts, s.crown]);
 
   function get() {
     const s = Store.raw();

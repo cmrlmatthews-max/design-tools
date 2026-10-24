@@ -191,9 +191,10 @@ Shared types:
       "core": {
         "outer": Ring,
         "stairs":    [ { "id": "S1", "outer": Ring, "door": [x, y] } ],
-        "elevators": [ { "id": "E1", "outer": Ring } ]
+        "elevators": [ { "id": "E1", "outer": Ring } ],
+        "rooms":     [ { "id": "TR1", "kind": "trash", "outer": Ring } ]   // optional: an automatic core
       },
-      "units": [ { "id": "3-07", "type": "1BR", "outer": Ring, "area": 745.5, "exposures": ["S", "E"], "corner": true, "bay": { "from": 120.0, "to": 148.0 } } ],
+      "units": [ { "id": "3-07", "type": "1BR", "outer": Ring, "area": 745.5, "exposures": ["S", "E"], "corner": true, "bay": { "from": 120.0, "to": 148.0 }, "flags": ["area-high"] } ],   // flags optional
       "metrics": { "units": 18, "nrsf": 13410, "gsf": 16200, "efficiency": 0.828 }
     }
   ],
@@ -211,6 +212,11 @@ Shared types:
   - On each level: `name`, `z` (floor surface, ft above `baseZ`), `ftf`, and `support: [{ id, outer, kind }]`.
   - On each unit: `ring`, `demising` (the cut lines, each `[[x, y], [x, y]]`), and `accessible` (`false`, `true`, or a type such as `"type-a"`).
   - On `metrics`: `bays` (hotel mode only: the keys times the bays per key).
+- The Plate Planner rework (October 24, 2026) adds two optional keys. Readers must accept them and must not need them:
+  - On `core`: `rooms: [ { "id": "TR1", "kind": "trash", "outer": Ring } ]`, written for an automatic core. The kinds are `stair`, `elevator`, `service-elevator`, `trash`, `electrical`, `shaft`, `linen`, `ice`, and `data`. The rooms tile `core.outer` with no gap. The rooms of kind `stair` are also in `core.stairs` (with their doors), and the rooms of kind `elevator` and `service-elevator` are also in `core.elevators`.
+  - On each unit: `flags: ["area-high"]` when the unit is larger than the area range of its type. This occurs on a run too deep for the type: the unit fills by its width range.
+  - Support `kind` values: `pocket` (a concave corner), `remainder` (a run too short for any unit), `leftover` (other pieces next to a block or a corner with no wrap unit), `trim` (the strip beyond the unit depth cap), and the user block kinds (`trash`, `electrical`, `storage`, `linen`, `ice`, `data`).
+- Only the Plate Planner makes the core. The Tower Generator no longer writes a core: its levels carry `core: null`. The Plate Planner ignores a `core` on a massing level, also in older files.
 - Unit `type` is the type NAME (for example `"1BR"`), not the internal id.
 - Area rule: unit `area` is measured to the centerline of the demising walls, to the corridor face of the corridor wall, and to the inside face of the exterior wall. The 0.5 ft corridor wall counts in the unit; the plate edge is the outside face, so the fill takes a 1.0 ft exterior wall allowance off the plate first. `nrsf` is the sum of unit areas, so it is a planning number, not a leasing number.
 - Every coordinate is in the massing local frame (the frame of `massing.derived.levels[].footprint`).

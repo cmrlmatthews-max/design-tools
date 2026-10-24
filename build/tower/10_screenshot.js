@@ -12,7 +12,7 @@ const Shots = (() => {
   ];
   const prefersDark = () => !!(window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
 
-  /** The six metrics on the picture: GFA, FAR, height, floors, units (or coverage), efficiency. */
+  /** The six metrics on the picture: GFA, FAR, height, floors, units (or coverage), tower plate area. */
   function keyMetrics(d) {
     const m = d.metrics;
     const ub = unitBreakdown(m);      // residential units + hotel keys; parking spaces are not counted
@@ -22,7 +22,7 @@ const Shots = (() => {
       ['Height', Units.formatFeetInches(m.totalHeight)],
       ['Floors', Units.formatInt(m.floorCount)],
       ub.hasTotal ? [ub.label, Units.formatInt(ub.total)] : ['Site coverage', m.hasSite === false ? '—' : `${(m.siteCoverage * 100).toFixed(1)}%`],
-      ['Efficiency', `${(m.efficiencyAvg * 100).toFixed(1)}%`],
+      ['Tower plate (avg)', Units.formatArea(m.plateAvg)],
     ];
   }
 

@@ -31,6 +31,8 @@ const CONFIG = {
   elevColor: '#8b94a0',
   supportColor: '#c9cdd2',
   pocketColor: '#dcdfe3',
+  remainderColor: '#f0f2f4',           // an unfilled run: very light fill under a dashed outline
+  areaHighColor: '#e07a00',            // orange: a unit larger than its type's area range
   flagColor: '#d03a30',
   lineColor: '#1d242b',
   lockColor: '#c07a0e',

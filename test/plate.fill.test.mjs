@@ -131,8 +131,10 @@ t("3 short bar 120 × 65: runs 98 and 98, 6 units, NRSF 5,618.3, closure 7,800",
   eq(f.runs.map((r) => r.length), [98, 98], "runs");
   eq(f.units.length, 6, "units");
   near(nrsfOf(f), 5618.3, 0.5, "NRSF");
-  const corridor = GEO.mpArea(f.corridor), stairs = sumArea(f.stairs), rem = sumArea(support(f, "remainder"));
-  near(corridor, 555.66, 0.05, "corridor"); near(stairs, 484, 0.01, "stairs"); near(rem, 946, 0.05, "remainders");
+  // rework plan 3: the pieces beside the stairs are kind "leftover"; "remainder" is an unfilled run only
+  const corridor = GEO.mpArea(f.corridor), stairs = sumArea(f.stairs), rem = sumArea(support(f, "leftover"));
+  near(corridor, 555.66, 0.05, "corridor"); near(stairs, 484, 0.01, "stairs"); near(rem, 946, 0.05, "leftovers beside the stairs");
+  eq(support(f, "remainder").length, 0, "no unfilled run");
   near(corridor + stairs + rem + nrsfOf(f) + 196, 7800, 1, "closure");
   const c = closure(f);
   near(c.overlap, 0, 0.5, "no overlap"); near(c.gap, 0, 0.5, "no gap"); near(c.allowance, 196, 1, "allowance");
@@ -287,19 +289,24 @@ t("10 preset 8.6 twice: byte-equal fills", () => {
 
 // Circle 100 ft (64 segments), bar corridor along x through the centroid. Each half is one run along the corridor face
 // (the arc edges that see the same face merge); cut lines are perpendicular to the corridor, units are polygons.
-// The half bands are 40.34 ft deep on average (band area ÷ run length), where no default type fits (2BR: 1,200 ÷ 40.34
-// = 29.7 < 32). The test scales every area of the default mix by 40.34 ÷ 28.665 = 1.407, which gives the 8.1 widths.
+// The half bands are 40.34 ft deep on average (band area ÷ run length), where no default type keeps its area range
+// (2BR: 1,200 ÷ 40.34 = 29.7 < 32). Rework plan 3: the types are deep, not dropped; they fill by width and are flagged.
+// The test then scales every area of the default mix by 40.34 ÷ 28.665 = 1.407, which gives the 8.1 widths.
 t("11 circle 100 ft: polygon units, Σ unit areas = band areas within 1 sf, widths within 1 percent of their range", () => {
   const s = defaultState();
   s.plate = { ...s.plate, shape: "circle", w: 100, d: 100, segments: 64 };
   s.core.rect = null; s.elevators.count = 0; s.corridor.kind = "bar";
   const f0 = fillOf(s);
   eq(f0.spine.length, 1); ok(Math.abs(f0.spine[0][0][1]) < 1e-9 && Math.abs(f0.spine[0][1][1]) < 1e-9, "east-west corridor");
-  eq(f0.dropped.length, 5, "the default mix does not fit 40 ft bands");
+  eq(f0.dropped.length, 0, "no type drops on a deep run");
+  eq(f0.deep.map((d) => d.id).sort(), ["1br", "1brden", "2br", "3br", "studio"], "the default mix is deep at 40 ft bands");
+  ok(f0.units.length > 0 && f0.units.filter((u) => !u.wrap).every((u) => u.areaHigh), "every unit flagged area-high");
+  eq(support(f0, "remainder").length, 0, "no unfilled run on a deep band");
   const k = f0.depth / 28.665;
   s.mix.multifamily = s.mix.multifamily.map((m) => ({ ...m, targetArea: m.targetArea * k, areaMin: m.areaMin * k, areaMax: m.areaMax * k }));
   const f = fillOf(s);
   eq(f.dropped.length, 0, "the scaled mix fits");
+  eq(f.deep.length, 0, "and is not deep");
   ok(f.units.length >= 4, "units");
   ok(f.units.some((u) => u.outer.length > 4), "polygon units");
   const filled = f.runs.filter((r) => r.slots > 0);
@@ -368,16 +375,21 @@ t("13 corridorGraph: 8.1 length 278, door path 278, dead ends 0; 8.2 keys within
 
 /* ------------------------------------------------------------ 14. point tower from a tower level */
 
-t("14 tower 'Slim residential point tower' floor 3 with coreRect: point corridor, units on the facade, wrap corners, closure", () => {
+// Rework plan 4.2 and 4.3: the Plate Planner makes the core. The tower level (90 ft square, about 90 × 90 at its
+// first tower floor) is compact (area ÷ box = 1, sides 1 : 1 ≤ 1.6), so "auto" gives a point corridor with an auto core.
+// The test does not read the tower's core: it passes before and after the Tower Generator drops it.
+t("14 tower 'Slim residential point tower' first tower floor: auto core, point corridor, units on the facade, wrap corners, closure", () => {
   const ts = clone(TP.PRESETS.find((p) => p.name === "Slim residential point tower").state);
   const tb = TG.buildPlates(ts);
   const p3 = tb.plates.find((p) => p.zone === "tower");
-  ok(p3 && p3.coreRect, "typical floor with a core");
+  ok(p3, "typical floor");
   const project = { sections: { massing: { tool: "tower", schema: 1, updatedAt: "2026-10-22T00:00:00.000Z", placement: { x: 0, y: 0, rotation: 0, baseZ: 0 },
-    derived: { levels: [{ index: p3.n, name: `Floor ${p3.n}`, zone: "tower", z: p3.z, ftf: p3.ftf, program: "residential", plates: p3.polygons, core: p3.coreRect, spines: [], seeds: [] }] } } } };
+    derived: { levels: [{ index: p3.n, name: `Floor ${p3.n}`, zone: "tower", z: p3.z, ftf: p3.ftf, program: "residential", plates: p3.polygons, core: null, spines: [], seeds: [] }] } } } };
   const s = defaultState(); s.source = "project"; s.corridor.kind = "auto"; s.core.rect = null;
   const f = fillOf(s, { project });
   eq(f.kind, "point");
+  eq(f.coreMode, "auto", "auto core");
+  near(f.coreRooms.reduce((a, r) => a + area(r.outer), 0), area(f.core), 1, "core rooms tile the core");
   ok(f.units.length >= 4, "units");
   for (const u of f.units) ok(u.exposures.length >= 1, `${u.id} touches the facade`);
   eq(f.corners.length, 4, "four wrap corners");

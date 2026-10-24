@@ -69,7 +69,6 @@ const baseState = () => ({
   carves: [],
   cuts: [],
   crown: { type: 'flat', height: 0, steps: 3, slopeSide: 'front' },
-  core: { mode: 'percent', percent: 20, w: 40, d: 30 },
   programs: copyPrograms(),
   targets: { gfa: 0, far: 0 },
   view: {

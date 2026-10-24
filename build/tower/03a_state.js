@@ -79,8 +79,6 @@ function defaultState() {
     // Integration note 2: a flat crown adds the 4 ft parapet ring only and adds 0 to total height.
     crown: { type: 'flat', height: 20, steps: 3, slopeSide: 'front' },
 
-    core: { mode: 'percent', percent: 20, w: 40, d: 30 },
-
     programs: defaultPrograms(),
 
     targets: { gfa: 0, far: 0 },
@@ -147,6 +145,7 @@ function fillDefaults(src) {
     }
   };
   legacySite(s);
+  delete s.core;                                            // the core moved to the Plate Planner (Oct 24, 2026): an old state or import with a core key loads, the key is dropped
   const base = defaultState();
   merge(s, base);                                           // a state with no colorBy gets "program"; an explicit "zone" or "program" is kept
   migrateView(s.view);
