@@ -149,45 +149,57 @@ t("R3 coreProgram hotel 12 floors: 14,400 sf → 4 + 1 (formula); 7,200 sf → 2
 
 /* ------------------------------------------------------------ R4 */
 
-// Advisor on R1, target 30 ft (+ 2 = 32; every run is deeper). The plate is a rectangle (area ÷ box = 1 ≥ 0.98).
-// North and south runs lie along x: narrow north–south: 44 (core along y) + 2 × 5.67 + 2 × (30 + 1) = 117.34.
-// East and west runs lie along y: narrow east–west: 22 + 11.34 + 62 = 95.34.
-// Test fit (a real fill of a drawn 95.34 × 117.34 rect, same state, auto core with 2 cabs): GSF 11,187.2;
-// depths 30.0; the north and south runs are 33.34 − 2 × 3.33 = 26.67 ft and fit no unit at 30 ft (1BR 24 to 26.67,
-// studio 20 to 24, den 28.33 up), so they stay unfilled: 8 units, NRSF 7,320.4, efficiency 0.6544; 24,000 − 11,187.2 =
-// 12,812.8 sf less per floor (the gain). The plan expects a test-fit efficiency above R1's: with the deep-run rule R1
-// counts its oversized units in full (0.8975), so the narrower plate is lower (reported).
-t("R4 advisor on R1: first item plate-too-deep with the formula sizes 95.34 and 117.34 and a real test fit", () => {
+// Advisor on R1, target 30 ft (+ 2 = 32; every run is deeper). R1 has 0 of 10 units in range: every unit is above its
+// areaMax (average 21,538.8 ÷ 10 = 2,153.9 sf; target 868.75 → 869 sf). The plate is a rectangle (area ÷ box = 1).
+// Search: area depths 28 … 36 ft. Point sides: y (long, u) = 44 + 2 × 5.67 + 2 × (du + 1); x (short, n) = 22 + 11.34 +
+// 2 × (dn + 1); the core for each candidate: 1 floor, U = round(GSF × 0.75 ÷ 868.75) → 2 cabs, 44 × 22.
+// Best: du = 32, dn = 29 → y = 44 + 11.34 + 66 = 121.34, x = 22 + 11.34 + 60 = 93.34; GSF 93.34 × 121.34 = 11,325.9.
+// The real fill of that drawn rect: 10 units, 10 in range, NRSF 9,055.6, efficiency 0.7995; no unfilled run.
+// gainUnits = 10 − 0 = 10; gain = 24,000 − 11,325.9 = 12,674.1 sf less per floor.
+t("R4 advisor on R1: plate-too-deep picks a searched size with no unfilled run and more units in range", () => {
   const s = r1State();
   const b = buildPlates(s);
   const m = MT.computeMetrics(s, b);
+  const row = m.groups[0].row;
+  eq([row.inRange, row.areaHighCount, row.avgArea, row.targetAvgArea], [0, 10, 2153.9, 868.8], "R1 range metrics");
+  eq([m.building.inRange, m.building.areaHighCount], [0, 10]);
+  const t0 = performance.now();
   const list = AD.advise(s, b, m, { fillPlate: buildPlates });
-  ok(list.length >= 1, "items");
+  const ms = performance.now() - t0;
+  console.log(`       advise(R1) ${ms.toFixed(0)} ms, ${list[0].suggested.tested} sizes filled`);
+  ok(ms < 300, `${ms} ms`);
   const a = list[0];
   eq(a.code, "plate-too-deep");
-  eq(a.suggested.size, { long: 117.34, short: 95.34 });
-  eq(a.suggested.plate.w, 95.34); eq(a.suggested.plate.d, 117.34);
-  const tf = fillOf({ ...clone(s), plate: { ...s.plate, w: 95.34, d: 117.34 } });
-  near(a.suggested.nrsf, nrsfOf(tf), 0.5, "the test fit is a real fill");
-  eq(a.suggested.units, tf.units.length);
-  near(a.suggested.gsf, 11187.2, 0.05); near(a.gain, 12812.8, 0.05);
-  near(a.suggested.efficiency, 0.6544, 0.0001); near(a.current.efficiency, 0.8975, 0.0001);
-  eq(a.message, "North, south, east and west units are 51.3 to 57.3 ft deep. The target is 30 ft. Narrow the plate north–south from 160 ft to 117.3 ft and east–west from 150 ft to 95.3 ft on the Plate tab. Test fit at that size: 65.4% efficiency, 8 units per floor, 12,813 sf less per floor.");
+  eq(a.suggested.depths, { long: 32, short: 29 });
+  eq(a.suggested.size, { long: 121.34, short: 93.34 });
+  eq([a.suggested.plate.w, a.suggested.plate.d], [93.34, 121.34]);
+  const tf = fillOf({ ...clone(s), plate: { ...s.plate, w: 93.34, d: 121.34 } });
+  eq(support(tf, "remainder").length, 0, "the best candidate has no unfilled run");
+  const tfRow = MT.computeMetrics(s, buildPlates({ ...clone(s), plate: { ...s.plate, w: 93.34, d: 121.34 } })).groups[0].row;
+  eq([tfRow.units, tfRow.inRange], [10, 10], "the test fit is a real fill");
+  ok(tfRow.inRange > row.inRange, "more units in range than R1");
+  eq([a.suggested.units, a.suggested.inRange], [10, 10]);
+  near(a.suggested.gsf, 11325.9, 0.05); near(a.suggested.nrsf, 9055.6, 0.5); near(a.suggested.efficiency, 0.7995, 0.0001);
+  eq(a.gainUnits, 10); near(a.gain, 12674.1, 0.05);
+  eq(a.message, "The units are 51.3 to 57.3 ft deep. The target is 30 ft. 10 of 10 units are larger than their area range (average 2,154 sf, target 869 sf). Narrow the plate to 93.3 × 121.3 ft on the Plate tab. Test fit at that size: 10 units, 10 in range, 80.0% efficiency.");
   ok(!/[;]|n't/.test(a.message), "no semicolons or contractions");
-  // the test-fit runs are 30 ft deep
-  ok(tf.runs.every((r) => Math.abs(r.depth - 30) < 0.01), "test-fit depth 30");
+  // a project source names the Tower Generator
+  const pb = { ...b, source: "project" };
+  ok(/ in the Tower Generator\./.test(AD.advise(s, pb, m, { fillPlate: buildPlates })[0].message), "project wording");
   // a larger target depth gives no plate-too-deep
   ok(!AD.advise({ ...s, targetDepth: 60 }, b, m, { fillPlate: buildPlates }).some((x) => x.code === "plate-too-deep"));
-  // sorted by gain
-  for (let i = 1; i < list.length; i++) ok(list[i - 1].gain >= list[i].gain, "sorted");
+  for (let i = 1; i < list.length; i++) ok(list[i - 1].gainUnits >= list[i].gainUnits, "sorted by units in range gained");
+  // 8.1: every unit in range
+  const r81 = MT.computeMetrics(PRESETS[0].state, buildPlates(clone(PRESETS[0].state))).groups[0].row;
+  eq([r81.inRange, r81.areaHighCount, r81.units], [17, 0, 17]);
 });
 
 /* ------------------------------------------------------------ R5 */
 
 // Manual core [−25, −47, 25, 47] = 50 × 94 = 4,700 sf on the R1 plate. Program (1 floor, 21 units): 44 × 22 = 968 sf;
 // 4,700 > 1.25 × 968 = 1,210 → core-oversize, gain 4,700 − 968 = 3,732 sf per floor.
-// The east and west runs are 75 − 1 − 30.67 = 43.33 ft deep, so plate-too-deep also shows: east–west 50 + 11.34 + 62 =
-// 123.34, gross (150 − 123.34) × 160 = 4,265.6 sf less; it sorts first (4,265.6 > 3,732).
+// The east and west runs are 75 − 1 − 30.67 = 43.33 ft deep, so plate-too-deep also shows (with an auto core in its test
+// fit); it sorts first because it gains units in range (gainUnits > 0) and core-oversize gains none.
 t("R5 advisor on a manual 4,700 sf core: core-oversize with a gain of 3,732 sf", () => {
   const s = r1State(); s.core = { mode: "manual", rect: [-25, -47, 25, 47] };
   const b = buildPlates(s);
@@ -199,7 +211,7 @@ t("R5 advisor on a manual 4,700 sf core: core-oversize with a gain of 3,732 sf",
   near(c.gain, 3732, 0.05); near(c.current.coreSf, 4700, 0.05); near(c.suggested.coreSf, 968, 0.05);
   eq(c.message, "The core is 4,700 sf. The program needs 968 sf. Reset the core to auto to gain about 3,732 sf per floor.");
   eq(list.map((x) => x.code), ["plate-too-deep", "core-oversize"]);
-  near(list[0].gain, 4265.6, 0.05);
+  ok(list[0].gainUnits > 0 && c.gainUnits === 0, "sort by units in range gained");
   // presets 8.1, 8.5, 8.6 have small manual cores: no core-oversize
   for (const id of ["double-loaded-bar", "point-tower", "courtyard-typed-o"]) {
     const ps = clone(PRESETS.find((p) => p.id === id).state);

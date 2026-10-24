@@ -16,22 +16,28 @@
      (ties: the first). `where.group` names it.
    - Target area depth: state.targetDepth, else multifamily 30 ft, hotel 26 ft. A run is too deep when its depth is more
      than target + 2 ft.
-   - plate-too-deep: the deep runs are sorted into the two axes of the plate's minimum-area rectangle by their direction.
-     A run along an axis is deep across the other axis, so that other side is the one to narrow. The suggested side:
-     point plates core extent + 2 × corridor width + 2 × (target + extWall); bars 2 × (target + extWall) + corridor
-     width; single-loaded target + 2 × extWall + corridor width. A side is suggested only when it is shorter than now.
-     The plate is rectangular when plate area ÷ the rectangle area ≥ 0.98 (one piece, no holes). The test fit is a
-     drawn rectangle at the suggested size with the same state, except: no locks, no support blocks, no typed spine,
-     auto stairs, the same corridor kind, an auto core with the same elevator counts (a point plate) or no core (a bar).
-   - gain is square feet per floor: plate-too-deep the gross area less per floor (current GSF − test-fit GSF);
-     core-oversize the manual core area − the auto program area; unfilled-runs the unfilled area; efficiency-low
-     (0.75 − efficiency) × GSF; plate-too-shallow 0. Items sort by gain, largest first (ties: the code order below).
+   - plate-too-deep (rectangular plates: one piece, no holes, plate area ÷ minimum-area rectangle ≥ 0.98): a candidate
+     search. Area depths target − 2 … target + 6 ft in 1 ft steps. Point plates: side = core side + 2 × corridor width
+     + 2 × (depth + extWall) on both axes (the core is the program for the candidate's own GSF with the same floors
+     context; first the same depth on both axes, then each axis alone around the best); bars: the short side
+     2 × (depth + extWall) + corridor width, the length unchanged; single-loaded depth + 2 × extWall + corridor width.
+     A side never grows past the current one. Each candidate is a real fill (fillPlate) of a drawn rectangle with the
+     same state, except: no locks, no support blocks, no typed spine, auto stairs, the same corridor kind, an auto core.
+     Score: no unfilled runs first, then most units in range (metrics unitsInRange), then highest efficiency, then the
+     size closest to the current one. Fills are cached by size. With no candidate free of unfilled runs, the message
+     says so and gives the depths only. Other plates (and no fillPlate): depths and the target only.
+     suggested.depths.long / .short are the area depths that set the long and the short side.
+   - gainUnits: units in range gained per floor (plate-too-deep; 0 for the others). gain is square feet per floor:
+     plate-too-deep the gross area less per floor; core-oversize the manual core area − the auto program area;
+     unfilled-runs the unfilled area; efficiency-low (0.75 − efficiency) × GSF; plate-too-shallow 0.
+     Items sort by gainUnits, then gain, largest first (ties: the code order below).
    - Numbers in messages: feet to one decimal (no ".0"), square feet rounded with thousands separators, percent to one
      decimal. Short sentences, active voice, no contractions (ASD-STE100 style).
    ========================================================================== */
 
 import { GEO, minRect } from "./corridor.js";
 import { coreProgram } from "./core.js";
+import { unitsInRange } from "./metrics.js";
 
 const { asMP, mpArea, ringArea } = GEO;
 
@@ -119,11 +125,22 @@ function testFitState(state, fill, m, size) {
   s.corridor = { ...(s.corridor || {}), kind: fill.kind, spine: null };
   s.stairs = { ...(s.stairs || {}), mode: "auto", items: [] };
   s.core = { mode: "auto", rect: null };
-  if (fill.kind === "point") {
-    const prog = fill.coreProgram;
-    if (prog) s.elevators = { ...(s.elevators || {}), count: prog.cabs, service: prog.service };
-  }
   return s;
+}
+
+/** Sides of the test plate for an area depth per axis. → { u, n } */
+function sidesFor(kind, cur, depth, coreSize, width, ext) {
+  if (kind === "point") return { u: Math.min(cur.u, coreSize[0] + 2 * width + 2 * (depth.u + ext)), n: Math.min(cur.n, coreSize[1] + 2 * width + 2 * (depth.n + ext)) };
+  if (kind === "single") return { u: cur.u, n: Math.min(cur.n, depth.n + 2 * ext + width) };
+  return { u: cur.u, n: Math.min(cur.n, 2 * (depth.n + ext) + width) };
+}
+
+/** The size text of a test plate: "w × d ft" on an axis-aligned plate (x × y), else "long × short ft". */
+function sizeText(m, size) {
+  const aligned = Math.abs(m.u[0]) < 1e-9 || Math.abs(m.u[1]) < 1e-9;
+  const alongX = Math.abs(m.u[0]) > 0.5;
+  const [a, b] = aligned ? (alongX ? [size.u, size.n] : [size.n, size.u]) : [size.u, size.n];
+  return `${fmtFt(a).replace(" ft", "")} × ${fmtFt(b)}`;
 }
 
 function tooDeep(state, built, fill, row, target, fillPlate, where) {
@@ -133,64 +150,88 @@ function tooDeep(state, built, fill, row, target, fillPlate, where) {
   const P = asMP(fill.plate);
   const m = minRect(P);
   if (!m) return null;
-  const center = m.center;
-  const sides = [...new Set(deep.map((r) => sideOf(r, center)))];
-  const order = ["north", "south", "east", "west"];
-  sides.sort((a, b) => order.indexOf(a) - order.indexOf(b));
   const dmin = Math.min(...deep.map((r) => r.depth)), dmax = Math.max(...deep.map((r) => r.depth));
   const depthText = Math.abs(dmax - dmin) < 0.05 ? fmtFt(dmax) : `${fmtFt(dmin).replace(" ft", "")} to ${fmtFt(dmax)}`;
-  const head = `${cap1(listWords(sides))} units are ${depthText} deep. The target is ${fmtFt(target)}.`;
-  const rectangular = P.length === 1 && !P[0].holes.length && mpArea(P) / m.area >= 0.98 - 1e-9;
-  const current = { depth: r3(dmax), target, ...row };
-  if (!rectangular) {
-    return { code: "plate-too-deep", severity: "warn", message: head, current, suggested: { depth: target }, gain: 0, where };
+  const rng = unitsInRange(state, fill.units);
+  let head = `The units are ${depthText} deep. The target is ${fmtFt(target)}.`;
+  if (rng.areaHighCount > 0) {
+    head += ` ${rng.areaHighCount} of ${rng.units} units are larger than their area range (average ${fmtSf(rng.avgArea)}${isNum(rng.targetAvgArea) ? `, target ${fmtSf(rng.targetAvgArea)}` : ""}).`;
   }
-  // the axes to narrow: a run along u is deep across n
+  const rectangular = P.length === 1 && !P[0].holes.length && mpArea(P) / m.area >= 0.98 - 1e-9;
+  const current = { depth: r3(dmax), target, ...row, inRange: rng.inRange, areaHighCount: rng.areaHighCount, avgArea: rng.avgArea, targetAvgArea: rng.targetAvgArea };
+  const base = { code: "plate-too-deep", severity: "warn", current, where };
+  if (!rectangular || typeof fillPlate !== "function") return { ...base, message: head, suggested: { depth: target }, gain: 0, gainUnits: 0 };
+
+  // candidate search (review of the rework): area depths target − 2 … target + 6 in 1 ft steps
   const width = isNum(fill.width) ? fill.width : 5.67;
   const ext = isNum(state.extWall) && state.extWall >= 0 ? state.extWall : 1.0;
-  const coreRing = fill.core && fill.core.length >= 3 ? fill.core : null;
-  const need2 = { u: false, n: false };
-  for (const r of deep) {
-    const dx = r.end[0] - r.start[0], dy = r.end[1] - r.start[1], L = Math.hypot(dx, dy) || 1;
-    const alongU = Math.abs((dx * m.u[0] + dy * m.u[1]) / L) >= Math.abs((dx * m.n[0] + dy * m.n[1]) / L);
-    need2[alongU ? "n" : "u"] = true;
-  }
   const cur = { u: m.long, n: m.short };
-  const sugg = { u: cur.u, n: cur.n };
-  const changes = [];
-  for (const k of ["u", "n"]) {
-    if (!need2[k]) continue;
-    const ax = k === "u" ? m.u : m.n;
-    let s;
-    if (fill.kind === "point") s = (coreRing ? projExtent(coreRing, ax) : 0) + 2 * width + 2 * (target + ext);
-    else if (fill.kind === "single") s = target + 2 * ext + width;
-    else s = 2 * (target + ext) + width;
-    if (s < cur[k] - 0.05) { sugg[k] = s; changes.push({ k, ax, from: cur[k], to: s }); }
-  }
-  if (!changes.length) return { code: "plate-too-deep", severity: "warn", message: head, current, suggested: { depth: target }, gain: 0, where };
-  const tool = built.source === "project" ? (fill.kind === "point" ? "in the Tower Generator" : "in the massing tool") : "on the Plate tab";
-  const parts = changes.map((c) => { const w = axisWord(c.ax); return `${w ? `${w} ` : c.k === "u" ? "along its long side " : "across its short side "}from ${fmtFt(c.from)} to ${fmtFt(c.to)}`; });
-  let msg = `${head} Narrow the plate ${parts.join(" and ")} ${tool}.`;
-  const suggested = { depth: target, size: { long: r3(sugg.u), short: r3(sugg.n) }, axis: m.u.slice() };
-  let gain = 0;
-  if (typeof fillPlate === "function") {
-    const s2 = testFitState(state, fill, m, sugg);
-    suggested.plate = clone(s2.plate);
+  const cc = built.coreContext || {};
+  const A = isNum(cc.unitArea) && cc.unitArea > 0 ? cc.unitArea : null;
+  const depths = [];
+  for (let d = target - 2; d <= target + 6 + 1e-9; d += 1) depths.push(d);
+  const cache = new Map();
+  const tryDepth = (du, dn) => {
+    // the core of the candidate: the program for its own GSF with the same floors context
+    let coreSize = [0, 0], prog = null;
+    if (fill.kind === "point") {
+      const guess = sidesFor("point", cur, { u: du, n: dn }, fill.coreProgram ? fill.coreProgram.size : [44, 22], width, ext);
+      const gsf = guess.u * guess.n;
+      const floors = isNum(cc.floors) && cc.floors > 0 ? cc.floors : 1;
+      prog = coreProgram(state, A ? { floors, units: floors * Math.round((gsf * 0.75) / A) } : { floors, levelGsf: gsf });
+      coreSize = prog.size;
+    }
+    const size = sidesFor(fill.kind, cur, { u: du, n: dn }, coreSize, width, ext);
+    const key = `${r3(size.u)}x${r3(size.n)}`;
+    if (cache.has(key)) return cache.get(key);
+    let res = null;
     try {
+      const s2 = testFitState(state, fill, m, size);
+      if (prog) s2.elevators = { ...(s2.elevators || {}), count: prog.cabs, service: prog.service };
       const b2 = fillPlate(s2, { project: null });
       const f2 = b2 && b2.groups && b2.groups[0] && b2.groups[0].fill;
       if (f2) {
         const n2 = fillNumbers(f2);
-        Object.assign(suggested, n2, { areaHigh: f2.units.filter((u) => u.areaHigh).length });
-        const less = (row.gsf || 0) - n2.gsf;
-        gain = r1(Math.max(0, less));
-        msg += ` Test fit at that size: ${fmtPct(n2.efficiency)} efficiency, ${n2.units} units per floor, ${fmtSf(less)} ${less >= 0 ? "less" : "more"} per floor.`;
+        const r2 = unitsInRange(s2, f2.units);
+        const unfilled = (f2.support || []).filter((x) => x.kind === "remainder").length;
+        res = { size, depth: { u: du, n: dn }, plate: clone(s2.plate), ...n2, inRange: r2.inRange, areaHighCount: r2.areaHighCount, avgArea: r2.avgArea, unfilled,
+          moved: Math.abs(cur.u - size.u) + Math.abs(cur.n - size.n) };
       }
-    } catch (e) {
-      msg += " The test fit at that size failed.";
-    }
+    } catch (e) { res = null; }
+    cache.set(key, res);
+    return res;
+  };
+  const better = (a, b) => {
+    if (!b) return true;
+    if (!a) return false;
+    if ((a.unfilled === 0) !== (b.unfilled === 0)) return a.unfilled === 0;
+    if (a.inRange !== b.inRange) return a.inRange > b.inRange;
+    if (Math.abs(a.efficiency - b.efficiency) > 1e-6) return a.efficiency > b.efficiency;
+    return a.moved < b.moved - 1e-9;
+  };
+  let best = null;
+  // 1) the same depth on both axes, 2) then each axis alone around the best (a point plate)
+  for (const d of depths) { const r = tryDepth(d, d); if (better(r, best)) best = r; }
+  if (best && fill.kind === "point") {
+    const d0 = best.depth;
+    for (const d of depths) { const r = tryDepth(d, d0.n); if (better(r, best)) best = r; }
+    const d1 = best.depth;
+    for (const d of depths) { const r = tryDepth(d1.u, d); if (better(r, best)) best = r; }
   }
-  return { code: "plate-too-deep", severity: "warn", message: msg, current, suggested, gain, where };
+  const tool = built.source === "project" ? "in the Tower Generator" : "on the Plate tab";
+  if (!best || best.unfilled > 0) {
+    return { ...base, message: `${head} No test size with runs ${fmtFt(target - 2).replace(" ft", "")} to ${fmtFt(target + 6)} deep fills every run. Aim for runs near ${fmtFt(target)} deep.`,
+      suggested: { depth: target, tested: cache.size }, gain: 0, gainUnits: 0 };
+  }
+  const less = (row.gsf || 0) - best.gsf;
+  const gainUnits = best.inRange - rng.inRange;
+  const msg = `${head} Narrow the plate to ${sizeText(m, best.size)} ${tool}. Test fit at that size: ${best.units} units, ${best.inRange} in range, ${fmtPct(best.efficiency)} efficiency.`;
+  return {
+    ...base, message: msg,
+    suggested: { depth: target, depths: { long: best.depth.u, short: best.depth.n }, size: { long: r3(best.size.u), short: r3(best.size.n) }, axis: m.u.slice(), plate: best.plate,
+      units: best.units, nrsf: best.nrsf, gsf: best.gsf, efficiency: best.efficiency, inRange: best.inRange, areaHighCount: best.areaHighCount, avgArea: best.avgArea, tested: cache.size },
+    gain: r1(Math.max(0, less)), gainUnits,
+  };
 }
 
 function tooShallow(state, fill, where) {
@@ -206,7 +247,7 @@ function tooShallow(state, fill, where) {
     out.push({
       code: "plate-too-shallow", severity: "info",
       message: `The ${nm} needs runs ${fmtFt(dNeed)} deep or more. The runs are ${fmtFt(depth)} deep. Make the runs ${fmtFt(dNeed - depth)} deeper or remove the ${nm}.`,
-      current: { depth: r3(depth), type: d.id }, suggested: { depth: r3(dNeed), deeperBy: r3(dNeed - depth) }, gain: 0, where: { ...where, type: d.id },
+      current: { depth: r3(depth), type: d.id }, suggested: { depth: r3(dNeed), deeperBy: r3(dNeed - depth) }, gain: 0, gainUnits: 0, where: { ...where, type: d.id },
     });
   }
   return out;
@@ -222,7 +263,7 @@ function coreOversize(state, built, fill, where) {
   return {
     code: "core-oversize", severity: "warn",
     message: `The core is ${fmtSf(coreArea)}. The program needs ${fmtSf(prog.area)}. Reset the core to auto to gain about ${fmtSf(gain)} per floor.`,
-    current: { coreSf: r1(coreArea) }, suggested: { coreSf: r1(prog.area), size: prog.size.slice(), cabs: prog.cabs, service: prog.service }, gain: r1(gain), where,
+    current: { coreSf: r1(coreArea) }, suggested: { coreSf: r1(prog.area), size: prog.size.slice(), cabs: prog.cabs, service: prog.service }, gain: r1(gain), gainUnits: 0, where,
   };
 }
 
@@ -234,7 +275,7 @@ function unfilled(fill, where) {
   return {
     code: "unfilled-runs", severity: "warn",
     message: `${n} ${n === 1 ? "run is" : "runs are"} unfilled (${fmtSf(a)}). Move a stair or the core, or fill the run by hand.`,
-    current: { runs: n, areaSf: r1(a) }, suggested: null, gain: r1(a), where,
+    current: { runs: n, areaSf: r1(a) }, suggested: null, gain: r1(a), gainUnits: 0, where,
   };
 }
 
@@ -260,8 +301,8 @@ export function advise(state, built, metrics, { fillPlate = null } = {}) {
     items.push({
       code: "efficiency-low", severity: "info",
       message: `Efficiency is ${fmtPct(row.efficiency)}. Typical test fits reach 75 to 82%.`,
-      current: { efficiency: row.efficiency }, suggested: { efficiency: 0.75 }, gain: r1(Math.max(0, (0.75 - row.efficiency) * row.gsf)), where,
+      current: { efficiency: row.efficiency }, suggested: { efficiency: 0.75 }, gain: r1(Math.max(0, (0.75 - row.efficiency) * row.gsf)), gainUnits: 0, where,
     });
   }
-  return items.map((it, i) => ({ it, i })).sort((a, b) => (b.it.gain - a.it.gain) || (ORDER.indexOf(a.it.code) - ORDER.indexOf(b.it.code)) || a.i - b.i).map((x) => x.it);
+  return items.map((it, i) => ({ it, i })).sort((a, b) => ((b.it.gainUnits || 0) - (a.it.gainUnits || 0)) || (b.it.gain - a.it.gain) || (ORDER.indexOf(a.it.code) - ORDER.indexOf(b.it.code)) || a.i - b.i).map((x) => x.it);
 }

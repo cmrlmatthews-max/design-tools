@@ -347,6 +347,37 @@ const clearWidth = (state) => (state.corridor && isNum(state.corridor.width) ? s
 
 const round2 = (v) => Math.round(v * 100) / 100;
 
+/** The share-weighted target area of the multifamily mix (types with share > 0); hotel: null. */
+function targetAvgOf(state) {
+  if (state.mode === "hotel") return null;
+  let s = 0, a = 0;
+  for (const t of mixTypes(state)) if (isNum(t.share) && t.share > 0 && isNum(t.targetArea)) { s += t.share; a += t.share * t.targetArea; }
+  return s > 0 ? r1(a / s) : null;
+}
+
+/**
+ * Units against their type's area range (rework review): a unit is area-high when the fill flagged it or its area is
+ * above areaMax (+0.5 sf); in range when it is not area-high and its area is at least areaMin (−0.5 sf). Wrap corners
+ * carry the corner type, so they test against it. A type with no area range (hotel keys, accessible keys) is in range.
+ * → { units, inRange, areaHighCount, avgArea, targetAvgArea }
+ */
+export function unitsInRange(state, units) {
+  need(state && typeof state === "object", "unitsInRange", "state");
+  const list = Array.isArray(units) ? units : [];
+  const rows = new Map(mixTypes(state).map((t) => [t.id, t]));
+  let inRange = 0, high = 0, sum = 0;
+  for (const u of list) {
+    const a = unitArea(u);
+    sum += a;
+    const t = rows.get(u.type);
+    const hasRange = t && isNum(t.areaMax) && state.mode !== "hotel";
+    const isHigh = !!u.areaHigh || (hasRange && a > t.areaMax + 0.5);
+    if (isHigh) { high++; continue; }
+    if (!hasRange || !isNum(t.areaMin) || a >= t.areaMin - 0.5) inRange++;
+  }
+  return { units: list.length, inRange, areaHighCount: high, avgArea: list.length ? r1(sum / list.length) : 0, targetAvgArea: targetAvgOf(state) };
+}
+
 /** The depth that carries the most run length, and every depth in use (rounded to 0.01 ft). */
 function runDepths(runs) {
   const by = new Map();
@@ -513,6 +544,7 @@ function levelRow(state, group, fill, hotel) {
   }
   const support = supportRows(fill);
   const closure = closureRows(state, fill, nrsfExact, gsfExact);
+  const rng = unitsInRange(state, units);
   const stairsArr = stairsOf(fill);
   return {
     group: group.id,
@@ -520,6 +552,7 @@ function levelRow(state, group, fill, hotel) {
     byType, mix,
     nrsf, gsf, efficiency: gsf > 0 ? r4(nrsfExact / gsfExact) : 0,
     avgUnitArea: units.length ? r1(nrsfExact / units.length) : 0,
+    inRange: rng.inRange, areaHighCount: rng.areaHighCount, avgArea: rng.avgArea, targetAvgArea: rng.targetAvgArea,
     corners: units.filter((u) => u.corner).length,
     exposures,
     accessible: units.filter((u) => u.accessible).length,
@@ -559,6 +592,7 @@ const add = (obj, key, n) => { obj[key] = (obj[key] || 0) + n; };
  *   mode, caution, floors,
  *   groups: [{ id, label, first, levels, floors, row }],
  *   levels: [{ index, ...row }]           one row per level of every group
+ *   (level rows and building also carry inRange, areaHighCount, avgArea, targetAvgArea: see unitsInRange)
  *   building: { units, keys, bays, nrsf, gsf, efficiency, avgUnitArea, corners, exposures, corridorFt,
  *               byType, mix: [{ type, count, share, target, diff, avgArea }], accessible, support },
  *   buildWarnings, massing: { usedAt, currentAt }, warnings }
@@ -571,7 +605,7 @@ export function computeMetrics(state, built) {
   const groups = [], levels = [], buildWarnings = [];
   for (const w of Array.isArray(built.warnings) ? built.warnings : []) buildWarnings.push({ ...w });
 
-  const total = { units: 0, bays: 0, nrsf: 0, gsf: 0, corners: 0, corridorFt: 0, accessible: 0, exposures: { N: 0, E: 0, S: 0, W: 0 }, byType: {}, areaByType: {}, targets: {}, support: 0, floors: 0 };
+  const total = { units: 0, bays: 0, inRange: 0, areaHigh: 0, nrsf: 0, gsf: 0, corners: 0, corridorFt: 0, accessible: 0, exposures: { N: 0, E: 0, S: 0, W: 0 }, byType: {}, areaByType: {}, targets: {}, support: 0, floors: 0 };
   for (const g of built.groups) {
     if (!g || !g.fill) continue;
     const idx = levelIndices(g.levels);
@@ -583,6 +617,7 @@ export function computeMetrics(state, built) {
 
     total.floors += floors;
     total.units += row.units * floors; total.bays += row.bays * floors;
+    total.inRange += row.inRange * floors; total.areaHigh += row.areaHighCount * floors;
     total.nrsf += row.nrsf * floors; total.gsf += row.gsf * floors;
     total.corners += row.corners * floors; total.accessible += row.accessible * floors;
     total.corridorFt += (row.corridor.lengthFt || 0) * floors;
@@ -616,6 +651,7 @@ export function computeMetrics(state, built) {
       units: total.units, keys: total.units, bays: total.bays,
       nrsf: r1(total.nrsf), gsf: r1(total.gsf), efficiency: total.gsf > 0 ? r4(total.nrsf / total.gsf) : 0,
       avgUnitArea: total.units ? r1(total.nrsf / total.units) : 0,
+      inRange: total.inRange, areaHighCount: total.areaHigh, avgArea: total.units ? r1(total.nrsf / total.units) : 0, targetAvgArea: targetAvgOf(state),
       corners: total.corners, exposures: total.exposures, corridorFt: r1(total.corridorFt),
       byType: total.byType, mix: mixRows, accessible, supportSf: r1(total.support),
     },
