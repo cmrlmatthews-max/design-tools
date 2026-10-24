@@ -3085,7 +3085,7 @@ const TowerGeo = (() => {
 
    Clipper: globalThis.ClipperLib, integers at SCALE = 1000 (0.001 ft). Clipper
    is only used where it is needed (non-convex offsets, carves, non-convex
-   half-plane clips, unclear core checks). Rotations, translations, scaling and
+   half-plane clips). Rotations, translations, scaling and
    convex clips are done in floating point, so simple cases are exact.
 
    ---- Rule choices where the plan leaves room (documented on purpose) -------
@@ -3119,7 +3119,7 @@ const TowerGeo = (() => {
    MECHANICAL FLOORS
    - A mechanical floor copies the plate of the floor below it BEFORE that
      floor's carves and cuts, then gets the carves and cuts whose range holds
-     the mechanical floor's own number. It uses the core of the segment below.
+     the mechanical floor's own number.
    CARVES (applied to every zone in the floor range, after translation)
    - corner: w x d rectangle at the NE/NW/SE/SW corner of the floor's own
      bounding box, world frame (after rotation and translation).
@@ -3141,16 +3141,10 @@ const TowerGeo = (() => {
      (before carves and cuts), so the plane does not follow taper or twist.
      The effective angle from vertical is atan(depth / (z_end - z_start)).
    CORE
-   - One core per tower segment: a rectangle centred on the area centroid of
-     the segment's first plate (before carves/cuts), rotated with that plate
-     (segment.rotation + twist at t = 0). It never tapers, twists or leans.
-     If the core does not fit at the centroid (L, U, concave custom shapes),
-     it moves to the nearest point of a 25 x 25 grid over the plate bounds
-     where it fits; if none fits it stays at the centroid.
-   - percent mode: area = percent of that first plate area, proportions of
-     the plate's local bounding box. Any other mode: core.w x core.d.
-   - coreArea = area of core inside the plate. "core-outside" warning when the
-     core minus the plate is more than 1 sf. Podium plates have no core.
+   - The Tower Generator makes no core (October 24, 2026). The Plate Planner sets
+     the core and the efficiency. Every plate still carries coreRect: null and
+     coreArea: 0 so readers of those fields do not break. A saved `core` key in
+     an old state is ignored here (the page's store drops it).
    CROWN
    - Sits on the highest non-void plate; base elevation = top of all floors.
    - flat: 4 ft parapet ring, 1 ft thick. Adds no height.  none: nothing.
@@ -3162,12 +3156,9 @@ const TowerGeo = (() => {
    - screen: top plate minus a 1 ft inward offset, extruded to crown.height.
    - Non-flat crowns add crown.height to total height. Crowns add no GFA.
    METRICS
-   - netArea = sum over non-mechanical plates of (area - coreArea)
-             = GFA - coreArea (non-mechanical floors) - mechanicalArea.
-     The core inside a mechanical floor is part of that floor's area, so it is
-     not subtracted twice.
-   - efficiencyAvg is area weighted over tower plates:
-     sum(area - core) / sum(area).
+   - netArea = GFA - mechanicalArea (sum of the area of non-mechanical plates).
+     It is "before core": no core is taken out. coreArea is always 0. There is
+     no efficiency metric; the Plate Planner computes it.
    - unitFactor may be a fraction (0.85) or a percent (85); values > 1 are
      read as percent.
    ========================================================================== */
@@ -3178,7 +3169,6 @@ const MAX_FLOORS = 400;           // same cap as the shell's CONFIG.limits.maxFl
 const MAX_DIM = 5000;             // ft, cap on any plan dimension
 const AREA_EPS = 1e-6;            // sf, a plate below this is empty
 const MIN_RING_AREA = 1e-4;       // sf, Clipper output rings below this are dropped
-const CORE_TOL = 1;               // sf, core outside the plate above this is a warning
 const PARAPET_HEIGHT = 4;         // ft
 const RING_THICKNESS = 1;         // ft, parapet and screen ring thickness
 const CORNER_SEGMENTS = 8;        // per rounded corner
@@ -3689,49 +3679,13 @@ function normCuts(list, lastN, floorByN) {
   }).filter((c) => c.s <= c.e && c.depth > 0);
 }
 
-/* ---------------------------------------------------------------- core */
+/* ---------------------------------------------------------------- segment helpers */
 
-function rectQuad(cx, cy, w, d, theta) {
-  const c = Math.cos(theta), s = Math.sin(theta), x = w / 2, y = d / 2;
-  const pts = [[-x, -y], [x, -y], [x, y], [-x, y]];
-  if (theta === 0) return pts.map((p) => [p[0] + cx, p[1] + cy]);
-  return pts.map((p) => [cx + p[0] * c - p[1] * s, cy + p[0] * s + p[1] * c]);
-}
-
-function pointInMP(mp, x, y) {
-  let inside = false;
-  const test = (ring) => {
-    for (let i = 0, n = ring.length, j = n - 1; i < n; j = i++) {
-      const a = ring[i], b = ring[j];
-      if ((a[1] > y) !== (b[1] > y) && x < ((b[0] - a[0]) * (y - a[1])) / (b[1] - a[1]) + a[0]) inside = !inside;
-    }
-  };
-  for (const p of mp) { test(p.outer); for (const h of p.holes || []) test(h); }
-  return inside;
-}
 function orient(a, b, c) { return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]); }
 function segCross(a, b, c, d) {
   const o1 = orient(a, b, c), o2 = orient(a, b, d), o3 = orient(c, d, a), o4 = orient(c, d, b);
   return ((o1 > 0 && o2 < 0) || (o1 < 0 && o2 > 0)) && ((o3 > 0 && o4 < 0) || (o3 < 0 && o4 > 0));
 }
-/** True only when the convex quad is certainly inside the plate (strict tests, no Clipper). */
-function quadInsideFast(q, mp) {
-  for (const p of q) if (!pointInMP(mp, p[0], p[1])) return false;
-  const rings = [];
-  for (const p of mp) { rings.push(p.outer); for (const h of p.holes || []) rings.push(h); }
-  for (const r of rings) {
-    for (let i = 0, n = r.length; i < n; i++) {
-      const a = r[i], b = r[(i + 1) % n];
-      // vertex inside or on the quad → not certain
-      let inQ = true;
-      for (let k = 0; k < 4; k++) if (orient(q[k], q[(k + 1) % 4], a) < -1e-9) { inQ = false; break; }
-      if (inQ) return false;
-      for (let k = 0; k < 4; k++) if (segCross(a, b, q[k], q[(k + 1) % 4])) return false;
-    }
-  }
-  return true;
-}
-
 /* ---------------------------------------------------------------- crown */
 
 function triangulate(poly) {
@@ -3912,7 +3866,6 @@ function prepSegment(seg, segN) {
     ox: num(seg && seg.offset && seg.offset.x, 0), oy: num(seg && seg.offset && seg.offset.y, 0),
     lx: num(seg && seg.lean && seg.lean.x, 0), ly: num(seg && seg.lean && seg.lean.y, 0),
     cache: new Map(),
-    core: undefined,     // set from the first plate of the segment
   };
 }
 
@@ -3961,42 +3914,6 @@ function towerPre(sc, f, setbacks) {
   return { mp, local, theta, tx, ty, cause: null };
 }
 
-function makeCore(state, sc, pre) {
-  const core = state.core || {};
-  const mode = String(core.mode || "percent").toLowerCase();
-  const b = mpBounds(pre.local);
-  const W = b.maxX - b.minX, D = b.maxY - b.minY;
-  let cw0, cd0;
-  if (mode === "percent") {
-    const A = (clamp(num(core.percent, 0), 0, 100) / 100) * multiPolyArea(pre.mp);
-    if (!(A > 0) || !(W > 0) || !(D > 0)) return null;
-    cw0 = Math.sqrt((A * W) / D); cd0 = Math.sqrt((A * D) / W);
-  } else {
-    cw0 = Math.max(0, num(core.w, 0)); cd0 = Math.max(0, num(core.d, 0));
-    if (!(cw0 > 0 && cd0 > 0)) return null;
-  }
-  // Work in the local frame (after taper and setbacks, before rotation and translation).
-  let [cx, cy] = mpCentroid(pre.local);
-  if (!quadInsideFast(rectQuad(cx, cy, cw0, cd0, 0), pre.local)) {
-    // L, U and other concave plates: the centroid can sit outside the material. Use the
-    // grid point nearest the centroid where the whole core fits (25 x 25 over the bounds).
-    const G = 24, cands = [];
-    for (let i = 0; i <= G; i++) for (let j = 0; j <= G; j++) {
-      const x = b.minX + (W * i) / G, y = b.minY + (D * j) / G;
-      cands.push([x, y, (x - cx) ** 2 + (y - cy) ** 2]);
-    }
-    cands.sort((p, q) => p[2] - q[2]);
-    for (const [x, y] of cands) {
-      if (quadInsideFast(rectQuad(x, y, cw0, cd0, 0), pre.local)) { cx = x; cy = y; break; }
-    }
-  }
-  const c = Math.cos(pre.theta), s = Math.sin(pre.theta);
-  const quad = rectQuad(cx, cy, cw0, cd0, 0).map((q) => (pre.theta === 0
-    ? [q[0] + pre.tx, q[1] + pre.ty]
-    : [q[0] * c - q[1] * s + pre.tx, q[0] * s + q[1] * c + pre.ty]));
-  return { quad, area: cw0 * cd0 };
-}
-
 /**
  * Build every floor plate, the crown solids and the geometry warnings.
  * → { plates: Plate[], solids: Solid[], warnings: Warning[], floors }
@@ -4023,26 +3940,22 @@ function buildPlates(state, { quality = "full" } = {}) {
 
   const plates = [];
   const empty = { shape: [], taper: [], setbacks: [], carves: [], cuts: [] };
-  const coreOut = [];
-  let below = null;   // { mp (pre-carve), core, segmentIndex } of the floor below
+  let below = null;   // { mp (pre-carve), cause } of the floor below
 
   for (const f of floors) {
-    let pre, core = null, cause = null;
+    let pre, cause = null;
     if (f.zone === "podium") {
       pre = cloneMP(podiumMP);
       if (!pre.length) cause = "shape";
     } else if (f.zone === "mechanical") {
       pre = below ? cloneMP(below.mp) : [];
-      core = below ? below.core : null;
       if (!pre.length) cause = below && below.cause ? below.cause : "shape";
     } else {
       const sc = segs[f.segmentIndex];
       const r = towerPre(sc, f, setbacks);
       pre = r.mp; cause = r.cause;
-      if (pre.length && sc.core === undefined) sc.core = makeCore(state, sc, r);
-      core = sc.core || null;
     }
-    below = { mp: pre, core, cause };
+    below = { mp: pre, cause };
     if (!pre.length) { empty[cause || "shape"].push(f.n); continue; }
 
     // 5. carves
@@ -4087,23 +4000,11 @@ function buildPlates(state, { quality = "full" } = {}) {
     }
 
     const area = isVoid ? 0 : multiPolyArea(mp);
-    // core
-    let coreArea = 0;
-    const coreRect = f.zone === "podium" || !core ? null : core.quad.map((q) => [q[0], q[1]]);
-    if (coreRect && !isVoid) {
-      if (quadInsideFast(core.quad, mp)) {
-        coreArea = core.area;
-      } else {
-        const inside = multiPolyArea(boolOp(mp, [core.quad], "int"));
-        const outside = core.area - inside;
-        if (outside > CORE_TOL) { coreOut.push(f.n); coreArea = Math.min(inside, area); }
-        else coreArea = Math.min(core.area, area);
-      }
-    }
     plates.push({
       n: f.n, zone: f.zone, program: f.program, segmentIndex: f.segmentIndex,
       t: f.t, z: f.z, ftf: f.ftf,
-      polygons: mp, area, coreArea, coreRect,
+      polygons: mp, area,
+      coreRect: null, coreArea: 0,      // the core moved to the Plate Planner; the fields stay for readers
       outsideEnvelopeArea: 0,
       void: isVoid,
     });
@@ -4117,9 +4018,6 @@ function buildPlates(state, { quality = "full" } = {}) {
     const verb = list.length === 1 ? "has" : "have";
     const msg = k === "shape" ? `${groupFloors(list)} ${verb} no area: ${why[k]}.` : `${groupFloors(list)} ${verb} no area after ${why[k]}.`;
     warnings.push(warn("plate-empty", list, msg));
-  }
-  if (coreOut.length) {
-    warnings.push(warn("core-outside", coreOut, `${groupFloors(coreOut)}: the core does not fit inside the plate.`));
   }
 
   // crown
@@ -4154,33 +4052,31 @@ function computeMetrics(state, plates) {
   state = state || {};
   plates = plates || [];
   const progs = programsOf(state);
-  let gfa = 0, top = 0, coreArea = 0, mechanicalArea = 0, netArea = 0, floorCount = 0, voidFloors = 0;
-  let towerArea = 0, towerNet = 0;
+  let gfa = 0, top = 0, mechanicalArea = 0, netArea = 0, floorCount = 0, voidFloors = 0;
+  let towerArea = 0;
   const byZone = { podium: 0, tower: 0, mechanical: 0, crown: 0 };
   const towerAreas = [];
-  const efficiency = [];
   const byProgram = {};
   let floor1Area = 0;
 
   for (const p of plates) {
     top = Math.max(top, p.z + p.ftf);
     if (p.void || !(p.area > 0)) { voidFloors += p.void ? 1 : 0; continue; }
-    const area = p.area, core = Math.min(num(p.coreArea, 0), area);
+    const area = p.area;
     gfa += area;
     floorCount += 1;
     byZone[p.zone] = (byZone[p.zone] || 0) + 1;
     if (p.n === 1) floor1Area = area;
-    efficiency.push({ n: p.n, zone: p.zone, efficiency: (area - core) / area });
     const key = p.program || p.zone;
-    const bp = byProgram[key] || (byProgram[key] = { floors: 0, gross: 0, core: 0, net: 0 });
+    const bp = byProgram[key] || (byProgram[key] = { floors: 0, gross: 0, net: 0 });
     bp.floors += 1; bp.gross += area;
     if (p.zone === "mechanical") {
       mechanicalArea += area;
     } else {
-      coreArea += core; netArea += area - core;
-      bp.core += core; bp.net += area - core;
+      netArea += area;
+      bp.net += area;
     }
-    if (p.zone === "tower") { towerAreas.push(area); towerArea += area; towerNet += area - core; }
+    if (p.zone === "tower") { towerAreas.push(area); towerArea += area; }
   }
   for (const [k, bp] of Object.entries(byProgram)) {
     const pr = progs[k] || {};
@@ -4217,11 +4113,9 @@ function computeMetrics(state, plates) {
     far,
     floor1Area,
     siteCoverage: siteArea > 0 ? floor1Area / siteArea : 0,
-    coreArea,
+    coreArea: 0,            // the core moved to the Plate Planner
     mechanicalArea,
-    netArea,
-    efficiency,
-    efficiencyAvg: towerArea > 0 ? towerNet / towerArea : 0,
+    netArea,                // GFA - mechanicalArea, before core
     byProgram,
     target: { gfa: check(num(t.gfa, 0), gfa), far: check(num(t.far, 0), far) },
   };
@@ -4320,14 +4214,18 @@ const ACCESSIBLE_DEFAULTS = {
  * Plan 3.6 items 1 and 2: the usable width range of every type at an area depth.
  * Multifamily: lo = max(widthMin, areaMin ÷ d), hi = min(widthMax, areaMax ÷ d), w = clamp(targetArea ÷ d, lo, hi).
  * Hotel: lo = widthMin, hi = widthMax, w = target (clamped); the depth is not used.
- * → { types: [{ id, name, color, w, lo, hi, bays, share }], dropped: [{ id, name, lo, hi }] }
- *   `share` is renormalized over the kept types. A type with lo > hi drops out.
+ * Deep-run rule (rework plan section 3, multifamily): when lo > hi because the run is too deep
+ * (areaMax ÷ d < widthMin), the type stays with lo = widthMin, hi = widthMax, w = clamp(targetArea ÷ d, lo, hi)
+ * and areaOff: "deep". When lo > hi because the run is too shallow (areaMin ÷ d > widthMax), the type drops.
+ * → { types: [{ id, name, color, w, lo, hi, bays, share, areaOff? }], dropped: [{ id, name, lo, hi }],
+ *     deep: [{ id, name, lo, hi, areaLo, areaHi, areaMin, areaMax, depth }] }   areaLo = widthMin × d, areaHi = widthMax × d
+ *   `share` is renormalized over the kept types (deep types included).
  */
 function effectiveTypes(types, depth, mode = "multifamily") {
   need(Array.isArray(types), "effectiveTypes", "types");
   const hotel = mode === "hotel";
   if (!hotel) need(isNum(depth) && depth > 0, "effectiveTypes", "depth");
-  const kept = [], dropped = [];
+  const kept = [], dropped = [], deep = [];
   for (const t of types) {
     need(t && t.id !== undefined, "effectiveTypes", "a type id");
     need(isNum(t.widthMin) && isNum(t.widthMax) && t.widthMin > 0, "effectiveTypes", `the widths of type "${t.id}"`);
@@ -4341,18 +4239,28 @@ function effectiveTypes(types, depth, mode = "multifamily") {
       target = isNum(t.targetArea) ? t.targetArea / depth : (lo + hi) / 2;
     }
     const base = { id: t.id, ...(t.name !== undefined ? { name: t.name } : {}) };
-    if (lo > hi + EPS) { dropped.push({ ...base, lo, hi }); continue; }
+    let areaOff = null;
+    if (lo > hi + EPS) {
+      // rework plan section 3: a run too deep for the area range keeps the type at its width range (flagged);
+      // a run too shallow drops it
+      const deepCause = !hotel && isNum(t.areaMax) && t.areaMax / depth < t.widthMin - EPS && t.widthMin <= t.widthMax;
+      if (!deepCause) { dropped.push({ ...base, lo, hi }); continue; }
+      lo = t.widthMin; hi = t.widthMax; areaOff = "deep";
+      deep.push({ ...base, lo, hi, areaLo: t.widthMin * depth, areaHi: t.widthMax * depth,
+        ...(isNum(t.areaMin) ? { areaMin: t.areaMin } : {}), areaMax: t.areaMax, depth });
+    }
     if (lo > hi) lo = hi;
     kept.push({
       ...base, ...(t.color !== undefined ? { color: t.color } : {}),
       w: clamp(target, lo, hi), lo, hi,
       bays: isNum(t.bays) && t.bays >= 1 ? Math.round(t.bays) : 1,
       share: isNum(t.share) && t.share > 0 ? t.share : 0,
+      ...(areaOff ? { areaOff } : {}),
     });
   }
   const sum = kept.reduce((s, t) => s + t.share, 0);
   for (const t of kept) t.share = sum > EPS ? t.share / sum : 1 / kept.length;
-  return { types: kept, dropped };
+  return { types: kept, dropped, deep };
 }
 
 /* ----------------------------------------------------------- weightedWidth */
@@ -4484,244 +4392,6 @@ function requiredAccessible(state, buildingCount) {
 return { MULTIFAMILY_TYPES, HOTEL_TYPES, ACCESSIBLE_DEFAULTS, effectiveTypes, weightedWidth, countsFor, scoreMix, requiredAccessible };
 })();
 
-/* ---- src/plate/levels.js ---- */
-const LevelsMod = (() => {
-/* ==========================================================================
-   levels.js — levels, level groups, and the drawn plate (plan sections 3.1, 4)
-
-   Contract: docs/plate-planner-technical-plan.md sections 2, 3.1 and 4.
-   Pure: no DOM, no Clipper, no mutation of inputs. Feet. Plan (x, y): x = east, y = north.
-
-   Rule choices where the plan leaves room:
-   - levelsFrom(state, project) reads the project from any of: the project
-     document ({ sections: { massing: { derived } } }), a massing section
-     ({ derived }), or the massing derived itself ({ levels }).
-   - A drawn level has index 1, zone "typical", z 0, ftf 10, program "residential"
-     (hotel mode: "hotel"), the typed core as a ring, the typed corridor spine
-     (corridor.spine, else []) and no seeds.
-   - Project levels keep the massing order (the Mid-Rise lists podium, bars, decks;
-     `index` is an id, not an elevation). They are skipped when the zone is deck,
-     crown or mechanical, when `plates` has no ring of 3 points or more, and for
-     zone podium unless state.levels.showPodium.
-   - Group key: FNV-1a (32 bit, 8 hex digits) over the JSON of the level's zone,
-     plate rings, core ring, seed rings and spines. The plan names rings, core and seeds;
-     the zone and the spines are added so a podium never merges with a bar of
-     the same footprint and a fill never copies across different corridors.
-     Rings are rounded to 0.01 ft, made counter-clockwise, and start at the vertex
-     with the smallest x, then the smallest y. Pieces and seeds are sorted.
-   - Group id "g" + key. Groups sort by the elevation of their lowest level, then index.
-     Inside a group the levels sort the same way; `first` is the lowest one, the level the tool fills.
-   - Group label: "Levels 7–22 (16 floors)", "Level 4 (1 floor)", "Levels 2, 4–6 (4 floors)".
-   - plateFromState: shapes through shapeToRing (centered on the bounding box,
-     L along the south and west, U open to the north); O = rect minus a centered
-     court; polygon points are kept as given, counter-clockwise. Rings are cleaned
-     with cleanRing2 and rounded to 0.001 ft. Outer rings run counter-clockwise, holes clockwise.
-   ========================================================================== */
-
-const { shapeToRing } = TowerGeo;
-const { cleanRing2 } = SkFmt;
-
-const isNum = (v) => typeof v === "number" && Number.isFinite(v);
-const r2 = (v) => Math.round(v * 100) / 100 + 0;
-const r3 = (v) => Math.round(v * 1000) / 1000 + 0;
-const isPair = (p) => Array.isArray(p) && p.length >= 2 && isNum(p[0]) && isNum(p[1]);
-
-function need(cond, fn, what) {
-  if (!cond) throw new Error(`${fn}: ${what} is missing or not valid`);
-}
-
-const SKIP_ZONES = new Set(["deck", "crown", "mechanical"]);
-
-/* ------------------------------------------------------------ plateFromState */
-
-const roundRing = (ring) => ring.map((p) => [r3(p[0]), r3(p[1])]);
-
-/** The drawn plate (plan section 2, `plate`) → MultiPoly [{ outer, holes }]. Throws when the shape has no area. */
-function plateFromState(plateState) {
-  need(plateState && typeof plateState === "object", "plateFromState", "plate");
-  const p = plateState;
-  const shape = String(p.shape || "rect").toLowerCase();
-  const segments = isNum(p.segments) ? Math.max(8, Math.round(p.segments)) : 64;
-  const w = isNum(p.w) ? p.w : 0, d = isNum(p.d) ? p.d : 0;
-  let outer, holes = [];
-  switch (shape) {
-    case "circle":
-      outer = shapeToRing({ type: "circle", w: w > 0 ? w : d }, { segments });
-      break;
-    case "l":
-      outer = shapeToRing({ type: "l", w, d, arm: p.arm }, { segments });
-      break;
-    case "u":
-      outer = shapeToRing({ type: "u", w, d, arm: p.arm }, { segments });
-      break;
-    case "o": {
-      outer = shapeToRing({ type: "rect", w, d }, { segments });
-      const cw = isNum(p.courtW) ? p.courtW : 0, cd = isNum(p.courtD) ? p.courtD : 0;
-      need(cw > 0 && cd > 0, "plateFromState", "the court size (courtW and courtD)");
-      if (!(cw < w && cd < d)) throw new Error(`plateFromState: the court ${cw} × ${cd} ft must be smaller than the plate ${w} × ${d} ft`);
-      const hole = shapeToRing({ type: "rect", w: cw, d: cd }, { segments });
-      holes = [hole];
-      break;
-    }
-    case "polygon":
-      outer = shapeToRing({ type: "polygon", points: (Array.isArray(p.points) ? p.points : []).filter(isPair) }, { segments });
-      break;
-    case "rect":
-      outer = shapeToRing({ type: "rect", w, d }, { segments });
-      break;
-    default:
-      throw new Error(`plateFromState: unknown plate shape "${p.shape}"`);
-  }
-  const o = cleanRing2(outer);
-  if (!o) throw new Error(`plateFromState: the ${shape} plate has no area`);
-  const hs = holes.map((h) => cleanRing2(h, { hole: true })).filter(Boolean);
-  return [{ outer: roundRing(o), holes: hs.map(roundRing) }];
-}
-
-/* ---------------------------------------------------------------- levelsFrom */
-
-function rectRing(rect) {
-  const [x0, y0, x1, y1] = rect;
-  const a = Math.min(x0, x1), b = Math.min(y0, y1), c = Math.max(x0, x1), e = Math.max(y0, y1);
-  return [[a, b], [c, b], [c, e], [a, e]];
-}
-
-const clone = (o) => JSON.parse(JSON.stringify(o));
-
-function massingLevels(project) {
-  if (!project || typeof project !== "object") return null;
-  const sec = project.sections && project.sections.massing ? project.sections.massing : project;
-  const derived = sec && sec.derived ? sec.derived : sec;
-  return derived && Array.isArray(derived.levels) ? derived.levels : null;
-}
-
-const hasArea = (mp) => Array.isArray(mp) && mp.some((pc) => pc && Array.isArray(pc.outer) && pc.outer.length >= 3);
-
-/**
- * Plan 3.1. → [{ index, name, zone, z, ftf, program, plate, core, spines, seeds }]
- * Drawn source: one level from state.plate. Project source: the fillable levels of the massing.
- */
-function levelsFrom(state, project) {
-  need(state && typeof state === "object", "levelsFrom", "state");
-  if (state.source === "project") {
-    const list = massingLevels(project);
-    need(list, "levelsFrom", "the project massing levels (sections.massing.derived.levels)");
-    const showPodium = !!(state.levels && state.levels.showPodium);
-    const out = [];
-    for (const l of list) {
-      if (!l || SKIP_ZONES.has(l.zone)) continue;
-      if (l.zone === "podium" && !showPodium) continue;
-      if (!hasArea(l.plates)) continue;
-      out.push({
-        index: l.index,
-        name: l.name !== undefined ? l.name : `Level ${l.index}`,
-        zone: l.zone,
-        z: isNum(l.z) ? l.z : 0,
-        ftf: isNum(l.ftf) ? l.ftf : 10,
-        program: l.program !== undefined ? l.program : "residential",
-        plate: clone(l.plates),
-        core: Array.isArray(l.core) && l.core.length >= 3 ? clone(l.core) : null,
-        spines: Array.isArray(l.spines) ? clone(l.spines) : [],
-        seeds: Array.isArray(l.seeds) ? clone(l.seeds) : [],
-      });
-    }
-    return out;
-  }
-  need(state.plate, "levelsFrom", "state.plate");
-  const rect = state.core && Array.isArray(state.core.rect) && state.core.rect.length === 4 && state.core.rect.every(isNum) ? state.core.rect : null;
-  const spine = state.corridor && Array.isArray(state.corridor.spine) ? state.corridor.spine : [];
-  return [{
-    index: 1, name: "Level 1", zone: "typical", z: 0, ftf: 10,
-    program: state.mode === "hotel" ? "hotel" : "residential",
-    plate: plateFromState(state.plate),
-    core: rect ? rectRing(rect) : null,
-    spines: clone(spine),
-    seeds: [],
-  }];
-}
-
-/* --------------------------------------------------------------- groupLevels */
-
-const area2 = (ring) => {
-  let a = 0;
-  for (let i = 0; i < ring.length; i++) { const p = ring[i], q = ring[(i + 1) % ring.length]; a += p[0] * q[1] - q[0] * p[1]; }
-  return a / 2;
-};
-
-/** A ring in a form that is equal for equal shapes: rounded to 0.01 ft, counter-clockwise, starting at the smallest x then y. */
-function canonRing(ring) {
-  let pts = (Array.isArray(ring) ? ring : []).filter(isPair).map((p) => [r2(p[0]), r2(p[1])]);
-  pts = pts.filter((p, i) => !i || p[0] !== pts[i - 1][0] || p[1] !== pts[i - 1][1]);
-  if (pts.length > 1 && pts[0][0] === pts[pts.length - 1][0] && pts[0][1] === pts[pts.length - 1][1]) pts.pop();
-  if (pts.length >= 3 && area2(pts) < 0) pts.reverse();
-  let s = 0;
-  for (let i = 1; i < pts.length; i++) if (pts[i][0] < pts[s][0] || (pts[i][0] === pts[s][0] && pts[i][1] < pts[s][1])) s = i;
-  return pts.slice(s).concat(pts.slice(0, s));
-}
-
-const sortedJson = (list) => list.map((x) => JSON.stringify(x)).sort();
-
-function levelKeyText(l) {
-  const pieces = (Array.isArray(l.plate) ? l.plate : []).map((pc) => ({ o: canonRing(pc.outer), h: sortedJson((pc.holes || []).map(canonRing)) }));
-  const seeds = (Array.isArray(l.seeds) ? l.seeds : []).map((s) => ({ k: s.kind, r: canonRing(s.outer) }));
-  const spines = (Array.isArray(l.spines) ? l.spines : []).map((s) => (Array.isArray(s) ? s.filter(isPair).map((p) => [r2(p[0]), r2(p[1])]) : []));
-  return JSON.stringify({ zone: l.zone || "", plate: sortedJson(pieces), core: l.core ? canonRing(l.core) : null, seeds: sortedJson(seeds), spines: sortedJson(spines) });
-}
-
-function fnv1a(text) {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < text.length; i++) {
-    h ^= text.charCodeAt(i);
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  return h.toString(16).padStart(8, "0");
-}
-
-function rangeLabel(indices) {
-  const nums = [...new Set(indices)].sort((a, b) => a - b);
-  const parts = [];
-  for (let i = 0; i < nums.length;) {
-    let j = i;
-    while (j + 1 < nums.length && nums[j + 1] === nums[j] + 1) j++;
-    parts.push(j > i ? `${nums[i]}–${nums[j]}` : `${nums[i]}`);
-    i = j + 1;
-  }
-  return parts.join(", ");
-}
-
-/**
- * Plan 3.1: levels with the same key form one group; the tool fills the lowest and copies the result.
- * → [{ id, key, levels: [index], first, floors, label }]
- */
-function groupLevels(levels) {
-  need(Array.isArray(levels), "groupLevels", "levels");
-  const byText = new Map();
-  for (const l of levels) {
-    const text = levelKeyText(l);
-    if (!byText.has(text)) byText.set(text, []);
-    byText.get(text).push(l);
-  }
-  const order = (a, b) => (a.z - b.z) || (a.index - b.index);
-  const used = new Set();
-  const groups = [...byText.values()].map((list) => {
-    list.sort(order);
-    return list;
-  }).sort((a, b) => order(a[0], b[0]));
-  return groups.map((list) => {
-    const hash = fnv1a(levelKeyText(list[0]));
-    let key = hash;
-    for (let n = 2; used.has(key); n++) key = `${hash}${n}`;   // a hash clash between different keys
-    used.add(key);
-    const indices = list.map((l) => l.index);
-    const floors = list.length;
-    const label = `${floors === 1 ? "Level" : "Levels"} ${rangeLabel(indices)} (${floors} ${floors === 1 ? "floor" : "floors"})`;
-    return { id: `g${key}`, key, levels: indices, first: indices[0], floors, label };
-  });
-}
-
-return { plateFromState, levelsFrom, groupLevels };
-})();
-
 /* ---- src/plate/corridor.js ---- */
 const CorridorMod = (() => {
 /* ==========================================================================
@@ -4732,6 +4402,12 @@ const CorridorMod = (() => {
    corridorPolygon(spine, width, plate)          → MultiPoly (clear corridor, clipped to the plate)
    stairBlocks(kind, spine, plate, state, seeds) → [{ id, outer, door }]
    corridorGraph(spine, stairs, units, opts)     → { lengthFt, stairPathFt, deadEnds: [{ stairId, ft }], doors, nodes, edges, reach(fromPoint, maxFt) }
+   corridorKind(plate, level, state)             → { kind, core: "manual" | "auto" | null } (rework plan 4.3)
+   coreModeOf(state)                             → "auto" | "manual" | "none" (rework plan 4.2 load rule)
+   manualCoreRect(state)                         → [x0, y0, x1, y1] | null
+   minRect(plate)                                → { u, n, long, short, area, center, aspect } (minimum-area rectangle)
+   isCompact(plate)                              → boolean (no holes, area ÷ rectangle ≥ 0.85, sides ≤ 1.6)
+   stairDoor(outer, corridor, plate)             → [x, y]
    GEO                                           shared Clipper and ring helpers (fill.js uses them)
 
    Pure ES module: no DOM, no Three.js, no hidden state, inputs are never mutated.
@@ -4742,7 +4418,10 @@ const CorridorMod = (() => {
    - Point corridor: the spine is the ring at core + width ÷ 2, so the clear corridor runs from the core face
      to core + width (section 8.5: corridor outer square ±20.67 for a ±15 core). Section 3.2 also names the
      wall; the section 8 numbers decide (the wall belongs to the units, and there are no units on the core side).
-   - Kind "auto": point when the level has a core and no spines (massing or state), else bar.
+   - Kind "auto" (rework plan 4.3, corridorKind): spines → bar; a manual core → point; core mode "auto" on a compact
+     plate → point with an auto core (core.js); else bar. spineFor itself sees a core only in level.core or the manual
+     state rect: the fill injects the auto core into level.core before it calls spineFor.
+   - The massing level.core (old Tower files) is never read: levels.js drops it.
    - Bar spine without massing spines: a four-corner rectangle takes its long axis through the centroid. Other
      plates look for arms: two facing parallel edges whose band lies inside the plate and is longer than it is deep;
      the arm centerlines extend to the crossing of the next centerline (L, U, O). With no arm, the long axis of the
@@ -4919,7 +4598,7 @@ function frameRect(fr, s0, s1, t0, t1) {
   return ringArea(ring) < 0 ? ring.reverse() : ring;
 }
 
-const GEO = { SCALE, clipper, asMP, bool, union, offsetMP, offsetSegments, mpArea, ringArea, inMP, inRing, segDist, distToBoundary, bboxOf, rectRing, centroidOf, ringsOf, at, frameRect, rr3, r3 };
+const GEO = { SCALE, clipper, asMP, bool, union, offsetMP, offsetSegments, mpArea, ringArea, inMP, inRing, segDist, distToBoundary, bboxOf, rectRing, centroidOf, ringsOf, at, frameRect, rr3, r3, orient };
 
 /* ======================================================================= state helpers */
 
@@ -4930,11 +4609,34 @@ function corridorWidth(state) {
 }
 const extWallOf = (state) => (state && isNum(state.extWall) && state.extWall >= 0 ? state.extWall : 1.0);
 
+/**
+ * Core mode of a state (rework plan 4.2): state.core.mode when it is "auto", "manual" or "none"; else the load rule:
+ * a stored rect with no mode is "manual", no rect and no mode is "auto". "manual" with no valid rect falls back to
+ * "auto". → "auto" | "manual" | "none"
+ */
+function coreModeOf(state) {
+  const c = state && state.core;
+  const rect = c && c.rect;
+  const hasRect = Array.isArray(rect) && rect.length === 4 && rect.every(isNum) && Math.abs(rect[2] - rect[0]) > 1e-6 && Math.abs(rect[3] - rect[1]) > 1e-6;
+  if (c && (c.mode === "auto" || c.mode === "none")) return c.mode;
+  if (c && c.mode === "manual") return hasRect ? "manual" : "auto";      // manual with no rectangle falls back to auto
+  return hasRect ? "manual" : "auto";
+}
+
+/** The manual core rectangle [x0, y0, x1, y1] of a state, or null (mode not manual, or no valid rect). */
+function manualCoreRect(state) {
+  if (coreModeOf(state) !== "manual") return null;
+  const rect = state.core.rect;
+  if (!(Array.isArray(rect) && rect.length === 4 && rect.every(isNum))) return null;
+  if (Math.abs(rect[2] - rect[0]) < 1e-6 || Math.abs(rect[3] - rect[1]) < 1e-6) return null;
+  return rect.slice();
+}
+
+/** The core ring of a level: level.core (a drawn manual core, or one the fill injects), else the manual state rect. */
 function coreRingOf(level, state) {
   if (level && Array.isArray(level.core) && level.core.length >= 3) return level.core.map((p) => [p[0], p[1]]);
-  const rect = state && state.core && state.core.rect;
-  if (Array.isArray(rect) && rect.length === 4 && rect.every(isNum)) return rectRing(...rect);
-  return null;
+  const rect = manualCoreRect(state);
+  return rect ? rectRing(...rect) : null;
 }
 
 const validSegs = (list) => (Array.isArray(list) ? list : []).filter((s) => Array.isArray(s) && s.length >= 2 && isPt(s[0]) && isPt(s[s.length - 1]))
@@ -5020,23 +4722,77 @@ function convexHull(pts) {
   return lo.slice(0, -1).concat(hi.slice(0, -1));
 }
 
-/** Long axis direction of the minimum-area bounding rectangle (a near-square box, 1.02 or less: east-west). */
-function longAxis(plate) {
+/**
+ * Minimum-area bounding rectangle of a plate (the hull of its first outer ring).
+ * → { u, n, long, short, area, center, aspect } — u: the long-axis direction (a near-square box, aspect 1.02 or less:
+ *   east-west [1, 0]); u points east (or north when it runs north-south); n = u turned 90 degrees counter-clockwise;
+ *   long and short: the side lengths along u and n; center: the rectangle center. Null when the plate has no ring.
+ */
+function minRect(plate) {
   const hull = convexHull(ringsOf(plate)[0] || []);
+  if (hull.length < 3) return null;
   let best = null;
   for (let i = 0; i < hull.length; i++) {
     const u = dirOf(hull[i], hull[(i + 1) % hull.length]), n = [-u[1], u[0]];
     let a0 = Infinity, a1 = -Infinity, b0 = Infinity, b1 = -Infinity;
     for (const q of hull) { const a = q[0] * u[0] + q[1] * u[1], b = q[0] * n[0] + q[1] * n[1]; a0 = Math.min(a0, a); a1 = Math.max(a1, a); b0 = Math.min(b0, b); b1 = Math.max(b1, b); }
     const area = (a1 - a0) * (b1 - b0);
-    const ax = (a1 - a0) >= (b1 - b0) - 1e-9 ? u : n;
-    const aspect = Math.max(a1 - a0, b1 - b0) / Math.max(1e-9, Math.min(a1 - a0, b1 - b0));
-    if (!best || area < best.area * (1 - 1e-9)) best = { area, ax, aspect };
+    if (!best || area < best.area * (1 - 1e-9)) best = { area, u, n, a0, a1, b0, b1 };
   }
-  if (!best || best.aspect <= 1.02) return [1, 0];             // a near-square plate (a circle): east-west
-  let [x, y] = best.ax;
+  const la = best.a1 - best.a0, lb = best.b1 - best.b0;
+  const c = [best.u[0] * (best.a0 + best.a1) / 2 + best.n[0] * (best.b0 + best.b1) / 2, best.u[1] * (best.a0 + best.a1) / 2 + best.n[1] * (best.b0 + best.b1) / 2];
+  const aspect = Math.max(la, lb) / Math.max(1e-9, Math.min(la, lb));
+  let ax = la >= lb - 1e-9 ? best.u : best.n;
+  if (aspect <= 1.02) ax = [1, 0];
+  let [x, y] = ax;
   if (x < -1e-9 || (Math.abs(x) <= 1e-9 && y < 0)) { x = -x; y = -y; }
-  return [x, y];
+  if (Math.abs(x) < 1e-12) x = 0;
+  if (Math.abs(y) < 1e-12) y = 0;
+  const along = (q) => q[0] * x + q[1] * y, across = (q) => -q[0] * y + q[1] * x;
+  let lo = Infinity, hi = -Infinity, lo2 = Infinity, hi2 = -Infinity;
+  for (const q of hull) { lo = Math.min(lo, along(q)); hi = Math.max(hi, along(q)); lo2 = Math.min(lo2, across(q)); hi2 = Math.max(hi2, across(q)); }
+  return { u: [x, y], n: [-y + 0, x], long: hi - lo, short: hi2 - lo2, area: best.area, center: c, aspect };
+}
+
+/** Long axis direction of the minimum-area bounding rectangle (a near-square box, 1.02 or less: east-west). */
+function longAxis(plate) {
+  const m = minRect(plate);
+  return m ? m.u : [1, 0];
+}
+
+/**
+ * Compact plate (rework plan 4.3): one piece, no holes, plate area ÷ minimum-area rectangle area ≥ 0.85, and that
+ * rectangle's long side ÷ short side ≤ 1.6.
+ */
+function isCompact(plate) {
+  const P = asMP(plate);
+  if (P.length !== 1 || P[0].holes.length) return false;
+  const m = minRect(P);
+  if (!m || m.area <= 0) return false;
+  return mpArea(P) / m.area >= 0.85 - 1e-9 && m.aspect <= 1.6 + 1e-9;
+}
+
+/**
+ * Corridor kind and core source of a level (rework plan 4.3). → { kind: "bar" | "single" | "point", core: "manual" | "auto" | null }
+ * auto: massing or typed spines → bar (a manual core stays a block); a manual core (level.core or the state rect) → point;
+ * core mode "auto" on a compact plate → point with an auto core; else bar. Explicit "point" with core mode "auto" → auto core.
+ * The massing level.core never reaches here (levels.js drops it).
+ */
+function corridorKind(plate, level, state) {
+  need(plate, "corridorKind", "plate"); need(state, "corridorKind", "state");
+  const cor = state.corridor || {};
+  const kind = cor.kind || "auto";
+  const spines = validSegs(cor.spine).length > 0 || validSegs(level && level.spines).length > 0;
+  const manual = coreRingOf(level, state) ? "manual" : null;
+  const mode = coreModeOf(state);
+  if (kind === "auto") {
+    if (spines) return { kind: "bar", core: manual };
+    if (manual) return { kind: "point", core: "manual" };
+    if (mode === "auto" && isCompact(plate)) return { kind: "point", core: "auto" };
+    return { kind: "bar", core: null };
+  }
+  if (kind === "point") return { kind: "point", core: manual || (mode === "auto" ? "auto" : null) };
+  return { kind, core: manual };
 }
 
 /** Arms: facing parallel edge pairs with the band inside the plate, longer than deep. → [{ a, b, depth }] centerline pieces */
@@ -5128,6 +4884,14 @@ function singleSpine(plate, side, ext, width) {
 }
 
 function pointSpine(core, width) {
+  const ring = orient(core, false);
+  const axisAligned = ring.every((p, i) => { const q = ring[(i + 1) % ring.length]; return Math.abs(p[0] - q[0]) < 1e-9 || Math.abs(p[1] - q[1]) < 1e-9; });
+  if (!axisAligned) {
+    // a turned core (an auto core on a turned plate): the core ring offset by half the corridor width, miter joins
+    const off = offsetMP([{ outer: ring, holes: [] }], width / 2);
+    const r = off.length ? (cleanRing2(off[0].outer) || off[0].outer) : ring;
+    return r.map((p, i) => { const q = r[(i + 1) % r.length]; return [[r3(p[0]), r3(p[1])], [r3(q[0]), r3(q[1])]]; });
+  }
   const [x0, y0, x1, y1] = bboxOf([core]);
   const h = width / 2;
   const p = [[x0 - h, y0 - h], [x1 + h, y0 - h], [x1 + h, y1 + h], [x0 - h, y1 + h]].map((q) => [r3(q[0]), r3(q[1])]);
@@ -5173,7 +4937,7 @@ function corridorPolygon(spine, width, plate) {
 
 const ringOfBlock = (b) => (b && Array.isArray(b.outer) ? b.outer : b && Array.isArray(b.rect) && b.rect.length === 4 ? rectRing(...b.rect) : Array.isArray(b) && isPt(b[0]) ? b : null);
 
-/** The door of a stair block: the middle of its edge with clear corridor just outside. */
+/** The door of a stair block: the middle of its edge with clear corridor just outside. → [x, y] */
 function stairDoor(outer, corridor, plate) {
   const ring = orient(outer, false);
   const c = centroidOf(plate);
@@ -5477,7 +5241,1529 @@ function corridorGraph(spine, stairs, units, opts = {}) {
   };
 }
 
-return { GEO, spineFor, corridorPolygon, coreLayout, stairBlocks, corridorGraph };
+return { GEO, coreModeOf, manualCoreRect, minRect, isCompact, corridorKind, spineFor, corridorPolygon, stairDoor, coreLayout, stairBlocks, corridorGraph };
+})();
+
+/* ---- src/plate/levels.js ---- */
+const LevelsMod = (() => {
+/* ==========================================================================
+   levels.js — levels, level groups, and the drawn plate (plan sections 3.1, 4)
+
+   Contract: docs/plate-planner-technical-plan.md sections 2, 3.1 and 4.
+   Pure: no DOM, no Clipper, no mutation of inputs. Feet. Plan (x, y): x = east, y = north.
+
+   Rule choices where the plan leaves room:
+   - levelsFrom(state, project) reads the project from any of: the project
+     document ({ sections: { massing: { derived } } }), a massing section
+     ({ derived }), or the massing derived itself ({ levels }).
+   - A drawn level has index 1, zone "typical", z 0, ftf 10, program "residential"
+     (hotel mode: "hotel"), the manual core as a ring (core mode "manual" only), the typed corridor spine
+     (corridor.spine, else []) and no seeds.
+   - Project levels never carry the massing core (rework plan 4.2): `core` is null. The Plate Planner makes the core.
+   - Project levels keep the massing order (the Mid-Rise lists podium, bars, decks;
+     `index` is an id, not an elevation). They are skipped when the zone is deck,
+     crown or mechanical, when `plates` has no ring of 3 points or more, and for
+     zone podium unless state.levels.showPodium.
+   - Group key: FNV-1a (32 bit, 8 hex digits) over the JSON of the level's zone,
+     plate rings, core ring, seed rings and spines. The plan names rings, core and seeds;
+     the zone and the spines are added so a podium never merges with a bar of
+     the same footprint and a fill never copies across different corridors.
+     Rings are rounded to 0.01 ft, made counter-clockwise, and start at the vertex
+     with the smallest x, then the smallest y. Pieces and seeds are sorted.
+   - Group id "g" + key. Groups sort by the elevation of their lowest level, then index.
+     Inside a group the levels sort the same way; `first` is the lowest one, the level the tool fills.
+   - Group label: "Levels 7–22 (16 floors)", "Level 4 (1 floor)", "Levels 2, 4–6 (4 floors)".
+   - plateFromState: shapes through shapeToRing (centered on the bounding box,
+     L along the south and west, U open to the north); O = rect minus a centered
+     court; polygon points are kept as given, counter-clockwise. Rings are cleaned
+     with cleanRing2 and rounded to 0.001 ft. Outer rings run counter-clockwise, holes clockwise.
+   ========================================================================== */
+
+const { shapeToRing } = TowerGeo;
+const { cleanRing2 } = SkFmt;
+const { manualCoreRect } = CorridorMod;
+
+const isNum = (v) => typeof v === "number" && Number.isFinite(v);
+const r2 = (v) => Math.round(v * 100) / 100 + 0;
+const r3 = (v) => Math.round(v * 1000) / 1000 + 0;
+const isPair = (p) => Array.isArray(p) && p.length >= 2 && isNum(p[0]) && isNum(p[1]);
+
+function need(cond, fn, what) {
+  if (!cond) throw new Error(`${fn}: ${what} is missing or not valid`);
+}
+
+const SKIP_ZONES = new Set(["deck", "crown", "mechanical"]);
+
+/* ------------------------------------------------------------ plateFromState */
+
+const roundRing = (ring) => ring.map((p) => [r3(p[0]), r3(p[1])]);
+
+/** The drawn plate (plan section 2, `plate`) → MultiPoly [{ outer, holes }]. Throws when the shape has no area. */
+function plateFromState(plateState) {
+  need(plateState && typeof plateState === "object", "plateFromState", "plate");
+  const p = plateState;
+  const shape = String(p.shape || "rect").toLowerCase();
+  const segments = isNum(p.segments) ? Math.max(8, Math.round(p.segments)) : 64;
+  const w = isNum(p.w) ? p.w : 0, d = isNum(p.d) ? p.d : 0;
+  let outer, holes = [];
+  switch (shape) {
+    case "circle":
+      outer = shapeToRing({ type: "circle", w: w > 0 ? w : d }, { segments });
+      break;
+    case "l":
+      outer = shapeToRing({ type: "l", w, d, arm: p.arm }, { segments });
+      break;
+    case "u":
+      outer = shapeToRing({ type: "u", w, d, arm: p.arm }, { segments });
+      break;
+    case "o": {
+      outer = shapeToRing({ type: "rect", w, d }, { segments });
+      const cw = isNum(p.courtW) ? p.courtW : 0, cd = isNum(p.courtD) ? p.courtD : 0;
+      need(cw > 0 && cd > 0, "plateFromState", "the court size (courtW and courtD)");
+      if (!(cw < w && cd < d)) throw new Error(`plateFromState: the court ${cw} × ${cd} ft must be smaller than the plate ${w} × ${d} ft`);
+      const hole = shapeToRing({ type: "rect", w: cw, d: cd }, { segments });
+      holes = [hole];
+      break;
+    }
+    case "polygon":
+      outer = shapeToRing({ type: "polygon", points: (Array.isArray(p.points) ? p.points : []).filter(isPair) }, { segments });
+      break;
+    case "rect":
+      outer = shapeToRing({ type: "rect", w, d }, { segments });
+      break;
+    default:
+      throw new Error(`plateFromState: unknown plate shape "${p.shape}"`);
+  }
+  const o = cleanRing2(outer);
+  if (!o) throw new Error(`plateFromState: the ${shape} plate has no area`);
+  const hs = holes.map((h) => cleanRing2(h, { hole: true })).filter(Boolean);
+  return [{ outer: roundRing(o), holes: hs.map(roundRing) }];
+}
+
+/* ---------------------------------------------------------------- levelsFrom */
+
+function rectRing(rect) {
+  const [x0, y0, x1, y1] = rect;
+  const a = Math.min(x0, x1), b = Math.min(y0, y1), c = Math.max(x0, x1), e = Math.max(y0, y1);
+  return [[a, b], [c, b], [c, e], [a, e]];
+}
+
+const clone = (o) => JSON.parse(JSON.stringify(o));
+
+function massingLevels(project) {
+  if (!project || typeof project !== "object") return null;
+  const sec = project.sections && project.sections.massing ? project.sections.massing : project;
+  const derived = sec && sec.derived ? sec.derived : sec;
+  return derived && Array.isArray(derived.levels) ? derived.levels : null;
+}
+
+const hasArea = (mp) => Array.isArray(mp) && mp.some((pc) => pc && Array.isArray(pc.outer) && pc.outer.length >= 3);
+
+/**
+ * Plan 3.1. → [{ index, name, zone, z, ftf, program, plate, core, spines, seeds }]
+ * Drawn source: one level from state.plate. Project source: the fillable levels of the massing.
+ */
+function levelsFrom(state, project) {
+  need(state && typeof state === "object", "levelsFrom", "state");
+  if (state.source === "project") {
+    const list = massingLevels(project);
+    need(list, "levelsFrom", "the project massing levels (sections.massing.derived.levels)");
+    const showPodium = !!(state.levels && state.levels.showPodium);
+    const out = [];
+    for (const l of list) {
+      if (!l || SKIP_ZONES.has(l.zone)) continue;
+      if (l.zone === "podium" && !showPodium) continue;
+      if (!hasArea(l.plates)) continue;
+      out.push({
+        index: l.index,
+        name: l.name !== undefined ? l.name : `Level ${l.index}`,
+        zone: l.zone,
+        z: isNum(l.z) ? l.z : 0,
+        ftf: isNum(l.ftf) ? l.ftf : 10,
+        program: l.program !== undefined ? l.program : "residential",
+        plate: clone(l.plates),
+        core: null,                     // rework plan 4.2: the massing core (old Tower files) is ignored
+        spines: Array.isArray(l.spines) ? clone(l.spines) : [],
+        seeds: Array.isArray(l.seeds) ? clone(l.seeds) : [],
+      });
+    }
+    return out;
+  }
+  need(state.plate, "levelsFrom", "state.plate");
+  const rect = manualCoreRect(state);
+  const spine = state.corridor && Array.isArray(state.corridor.spine) ? state.corridor.spine : [];
+  return [{
+    index: 1, name: "Level 1", zone: "typical", z: 0, ftf: 10,
+    program: state.mode === "hotel" ? "hotel" : "residential",
+    plate: plateFromState(state.plate),
+    core: rect ? rectRing(rect) : null,
+    spines: clone(spine),
+    seeds: [],
+  }];
+}
+
+/* --------------------------------------------------------------- groupLevels */
+
+const area2 = (ring) => {
+  let a = 0;
+  for (let i = 0; i < ring.length; i++) { const p = ring[i], q = ring[(i + 1) % ring.length]; a += p[0] * q[1] - q[0] * p[1]; }
+  return a / 2;
+};
+
+/** A ring in a form that is equal for equal shapes: rounded to 0.01 ft, counter-clockwise, starting at the smallest x then y. */
+function canonRing(ring) {
+  let pts = (Array.isArray(ring) ? ring : []).filter(isPair).map((p) => [r2(p[0]), r2(p[1])]);
+  pts = pts.filter((p, i) => !i || p[0] !== pts[i - 1][0] || p[1] !== pts[i - 1][1]);
+  if (pts.length > 1 && pts[0][0] === pts[pts.length - 1][0] && pts[0][1] === pts[pts.length - 1][1]) pts.pop();
+  if (pts.length >= 3 && area2(pts) < 0) pts.reverse();
+  let s = 0;
+  for (let i = 1; i < pts.length; i++) if (pts[i][0] < pts[s][0] || (pts[i][0] === pts[s][0] && pts[i][1] < pts[s][1])) s = i;
+  return pts.slice(s).concat(pts.slice(0, s));
+}
+
+const sortedJson = (list) => list.map((x) => JSON.stringify(x)).sort();
+
+function levelKeyText(l) {
+  const pieces = (Array.isArray(l.plate) ? l.plate : []).map((pc) => ({ o: canonRing(pc.outer), h: sortedJson((pc.holes || []).map(canonRing)) }));
+  const seeds = (Array.isArray(l.seeds) ? l.seeds : []).map((s) => ({ k: s.kind, r: canonRing(s.outer) }));
+  const spines = (Array.isArray(l.spines) ? l.spines : []).map((s) => (Array.isArray(s) ? s.filter(isPair).map((p) => [r2(p[0]), r2(p[1])]) : []));
+  return JSON.stringify({ zone: l.zone || "", plate: sortedJson(pieces), core: l.core ? canonRing(l.core) : null, seeds: sortedJson(seeds), spines: sortedJson(spines) });
+}
+
+function fnv1a(text) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(8, "0");
+}
+
+function rangeLabel(indices) {
+  const nums = [...new Set(indices)].sort((a, b) => a - b);
+  const parts = [];
+  for (let i = 0; i < nums.length;) {
+    let j = i;
+    while (j + 1 < nums.length && nums[j + 1] === nums[j] + 1) j++;
+    parts.push(j > i ? `${nums[i]}–${nums[j]}` : `${nums[i]}`);
+    i = j + 1;
+  }
+  return parts.join(", ");
+}
+
+/**
+ * Plan 3.1: levels with the same key form one group; the tool fills the lowest and copies the result.
+ * → [{ id, key, levels: [index], first, floors, label }]
+ */
+function groupLevels(levels) {
+  need(Array.isArray(levels), "groupLevels", "levels");
+  const byText = new Map();
+  for (const l of levels) {
+    const text = levelKeyText(l);
+    if (!byText.has(text)) byText.set(text, []);
+    byText.get(text).push(l);
+  }
+  const order = (a, b) => (a.z - b.z) || (a.index - b.index);
+  const used = new Set();
+  const groups = [...byText.values()].map((list) => {
+    list.sort(order);
+    return list;
+  }).sort((a, b) => order(a[0], b[0]));
+  return groups.map((list) => {
+    const hash = fnv1a(levelKeyText(list[0]));
+    let key = hash;
+    for (let n = 2; used.has(key); n++) key = `${hash}${n}`;   // a hash clash between different keys
+    used.add(key);
+    const indices = list.map((l) => l.index);
+    const floors = list.length;
+    const label = `${floors === 1 ? "Level" : "Levels"} ${rangeLabel(indices)} (${floors} ${floors === 1 ? "floor" : "floors"})`;
+    return { id: `g${key}`, key, levels: indices, first: indices[0], floors, label };
+  });
+}
+
+return { plateFromState, levelsFrom, groupLevels };
+})();
+
+/* ---- src/plate/core.js ---- */
+const CoreMod = (() => {
+/* ==========================================================================
+   plate/core.js — the auto core of the Plate Planner (rework plan sections 4.2 and 4.4)
+
+   coreProgram(state, ctx)                         → { mode, cabs, autoCabs, service, units, unitArea, floors, rows, size, area, rooms, notes }
+   coreLayout2(program, center, axis, state, opts) → { rect, outer, rooms: [{ id, kind, outer }], size }
+   autoCore(plate, level, state, ctx)              → { outer, rect, rooms, program, size, axis, center }
+   coreContext(state, groups)                      → { floors, units, unitArea, perGroup } (buildPlates passes it to every level)
+   normalizeCore(core)                             → { mode, rect } (the load rule, for the page store)
+   coreModeOf(state), manualCoreRect(state)        re-exported from corridor.js
+
+   Caution: elevator counts and core sizes are seeds for early design. Verify them with a vertical transportation
+   consultant and the design team. The tool never checks a code.
+
+   Pure ES module: no DOM, no hidden state, inputs are never mutated. Feet and square feet.
+
+   Rule choices where the plan leaves room:
+   - Unit estimate U (K for hotels) = Σ over the filled groups of floors × round(levelGsf × 0.75 ÷ A). With one group this
+     is the plan formula floors × round(levelGsf × 0.75 ÷ A). A = the share-weighted target area of the mix (types with
+     share > 0); hotel A = 400 sf per key. ctx.units, when given, is U; else ctx.floors × round(ctx.levelGsf × 0.75 ÷ A).
+   - Passenger cabs: multifamily max(2, ceil(U ÷ 90)), hotel max(2, ceil(K ÷ 100)); state.elevators.count (not null)
+     overrides. Service cab: hotel 1, multifamily 1 when floors ≥ 20; state.elevators.service (not null) overrides.
+   - Core depth B = the stair depth (state.stairs.size[1], 22). Two rows of B ÷ 2 (11 ft). Cab width = state.elevators.size[0]
+     (8 ft); a cab room is 8 × 11.
+   - Row 1: the passenger cabs. Row 2: service cab 8, trash 8, electrical 8, then (hotel, back-of-house on) linen 14,
+     ice 6, data 6, and last the shaft 6. The shaft is last so that it is the room that stretches.
+   - More than 6 passenger cabs: row 1 takes ceil(n ÷ 2), row 2 floor(n ÷ 2); the row-2 rooms move to the end of row 1.
+   - Row length R = the longer row; the shorter row stretches its last room when it is a shaft, else it gets a new shaft
+     room of the missing length. Core length A = 2 × stair width + R (stairs at the two ends, full depth). Every square
+     foot of the core is a named room.
+   - Without core stairs (stairs mode "manual", or stair seeds): A = R, no stair rooms.
+   - Frame: u along the plate's long axis (minimum-area rectangle; a near-square plate: east-west), n = u turned 90
+     degrees counter-clockwise; the core is centered on the plate's area centroid; row 1 is on the +n side.
+   - Room ids: S1, S2 (stairs), E1… (cabs), SE1 (service cab), TR1 (trash), EL1 (electrical), SH1… (shafts), LN1, IC1, DA1.
+   ========================================================================== */
+
+const { GEO, minRect, coreModeOf as coreModeOf0, manualCoreRect as manualCoreRect0 } = CorridorMod;
+const { MULTIFAMILY_TYPES, HOTEL_TYPES } = MixMod;
+
+const { asMP, mpArea, centroidOf, frameRect, rr3, r3 } = GEO;
+
+const isNum = (v) => typeof v === "number" && Number.isFinite(v);
+const need = (v, fn, name) => { if (v === undefined || v === null) throw new Error(`${fn}: missing input "${name}".`); return v; };
+const r1 = (v) => { const r = Math.round(v * 10) / 10; return r === 0 ? 0 : r; };
+
+const CORE_CAUTION = "Elevator counts and core sizes are seeds for early design. Verify them with a vertical transportation consultant.";
+
+/** Room kinds of an auto core (rework plan 4.4). */
+const CORE_ROOM_KINDS = ["stair", "elevator", "service-elevator", "trash", "electrical", "shaft", "linen", "ice", "data"];
+
+const ROOM_CODE = { stair: "S", elevator: "E", "service-elevator": "SE", trash: "TR", electrical: "EL", shaft: "SH", linen: "LN", ice: "IC", data: "DA" };
+
+/** Core mode: "auto" | "manual" | "none" (the load rule: a rect with no mode is manual, else auto). */
+const coreModeOf = coreModeOf0;
+/** The manual core rectangle, or null. */
+const manualCoreRect = manualCoreRect0;
+
+/** The load rule of rework plan 4.2 for a stored core: → { mode, rect } (a new object). */
+function normalizeCore(core) {
+  const c = core && typeof core === "object" ? core : {};
+  const rect = Array.isArray(c.rect) && c.rect.length === 4 && c.rect.every(isNum) ? c.rect.slice() : null;
+  const mode = c.mode === "auto" || c.mode === "manual" || c.mode === "none" ? c.mode : rect ? "manual" : "auto";
+  return { mode, rect };
+}
+
+const modeOf = (state, ctx) => ((ctx && (ctx.mode === "hotel" || ctx.mode === "multifamily")) ? ctx.mode : state && state.mode === "hotel" ? "hotel" : "multifamily");
+
+/** The share-weighted target area A of the mix (hotel: 400 sf per key). */
+function unitAreaOf(state, mode) {
+  if (mode === "hotel") return 400;
+  const list = state && state.mix && Array.isArray(state.mix.multifamily) && state.mix.multifamily.length ? state.mix.multifamily : MULTIFAMILY_TYPES;
+  let s = 0, a = 0;
+  for (const t of list) if (isNum(t.share) && t.share > 0 && isNum(t.targetArea)) { s += t.share; a += t.share * t.targetArea; }
+  if (s > 0) return a / s;
+  const tg = list.filter((t) => isNum(t.targetArea));
+  return tg.length ? tg.reduce((x, t) => x + t.targetArea, 0) / tg.length : 900;
+}
+
+/** Units on one level by the estimate: round(levelGsf × 0.75 ÷ A). */
+const perLevel = (gsf, A) => Math.round((gsf * 0.75) / A);
+
+/**
+ * The building context of the core program: groups [{ floors, gsf }] (the filled groups, each with its level GSF).
+ * → { floors, units, unitArea, perGroup: [{ floors, gsf, units }] }
+ */
+function coreContext(state, groups) {
+  need(state, "coreContext", "state");
+  const mode = modeOf(state);
+  const A = unitAreaOf(state, mode);
+  const perGroup = (Array.isArray(groups) ? groups : []).map((g) => ({ floors: g.floors, gsf: g.gsf, units: g.floors * perLevel(g.gsf, A) }));
+  return { mode, floors: perGroup.reduce((s, g) => s + g.floors, 0), units: perGroup.reduce((s, g) => s + g.units, 0), unitArea: A, perGroup };
+}
+
+/** The two rows of a program, in order: → { row1: [{ kind, len }], row2, R } */
+function rowsOf(cabs, service, cw, extra) {
+  const cab = (kind) => ({ kind, len: cw });
+  const rooms = [...Array.from({ length: service }, () => cab("service-elevator")), ...extra];
+  let row1, row2;
+  if (cabs > 6) {
+    const n1 = Math.ceil(cabs / 2), n2 = cabs - n1;
+    row1 = [...Array.from({ length: n1 }, () => cab("elevator")), ...rooms];
+    row2 = Array.from({ length: n2 }, () => cab("elevator"));
+  } else {
+    row1 = Array.from({ length: cabs }, () => cab("elevator"));
+    row2 = rooms;
+  }
+  const len = (row) => row.reduce((s, r) => s + r.len, 0);
+  const R = Math.max(len(row1), len(row2));
+  for (const row of [row1, row2]) {
+    const gap = R - len(row);
+    if (gap <= 1e-9) continue;
+    const last = row[row.length - 1];
+    if (last && last.kind === "shaft") last.len += gap;
+    else row.push({ kind: "shaft", len: gap });
+  }
+  return { row1, row2, R };
+}
+
+/**
+ * Rework plan 4.4: the auto core program. ctx: { floors, levelGsf, mode?, units? }.
+ * → { mode, cabs, autoCabs, service, units, unitArea, floors, cab: [w, d], stair: [w, d], rows: { row1, row2, R },
+ *     size: [A, B] (with stairs), area, rooms: [{ kind, size: [a, b] }], notes }
+ */
+function coreProgram(state, ctx = {}) {
+  need(state, "coreProgram", "state");
+  const c = ctx || {};
+  const mode = modeOf(state, c);
+  const hotel = mode === "hotel";
+  const A = unitAreaOf(state, mode);
+  const floors = isNum(c.floors) && c.floors > 0 ? Math.round(c.floors) : 1;
+  let units;
+  if (isNum(c.units)) units = Math.max(0, Math.round(c.units));
+  else { need(isNum(c.levelGsf) ? c.levelGsf : null, "coreProgram", "ctx.levelGsf"); units = floors * perLevel(c.levelGsf, A); }
+  const per = hotel ? 100 : 90;
+  const autoCabs = Math.max(2, Math.ceil(units / per - 1e-9));
+  const el = state.elevators || {};
+  const cabs = isNum(el.count) ? Math.max(0, Math.round(el.count)) : autoCabs;
+  const service = isNum(el.service) ? Math.max(0, Math.round(el.service)) : hotel ? 1 : floors >= 20 ? 1 : 0;
+  const st = state.stairs && Array.isArray(state.stairs.size) && state.stairs.size.length === 2 && state.stairs.size.every((v) => isNum(v) && v > 0) ? state.stairs.size : [11, 22];
+  const cw = Array.isArray(el.size) && isNum(el.size[0]) && el.size[0] > 0 ? el.size[0] : 8;
+  const B = st[1], row = B / 2;
+  const extra = [{ kind: "trash", len: 8 }, { kind: "electrical", len: 8 }];
+  if (hotel && !(state.hotelBoh && state.hotelBoh.on === false)) extra.push({ kind: "linen", len: 14 }, { kind: "ice", len: 6 }, { kind: "data", len: 6 });
+  extra.push({ kind: "shaft", len: 6 });
+  const rows = rowsOf(cabs, service, cw, extra);
+  const Atot = 2 * st[0] + rows.R;
+  const rooms = [
+    { kind: "stair", size: [st[0], B] }, { kind: "stair", size: [st[0], B] },
+    ...rows.row1.map((r) => ({ kind: r.kind, size: [r.len, row] })),
+    ...rows.row2.map((r) => ({ kind: r.kind, size: [r.len, row] })),
+  ];
+  const notes = [
+    hotel
+      ? `Passenger cabs: max(2, ceil(${units} keys ÷ 100)) = ${autoCabs}${isNum(el.count) ? `; the elevator count ${cabs} overrides it` : ""}. Service cab: ${service}.`
+      : `Passenger cabs: max(2, ceil(${units} units ÷ 90)) = ${autoCabs}${isNum(el.count) ? `; the elevator count ${cabs} overrides it` : ""}. Service cab: ${service}${floors >= 20 ? " (20 floors or more)" : ""}.`,
+    `Unit estimate: ${floors} floor${floors === 1 ? "" : "s"} at about ${r1(A)} sf per ${hotel ? "key" : "unit"} (75% of the plate).`,
+    CORE_CAUTION,
+  ];
+  return {
+    mode, cabs, autoCabs, service, units, unitArea: A, floors, cab: [cw, row], stair: st.slice(), rows,
+    size: [Atot, B], area: Atot * B, rooms, notes,
+  };
+}
+
+/**
+ * Rework plan 4.4: the auto core layout. program: coreProgram(); center: [x, y]; axis: [ux, uy] (unit, along the long side);
+ * opts: { withStairs = true }. → { rect: [x0, y0, x1, y1] (axis-aligned cores) | null, outer: Ring, rooms: [{ id, kind, outer }], size: [A, B] }
+ */
+function coreLayout2(program, center, axis, state, { withStairs = true } = {}) {
+  need(program, "coreLayout2", "program"); need(center, "coreLayout2", "center"); need(axis, "coreLayout2", "axis");
+  const L = Math.hypot(axis[0], axis[1]) || 1;
+  const u = [axis[0] / L, axis[1] / L], n = [-u[1] + 0, u[0]];
+  const [sa, B] = program.stair;
+  const R = program.rows.R;
+  const A = (withStairs ? 2 * sa : 0) + R;
+  const o = [center[0] - u[0] * A / 2 - n[0] * B / 2, center[1] - u[1] * A / 2 - n[1] * B / 2];
+  const fr = { o, u, n };
+  const counters = {};
+  const rooms = [];
+  const add = (kind, s0, s1, t0, t1) => {
+    if (s1 - s0 < 1e-9) return;
+    counters[kind] = (counters[kind] || 0) + 1;
+    rooms.push({ id: `${ROOM_CODE[kind] || "R"}${counters[kind]}`, kind, outer: rr3(frameRect(fr, s0, s1, t0, t1)) });
+  };
+  const s0 = withStairs ? sa : 0;
+  if (withStairs) add("stair", 0, sa, 0, B);
+  // passenger cabs first (ids E1… in bank order), then the other rooms
+  const placed = [];
+  let s = s0;
+  for (const r of program.rows.row1) { placed.push({ r, a: s, b: s + r.len, t0: B / 2, t1: B }); s += r.len; }
+  s = s0;
+  for (const r of program.rows.row2) { placed.push({ r, a: s, b: s + r.len, t0: 0, t1: B / 2 }); s += r.len; }
+  for (const k of ["elevator", "service-elevator"]) for (const p of placed) if (p.r.kind === k) add(k, p.a, p.b, p.t0, p.t1);
+  for (const p of placed) if (p.r.kind !== "elevator" && p.r.kind !== "service-elevator") add(p.r.kind, p.a, p.b, p.t0, p.t1);
+  if (withStairs) add("stair", A - sa, A, 0, B);
+  const outer = rr3(frameRect(fr, 0, A, 0, B));
+  const aligned = Math.abs(u[0]) < 1e-12 || Math.abs(u[1]) < 1e-12;
+  let rect = null;
+  if (aligned) {
+    const xs = outer.map((p) => p[0]), ys = outer.map((p) => p[1]);
+    rect = [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+  }
+  return { rect, outer, rooms, size: [r3(A), r3(B)] };
+}
+
+/**
+ * Rework plan 4.4: the auto core of a point plate. plate: MultiPoly; level: a levels.js level (seeds); state; ctx: as
+ * coreProgram. → { outer, rect, rooms, program, size, axis, center, withStairs }
+ */
+function autoCore(plate, level, state, ctx = {}) {
+  need(plate, "autoCore", "plate"); need(state, "autoCore", "state");
+  const P = asMP(plate);
+  if (!P.length) throw new Error('autoCore: the input "plate" has no ring.');
+  const c = { ...(ctx || {}) };
+  if (!isNum(c.units) && !isNum(c.levelGsf)) c.levelGsf = mpArea(P);
+  const program = coreProgram(state, c);
+  const m = minRect(P);
+  const axis = m ? m.u : [1, 0];
+  const center = centroidOf(P);
+  const seeds = (level && Array.isArray(level.seeds) ? level.seeds : []).filter((x) => x && (x.kind === "stair" || x.kind === "exterior-stair"));
+  const stairMode = state.stairs && state.stairs.mode;
+  const withStairs = stairMode !== "manual" && !(stairMode === "seeds" || seeds.length);
+  const lay = coreLayout2(program, center, axis, state, { withStairs });
+  return { outer: lay.outer, rect: lay.rect, rooms: lay.rooms, program, size: lay.size, axis: axis.slice(), center: [r3(center[0]), r3(center[1])], withStairs };
+}
+
+return { CORE_CAUTION, CORE_ROOM_KINDS, coreModeOf, manualCoreRect, normalizeCore, unitAreaOf, coreContext, coreProgram, coreLayout2, autoCore };
+})();
+
+/* ---- src/plate/metrics.js ---- */
+const PlateMetricsMod = (() => {
+/* ==========================================================================
+   metrics.js — every row of plan 3.12 and the warning list (Plate Planner)
+
+   Contract: docs/plate-planner-technical-plan.md sections 3.11, 3.12 and 4.
+   Pure: no DOM, no Clipper, no mutation of inputs.
+
+   Caution: these are design-stage numbers on editable values, not a code
+   review. Unit counts, areas, corridor lengths, distances and accessible
+   counts need the design team's check against the adopted code. The tool
+   never writes "compliant".
+
+   Reads `built` (the buildPlates result):
+     { source, groups: [{ id, levels, fill, label?, first? }], placement, warnings,
+       massingUpdatedAt?, currentMassingUpdatedAt? }
+   `levels` lists the level indices of the group (numbers, or objects with .index);
+   `fill` is the LevelFill of the lowest level:
+     { plate: MultiPoly, corridor: MultiPoly, core: Ring | { outer } | null,
+       stairs: [{ id, outer, door }], elevators: [{ id, outer }],
+       support: [{ id, outer, kind }], units: [{ id, type, outer, area?, exposures, corner,
+       accessible, bays?, bay? }], runs: [{ id, length, depth }], corners?: [{ e }],
+       spine?: [[[x, y], [x, y]], …], counts?: { [typeId]: target }, warnings?: [] }
+   Optional fill fields: `spine` (the corridor graph numbers need it), `counts` (the
+   per-type targets; otherwise they are recomputed from the runs with mix.js), `corners`
+   (the wrap corner legs, for the area closure). `fill.core.stairs` and `fill.core.elevators`
+   are read when the fill keeps them inside `core`.
+
+   Rule choices where the plan leaves room:
+   - Every level of a group gets its own row (same numbers, its own index);
+     building totals are level × group floors. Building NRSF adds the level NRSF
+     rounded to 0.1 sf, so five floors of 15,077.8 give 75,389.0.
+   - GSF = plate outer areas less hole areas. Efficiency = NRSF ÷ GSF (4 decimals).
+     Unit area is `area` when given, else the polygon area.
+   - Mix targets: fill.counts, else countsFor on the run lengths at the depth that
+     carries the most run length, with the wrap corners as cornerType units
+     (hotel: less the widths of the accessible keys, which are not scored).
+   - Mix misses: |placed − target| > 1 unit on a level (scoreMix).
+   - Corridor length = clear corridor area ÷ clear width (spine length when
+     the polygon is missing). Clear width: state.corridor.width, else 6.0 (hotel) / 5.67.
+   - Corridor graph: nodes at spine ends, junctions, and the projection of each
+     stair door, linen closet and key door onto the spine. Stair door path = the
+     longest of the shortest paths between two stair doors. Dead end = for every
+     spine end that is not inside a stair block, the path length to the nearest
+     stair door; an end inside a stair block gives 0. Reported only, no code check.
+   - Hotel reach: a key door is the middle of the longest edge of the unit that lies
+     on the corridor boundary (the unit centroid when none does). A key counts
+     when its graph distance from the linen closet is at most housekeepingReach.
+   - Area closure: GSF − (NRSF + clear corridor + core + stairs + elevators + support)
+     with overlaps removed, against extWall × (Σ run lengths + the two wrap legs
+     of every corner). A run with `slots: 0` (unfilled) is left out: its remainder runs to the plate edge.
+     `area-closure` warns beyond ±1 sf.
+   - Stale massing: needs built.massingUpdatedAt (used by the fill) and
+     built.currentMassingUpdatedAt (the project now); checks() also takes the current time as a third
+     argument { massingUpdatedAt }.
+   - Warnings are { code, severity, where, message }. Build and fill warnings pass
+     through metrics.buildWarnings. Derived here: type-does-not-fit and run-too-short
+     (only when the fill passed none), mix-miss, stale-massing, area-closure.
+   - Areas round to 0.1 sf, lengths to 0.1 ft, efficiency to 0.0001, points to 0.001.
+   ========================================================================== */
+
+const { effectiveTypes, countsFor, scoreMix, requiredAccessible, MULTIFAMILY_TYPES, HOTEL_TYPES } = MixMod;
+
+const isNum = (v) => typeof v === "number" && Number.isFinite(v);
+const r1 = (v) => Math.round(v * 10) / 10 + 0;
+const r3 = (v) => Math.round(v * 1000) / 1000 + 0;
+const r4 = (v) => Math.round(v * 10000) / 10000 + 0;
+const isPair = (p) => Array.isArray(p) && p.length >= 2 && isNum(p[0]) && isNum(p[1]);
+
+const EPS = 1e-9;
+const CAUTION = "Design-stage numbers from a test fit. Unit counts, areas, corridor lengths and accessible counts are not a code check. Verify against the adopted code.";
+
+function need(cond, fn, what) {
+  if (!cond) throw new Error(`${fn}: ${what} is missing or not valid`);
+}
+
+/* -------------------------------------------------------------- geometry */
+
+const ringArea = (ring) => {
+  let a = 0;
+  for (let i = 0; i < ring.length; i++) { const p = ring[i], q = ring[(i + 1) % ring.length]; a += p[0] * q[1] - q[0] * p[1]; }
+  return a / 2;
+};
+const absArea = (ring) => Math.abs(ringArea(ring));
+const multiArea = (mp) => (Array.isArray(mp) ? mp : []).reduce((s, pc) => s + absArea(pc.outer) - (pc.holes || []).reduce((h, r) => h + absArea(r), 0), 0);
+
+function centroid(ring) {
+  const a = ringArea(ring);
+  if (Math.abs(a) < 1e-9) return [ring.reduce((s, p) => s + p[0], 0) / ring.length, ring.reduce((s, p) => s + p[1], 0) / ring.length];
+  let cx = 0, cy = 0;
+  for (let i = 0; i < ring.length; i++) {
+    const p = ring[i], q = ring[(i + 1) % ring.length], f = p[0] * q[1] - q[0] * p[1];
+    cx += (p[0] + q[0]) * f; cy += (p[1] + q[1]) * f;
+  }
+  return [cx / (6 * a), cy / (6 * a)];
+}
+
+function inRing(x, y, ring, tol = 1e-6) {
+  let inside = false;
+  for (let a = 0, b = ring.length - 1; a < ring.length; b = a++) {
+    const [xa, ya] = ring[a], [xb, yb] = ring[b];
+    const len = Math.hypot(xb - xa, yb - ya);
+    if (len > 0) {
+      const cr = (xb - xa) * (y - ya) - (yb - ya) * (x - xa);
+      if (Math.abs(cr) / len <= tol && x >= Math.min(xa, xb) - tol && x <= Math.max(xa, xb) + tol && y >= Math.min(ya, yb) - tol && y <= Math.max(ya, yb) + tol) return true;
+    }
+    if ((ya > y) !== (yb > y) && x < ((xb - xa) * (y - ya)) / (yb - ya) + xa) inside = !inside;
+  }
+  return inside;
+}
+
+function isConvex(ring) {
+  let sign = 0;
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i], b = ring[(i + 1) % ring.length], c = ring[(i + 2) % ring.length];
+    const cr = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
+    if (Math.abs(cr) < 1e-9) continue;
+    const s = cr > 0 ? 1 : -1;
+    if (sign && s !== sign) return false;
+    sign = s;
+  }
+  return true;
+}
+
+/** Sutherland–Hodgman: the area of `subject` (any simple polygon) inside `clip` (convex). */
+function clipArea(subject, clip) {
+  const ccw = ringArea(clip) > 0;
+  let out = subject.map((p) => [p[0], p[1]]);
+  for (let i = 0; i < clip.length && out.length; i++) {
+    const a = clip[i], b = clip[(i + 1) % clip.length];
+    const side = (p) => ((b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0])) * (ccw ? 1 : -1);
+    const input = out;
+    out = [];
+    for (let j = 0; j < input.length; j++) {
+      const p = input[j], q = input[(j + 1) % input.length];
+      const sp = side(p), sq = side(q);
+      if (sp >= 0) out.push(p);
+      if ((sp >= 0) !== (sq >= 0)) {
+        const t = sp / (sp - sq);
+        out.push([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t]);
+      }
+    }
+  }
+  return out.length >= 3 ? absArea(out) : 0;
+}
+
+/** Area of ring ∩ MultiPoly, for a convex `ring` (or a convex piece outer). */
+function overlapWith(ring, mp) {
+  let total = 0;
+  for (const pc of mp) {
+    let a;
+    if (isConvex(ring)) a = clipArea(pc.outer, ring) - (pc.holes || []).reduce((h, r) => h + clipArea(r, ring), 0);
+    else if (isConvex(pc.outer) && !(pc.holes || []).length) a = clipArea(ring, pc.outer);
+    else a = 0;
+    total += a;
+  }
+  return total;
+}
+
+const ringOf = (v) => (Array.isArray(v) ? v : v && Array.isArray(v.outer) ? v.outer : null);
+
+function projectOnSegment(p, a, b) {
+  const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy;
+  const t = l2 > 0 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2)) : 0;
+  const x = a[0] + dx * t, y = a[1] + dy * t;
+  return { t, pt: [x, y], dist: Math.hypot(p[0] - x, p[1] - y) };
+}
+
+/* ------------------------------------------------------- corridor graph */
+
+function spineSegments(spine) {
+  const segs = [];
+  for (const line of Array.isArray(spine) ? spine : []) {
+    const pts = (Array.isArray(line) ? line : []).filter(isPair);
+    for (let i = 0; i + 1 < pts.length; i++) if (Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]) > 1e-6) segs.push([pts[i], pts[i + 1]]);
+  }
+  return segs;
+}
+
+const nodeKey = (p) => `${Math.round(p[0] * 50)},${Math.round(p[1] * 50)}`;
+
+/**
+ * The spine as a graph. `queries` are { key, p }: each is projected onto the nearest spine piece and
+ * becomes a node. → { nodes, adj, totalFt, ends, projOf(key) → nodeId, dist(fromNode) → Map }
+ */
+function buildGraph(spine, queries) {
+  const segs = spineSegments(spine);
+  if (!segs.length) return null;
+  const cuts = segs.map(() => [0, 1]);
+  const proj = new Map();
+  for (const q of queries) {
+    let best = null;
+    segs.forEach((s, i) => {
+      const pr = projectOnSegment(q.p, s[0], s[1]);
+      if (!best || pr.dist < best.dist - 1e-9) best = { ...pr, i };
+    });
+    cuts[best.i].push(best.t);
+    proj.set(q.key, { seg: best.i, t: best.t, pt: best.pt });
+  }
+  // junctions: a spine end that lies on another piece, and proper crossings
+  segs.forEach((s, i) => {
+    segs.forEach((o, j) => {
+      if (i === j) return;
+      for (const e of o) {
+        const pr = projectOnSegment(e, s[0], s[1]);
+        if (pr.dist < 0.05) cuts[i].push(pr.t);
+      }
+      const d1 = [s[1][0] - s[0][0], s[1][1] - s[0][1]], d2 = [o[1][0] - o[0][0], o[1][1] - o[0][1]];
+      const den = d1[0] * d2[1] - d1[1] * d2[0];
+      if (Math.abs(den) > 1e-9) {
+        const t = ((o[0][0] - s[0][0]) * d2[1] - (o[0][1] - s[0][1]) * d2[0]) / den;
+        const u = ((o[0][0] - s[0][0]) * d1[1] - (o[0][1] - s[0][1]) * d1[0]) / den;
+        if (t > 0 && t < 1 && u > 0 && u < 1) cuts[i].push(t);
+      }
+    });
+  });
+  const nodes = [], ids = new Map(), adj = [];
+  const node = (p) => {
+    const k = nodeKey(p);
+    if (!ids.has(k)) { ids.set(k, nodes.length); nodes.push([p[0], p[1]]); adj.push([]); }
+    return ids.get(k);
+  };
+  let totalFt = 0;
+  segs.forEach((s, i) => {
+    const ts = [...new Set(cuts[i].map((t) => Math.round(t * 1e7) / 1e7))].sort((a, b) => a - b);
+    for (let k = 0; k + 1 < ts.length; k++) {
+      const p = [s[0][0] + (s[1][0] - s[0][0]) * ts[k], s[0][1] + (s[1][1] - s[0][1]) * ts[k]];
+      const q = [s[0][0] + (s[1][0] - s[0][0]) * ts[k + 1], s[0][1] + (s[1][1] - s[0][1]) * ts[k + 1]];
+      const a = node(p), b = node(q);
+      const len = Math.hypot(q[0] - p[0], q[1] - p[1]);
+      if (a === b || len < 1e-6) continue;
+      adj[a].push([b, len]); adj[b].push([a, len]);
+      totalFt += len;
+    }
+  });
+  const nodeOf = new Map();
+  // the node of a query: the same rounded t as the edge cuts, so the two always meet in one node
+  for (const [key, pr] of proj) {
+    const s = segs[pr.seg], tt = Math.round(pr.t * 1e7) / 1e7;
+    nodeOf.set(key, node([s[0][0] + (s[1][0] - s[0][0]) * tt, s[0][1] + (s[1][1] - s[0][1]) * tt]));
+  }
+  const ends = nodes.map((_, i) => i).filter((i) => adj[i].length === 1);
+  function dist(from) {
+    const d = new Array(nodes.length).fill(Infinity), done = new Array(nodes.length).fill(false);
+    d[from] = 0;
+    for (;;) {
+      let u = -1;
+      for (let i = 0; i < nodes.length; i++) if (!done[i] && d[i] < Infinity && (u < 0 || d[i] < d[u])) u = i;
+      if (u < 0) break;
+      done[u] = true;
+      for (const [v, w] of adj[u]) if (d[u] + w < d[v]) d[v] = d[u] + w;
+    }
+    return d;
+  }
+  return { nodes, adj, totalFt, ends, nodeOf: (key) => nodeOf.get(key), dist };
+}
+
+/** The door of a key: the middle of the longest unit edge on the corridor boundary; the centroid when none lies on it. */
+function doorOf(unit, corridor) {
+  const ring = ringOf(unit.outer);
+  if (!ring) return null;
+  const bounds = [];
+  for (const pc of corridor) { bounds.push(pc.outer); for (const h of pc.holes || []) bounds.push(h); }
+  const onBoundary = (p) => bounds.some((r) => r.some((a, i) => projectOnSegment(p, a, r[(i + 1) % r.length]).dist < 0.02));
+  let best = null, bestLen = 0.5;
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i], b = ring[(i + 1) % ring.length];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    if (len > bestLen && onBoundary(a) && onBoundary(b) && onBoundary(mid)) { best = mid; bestLen = len; }
+  }
+  return best || centroid(ring);
+}
+
+/** Plan 3.11 for one level fill. → { lengthFt, stairPathFt, deadEnds, deadEndMax, doors, reach } */
+function corridorNumbers(state, fill, width, hotel) {
+  const stairs = stairsOf(fill);
+  const corridor = Array.isArray(fill.corridor) ? fill.corridor : [];
+  const polyFt = corridor.length && width > 0 ? multiArea(corridor) / width : null;
+  const out = { lengthFt: null, stairPathFt: null, deadEnds: [], deadEndMax: null, doors: stairs.map((s) => ({ id: s.id, door: s.door ? [r3(s.door[0]), r3(s.door[1])] : null })), reach: null };
+  const spine = Array.isArray(fill.spine) ? fill.spine : [];
+  const queries = [];
+  stairs.forEach((s) => { if (isPair(s.door)) queries.push({ key: `s:${s.id}`, p: s.door }); });
+  const closets = hotel ? [...(fill.support || []), ...(Array.isArray(fill.coreRooms) ? fill.coreRooms : [])].filter((b) => b && b.kind === "linen" && ringOf(b.outer)) : [];
+  closets.forEach((b, i) => queries.push({ key: `c:${i}`, p: centroid(ringOf(b.outer)) }));
+  const units = Array.isArray(fill.units) ? fill.units : [];
+  const doors = hotel && closets.length ? units.map((u) => doorOf(u, corridor)) : [];
+  doors.forEach((p, i) => { if (p) queries.push({ key: `k:${i}`, p }); });
+
+  const g = buildGraph(spine, queries);
+  out.lengthFt = polyFt !== null ? r1(polyFt) : g ? r1(g.totalFt) : null;
+  if (!g) return out;
+
+  const sIds = stairs.filter((s) => isPair(s.door)).map((s) => ({ id: s.id, node: g.nodeOf(`s:${s.id}`) }));
+  if (sIds.length >= 2) {
+    let best = 0;
+    for (const a of sIds) { const d = g.dist(a.node); for (const b of sIds) if (b !== a && d[b.node] < Infinity && d[b.node] > best) best = d[b.node]; }
+    out.stairPathFt = r1(best);
+  } else if (sIds.length === 1) out.stairPathFt = 0;
+
+  if (sIds.length) {
+    const fromStair = sIds.map((s) => ({ ...s, d: g.dist(s.node) }));
+    for (const n of g.ends) {
+      const at = g.nodes[n];
+      const inside = stairs.find((s) => ringOf(s.outer) && inRing(at[0], at[1], ringOf(s.outer), 0.02));
+      if (inside) { out.deadEnds.push({ stairId: inside.id, ft: 0, at: [r3(at[0]), r3(at[1])] }); continue; }
+      let best = null;
+      for (const s of fromStair) if (s.d[n] < Infinity && (!best || s.d[n] < best.d)) best = { id: s.id, d: s.d[n] };
+      if (best) out.deadEnds.push({ stairId: best.id, ft: r1(best.d), at: [r3(at[0]), r3(at[1])] });
+    }
+    out.deadEndMax = out.deadEnds.reduce((m, e) => Math.max(m, e.ft), 0);
+  }
+
+  if (hotel && closets.length) {
+    const reachFt = isNum(state.housekeepingReach) ? state.housekeepingReach : 150;
+    const d = g.dist(g.nodeOf("c:0"));
+    let within = 0, farthest = 0;
+    doors.forEach((p, i) => {
+      if (!p) return;
+      const ft = d[g.nodeOf(`k:${i}`)];
+      if (ft <= reachFt + EPS) within++;
+      if (ft < Infinity && ft > farthest) farthest = ft;
+    });
+    out.reach = { reachFt, within, outside: doors.filter(Boolean).length - within, farthestFt: r1(farthest) };
+  }
+  return out;
+}
+
+/* ----------------------------------------------------------- level rows */
+
+const coreRing = (fill) => ringOf(fill.core);
+
+function stairsOf(fill) {
+  if (Array.isArray(fill.stairs)) return fill.stairs;
+  return fill.core && Array.isArray(fill.core.stairs) ? fill.core.stairs : [];
+}
+function elevatorsOf(fill) {
+  if (Array.isArray(fill.elevators)) return fill.elevators;
+  return fill.core && Array.isArray(fill.core.elevators) ? fill.core.elevators : [];
+}
+
+const unitArea = (u) => (isNum(u.area) ? u.area : ringOf(u.outer) ? absArea(ringOf(u.outer)) : 0);
+const mixKey = (state) => (state.mode === "hotel" ? "hotel" : "multifamily");
+const mixTypes = (state) => {
+  const m = state.mix && Array.isArray(state.mix[mixKey(state)]) ? state.mix[mixKey(state)] : null;
+  return m || (state.mode === "hotel" ? HOTEL_TYPES : MULTIFAMILY_TYPES);
+};
+const clearWidth = (state) => (state.corridor && isNum(state.corridor.width) ? state.corridor.width : state.mode === "hotel" ? 6.0 : 5.67);
+
+const round2 = (v) => Math.round(v * 100) / 100;
+
+/** The share-weighted target area of the multifamily mix (types with share > 0); hotel: null. */
+function targetAvgOf(state) {
+  if (state.mode === "hotel") return null;
+  let s = 0, a = 0;
+  for (const t of mixTypes(state)) if (isNum(t.share) && t.share > 0 && isNum(t.targetArea)) { s += t.share; a += t.share * t.targetArea; }
+  return s > 0 ? r1(a / s) : null;
+}
+
+/**
+ * Units against their type's area range (rework review): a unit is area-high when the fill flagged it or its area is
+ * above areaMax (+0.5 sf); in range when it is not area-high and its area is at least areaMin (−0.5 sf). Wrap corners
+ * carry the corner type, so they test against it. A type with no area range (hotel keys, accessible keys) is in range.
+ * → { units, inRange, areaHighCount, avgArea, targetAvgArea }
+ */
+function unitsInRange(state, units) {
+  need(state && typeof state === "object", "unitsInRange", "state");
+  const list = Array.isArray(units) ? units : [];
+  const rows = new Map(mixTypes(state).map((t) => [t.id, t]));
+  let inRange = 0, high = 0, sum = 0;
+  for (const u of list) {
+    const a = unitArea(u);
+    sum += a;
+    const t = rows.get(u.type);
+    const hasRange = t && isNum(t.areaMax) && state.mode !== "hotel";
+    const isHigh = !!u.areaHigh || (hasRange && a > t.areaMax + 0.5);
+    if (isHigh) { high++; continue; }
+    if (!hasRange || !isNum(t.areaMin) || a >= t.areaMin - 0.5) inRange++;
+  }
+  return { units: list.length, inRange, areaHighCount: high, avgArea: list.length ? r1(sum / list.length) : 0, targetAvgArea: targetAvgOf(state) };
+}
+
+/** The depth that carries the most run length, and every depth in use (rounded to 0.01 ft). */
+function runDepths(runs) {
+  const by = new Map();
+  for (const r of runs) {
+    if (!isNum(r.depth) || !isNum(r.length)) continue;
+    const k = round2(r.depth);
+    by.set(k, (by.get(k) || 0) + r.length);
+  }
+  let main = null;
+  for (const [k, v] of by) if (main === null || v > by.get(main)) main = k;
+  return { main, all: [...by.keys()].sort((a, b) => a - b) };
+}
+
+function targetsFor(state, fill, hotel) {
+  const runs = Array.isArray(fill.runs) ? fill.runs : [];
+  if (fill.counts && typeof fill.counts === "object") return { counts: { ...fill.counts }, dropped: [], depths: runDepths(runs).all };
+  const { main, all } = runDepths(runs);
+  if (!runs.length || (main === null && !hotel)) return { counts: null, dropped: [], depths: all };
+  const types = mixTypes(state);
+  const eff = effectiveTypes(types, main, hotel ? "hotel" : "multifamily");
+  const dropped = [];
+  for (const depth of hotel ? [] : all) for (const d of effectiveTypes(types, depth, "multifamily").dropped) dropped.push({ ...d, depth });
+  if (!eff.types.length) return { counts: null, dropped, depths: all };
+  let length = runs.reduce((s, r) => s + (isNum(r.length) ? r.length : 0), 0);
+  const units = Array.isArray(fill.units) ? fill.units : [];
+  if (hotel) {
+    for (const u of units) if (u.accessible) length -= u.bay && isNum(u.bay.from) && isNum(u.bay.to) ? Math.abs(u.bay.to - u.bay.from) : unitArea(u) / (main || 26);
+    length = Math.max(0, length);
+  }
+  const cornerType = state.mix && state.mix.cornerType ? state.mix.cornerType : "2br";
+  const corners = Array.isArray(fill.corners) ? fill.corners.map(() => cornerType) : [];
+  return { counts: countsFor(length, eff.types, corners).counts, dropped, depths: all };
+}
+
+function supportRows(fill) {
+  const byKind = {};
+  let count = 0, areaSf = 0;
+  for (const b of fill.support || []) {
+    const ring = ringOf(b && b.outer);
+    if (!ring) continue;
+    const kind = b.kind || "support";
+    if (!byKind[kind]) byKind[kind] = { count: 0, areaSf: 0 };
+    const a = absArea(ring);
+    byKind[kind].count++; byKind[kind].areaSf += a;
+    count++; areaSf += a;
+  }
+  for (const k of Object.keys(byKind)) byKind[k].areaSf = r1(byKind[k].areaSf);
+  return { count, areaSf: r1(areaSf), byKind };
+}
+
+/** Uncovered convex corners minus uncovered reflex corners of the plate (outer rings and holes). */
+function cornerSquares(plate, blocks) {
+  const polys = Array.isArray(plate) ? plate : [];
+  const signedArea = (r) => { let a = 0; for (let i = 0; i < r.length; i++) { const p = r[i], q = r[(i + 1) % r.length]; a += p[0] * q[1] - q[0] * p[1]; } return a / 2; };
+  const near = (p, a, b) => {
+    const dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy;
+    const t = L2 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L2)) : 0;
+    return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy)) < 0.01;
+  };
+  const covered = (p) => blocks.some((r) => {
+    let inside = false;
+    for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+      if (near(p, r[j], r[i])) return true;
+      const a = r[i], b = r[j];
+      if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < ((b[0] - a[0]) * (p[1] - a[1])) / (b[1] - a[1]) + a[0]) inside = !inside;
+    }
+    return inside;
+  });
+  let n = 0;
+  const walk = (ring, hole) => {
+    if (!Array.isArray(ring) || ring.length < 3) return;
+    const s = Math.sign(signedArea(ring)) * (hole ? -1 : 1);   // material sits to the left after this sign
+    for (let i = 0; i < ring.length; i++) {
+      const a = ring[(i + ring.length - 1) % ring.length], v = ring[i], b = ring[(i + 1) % ring.length];
+      const cross = (v[0] - a[0]) * (b[1] - v[1]) - (v[1] - a[1]) * (b[0] - v[0]);
+      if (Math.abs(cross) < 1e-9 || covered(v)) continue;
+      n += cross * s > 0 ? 1 : -1;
+    }
+  };
+  for (const poly of polys) { if (!poly) continue; walk(poly.outer, false); for (const h of poly.holes || []) walk(h, true); }
+  return n;
+}
+
+/** Length of the edges of leftover and remainder pieces that lie on the area line (fill.inset rings). */
+function leftoverContact(fill) {
+  const rings = [];
+  for (const pc of Array.isArray(fill.inset) ? fill.inset : []) { if (pc && pc.outer) rings.push(pc.outer); for (const h of (pc && pc.holes) || []) rings.push(h); }
+  if (!rings.length) return 0;
+  let total = 0;
+  for (const b of fill.support || []) {
+    if (!b || (b.kind !== "leftover" && b.kind !== "remainder")) continue;
+    const r = ringOf(b.outer);
+    if (!r) continue;
+    for (let i = 0; i < r.length; i++) {
+      const a = r[i], c = r[(i + 1) % r.length], L = Math.hypot(c[0] - a[0], c[1] - a[1]);
+      if (L < 0.01) continue;
+      const on = rings.some((q) => q.some((p, k) => { const e = q[(k + 1) % q.length]; return projectOnSegment(a, p, e).dist < 0.005 && projectOnSegment(c, p, e).dist < 0.005; }));
+      if (on) total += L;
+    }
+  }
+  return total;
+}
+
+/** Plan 3.12 "Area closure". */
+function closureRows(state, fill, nrsf, gsf) {
+  const corridor = Array.isArray(fill.corridor) ? fill.corridor : [];
+  const counted = corridor.slice();
+  const take = (rings) => {
+    let sum = 0;
+    for (const ring of rings) {
+      if (!ring || ring.length < 3) continue;
+      const a = absArea(ring);
+      sum += Math.max(0, a - overlapWith(ring, counted));
+      counted.push({ outer: ring, holes: [] });
+    }
+    return sum;
+  };
+  const corridorSf = multiArea(corridor);
+  const core = coreRing(fill);
+  const coreSf = take(core ? [core] : []);
+  const stairsSf = take(stairsOf(fill).map((s) => ringOf(s.outer)));
+  const elevSf = take(elevatorsOf(fill).map((s) => ringOf(s.outer)));
+  const supportSf = take((fill.support || []).map((s) => ringOf(s && s.outer)));
+  const strip = gsf - (nrsf + corridorSf + coreSf + stairsSf + elevSf + supportSf);
+  const ext = isNum(state.extWall) ? state.extWall : 1.0;
+  // a run the fill left unfilled (slots: 0) is a remainder out to the plate edge: its exterior strip is inside it
+  const runs = (Array.isArray(fill.runs) ? fill.runs : []).filter((r) => r.slots !== 0);
+  // a wrap corner covers legs[0] + legs[1] of area line (2 × e when the legs are equal; a deep corner can differ)
+  const legs = Array.isArray(fill.corners) ? fill.corners.reduce((s, c) => s + (Array.isArray(c.legs) && c.legs.length === 2 && c.legs.every(isNum) ? c.legs[0] + c.legs[1] : 2 * (isNum(c.e) ? c.e : 0)), 0) : 0;
+  // Corner squares: the strip along the runs and legs is measured on the area line, so each plate corner that no block
+  // covers adds one ext × ext square (convex corner) or takes one away (reflex corner). A point tower has four convex ones.
+  const blocks = [core, ...stairsOf(fill).map((s) => ringOf(s.outer)), ...elevatorsOf(fill).map((s) => ringOf(s.outer)),
+    ...(fill.support || []).map((s) => ringOf(s && s.outer))].filter((r) => r && r.length >= 3);
+  const cornerSq = runs.length ? cornerSquares(fill.plate, blocks) : 0;
+  // leftover pieces that stop at the area line (a hotel corner with no wrap unit) leave the strip along them open too
+  const contact = runs.length ? leftoverContact(fill) : 0;
+  const expected = ext * (runs.reduce((s, r) => s + (isNum(r.length) ? r.length : 0), 0) + legs + contact) + ext * ext * cornerSq;
+  return {
+    gsf: r1(gsf), nrsf: r1(nrsf), corridor: r1(corridorSf), core: r1(coreSf), stairs: r1(stairsSf), elevators: r1(elevSf), support: r1(supportSf),
+    strip: r1(strip), expected: r1(expected), diff: r1(strip - expected), ok: runs.length === 0 || Math.abs(strip - expected) <= 1,
+  };
+}
+
+function levelRow(state, group, fill, hotel) {
+  const units = Array.isArray(fill.units) ? fill.units : [];
+  const types = mixTypes(state);
+  const nrsfExact = units.reduce((s, u) => s + unitArea(u), 0);
+  const gsfExact = multiArea(fill.plate);
+  const nrsf = r1(nrsfExact), gsf = r1(gsfExact);
+  const byType = {};
+  for (const u of units) byType[u.type] = (byType[u.type] || 0) + 1;
+  const bayOf = new Map(types.map((t) => [t.id, isNum(t.bays) ? t.bays : 1]));
+  const bays = units.reduce((s, u) => s + (isNum(u.bays) ? u.bays : bayOf.get(u.type) || 1), 0);
+  const exposures = { N: 0, E: 0, S: 0, W: 0 };
+  for (const u of units) for (const e of new Set(u.exposures || [])) if (e in exposures) exposures[e]++;
+  const width = clearWidth(state);
+  const cn = corridorNumbers(state, fill, width, hotel);
+  const t = targetsFor(state, fill, hotel);
+  let mix = null;
+  if (t.counts) {
+    const scored = hotel ? units.filter((u) => !u.accessible) : units;
+    const s = scoreMix(scored, t.counts, types.filter((ty) => ty.id in t.counts));
+    mix = { targets: t.counts, byType: s.byType, misses: s.misses };
+  }
+  const support = supportRows(fill);
+  const closure = closureRows(state, fill, nrsfExact, gsfExact);
+  const rng = unitsInRange(state, units);
+  const stairsArr = stairsOf(fill);
+  return {
+    group: group.id,
+    units: units.length, keys: units.length, bays,
+    byType, mix,
+    nrsf, gsf, efficiency: gsf > 0 ? r4(nrsfExact / gsfExact) : 0,
+    avgUnitArea: units.length ? r1(nrsfExact / units.length) : 0,
+    inRange: rng.inRange, areaHighCount: rng.areaHighCount, avgArea: rng.avgArea, targetAvgArea: rng.targetAvgArea,
+    corners: units.filter((u) => u.corner).length,
+    exposures,
+    accessible: units.filter((u) => u.accessible).length,
+    corridor: { lengthFt: cn.lengthFt, perUnit: cn.lengthFt !== null && units.length ? r1(cn.lengthFt / units.length) : null },
+    stairDoors: { count: stairsArr.length, pathFt: cn.stairPathFt, doors: cn.doors, deadEnds: cn.deadEnds, deadEndMax: cn.deadEndMax },
+    support,
+    closure,
+    hotel: hotel ? cn.reach : null,
+    shortRuns: shortRuns(state, fill, hotel),
+    dropped: t.dropped,
+  };
+}
+
+/** Runs shorter than the smallest usable width of any type at their depth. */
+function shortRuns(state, fill, hotel) {
+  const out = [];
+  const types = mixTypes(state);
+  for (const r of Array.isArray(fill.runs) ? fill.runs : []) {
+    if (!isNum(r.length)) continue;
+    if (!hotel && !isNum(r.depth)) continue;
+    const eff = effectiveTypes(types, hotel ? null : r.depth, hotel ? "hotel" : "multifamily").types;
+    if (!eff.length) continue;
+    const min = Math.min(...eff.map((e) => e.lo));
+    if (r.length < min - EPS) out.push({ run: r.id, length: r1(r.length), min: r1(min) });
+  }
+  return out;
+}
+
+/* ------------------------------------------------------------ computeMetrics */
+
+const levelIndices = (levels) => (Array.isArray(levels) ? levels : []).map((l) => (l && typeof l === "object" ? l.index : l)).filter(isNum);
+
+const add = (obj, key, n) => { obj[key] = (obj[key] || 0) + n; };
+
+/**
+ * Plan 3.12. → {
+ *   mode, caution, floors,
+ *   groups: [{ id, label, first, levels, floors, row }],
+ *   levels: [{ index, ...row }]           one row per level of every group
+ *   (level rows and building also carry inRange, areaHighCount, avgArea, targetAvgArea: see unitsInRange)
+ *   building: { units, keys, bays, nrsf, gsf, efficiency, avgUnitArea, corners, exposures, corridorFt,
+ *               byType, mix: [{ type, count, share, target, diff, avgArea }], accessible, support },
+ *   buildWarnings, massing: { usedAt, currentAt }, warnings }
+ */
+function computeMetrics(state, built) {
+  need(state && typeof state === "object", "computeMetrics", "state");
+  need(built && Array.isArray(built.groups), "computeMetrics", "built.groups");
+  const hotel = state.mode === "hotel";
+  const types = mixTypes(state);
+  const groups = [], levels = [], buildWarnings = [];
+  for (const w of Array.isArray(built.warnings) ? built.warnings : []) buildWarnings.push({ ...w });
+
+  const total = { units: 0, bays: 0, inRange: 0, areaHigh: 0, nrsf: 0, gsf: 0, corners: 0, corridorFt: 0, accessible: 0, exposures: { N: 0, E: 0, S: 0, W: 0 }, byType: {}, areaByType: {}, targets: {}, support: 0, floors: 0 };
+  for (const g of built.groups) {
+    if (!g || !g.fill) continue;
+    const idx = levelIndices(g.levels);
+    const floors = idx.length || 1;
+    const row = levelRow(state, g, g.fill, hotel);
+    groups.push({ id: g.id, label: g.label !== undefined ? g.label : null, first: g.first !== undefined ? g.first : idx[0], levels: idx, floors, row });
+    for (const i of idx.length ? idx : [1]) levels.push({ index: i, ...row });
+    for (const w of Array.isArray(g.fill.warnings) ? g.fill.warnings : []) buildWarnings.push({ ...w, where: w.where && typeof w.where === "object" ? { ...w.where, group: g.id } : { group: g.id } });
+
+    total.floors += floors;
+    total.units += row.units * floors; total.bays += row.bays * floors;
+    total.inRange += row.inRange * floors; total.areaHigh += row.areaHighCount * floors;
+    total.nrsf += row.nrsf * floors; total.gsf += row.gsf * floors;
+    total.corners += row.corners * floors; total.accessible += row.accessible * floors;
+    total.corridorFt += (row.corridor.lengthFt || 0) * floors;
+    total.support += row.support.areaSf * floors;
+    for (const k of Object.keys(total.exposures)) total.exposures[k] += row.exposures[k] * floors;
+    for (const u of g.fill.units || []) {
+      add(total.byType, u.type, floors);
+      add(total.areaByType, u.type, unitArea(u) * floors);
+    }
+    if (row.mix) for (const k of Object.keys(row.mix.targets)) add(total.targets, k, row.mix.targets[k] * floors);
+  }
+
+  const ids = types.map((t) => t.id);
+  for (const id of Object.keys(total.byType)) if (!ids.includes(id)) ids.push(id);
+  const mixRows = ids.map((id) => {
+    const count = total.byType[id] || 0, target = total.targets[id] || 0;
+    return { type: id, count, share: total.units ? r4(count / total.units) : 0, target, diff: count - target, avgArea: count ? r1(total.areaByType[id] / count) : 0 };
+  });
+
+  const req = requiredAccessible({ ...state, mode: hotel ? "hotel" : "multifamily" }, total.units);
+  const accessible = hotel
+    ? { required: req.keys, rollIn: req.rollIn, row: req.row, beyond: req.beyond, provided: total.accessible, caution: "Seeds for an editable table. Verify against the adopted code." }
+    : { required: req.typeA, row: req.row, provided: total.accessible, caution: "Seeds for an editable table. Verify against the adopted code." };
+
+  const m = {
+    mode: hotel ? "hotel" : "multifamily",
+    caution: CAUTION,
+    floors: total.floors,
+    groups, levels,
+    building: {
+      units: total.units, keys: total.units, bays: total.bays,
+      nrsf: r1(total.nrsf), gsf: r1(total.gsf), efficiency: total.gsf > 0 ? r4(total.nrsf / total.gsf) : 0,
+      avgUnitArea: total.units ? r1(total.nrsf / total.units) : 0,
+      inRange: total.inRange, areaHighCount: total.areaHigh, avgArea: total.units ? r1(total.nrsf / total.units) : 0, targetAvgArea: targetAvgOf(state),
+      corners: total.corners, exposures: total.exposures, corridorFt: r1(total.corridorFt),
+      byType: total.byType, mix: mixRows, accessible, supportSf: r1(total.support),
+    },
+    buildWarnings,
+    massing: {
+      usedAt: built.massingUpdatedAt !== undefined ? built.massingUpdatedAt : null,
+      currentAt: built.currentMassingUpdatedAt !== undefined ? built.currentMassingUpdatedAt : null,
+    },
+  };
+  m.warnings = checks(state, m);   // so one list reaches the page, the notes, and the exports
+  return m;
+}
+
+/* ----------------------------------------------------------------- checks */
+
+const warn = (code, message, where = null, severity = "warn") => ({ code, severity, where, message });
+
+function later(current, used) {
+  if (current === null || current === undefined || used === null || used === undefined) return false;
+  const a = Date.parse(current), b = Date.parse(used);
+  if (Number.isFinite(a) && Number.isFinite(b)) return a > b;
+  return String(current) > String(used);
+}
+
+/**
+ * Plan 3.12 "Flags". → Warning[] { code, severity, where, message }:
+ * the build and fill warnings (core-blocks-corridor, type-area-high and the rest), type-does-not-fit, run-too-short,
+ * mix-miss, area-closure and stale-massing. De-duplicated by code + where (rework plan 7.3): the page badge count
+ * is the length of this list. The optional third argument { massingUpdatedAt } is the
+ * massing time now, for stale-massing when the metrics do not carry it.
+ */
+function checks(state, metrics, ctx = {}) {
+  need(state && metrics && Array.isArray(metrics.groups), "checks", "state and metrics");
+  const out = [];
+  const pass = Array.isArray(metrics.buildWarnings) ? metrics.buildWarnings : [];
+  for (const w of pass) out.push({ ...w, where: w.where ? { ...w.where } : null });
+  const has = (code) => pass.some((w) => w.code === code);
+
+  for (const g of metrics.groups) {
+    const label = g.label || g.id;
+    const row = g.row;
+    if (!has("type-does-not-fit")) {
+      const seen = new Set();
+      for (const d of row.dropped || []) {
+        const k = `${d.id}@${d.depth}`;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        out.push(warn("type-does-not-fit", `${d.name || d.id} does not fit a depth of ${round2(d.depth)} ft (${label}): it needs a width of at least ${round2(d.lo)} ft but its area range allows at most ${round2(d.hi)} ft. The type drops out of this fill and the other shares renormalize.`, { group: g.id, type: d.id, depth: d.depth }, "info"));
+      }
+    }
+    if (!has("run-too-short")) {
+      for (const r of row.shortRuns || []) out.push(warn("run-too-short", `Run ${r.run} is ${r.length} ft long, shorter than the narrowest unit (${r.min} ft) (${label}). It stays as support. Move a block or edit the mix.`, { group: g.id, run: r.run }));
+    }
+    if (row.mix) {
+      for (const id of row.mix.misses) {
+        const r = row.mix.byType.find((b) => b.type === id);
+        const t = (state.mix && (state.mix[mixKey(state)] || []).find((x) => x.id === id)) || {};
+        out.push(warn("mix-miss", `${t.name || id} has ${r.count} placed against a target of ${r.target} (${label}). The level is off by ${Math.abs(r.diff)} units. Edit the shares or the blocks.`, { group: g.id, type: id }, "info"));
+      }
+    }
+    if (row.closure && !row.closure.ok) {
+      out.push(warn("area-closure", `The areas of ${label} do not close: the strip left is ${row.closure.strip} sf against ${row.closure.expected} sf for the exterior allowance (difference ${row.closure.diff} sf).`, { group: g.id }));
+    }
+  }
+
+  const used = metrics.massing ? metrics.massing.usedAt : null;
+  const current = ctx && ctx.massingUpdatedAt !== undefined ? ctx.massingUpdatedAt : metrics.massing ? metrics.massing.currentAt : null;
+  if (later(current, used)) out.push(warn("stale-massing", "The massing changed after this fill. Re-fill to follow the new plates.", { usedAt: used, currentAt: current }));
+  // rework plan 7.3: one list, de-duplicated by code + where (the first one stays); the page badge counts this list
+  const seenKey = new Set();
+  return out.filter((w) => {
+    const k = `${w.code}|${stableJson(w.where)}`;
+    if (seenKey.has(k)) return false;
+    seenKey.add(k);
+    return true;
+  });
+}
+
+function stableJson(v) {
+  if (v === null || typeof v !== "object") return JSON.stringify(v === undefined ? null : v);
+  if (Array.isArray(v)) return `[${v.map(stableJson).join(",")}]`;
+  return `{${Object.keys(v).sort().filter((k) => v[k] !== undefined).map((k) => `${JSON.stringify(k)}:${stableJson(v[k])}`).join(",")}}`;
+}
+
+return { unitsInRange, computeMetrics, checks };
+})();
+
+/* ---- src/plate/advisor.js ---- */
+const AdvisorMod = (() => {
+/* ==========================================================================
+   plate/advisor.js — the efficiency advisor of the Plate Planner (rework plan section 6)
+
+   advise(state, built, metrics, { fillPlate }) → [{ code, severity, message, current, suggested, gain, where }]
+     state      the plate state
+     built      buildPlates(state, …) result
+     metrics    computeMetrics(state, built) result (optional: the numbers come from the fill when it is missing)
+     fillPlate  buildPlates, injected so that this module has no import cycle; it makes the real test fit of
+                plate-too-deep. Without it, plate-too-deep carries no test fit.
+   ADVISOR_CAUTION   the caution line for the card
+
+   Caution: design-stage numbers from a test fit. The advisor never edits the massing.
+
+   Rule choices where the plan leaves room:
+   - One group is advised: state.levels.selected when it is a built group, else the group with the most floors
+     (ties: the first). `where.group` names it.
+   - Target area depth: state.targetDepth, else multifamily 30 ft, hotel 26 ft. A run is too deep when its depth is more
+     than target + 2 ft.
+   - plate-too-deep: the deep runs are sorted into the two axes of the plate's minimum-area rectangle by their direction.
+     A run along an axis is deep across the other axis, so that other side is the one to narrow. The suggested side:
+     point plates core extent + 2 × corridor width + 2 × (target + extWall); bars 2 × (target + extWall) + corridor
+     width; single-loaded target + 2 × extWall + corridor width. A side is suggested only when it is shorter than now.
+     The plate is rectangular when plate area ÷ the rectangle area ≥ 0.98 (one piece, no holes). The test fit is a
+     drawn rectangle at the suggested size with the same state, except: no locks, no support blocks, no typed spine,
+     auto stairs, the same corridor kind, an auto core with the same elevator counts (a point plate) or no core (a bar).
+   - gain is square feet per floor: plate-too-deep the gross area less per floor (current GSF − test-fit GSF);
+     core-oversize the manual core area − the auto program area; unfilled-runs the unfilled area; efficiency-low
+     (0.75 − efficiency) × GSF; plate-too-shallow 0. Items sort by gain, largest first (ties: the code order below).
+   - Numbers in messages: feet to one decimal (no ".0"), square feet rounded with thousands separators, percent to one
+     decimal. Short sentences, active voice, no contractions (ASD-STE100 style).
+   ========================================================================== */
+
+const { GEO, minRect } = CorridorMod;
+const { coreProgram } = CoreMod;
+const { unitsInRange } = PlateMetricsMod;
+
+const { asMP, mpArea, ringArea } = GEO;
+
+const isNum = (v) => typeof v === "number" && Number.isFinite(v);
+const need = (v, fn, name) => { if (v === undefined || v === null) throw new Error(`${fn}: missing input "${name}".`); return v; };
+const clone = (o) => JSON.parse(JSON.stringify(o));
+const r1 = (v) => { const r = Math.round(v * 10) / 10; return r === 0 ? 0 : r; };
+const r3 = (v) => { const r = Math.round(v * 1000) / 1000; return r === 0 ? 0 : r; };
+const r4 = (v) => { const r = Math.round(v * 10000) / 10000; return r === 0 ? 0 : r; };
+
+const ADVISOR_CAUTION = "Design-stage numbers from a test fit. The advisor does not change the massing.";
+
+const ORDER = ["plate-too-deep", "core-oversize", "unfilled-runs", "plate-too-shallow", "efficiency-low"];
+
+/** Feet to one decimal: "95.3 ft", "150 ft". */
+function fmtFt(v) { const r = r1(v); return `${Number.isInteger(r) ? String(r) : r.toFixed(1)} ft`; }
+/** Square feet with thousands separators: "4,300 sf". */
+function fmtSf(v) { return `${String(Math.round(Math.abs(v))).replace(/\B(?=(\d{3})+(?!\d))/g, ",")} sf`; }
+const fmtPct = (v) => `${(Math.round(v * 1000) / 10).toFixed(1)}%`;
+const cap1 = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+const listWords = (w) => (w.length <= 1 ? w.join("") : w.length === 2 ? `${w[0]} and ${w[1]}` : `${w.slice(0, -1).join(", ")} and ${w[w.length - 1]}`);
+
+const targetDepthOf = (state) => (isNum(state.targetDepth) && state.targetDepth > 0 ? state.targetDepth : state.mode === "hotel" ? 26 : 30);
+const unitArea = (u) => (isNum(u.area) ? u.area : Math.abs(ringArea(u.outer)));
+
+function focusGroup(state, built) {
+  const groups = (built && Array.isArray(built.groups) ? built.groups : []).filter((g) => g && g.fill);
+  if (!groups.length) return null;
+  const sel = state.levels && state.levels.selected;
+  const hit = sel ? groups.find((g) => g.id === sel) : null;
+  if (hit) return hit;
+  let best = groups[0];
+  for (const g of groups) if ((g.floors || 1) > (best.floors || 1)) best = g;
+  return best;
+}
+
+/** Facade side word of a run: the outward normal of its area line, in the plate frame. */
+function sideOf(run, center) {
+  const dx = run.end[0] - run.start[0], dy = run.end[1] - run.start[1];
+  const L = Math.hypot(dx, dy) || 1;
+  let nx = -dy / L, ny = dx / L;
+  const mx = (run.start[0] + run.end[0]) / 2 - center[0], my = (run.start[1] + run.end[1]) / 2 - center[1];
+  if (nx * mx + ny * my < 0) { nx = -nx; ny = -ny; }
+  if (Math.abs(nx) >= Math.abs(ny)) return nx > 0 ? "east" : "west";
+  return ny > 0 ? "north" : "south";
+}
+
+/** "east–west" for an axis near x, "north–south" for an axis near y, else a plain phrase. */
+function axisWord(ax) {
+  const a = Math.abs(ax[0]), b = Math.abs(ax[1]);
+  if (a > 0.97) return "east–west";
+  if (b > 0.97) return "north–south";
+  return null;
+}
+
+function projExtent(ring, ax) {
+  let lo = Infinity, hi = -Infinity;
+  for (const p of ring) { const s = p[0] * ax[0] + p[1] * ax[1]; lo = Math.min(lo, s); hi = Math.max(hi, s); }
+  return hi - lo;
+}
+
+function fillNumbers(fill) {
+  const nrsf = fill.units.reduce((s, u) => s + unitArea(u), 0);
+  const gsf = mpArea(asMP(fill.plate));
+  return { units: fill.units.length, nrsf: r1(nrsf), gsf: r1(gsf), efficiency: gsf > 0 ? r4(nrsf / gsf) : 0 };
+}
+
+/** The test-fit state: a drawn rectangle of sides `size` ({ u, n } lengths) along the rectangle axes m. */
+function testFitState(state, fill, m, size) {
+  const s = clone(state);
+  s.source = "drawn";
+  const aligned = Math.abs(m.u[0]) < 1e-9 || Math.abs(m.u[1]) < 1e-9;
+  if (aligned) {
+    const alongX = Math.abs(m.u[0]) > 0.5;
+    const w = alongX ? size.u : size.n, d = alongX ? size.n : size.u;
+    s.plate = { ...(s.plate || {}), shape: "rect", w: r3(w), d: r3(d), points: [] };
+  } else {
+    const c = m.center, hu = size.u / 2, hn = size.n / 2;
+    const pt = (a, b) => [r3(c[0] + m.u[0] * a + m.n[0] * b), r3(c[1] + m.u[1] * a + m.n[1] * b)];
+    s.plate = { ...(s.plate || {}), shape: "polygon", points: [pt(-hu, -hn), pt(hu, -hn), pt(hu, hn), pt(-hu, hn)] };
+  }
+  s.locks = [];
+  s.support = [];
+  s.levels = { showPodium: false, selected: null, groups: {} };
+  s.corridor = { ...(s.corridor || {}), kind: fill.kind, spine: null };
+  s.stairs = { ...(s.stairs || {}), mode: "auto", items: [] };
+  s.core = { mode: "auto", rect: null };
+  return s;
+}
+
+/** Sides of the test plate for an area depth per axis. → { u, n } */
+function sidesFor(kind, cur, depth, coreSize, width, ext) {
+  if (kind === "point") return { u: Math.min(cur.u, coreSize[0] + 2 * width + 2 * (depth.u + ext)), n: Math.min(cur.n, coreSize[1] + 2 * width + 2 * (depth.n + ext)) };
+  if (kind === "single") return { u: cur.u, n: Math.min(cur.n, depth.n + 2 * ext + width) };
+  return { u: cur.u, n: Math.min(cur.n, 2 * (depth.n + ext) + width) };
+}
+
+/** The size text of a test plate: "w × d ft" on an axis-aligned plate (x × y), else "long × short ft". */
+function sizeText(m, size) {
+  const aligned = Math.abs(m.u[0]) < 1e-9 || Math.abs(m.u[1]) < 1e-9;
+  const alongX = Math.abs(m.u[0]) > 0.5;
+  const [a, b] = aligned ? (alongX ? [size.u, size.n] : [size.n, size.u]) : [size.u, size.n];
+  return `${fmtFt(a).replace(" ft", "")} × ${fmtFt(b)}`;
+}
+
+function tooDeep(state, built, fill, row, target, fillPlate, where) {
+  const limit = target + 2;
+  const deep = (fill.runs || []).filter((r) => isNum(r.depth) && r.depth > limit + 1e-9);
+  if (!deep.length) return null;
+  const P = asMP(fill.plate);
+  const m = minRect(P);
+  if (!m) return null;
+  const dmin = Math.min(...deep.map((r) => r.depth)), dmax = Math.max(...deep.map((r) => r.depth));
+  const depthText = Math.abs(dmax - dmin) < 0.05 ? fmtFt(dmax) : `${fmtFt(dmin).replace(" ft", "")} to ${fmtFt(dmax)}`;
+  const rng = unitsInRange(state, fill.units);
+  let head = `The units are ${depthText} deep. The target is ${fmtFt(target)}.`;
+  if (rng.areaHighCount > 0) {
+    head += ` ${rng.areaHighCount} of ${rng.units} units are larger than their area range (average ${fmtSf(rng.avgArea)}${isNum(rng.targetAvgArea) ? `, target ${fmtSf(rng.targetAvgArea)}` : ""}).`;
+  }
+  const rectangular = P.length === 1 && !P[0].holes.length && mpArea(P) / m.area >= 0.98 - 1e-9;
+  const current = { depth: r3(dmax), target, ...row, inRange: rng.inRange, areaHighCount: rng.areaHighCount, avgArea: rng.avgArea, targetAvgArea: rng.targetAvgArea };
+  const base = { code: "plate-too-deep", severity: "warn", current, where };
+  if (!rectangular || typeof fillPlate !== "function") return { ...base, message: head, suggested: { depth: target }, gain: 0, gainUnits: 0 };
+
+  // candidate search (review of the rework): area depths target − 2 … target + 6 in 1 ft steps
+  const width = isNum(fill.width) ? fill.width : 5.67;
+  const ext = isNum(state.extWall) && state.extWall >= 0 ? state.extWall : 1.0;
+  const cur = { u: m.long, n: m.short };
+  const cc = built.coreContext || {};
+  const A = isNum(cc.unitArea) && cc.unitArea > 0 ? cc.unitArea : null;
+  const depths = [];
+  for (let d = target - 2; d <= target + 6 + 1e-9; d += 1) depths.push(d);
+  const cache = new Map();
+  const tryDepth = (du, dn) => {
+    // the core of the candidate: the program for its own GSF with the same floors context
+    let coreSize = [0, 0], prog = null;
+    if (fill.kind === "point") {
+      const guess = sidesFor("point", cur, { u: du, n: dn }, fill.coreProgram ? fill.coreProgram.size : [44, 22], width, ext);
+      const gsf = guess.u * guess.n;
+      const floors = isNum(cc.floors) && cc.floors > 0 ? cc.floors : 1;
+      prog = coreProgram(state, A ? { floors, units: floors * Math.round((gsf * 0.75) / A) } : { floors, levelGsf: gsf });
+      coreSize = prog.size;
+    }
+    const size = sidesFor(fill.kind, cur, { u: du, n: dn }, coreSize, width, ext);
+    const key = `${r3(size.u)}x${r3(size.n)}`;
+    if (cache.has(key)) return cache.get(key);
+    let res = null;
+    try {
+      const s2 = testFitState(state, fill, m, size);
+      if (prog) s2.elevators = { ...(s2.elevators || {}), count: prog.cabs, service: prog.service };
+      const b2 = fillPlate(s2, { project: null });
+      const f2 = b2 && b2.groups && b2.groups[0] && b2.groups[0].fill;
+      if (f2) {
+        const n2 = fillNumbers(f2);
+        const r2 = unitsInRange(s2, f2.units);
+        const unfilled = (f2.support || []).filter((x) => x.kind === "remainder").length;
+        res = { size, depth: { u: du, n: dn }, plate: clone(s2.plate), ...n2, inRange: r2.inRange, areaHighCount: r2.areaHighCount, avgArea: r2.avgArea, unfilled,
+          moved: Math.abs(cur.u - size.u) + Math.abs(cur.n - size.n) };
+      }
+    } catch (e) { res = null; }
+    cache.set(key, res);
+    return res;
+  };
+  const better = (a, b) => {
+    if (!b) return true;
+    if (!a) return false;
+    if ((a.unfilled === 0) !== (b.unfilled === 0)) return a.unfilled === 0;
+    if (a.inRange !== b.inRange) return a.inRange > b.inRange;
+    if (Math.abs(a.efficiency - b.efficiency) > 1e-6) return a.efficiency > b.efficiency;
+    return a.moved < b.moved - 1e-9;
+  };
+  let best = null;
+  // 1) the same depth on both axes, 2) then each axis alone around the best (a point plate)
+  for (const d of depths) { const r = tryDepth(d, d); if (better(r, best)) best = r; }
+  if (best && fill.kind === "point") {
+    const d0 = best.depth;
+    for (const d of depths) { const r = tryDepth(d, d0.n); if (better(r, best)) best = r; }
+    const d1 = best.depth;
+    for (const d of depths) { const r = tryDepth(d1.u, d); if (better(r, best)) best = r; }
+  }
+  const tool = built.source === "project" ? "in the Tower Generator" : "on the Plate tab";
+  if (!best || best.unfilled > 0) {
+    return { ...base, message: `${head} No test size with runs ${fmtFt(target - 2).replace(" ft", "")} to ${fmtFt(target + 6)} deep fills every run. Aim for runs near ${fmtFt(target)} deep.`,
+      suggested: { depth: target, tested: cache.size }, gain: 0, gainUnits: 0 };
+  }
+  const less = (row.gsf || 0) - best.gsf;
+  const gainUnits = best.inRange - rng.inRange;
+  const msg = `${head} Narrow the plate to ${sizeText(m, best.size)} ${tool}. Test fit at that size: ${best.units} units, ${best.inRange} in range, ${fmtPct(best.efficiency)} efficiency.`;
+  return {
+    ...base, message: msg,
+    suggested: { depth: target, depths: { long: best.depth.u, short: best.depth.n }, size: { long: r3(best.size.u), short: r3(best.size.n) }, axis: m.u.slice(), plate: best.plate,
+      units: best.units, nrsf: best.nrsf, gsf: best.gsf, efficiency: best.efficiency, inRange: best.inRange, areaHighCount: best.areaHighCount, avgArea: best.avgArea, tested: cache.size },
+    gain: r1(Math.max(0, less)), gainUnits,
+  };
+}
+
+function tooShallow(state, fill, where) {
+  const types = state.mix && Array.isArray(state.mix[state.mode === "hotel" ? "hotel" : "multifamily"]) ? state.mix[state.mode === "hotel" ? "hotel" : "multifamily"] : [];
+  const out = [];
+  const depth = isNum(fill.depth) ? fill.depth : 0;
+  for (const d of fill.dropped || []) {
+    const t = types.find((x) => x.id === d.id);
+    if (!t || !isNum(t.areaMin) || !isNum(t.widthMax) || !(t.share > 0)) continue;
+    const dNeed = t.areaMin / t.widthMax;
+    if (dNeed <= depth + 1e-9) continue;
+    const nm = t.name || t.id;
+    out.push({
+      code: "plate-too-shallow", severity: "info",
+      message: `The ${nm} needs runs ${fmtFt(dNeed)} deep or more. The runs are ${fmtFt(depth)} deep. Make the runs ${fmtFt(dNeed - depth)} deeper or remove the ${nm}.`,
+      current: { depth: r3(depth), type: d.id }, suggested: { depth: r3(dNeed), deeperBy: r3(dNeed - depth) }, gain: 0, gainUnits: 0, where: { ...where, type: d.id },
+    });
+  }
+  return out;
+}
+
+function coreOversize(state, built, fill, where) {
+  if (fill.coreMode !== "manual" || !fill.core) return null;
+  const coreArea = Math.abs(ringArea(fill.core));
+  const cc = built.coreContext || {};
+  const prog = coreProgram(state, isNum(cc.units) ? { floors: cc.floors, units: cc.units } : { floors: 1, levelGsf: mpArea(asMP(fill.plate)) });
+  if (!(coreArea > 1.25 * prog.area)) return null;
+  const gain = coreArea - prog.area;
+  return {
+    code: "core-oversize", severity: "warn",
+    message: `The core is ${fmtSf(coreArea)}. The program needs ${fmtSf(prog.area)}. Reset the core to auto to gain about ${fmtSf(gain)} per floor.`,
+    current: { coreSf: r1(coreArea) }, suggested: { coreSf: r1(prog.area), size: prog.size.slice(), cabs: prog.cabs, service: prog.service }, gain: r1(gain), gainUnits: 0, where,
+  };
+}
+
+function unfilled(fill, where) {
+  const rem = (fill.support || []).filter((s) => s.kind === "remainder");
+  if (!rem.length) return null;
+  const a = rem.reduce((s, x) => s + Math.abs(ringArea(x.outer)), 0);
+  const n = rem.length;
+  return {
+    code: "unfilled-runs", severity: "warn",
+    message: `${n} ${n === 1 ? "run is" : "runs are"} unfilled (${fmtSf(a)}). Move a stair or the core, or fill the run by hand.`,
+    current: { runs: n, areaSf: r1(a) }, suggested: null, gain: r1(a), gainUnits: 0, where,
+  };
+}
+
+/** Rework plan section 6. → [{ code, severity, message, current, suggested, gain, where }] sorted by gain. */
+function advise(state, built, metrics, { fillPlate = null } = {}) {
+  need(state, "advise", "state"); need(built, "advise", "built");
+  const g = focusGroup(state, built);
+  if (!g) return [];
+  const fill = g.fill;
+  const where = { group: g.id };
+  const mrow = metrics && Array.isArray(metrics.groups) ? (metrics.groups.find((x) => x.id === g.id) || {}).row : null;
+  const row = mrow ? { units: mrow.units, nrsf: mrow.nrsf, gsf: mrow.gsf, efficiency: mrow.efficiency } : fillNumbers(fill);
+  const target = targetDepthOf(state);
+  const items = [];
+  const deep = tooDeep(state, built, fill, row, target, fillPlate, where);
+  if (deep) items.push(deep);
+  items.push(...tooShallow(state, fill, where));
+  const co = coreOversize(state, built, fill, where);
+  if (co) items.push(co);
+  const un = unfilled(fill, where);
+  if (un) items.push(un);
+  if (!items.length && row.efficiency < 0.70) {
+    items.push({
+      code: "efficiency-low", severity: "info",
+      message: `Efficiency is ${fmtPct(row.efficiency)}. Typical test fits reach 75 to 82%.`,
+      current: { efficiency: row.efficiency }, suggested: { efficiency: 0.75 }, gain: r1(Math.max(0, (0.75 - row.efficiency) * row.gsf)), gainUnits: 0, where,
+    });
+  }
+  return items.map((it, i) => ({ it, i })).sort((a, b) => ((b.it.gainUnits || 0) - (a.it.gainUnits || 0)) || (b.it.gain - a.it.gain) || (ORDER.indexOf(a.it.code) - ORDER.indexOf(b.it.code)) || a.i - b.i).map((x) => x.it);
+}
+
+return { ADVISOR_CAUTION, fmtFt, fmtSf, advise };
 })();
 
 /* ---- src/plate/fill.js ---- */
@@ -5490,15 +6776,27 @@ const FillMod = (() => {
    runsAndCorners(zone, plate, corridor, blocks, state) → { runs, corners, pockets, remainders, bands, warnings }
    slotsFor(run, types, W)                              → n | null
    fillRuns(runs, types, counts, opts)                  → [{ runId, units: [{ type, from, to, width, accessible }], short }]
-   fillLevel(level, state, { counters, locks, accessible } = {}) → LevelFill
+   fillLevel(level, state, { counters, locks, accessible, rotation, core, maxDepth } = {}) → LevelFill
+                                                         core: { floors, units | levelGsf, mode } (core.js coreProgram ctx)
    buildPlates(state, { project = null } = {})          → { source, groups: [{ id, key, label, first, floors, levels, fill }],
-                                                            levels, placement, warnings, notes, massingUpdatedAt }
+                                                            levels, placement, warnings, notes, coreContext, massingUpdatedAt }
 
-   LevelFill = { index, kind, width, spine, plate, inset, corridor, corridorClear, core, stairs: [{ id, outer, door }],
-                 elevators: [{ id, outer, service }], support: [{ id, outer, kind }], units, runs, corners: [{ ring, at, e, outer, type }],
-                 counts, placed, dropped, depth, graph: { lengthFt, stairPathFt, deadEnds, reach }, warnings }
+   LevelFill = { index, kind, width, spine, plate, inset, corridor, corridorClear, core, coreMode, coreRooms, coreProgram, maxDepth,
+                 stairs: [{ id, outer, door }], elevators: [{ id, outer, service }], support: [{ id, outer, kind, why? }], units, runs,
+                 corners: [{ ring, at, e, legs, outer, type }], counts, placed, dropped, deep, depth,
+                 graph: { lengthFt, stairPathFt, deadEnds, reach }, warnings }
+     core        Ring | null (the core outline: auto, manual, or null)
+     coreMode    "auto" (made here, point plates) | "manual" (state.core.rect) | "none"
+     coreRooms   [{ id, kind, outer }] of an auto core (they tile `core`); [] otherwise. Its stairs and cabs are also in
+                 `stairs` and `elevators`.
+     coreProgram the core.js program of an auto core (cabs, service, size, notes), else null
+     maxDepth    the unit depth cap used on this level (ft), or null
+     support kinds: "pocket" (concave corner), "remainder" (an unfilled run: run-too-short, why "run-too-short"),
+                 "leftover" (beside a block, a corner with no wrap unit, an arm end; why "block" | "corner" | "leftover"),
+                 "trim" (beyond the depth cap, why "depth-cap"), and the state support and hotel back-of-house kinds.
+     deep        [{ id, lo, hi, depth, areaLo, areaHi }]: types that are deep on this level (rework plan 3)
    unit = { id, type, outer, area, width, exposures, corner, accessible, bays, bay: { from, to }, ring, demising, door, runId,
-            wrap?, locked? }
+            wrap?, locked?, areaHigh? }    areaHigh: true when the unit is larger than its type's area range
 
    Pure ES module: no DOM, no Three.js, no hidden state, inputs are never mutated. Clipper at SCALE 1000.
    Coordinates round to 0.001 ft, unit areas to 0.1 sf.
@@ -5528,9 +6826,20 @@ const FillMod = (() => {
      placement rotation (counter-clockwise degrees); a unit with two sectors is a corner unit.
    - Targets (fill.counts): countsFor(ΣL, types at the length-weighted depth, wrap corners + locked units), hotel less the
      accessible widths. Deficit counters start with the corner and locked units and carry from run to run.
+   Rework (docs/plate-planner-rework-plan.md):
+   - Deep runs (section 3): a type too deep for its area range fills by its width range; its units carry areaHigh, and
+     one type-area-high note (info) per type names the deepest run. A wrap corner larger than the corner type's
+     areaMax carries areaHigh too.
+   - Core (sections 4.2 to 4.4): corridorKind decides; an auto core (core.js) enters level.core before spineFor; its
+     stair rooms are the stairs (doors from stairDoor), its cab rooms the elevators; no extra hotel back-of-house. A
+     point corridor is the core grown by the clear width less the core. The massing level.core is never read.
+   - Depth cap (section 5): fillLevel({ maxDepth }); buildPlates passes levels.groups[gid].maxDepth, else fill.maxDepth.
+     The band farther than maxDepth from the area line becomes "trim"; corners use min(d, maxDepth) as their depth.
+   - buildPlates writes coreContext { floors, units, unitArea }: the building estimate the core program used.
    ========================================================================== */
 
-const { GEO, spineFor, corridorPolygon, stairBlocks, corridorGraph, coreLayout } = CorridorMod;
+const { GEO, spineFor, corridorPolygon, stairBlocks, corridorGraph, coreLayout, corridorKind, stairDoor } = CorridorMod;
+const { autoCore, coreContext } = CoreMod;
 const { effectiveTypes, weightedWidth, countsFor, requiredAccessible, MULTIFAMILY_TYPES, HOTEL_TYPES } = MixMod;
 const { levelsFrom, groupLevels } = LevelsMod;
 const { cleanRing2 } = SkFmt;
@@ -5547,6 +6856,8 @@ const dot = (a, b) => a[0] * b[0] + a[1] * b[1];
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1]];
 const dirOf = (a, b) => { const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; return [(b[0] - a[0]) / L, (b[1] - a[1]) / L]; };
 const warn = (code, message, where = {}, severity = "warn") => ({ code, severity, where, message });
+const fmtN = (v) => { const r = Math.round(v * 10) / 10; return Number.isInteger(r) ? String(r) : r.toFixed(1); };
+const fmtSf = (v) => (isNum(v) ? String(Math.round(v)).replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "?");
 
 const MAX_RUN = 400;              // ft: longer runs split at the middle (plan section 11)
 const MIN_DEPTH = 0.5;            // ft: a corridor this close to the area line leaves no band
@@ -5792,7 +7103,10 @@ function facadeContacts(ring, rings) {
 /** Leftover pieces of the band partition → corner zones, pockets, remainders. */
 function classifyLeftovers(zone0, bands, rings, blocks, opts) {
   const all = bands.flatMap((b) => b.band);
-  const left = all.length ? bool("diff", zone0, all) : asMP(zone0);
+  const left0 = all.length ? bool("diff", zone0, all) : asMP(zone0);
+  // an opening of 0.005 ft drops the hairline slivers that rounding leaves between turned bands and the corridor,
+  // so the corner zones of a turned plate stay separate pieces (exact on axis-aligned plates)
+  const left = left0.length ? offsetMP(offsetMP(left0, -0.005), 0.005) : left0;
   const corners = [], pockets = [], remainders = [];
   const blk = blockMP(blocks);
   for (const pc of left) {
@@ -5864,7 +7178,7 @@ const projRange = (fr, ring) => { let lo = Infinity, hi = -Infinity; for (const 
  * → { runs: [{ id, ring, edge, from, to, length, depth, band, start, end, fr, a, b, bandId }], corners: [{ ring, at, e, outer, legs }],
  *     pockets: [{ outer }], remainders: [{ outer, why }], bands, rings, warnings }
  */
-function runsAndCorners(zone, plate, corridor, blocks, state, cache = null) {
+function runsAndCorners(zone, plate, corridor, blocks, state, cache = null, { maxDepth = null } = {}) {
   need(plate, "runsAndCorners", "plate"); need(corridor, "runsAndCorners", "corridor"); need(state, "runsAndCorners", "state");
   const ext = extWallOf(state);
   const blockList = (Array.isArray(blocks) ? blocks : []).filter((b) => b && Array.isArray(b.outer) && b.outer.length >= 3);
@@ -5876,6 +7190,7 @@ function runsAndCorners(zone, plate, corridor, blocks, state, cache = null) {
   const types = mixTypes(state);
   const cornerId = (state.mix && state.mix.cornerType) || "2br";
   const cornerType = types.find((t) => t.id === cornerId) || null;
+  const cap = isNum(maxDepth) && maxDepth > 0 ? maxDepth : null;
 
   // reservations per band
   const res = new Map();
@@ -5895,7 +7210,8 @@ function runsAndCorners(zone, plate, corridor, blocks, state, cache = null) {
   for (const c of cz) {
     if (!cornerType || !isNum(cornerType.targetArea)) { left.push({ outer: c.piece.outer, holes: c.piece.holes, why: "corner" }); continue; }
     const ds = [c.B1, c.B2].filter(Boolean).map((b) => b.depth);
-    const d = ds.reduce((s, v) => s + v, 0) / ds.length;
+    const d0 = ds.reduce((s, v) => s + v, 0) / ds.length;
+    const d = cap && d0 > cap ? cap : d0;            // rework plan 5: the depth cap is the corner depth
     const A = cornerType.targetArea;
     let e = Math.min(2 * d, Math.max(d, (A + d * d) / (2 * d)));
     // legs stop at the first reservation
@@ -5955,7 +7271,33 @@ function runsAndCorners(zone, plate, corridor, blocks, state, cache = null) {
   }
   runs.sort((p, q) => p.ringIndex - q.ringIndex || p.from - q.from || p.a - q.a);
   runs.forEach((r, i) => { r.id = `R${i + 1}`; });
-  return { runs, corners, pockets, remainders: left, reserved, bands, rings, zone0, warnings };
+
+  // rework plan 5: the unit depth cap. The part of a band (or a wrap corner) farther than maxDepth from the area line
+  // becomes support of kind "trim"; the run keeps the rest, and its depth is the remaining area ÷ its length.
+  const trims = [];
+  if (cap) {
+    const deepZone = offsetMP(base.inset, -cap);
+    if (deepZone.length) {
+      for (const r of runs) {
+        if (r.depth <= cap + 1e-6) continue;
+        const cut = bool("int", r.band, deepZone);
+        if (mpArea(cut) < 0.01) continue;
+        r.band = bool("diff", r.band, deepZone);
+        r.depth = mpArea(r.band) / r.length;
+        r.capped = true;
+        for (const pc of cut) trims.push({ outer: pc.outer, holes: pc.holes });
+      }
+      for (const c of corners) {
+        const cut = bool("int", [{ outer: c.outer, holes: [] }], deepZone);
+        if (mpArea(cut) < 0.01) continue;
+        const rest = largest(bool("diff", [{ outer: c.outer, holes: [] }], deepZone));
+        if (!rest) continue;
+        c.outer = rest.outer;
+        for (const pc of cut) trims.push({ outer: pc.outer, holes: pc.holes });
+      }
+    }
+  }
+  return { runs, corners, pockets, remainders: left, reserved, bands, rings, zone0, trims, warnings };
 }
 
 /** Facade point of a band at axis position s (the far end of the cut line). */
@@ -6047,7 +7389,8 @@ function deficitOrder(types, counts, placed) {
 /**
  * Plan 3.7. runs: [{ id, length, depth, acc?: [{ at: "start" | "end", width }] }]; types: the mix types (state rows);
  * counts: { [id]: target }; opts: { mode, placed, cache }. Deficit counters carry from run to run (opts.placed is copied).
- * → [{ runId, units: [{ type, from, to, width, accessible }], short, dropped }]
+ * → [{ runId, units: [{ type, from, to, width, accessible, areaHigh? }], short, dropped, deep }]
+ *   areaHigh: the type is deep at this run (rework plan 3): the unit fills by width and its area is above the range.
  */
 function fillRuns(runs, types, counts, opts = {}) {
   need(runs, "fillRuns", "runs"); need(types, "fillRuns", "types"); need(counts, "fillRuns", "counts");
@@ -6064,10 +7407,10 @@ function fillRuns(runs, types, counts, opts = {}) {
     const accW = acc.reduce((s, a) => s + a.width, 0);
     const L = run.length - accW;
     const ts = eff.types;
-    if (!ts.length || L <= 0) { out.push({ runId: run.id, units: [], short: true, dropped: eff.dropped }); continue; }
+    if (!ts.length || L <= 0) { out.push({ runId: run.id, units: [], short: true, dropped: eff.dropped, deep: eff.deep || [] }); continue; }
     const { W, Wbay } = weightedWidth(ts);
     const n = slotsFor({ length: L }, ts, mode === "hotel" ? Wbay : W, cache);
-    if (n === null) { out.push({ runId: run.id, units: [], short: true, dropped: eff.dropped }); continue; }
+    if (n === null) { out.push({ runId: run.id, units: [], short: true, dropped: eff.dropped, deep: eff.deep || [] }); continue; }
     const table = sumsTable(ts, n, cache);
     const chosen = [];
     let left = n, lo = 0, hi = 0;
@@ -6094,9 +7437,9 @@ function fillRuns(runs, types, counts, opts = {}) {
     const units = [];
     let s = 0;
     for (const a of acc.filter((x) => x.at === "start")) { units.push({ type: "accessible", from: s, to: s + a.width, width: a.width, accessible: true, bays: 1 }); s += a.width; }
-    chosen.forEach((t, i) => { units.push({ type: t.id, from: s, to: s + widths[i], width: widths[i], accessible: false, bays: t.bays || 1, lo: t.lo, hi: t.hi }); s += widths[i]; });
+    chosen.forEach((t, i) => { units.push({ type: t.id, from: s, to: s + widths[i], width: widths[i], accessible: false, bays: t.bays || 1, lo: t.lo, hi: t.hi, ...(t.areaOff === "deep" ? { areaHigh: true } : {}) }); s += widths[i]; });
     for (const a of acc.filter((x) => x.at === "end")) { units.push({ type: "accessible", from: s, to: s + a.width, width: a.width, accessible: true, bays: 1 }); s += a.width; }
-    out.push({ runId: run.id, units, short: false, dropped: eff.dropped });
+    out.push({ runId: run.id, units, short: false, dropped: eff.dropped, deep: eff.deep || [] });
   }
   return out;
 }
@@ -6164,7 +7507,7 @@ const pad2 = (n) => String(n).padStart(2, "0");
  *         accessible: { perFloor (hotel keys on this level), typeA (multifamily flags on this level) },
  *         rotation (placement degrees) }
  */
-function fillLevel(level, state, { counters = null, locks = null, accessible = null, rotation = null } = {}) {
+function fillLevel(level, state, { counters = null, locks = null, accessible = null, rotation = null, core: coreCtx = null, maxDepth = null } = {}) {
   need(level, "fillLevel", "level"); need(state, "fillLevel", "state");
   const plate = asMP(need(level.plate, "fillLevel", "level.plate"));
   if (!plate.length) throw new Error('fillLevel: the input "level.plate" has no ring.');
@@ -6174,14 +7517,28 @@ function fillLevel(level, state, { counters = null, locks = null, accessible = n
   const warnings = [];
   const where = { level: level.index };
 
-  // corridor, core, stairs
-  const sp = spineFor(plate, level, state);
+  // corridor kind and core source (rework plan 4.3): an auto core enters the level before the spine
+  const ck = corridorKind(plate, level, state);
+  let auto = null, lvl = level;
+  if (ck.core === "auto") {
+    auto = autoCore(plate, level, state, coreCtx || {});
+    lvl = { ...level, core: auto.outer };
+  }
+  const st2 = { ...state, corridor: { ...(state.corridor || {}), kind: ck.kind } };
+  const sp = spineFor(plate, lvl, st2);
   for (const w of sp.warnings) warnings.push({ ...w, where });
   const { kind, spine, width } = sp;
-  const clear = corridorPolygon(spine, width, plate);
+  if (auto && kind !== "point") auto = null;
   let core = sp.core ? sp.core.map((p) => [p[0], p[1]]) : null;
+  // a point corridor is the core ring grown by the clear width (miter corners), less the core: the same band as the
+  // spine offset, without the rounding notches that square caps leave on a turned core
+  const clear = kind === "point" && core
+    ? bool("int", bool("diff", offsetMP([{ outer: core, holes: [] }], width), [{ outer: core, holes: [] }]), plate)
+    : corridorPolygon(spine, width, plate);
   if (core && kind !== "point") core = coreMove(core, clear, plate, warnings);
-  const stairs = stairBlocks(kind, spine, plate, state, level.seeds);
+  const stairs = auto && auto.withStairs
+    ? auto.rooms.filter((r) => r.kind === "stair").map((r) => ({ id: r.id, outer: r.outer, door: stairDoor(r.outer, clear, plate) }))
+    : stairBlocks(kind, spine, plate, st2, level.seeds);
   const stairSize = state.stairs && Array.isArray(state.stairs.size) ? state.stairs.size : [11, 22];
 
   // bands (the blocks known now only break ties between equal depths)
@@ -6205,7 +7562,9 @@ function fillLevel(level, state, { counters = null, locks = null, accessible = n
   const seedCabs = (Array.isArray(level.seeds) ? level.seeds : []).filter((s) => s && s.kind === "elevator" && Array.isArray(s.outer));
   const firstBand = base.bands[0] || null;
   if (seedCabs.length) seedCabs.forEach((s, k) => elevators.push({ id: `E${k + 1}`, outer: rr3(s.outer), service: false }));
-  else if (core) {
+  else if (auto) {
+    for (const r of auto.rooms) if (r.kind === "elevator" || r.kind === "service-elevator") elevators.push({ id: r.id, outer: r.outer, service: r.kind === "service-elevator" });
+  } else if (core) {
     const lay = coreLayout(core, stairSize, cab, guestN + serviceN, { withStairs: kind === "point" });
     if (!lay.fits) warnings.push(warn("elevators-do-not-fit", "The elevator cabs do not fit inside the core.", where));
     lay.cabs.forEach((r, k) => elevators.push({ id: k < guestN ? `E${k + 1}` : `SE${k - guestN + 1}`, outer: rr3(r), service: k >= guestN }));
@@ -6230,7 +7589,7 @@ function fillLevel(level, state, { counters = null, locks = null, accessible = n
       }
     }
   }
-  if (core && hotel && state.hotelBoh && state.hotelBoh.on !== false && !seedCabs.length) {
+  if (core && !auto && hotel && state.hotelBoh && state.hotelBoh.on !== false && !seedCabs.length) {
     let best = null;
     for (const b of base.bands) {
       if (mpArea(bool("int", b.band, [core])) <= 1) continue;
@@ -6257,7 +7616,8 @@ function fillLevel(level, state, { counters = null, locks = null, accessible = n
   ];
 
   // runs, corners, pockets, remainders
-  const rc = runsAndCorners(null, plate, clear, blocks, state, base);
+  const cap = isNum(maxDepth) && maxDepth > 0 ? maxDepth : null;
+  const rc = runsAndCorners(null, plate, clear, blocks, state, base, { maxDepth: cap });
   const { runs, corners, pockets, rings } = rc;
   const types = mixTypes(state);
 
@@ -6304,6 +7664,19 @@ function fillLevel(level, state, { counters = null, locks = null, accessible = n
 
   const fills = fillRuns(runs.map((r) => ({ id: r.id, length: r.length, depth: r.depth, acc: accByRun.get(r.id) || [] })), types, counts, { mode, placed: placed0 });
 
+  // rework plan 3: one type-area-high note per deep type (the deepest filled run where it is deep; a type with share 0
+  // only when the run holds a unit of it)
+  const deepBy = new Map();
+  const shareOf = new Map(types.map((t) => [t.id, isNum(t.share) ? t.share : 0]));
+  fills.forEach((f, i) => {
+    if (f.short) return;
+    for (const d of f.deep || []) {
+      if (!(shareOf.get(d.id) > 0) && !f.units.some((u) => u.type === d.id)) continue;
+      const prev = deepBy.get(d.id);
+      if (!prev || runs[i].depth > prev.depth + 1e-9) deepBy.set(d.id, { ...d, depth: runs[i].depth });
+    }
+  });
+
   // unit polygons
   const units = [];
   const remainders = rc.remainders.map((r) => ({ outer: r.outer, why: r.why }));
@@ -6333,11 +7706,13 @@ function fillLevel(level, state, { counters = null, locks = null, accessible = n
       units.push({
         type: u.type, outer, area: r1(Math.abs(ringArea(outer))), width: Math.round(u.width * 1000) / 1000,
         lo: u.lo, hi: u.hi, accessible: !!u.accessible, accessibleKind: u.accessible ? "key" : undefined, bays: u.bays,
+        ...(u.areaHigh ? { areaHigh: true } : {}),
         bay: { from: r3(from), to: r3(to) }, ring: R.id, demising: [d1, d2].filter(Boolean), door: [r3(door[0]), r3(door[1])],
         runId: run.id, key: [run.ringIndex, from],
       });
     }
   });
+  const cornerRow = types.find((t) => t.id === cornerId) || null;
   for (const c of corners) {
     const R = rings[c.ring];
     const pV = ringParam(R, c.V || c.at);
@@ -6351,6 +7726,7 @@ function fillLevel(level, state, { counters = null, locks = null, accessible = n
       type: cornerId, outer: c.outer, area: r1(Math.abs(ringArea(c.outer))), width: null, accessible: false, bays: 1,
       bay: { from: r3(from), to: r3(from + c.legs[0] + c.legs[1]) }, ring: R.id, demising: dm, door: [r3(door[0]), r3(door[1])],
       runId: null, wrap: true, e: c.e, key: [c.ring, pV - 1e-6],
+      ...(cornerRow && isNum(cornerRow.areaMax) && Math.abs(ringArea(c.outer)) > cornerRow.areaMax + 0.05 ? { areaHigh: true } : {}),
     });
   }
   for (const l of lockList) {
@@ -6365,7 +7741,8 @@ function fillLevel(level, state, { counters = null, locks = null, accessible = n
   // gross remainders of the reserved stretches
   const blk = blockMP(blocks);
   const otherBands = (id) => rc.bands.filter((b) => b.id !== id).flatMap((b) => b.band);
-  const fixed = [...units.map((u) => ({ outer: u.outer, holes: [] })), ...pockets, ...remainders.map((r) => ({ outer: r.outer, holes: [] }))];
+  const trims = rc.trims || [];
+  const fixed = [...units.map((u) => ({ outer: u.outer, holes: [] })), ...pockets, ...trims, ...remainders.map((r) => ({ outer: r.outer, holes: [] }))];
   let taken = fixed.length ? bool("union", fixed, []) : [];
   for (const x of extra) {
     let g = bool("int", strip(x.fr, x.a, x.b, 0, x.maxT + ext + 1), plate);
@@ -6398,14 +7775,22 @@ function fillLevel(level, state, { counters = null, locks = null, accessible = n
     if (Math.abs(diff) > 1) warnings.push(warn("mix-miss", `${t.name || t.id}: ${placedCount[t.id] || 0} placed against a target of ${counts[t.id] || 0}.`, { ...where, type: t.id, diff }));
   }
 
+  // kinds (rework plan 3 and 5): "remainder" = an unfilled run (run-too-short) only; "leftover" = the other pieces the
+  // bands leave (beside a block, a corner with no wrap unit, an arm end); "pocket" = a concave corner; "trim" = the
+  // strip beyond the unit depth cap
+  let nx = 0, nl = 0;
   const support_ = [
     ...support, ...boh,
     ...pockets.map((p, k) => ({ id: `P${k + 1}`, kind: "pocket", outer: rr3(p.outer) })),
-    ...remainders.map((p, k) => ({ id: `X${k + 1}`, kind: "remainder", outer: rr3(p.outer), why: p.why })),
+    ...remainders.map((p) => (p.why === "run-too-short"
+      ? { id: `X${++nx}`, kind: "remainder", outer: rr3(p.outer), why: p.why }
+      : { id: `L${++nl}`, kind: "leftover", outer: rr3(p.outer), why: p.why })),
+    ...trims.map((p, k) => ({ id: `T${k + 1}`, kind: "trim", outer: rr3(p.outer), why: "depth-cap" })),
   ];
   const corridor = blocks.length ? bool("diff", clear, blk) : clear;
   const graph = corridorGraph(spine, stairs, units, { corridor, width });
-  const linen = boh.concat(support).filter((b) => b.kind === "linen");
+  const coreRooms = auto ? auto.rooms.map((r) => ({ id: r.id, kind: r.kind, outer: r.outer })) : [];
+  const linen = boh.concat(support, coreRooms).filter((b) => b.kind === "linen");
   let reach = null;
   if (hotel && linen.length) {
     const maxFt = isNum(state.housekeepingReach) ? state.housekeepingReach : 150;
@@ -6414,13 +7799,22 @@ function fillLevel(level, state, { counters = null, locks = null, accessible = n
     reach = { from: [r3(from[0]), r3(from[1])], maxFt, keys: rr.count, of: units.length };
   }
 
+  for (const d of deepBy.values()) {
+    const nm = d.name || d.id;
+    warnings.push(warn("type-area-high", `At ${r1(d.depth)} ft deep, a ${nm} ${fmtN(d.lo)} to ${fmtN(d.hi)} ft wide is ${fmtSf(d.lo * d.depth)} to ${fmtSf(d.hi * d.depth)} sf. Its area range is ${fmtSf(d.areaMin)} to ${fmtSf(d.areaMax)} sf. The units fill by width and show as large.`,
+      { ...where, type: d.id, depth: Math.round(d.depth * 1000) / 1000 }, "info"));
+  }
+  const coreMode = auto ? "auto" : core ? "manual" : "none";
   return {
     index: level.index, kind, width, spine, plate, inset: base.inset.map((pc) => ({ outer: rr3(pc.outer), holes: pc.holes.map(rr3) })),
     corridor, corridorClear: clear, core: core ? rr3(core) : null,
+    coreMode, coreRooms, coreProgram: auto ? auto.program : null, maxDepth: cap,
     stairs, elevators, support: support_, units,
     runs: runs.map((r) => ({ id: r.id, ring: r.ring, edge: r.edge, from: r3(r.from), to: r3(r.to), length: Math.round(r.length * 1000) / 1000, depth: Math.round(r.depth * 1000) / 1000, slots: r.slots || 0, start: [r3(r.start[0]), r3(r.start[1])], end: [r3(r.end[0]), r3(r.end[1])] })),
     corners: corners.map((c) => ({ ring: rings[c.ring].id, at: c.at, e: c.e, legs: c.legs, eTarget: c.eTarget, type: cornerId, outer: rr3(c.outer) })),
-    counts, placed: placedCount, dropped: eff.dropped.map((d) => ({ id: d.id, lo: d.lo, hi: d.hi })), depth: Math.round(depth * 1000) / 1000,
+    counts, placed: placedCount, dropped: eff.dropped.map((d) => ({ id: d.id, lo: d.lo, hi: d.hi })),
+    deep: [...deepBy.values()].map((d) => ({ id: d.id, lo: d.lo, hi: d.hi, depth: Math.round(d.depth * 1000) / 1000, areaLo: r1(d.lo * d.depth), areaHi: r1(d.hi * d.depth) })),
+    depth: Math.round(depth * 1000) / 1000,
     graph: { lengthFt: graph.lengthFt, stairPathFt: graph.stairPathFt, deadEnds: graph.deadEnds, reach },
     warnings,
   };
@@ -6455,8 +7849,18 @@ function buildPlates(state, { project = null } = {}) {
   const levelOf = (g) => levels.find((l) => l.index === g.first);
   const filled = groups.filter((g) => groupState(g).filled !== false);
   const floorsTotal = filled.reduce((s, g) => s + g.floors, 0);
+  // rework plan 4.4: the building estimate for the core program, made before the fill
+  const cctx = coreContext(state, filled.map((g) => ({ floors: g.floors, gsf: GEO.mpArea(asMP(levelOf(g).plate)) })));
+  const coreFor = () => ({ floors: cctx.floors, units: cctx.units, mode: modeOf(state) });
+  // rework plan 5: levels.groups[gid].maxDepth wins over fill.maxDepth
+  const capOf = (g) => {
+    const gs = groupState(g);
+    if (gs.maxDepth !== undefined && gs.maxDepth !== null) return isNum(gs.maxDepth) && gs.maxDepth > 0 ? gs.maxDepth : null;
+    const f = state.fill && state.fill.maxDepth;
+    return isNum(f) && f > 0 ? f : null;
+  };
 
-  const run = (acc) => filled.map((g) => ({ g, fill: fillLevel(levelOf(g), state, { locks: lockFor(g), accessible: acc(g), rotation }) }));
+  const run = (acc) => filled.map((g) => ({ g, fill: fillLevel(levelOf(g), state, { locks: lockFor(g), accessible: acc(g), rotation, core: coreFor(), maxDepth: capOf(g) }) }));
   let out;
   if (hotel) {
     let perFloor = isNum(state.accessible && state.accessible.perFloor) ? state.accessible.perFloor : null;
@@ -6486,675 +7890,12 @@ function buildPlates(state, { project = null } = {}) {
     placement,
     warnings,
     notes,
+    coreContext: { floors: cctx.floors, units: cctx.units, unitArea: Math.round(cctx.unitArea * 1000) / 1000 },
     massingUpdatedAt: sec && sec.updatedAt ? sec.updatedAt : null,
   };
 }
 
 return { unitZone, runsAndCorners, slotsFor, fillRuns, fillLevel, buildPlates };
-})();
-
-/* ---- src/plate/metrics.js ---- */
-const PlateMetricsMod = (() => {
-/* ==========================================================================
-   metrics.js — every row of plan 3.12 and the warning list (Plate Planner)
-
-   Contract: docs/plate-planner-technical-plan.md sections 3.11, 3.12 and 4.
-   Pure: no DOM, no Clipper, no mutation of inputs.
-
-   Caution: these are design-stage numbers on editable values, not a code
-   review. Unit counts, areas, corridor lengths, distances and accessible
-   counts need the design team's check against the adopted code. The tool
-   never writes "compliant".
-
-   Reads `built` (the buildPlates result):
-     { source, groups: [{ id, levels, fill, label?, first? }], placement, warnings,
-       massingUpdatedAt?, currentMassingUpdatedAt? }
-   `levels` lists the level indices of the group (numbers, or objects with .index);
-   `fill` is the LevelFill of the lowest level:
-     { plate: MultiPoly, corridor: MultiPoly, core: Ring | { outer } | null,
-       stairs: [{ id, outer, door }], elevators: [{ id, outer }],
-       support: [{ id, outer, kind }], units: [{ id, type, outer, area?, exposures, corner,
-       accessible, bays?, bay? }], runs: [{ id, length, depth }], corners?: [{ e }],
-       spine?: [[[x, y], [x, y]], …], counts?: { [typeId]: target }, warnings?: [] }
-   Optional fill fields: `spine` (the corridor graph numbers need it), `counts` (the
-   per-type targets; otherwise they are recomputed from the runs with mix.js), `corners`
-   (the wrap corner legs, for the area closure). `fill.core.stairs` and `fill.core.elevators`
-   are read when the fill keeps them inside `core`.
-
-   Rule choices where the plan leaves room:
-   - Every level of a group gets its own row (same numbers, its own index);
-     building totals are level × group floors. Building NRSF adds the level NRSF
-     rounded to 0.1 sf, so five floors of 15,077.8 give 75,389.0.
-   - GSF = plate outer areas less hole areas. Efficiency = NRSF ÷ GSF (4 decimals).
-     Unit area is `area` when given, else the polygon area.
-   - Mix targets: fill.counts, else countsFor on the run lengths at the depth that
-     carries the most run length, with the wrap corners as cornerType units
-     (hotel: less the widths of the accessible keys, which are not scored).
-   - Mix misses: |placed − target| > 1 unit on a level (scoreMix).
-   - Corridor length = clear corridor area ÷ clear width (spine length when
-     the polygon is missing). Clear width: state.corridor.width, else 6.0 (hotel) / 5.67.
-   - Corridor graph: nodes at spine ends, junctions, and the projection of each
-     stair door, linen closet and key door onto the spine. Stair door path = the
-     longest of the shortest paths between two stair doors. Dead end = for every
-     spine end that is not inside a stair block, the path length to the nearest
-     stair door; an end inside a stair block gives 0. Reported only, no code check.
-   - Hotel reach: a key door is the middle of the longest edge of the unit that lies
-     on the corridor boundary (the unit centroid when none does). A key counts
-     when its graph distance from the linen closet is at most housekeepingReach.
-   - Area closure: GSF − (NRSF + clear corridor + core + stairs + elevators + support)
-     with overlaps removed, against extWall × (Σ run lengths + 2 × the wrap leg
-     of every corner). `area-closure` warns beyond ±1 sf.
-   - Stale massing: needs built.massingUpdatedAt (used by the fill) and
-     built.currentMassingUpdatedAt (the project now); checks() also takes the current time as a third
-     argument { massingUpdatedAt }.
-   - Warnings are { code, severity, where, message }. Build and fill warnings pass
-     through metrics.buildWarnings. Derived here: type-does-not-fit and run-too-short
-     (only when the fill passed none), mix-miss, stale-massing, area-closure.
-   - Areas round to 0.1 sf, lengths to 0.1 ft, efficiency to 0.0001, points to 0.001.
-   ========================================================================== */
-
-const { effectiveTypes, countsFor, scoreMix, requiredAccessible, MULTIFAMILY_TYPES, HOTEL_TYPES } = MixMod;
-
-const isNum = (v) => typeof v === "number" && Number.isFinite(v);
-const r1 = (v) => Math.round(v * 10) / 10 + 0;
-const r3 = (v) => Math.round(v * 1000) / 1000 + 0;
-const r4 = (v) => Math.round(v * 10000) / 10000 + 0;
-const isPair = (p) => Array.isArray(p) && p.length >= 2 && isNum(p[0]) && isNum(p[1]);
-
-const EPS = 1e-9;
-const CAUTION = "Design-stage numbers from a test fit. Unit counts, areas, corridor lengths and accessible counts are not a code check. Verify against the adopted code.";
-
-function need(cond, fn, what) {
-  if (!cond) throw new Error(`${fn}: ${what} is missing or not valid`);
-}
-
-/* -------------------------------------------------------------- geometry */
-
-const ringArea = (ring) => {
-  let a = 0;
-  for (let i = 0; i < ring.length; i++) { const p = ring[i], q = ring[(i + 1) % ring.length]; a += p[0] * q[1] - q[0] * p[1]; }
-  return a / 2;
-};
-const absArea = (ring) => Math.abs(ringArea(ring));
-const multiArea = (mp) => (Array.isArray(mp) ? mp : []).reduce((s, pc) => s + absArea(pc.outer) - (pc.holes || []).reduce((h, r) => h + absArea(r), 0), 0);
-
-function centroid(ring) {
-  const a = ringArea(ring);
-  if (Math.abs(a) < 1e-9) return [ring.reduce((s, p) => s + p[0], 0) / ring.length, ring.reduce((s, p) => s + p[1], 0) / ring.length];
-  let cx = 0, cy = 0;
-  for (let i = 0; i < ring.length; i++) {
-    const p = ring[i], q = ring[(i + 1) % ring.length], f = p[0] * q[1] - q[0] * p[1];
-    cx += (p[0] + q[0]) * f; cy += (p[1] + q[1]) * f;
-  }
-  return [cx / (6 * a), cy / (6 * a)];
-}
-
-function inRing(x, y, ring, tol = 1e-6) {
-  let inside = false;
-  for (let a = 0, b = ring.length - 1; a < ring.length; b = a++) {
-    const [xa, ya] = ring[a], [xb, yb] = ring[b];
-    const len = Math.hypot(xb - xa, yb - ya);
-    if (len > 0) {
-      const cr = (xb - xa) * (y - ya) - (yb - ya) * (x - xa);
-      if (Math.abs(cr) / len <= tol && x >= Math.min(xa, xb) - tol && x <= Math.max(xa, xb) + tol && y >= Math.min(ya, yb) - tol && y <= Math.max(ya, yb) + tol) return true;
-    }
-    if ((ya > y) !== (yb > y) && x < ((xb - xa) * (y - ya)) / (yb - ya) + xa) inside = !inside;
-  }
-  return inside;
-}
-
-function isConvex(ring) {
-  let sign = 0;
-  for (let i = 0; i < ring.length; i++) {
-    const a = ring[i], b = ring[(i + 1) % ring.length], c = ring[(i + 2) % ring.length];
-    const cr = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
-    if (Math.abs(cr) < 1e-9) continue;
-    const s = cr > 0 ? 1 : -1;
-    if (sign && s !== sign) return false;
-    sign = s;
-  }
-  return true;
-}
-
-/** Sutherland–Hodgman: the area of `subject` (any simple polygon) inside `clip` (convex). */
-function clipArea(subject, clip) {
-  const ccw = ringArea(clip) > 0;
-  let out = subject.map((p) => [p[0], p[1]]);
-  for (let i = 0; i < clip.length && out.length; i++) {
-    const a = clip[i], b = clip[(i + 1) % clip.length];
-    const side = (p) => ((b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0])) * (ccw ? 1 : -1);
-    const input = out;
-    out = [];
-    for (let j = 0; j < input.length; j++) {
-      const p = input[j], q = input[(j + 1) % input.length];
-      const sp = side(p), sq = side(q);
-      if (sp >= 0) out.push(p);
-      if ((sp >= 0) !== (sq >= 0)) {
-        const t = sp / (sp - sq);
-        out.push([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t]);
-      }
-    }
-  }
-  return out.length >= 3 ? absArea(out) : 0;
-}
-
-/** Area of ring ∩ MultiPoly, for a convex `ring` (or a convex piece outer). */
-function overlapWith(ring, mp) {
-  let total = 0;
-  for (const pc of mp) {
-    let a;
-    if (isConvex(ring)) a = clipArea(pc.outer, ring) - (pc.holes || []).reduce((h, r) => h + clipArea(r, ring), 0);
-    else if (isConvex(pc.outer) && !(pc.holes || []).length) a = clipArea(ring, pc.outer);
-    else a = 0;
-    total += a;
-  }
-  return total;
-}
-
-const ringOf = (v) => (Array.isArray(v) ? v : v && Array.isArray(v.outer) ? v.outer : null);
-
-function projectOnSegment(p, a, b) {
-  const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy;
-  const t = l2 > 0 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2)) : 0;
-  const x = a[0] + dx * t, y = a[1] + dy * t;
-  return { t, pt: [x, y], dist: Math.hypot(p[0] - x, p[1] - y) };
-}
-
-/* ------------------------------------------------------- corridor graph */
-
-function spineSegments(spine) {
-  const segs = [];
-  for (const line of Array.isArray(spine) ? spine : []) {
-    const pts = (Array.isArray(line) ? line : []).filter(isPair);
-    for (let i = 0; i + 1 < pts.length; i++) if (Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]) > 1e-6) segs.push([pts[i], pts[i + 1]]);
-  }
-  return segs;
-}
-
-const nodeKey = (p) => `${Math.round(p[0] * 50)},${Math.round(p[1] * 50)}`;
-
-/**
- * The spine as a graph. `queries` are { key, p }: each is projected onto the nearest spine piece and
- * becomes a node. → { nodes, adj, totalFt, ends, projOf(key) → nodeId, dist(fromNode) → Map }
- */
-function buildGraph(spine, queries) {
-  const segs = spineSegments(spine);
-  if (!segs.length) return null;
-  const cuts = segs.map(() => [0, 1]);
-  const proj = new Map();
-  for (const q of queries) {
-    let best = null;
-    segs.forEach((s, i) => {
-      const pr = projectOnSegment(q.p, s[0], s[1]);
-      if (!best || pr.dist < best.dist - 1e-9) best = { ...pr, i };
-    });
-    cuts[best.i].push(best.t);
-    proj.set(q.key, { seg: best.i, t: best.t, pt: best.pt });
-  }
-  // junctions: a spine end that lies on another piece, and proper crossings
-  segs.forEach((s, i) => {
-    segs.forEach((o, j) => {
-      if (i === j) return;
-      for (const e of o) {
-        const pr = projectOnSegment(e, s[0], s[1]);
-        if (pr.dist < 0.05) cuts[i].push(pr.t);
-      }
-      const d1 = [s[1][0] - s[0][0], s[1][1] - s[0][1]], d2 = [o[1][0] - o[0][0], o[1][1] - o[0][1]];
-      const den = d1[0] * d2[1] - d1[1] * d2[0];
-      if (Math.abs(den) > 1e-9) {
-        const t = ((o[0][0] - s[0][0]) * d2[1] - (o[0][1] - s[0][1]) * d2[0]) / den;
-        const u = ((o[0][0] - s[0][0]) * d1[1] - (o[0][1] - s[0][1]) * d1[0]) / den;
-        if (t > 0 && t < 1 && u > 0 && u < 1) cuts[i].push(t);
-      }
-    });
-  });
-  const nodes = [], ids = new Map(), adj = [];
-  const node = (p) => {
-    const k = nodeKey(p);
-    if (!ids.has(k)) { ids.set(k, nodes.length); nodes.push([p[0], p[1]]); adj.push([]); }
-    return ids.get(k);
-  };
-  let totalFt = 0;
-  segs.forEach((s, i) => {
-    const ts = [...new Set(cuts[i].map((t) => Math.round(t * 1e7) / 1e7))].sort((a, b) => a - b);
-    for (let k = 0; k + 1 < ts.length; k++) {
-      const p = [s[0][0] + (s[1][0] - s[0][0]) * ts[k], s[0][1] + (s[1][1] - s[0][1]) * ts[k]];
-      const q = [s[0][0] + (s[1][0] - s[0][0]) * ts[k + 1], s[0][1] + (s[1][1] - s[0][1]) * ts[k + 1]];
-      const a = node(p), b = node(q);
-      const len = Math.hypot(q[0] - p[0], q[1] - p[1]);
-      if (a === b || len < 1e-6) continue;
-      adj[a].push([b, len]); adj[b].push([a, len]);
-      totalFt += len;
-    }
-  });
-  const nodeOf = new Map();
-  for (const [key, pr] of proj) nodeOf.set(key, node(pr.pt));
-  const ends = nodes.map((_, i) => i).filter((i) => adj[i].length === 1);
-  function dist(from) {
-    const d = new Array(nodes.length).fill(Infinity), done = new Array(nodes.length).fill(false);
-    d[from] = 0;
-    for (;;) {
-      let u = -1;
-      for (let i = 0; i < nodes.length; i++) if (!done[i] && d[i] < Infinity && (u < 0 || d[i] < d[u])) u = i;
-      if (u < 0) break;
-      done[u] = true;
-      for (const [v, w] of adj[u]) if (d[u] + w < d[v]) d[v] = d[u] + w;
-    }
-    return d;
-  }
-  return { nodes, adj, totalFt, ends, nodeOf: (key) => nodeOf.get(key), dist };
-}
-
-/** The door of a key: the middle of the longest unit edge on the corridor boundary; the centroid when none lies on it. */
-function doorOf(unit, corridor) {
-  const ring = ringOf(unit.outer);
-  if (!ring) return null;
-  const bounds = [];
-  for (const pc of corridor) { bounds.push(pc.outer); for (const h of pc.holes || []) bounds.push(h); }
-  const onBoundary = (p) => bounds.some((r) => r.some((a, i) => projectOnSegment(p, a, r[(i + 1) % r.length]).dist < 0.02));
-  let best = null, bestLen = 0.5;
-  for (let i = 0; i < ring.length; i++) {
-    const a = ring[i], b = ring[(i + 1) % ring.length];
-    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-    const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-    if (len > bestLen && onBoundary(a) && onBoundary(b) && onBoundary(mid)) { best = mid; bestLen = len; }
-  }
-  return best || centroid(ring);
-}
-
-/** Plan 3.11 for one level fill. → { lengthFt, stairPathFt, deadEnds, deadEndMax, doors, reach } */
-function corridorNumbers(state, fill, width, hotel) {
-  const stairs = stairsOf(fill);
-  const corridor = Array.isArray(fill.corridor) ? fill.corridor : [];
-  const polyFt = corridor.length && width > 0 ? multiArea(corridor) / width : null;
-  const out = { lengthFt: null, stairPathFt: null, deadEnds: [], deadEndMax: null, doors: stairs.map((s) => ({ id: s.id, door: s.door ? [r3(s.door[0]), r3(s.door[1])] : null })), reach: null };
-  const spine = Array.isArray(fill.spine) ? fill.spine : [];
-  const queries = [];
-  stairs.forEach((s) => { if (isPair(s.door)) queries.push({ key: `s:${s.id}`, p: s.door }); });
-  const closets = hotel ? (fill.support || []).filter((b) => b && b.kind === "linen" && ringOf(b.outer)) : [];
-  closets.forEach((b, i) => queries.push({ key: `c:${i}`, p: centroid(ringOf(b.outer)) }));
-  const units = Array.isArray(fill.units) ? fill.units : [];
-  const doors = hotel && closets.length ? units.map((u) => doorOf(u, corridor)) : [];
-  doors.forEach((p, i) => { if (p) queries.push({ key: `k:${i}`, p }); });
-
-  const g = buildGraph(spine, queries);
-  out.lengthFt = polyFt !== null ? r1(polyFt) : g ? r1(g.totalFt) : null;
-  if (!g) return out;
-
-  const sIds = stairs.filter((s) => isPair(s.door)).map((s) => ({ id: s.id, node: g.nodeOf(`s:${s.id}`) }));
-  if (sIds.length >= 2) {
-    let best = 0;
-    for (const a of sIds) { const d = g.dist(a.node); for (const b of sIds) if (b !== a && d[b.node] < Infinity && d[b.node] > best) best = d[b.node]; }
-    out.stairPathFt = r1(best);
-  } else if (sIds.length === 1) out.stairPathFt = 0;
-
-  if (sIds.length) {
-    const fromStair = sIds.map((s) => ({ ...s, d: g.dist(s.node) }));
-    for (const n of g.ends) {
-      const at = g.nodes[n];
-      const inside = stairs.find((s) => ringOf(s.outer) && inRing(at[0], at[1], ringOf(s.outer), 0.02));
-      if (inside) { out.deadEnds.push({ stairId: inside.id, ft: 0, at: [r3(at[0]), r3(at[1])] }); continue; }
-      let best = null;
-      for (const s of fromStair) if (s.d[n] < Infinity && (!best || s.d[n] < best.d)) best = { id: s.id, d: s.d[n] };
-      if (best) out.deadEnds.push({ stairId: best.id, ft: r1(best.d), at: [r3(at[0]), r3(at[1])] });
-    }
-    out.deadEndMax = out.deadEnds.reduce((m, e) => Math.max(m, e.ft), 0);
-  }
-
-  if (hotel && closets.length) {
-    const reachFt = isNum(state.housekeepingReach) ? state.housekeepingReach : 150;
-    const d = g.dist(g.nodeOf("c:0"));
-    let within = 0, farthest = 0;
-    doors.forEach((p, i) => {
-      if (!p) return;
-      const ft = d[g.nodeOf(`k:${i}`)];
-      if (ft <= reachFt + EPS) within++;
-      if (ft < Infinity && ft > farthest) farthest = ft;
-    });
-    out.reach = { reachFt, within, outside: doors.filter(Boolean).length - within, farthestFt: r1(farthest) };
-  }
-  return out;
-}
-
-/* ----------------------------------------------------------- level rows */
-
-const coreRing = (fill) => ringOf(fill.core);
-
-function stairsOf(fill) {
-  if (Array.isArray(fill.stairs)) return fill.stairs;
-  return fill.core && Array.isArray(fill.core.stairs) ? fill.core.stairs : [];
-}
-function elevatorsOf(fill) {
-  if (Array.isArray(fill.elevators)) return fill.elevators;
-  return fill.core && Array.isArray(fill.core.elevators) ? fill.core.elevators : [];
-}
-
-const unitArea = (u) => (isNum(u.area) ? u.area : ringOf(u.outer) ? absArea(ringOf(u.outer)) : 0);
-const mixKey = (state) => (state.mode === "hotel" ? "hotel" : "multifamily");
-const mixTypes = (state) => {
-  const m = state.mix && Array.isArray(state.mix[mixKey(state)]) ? state.mix[mixKey(state)] : null;
-  return m || (state.mode === "hotel" ? HOTEL_TYPES : MULTIFAMILY_TYPES);
-};
-const clearWidth = (state) => (state.corridor && isNum(state.corridor.width) ? state.corridor.width : state.mode === "hotel" ? 6.0 : 5.67);
-
-const round2 = (v) => Math.round(v * 100) / 100;
-
-/** The depth that carries the most run length, and every depth in use (rounded to 0.01 ft). */
-function runDepths(runs) {
-  const by = new Map();
-  for (const r of runs) {
-    if (!isNum(r.depth) || !isNum(r.length)) continue;
-    const k = round2(r.depth);
-    by.set(k, (by.get(k) || 0) + r.length);
-  }
-  let main = null;
-  for (const [k, v] of by) if (main === null || v > by.get(main)) main = k;
-  return { main, all: [...by.keys()].sort((a, b) => a - b) };
-}
-
-function targetsFor(state, fill, hotel) {
-  const runs = Array.isArray(fill.runs) ? fill.runs : [];
-  if (fill.counts && typeof fill.counts === "object") return { counts: { ...fill.counts }, dropped: [], depths: runDepths(runs).all };
-  const { main, all } = runDepths(runs);
-  if (!runs.length || (main === null && !hotel)) return { counts: null, dropped: [], depths: all };
-  const types = mixTypes(state);
-  const eff = effectiveTypes(types, main, hotel ? "hotel" : "multifamily");
-  const dropped = [];
-  for (const depth of hotel ? [] : all) for (const d of effectiveTypes(types, depth, "multifamily").dropped) dropped.push({ ...d, depth });
-  if (!eff.types.length) return { counts: null, dropped, depths: all };
-  let length = runs.reduce((s, r) => s + (isNum(r.length) ? r.length : 0), 0);
-  const units = Array.isArray(fill.units) ? fill.units : [];
-  if (hotel) {
-    for (const u of units) if (u.accessible) length -= u.bay && isNum(u.bay.from) && isNum(u.bay.to) ? Math.abs(u.bay.to - u.bay.from) : unitArea(u) / (main || 26);
-    length = Math.max(0, length);
-  }
-  const cornerType = state.mix && state.mix.cornerType ? state.mix.cornerType : "2br";
-  const corners = Array.isArray(fill.corners) ? fill.corners.map(() => cornerType) : [];
-  return { counts: countsFor(length, eff.types, corners).counts, dropped, depths: all };
-}
-
-function supportRows(fill) {
-  const byKind = {};
-  let count = 0, areaSf = 0;
-  for (const b of fill.support || []) {
-    const ring = ringOf(b && b.outer);
-    if (!ring) continue;
-    const kind = b.kind || "support";
-    if (!byKind[kind]) byKind[kind] = { count: 0, areaSf: 0 };
-    const a = absArea(ring);
-    byKind[kind].count++; byKind[kind].areaSf += a;
-    count++; areaSf += a;
-  }
-  for (const k of Object.keys(byKind)) byKind[k].areaSf = r1(byKind[k].areaSf);
-  return { count, areaSf: r1(areaSf), byKind };
-}
-
-/** Uncovered convex corners minus uncovered reflex corners of the plate (outer rings and holes). */
-function cornerSquares(plate, blocks) {
-  const polys = Array.isArray(plate) ? plate : [];
-  const signedArea = (r) => { let a = 0; for (let i = 0; i < r.length; i++) { const p = r[i], q = r[(i + 1) % r.length]; a += p[0] * q[1] - q[0] * p[1]; } return a / 2; };
-  const near = (p, a, b) => {
-    const dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy;
-    const t = L2 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L2)) : 0;
-    return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy)) < 0.01;
-  };
-  const covered = (p) => blocks.some((r) => {
-    let inside = false;
-    for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
-      if (near(p, r[j], r[i])) return true;
-      const a = r[i], b = r[j];
-      if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < ((b[0] - a[0]) * (p[1] - a[1])) / (b[1] - a[1]) + a[0]) inside = !inside;
-    }
-    return inside;
-  });
-  let n = 0;
-  const walk = (ring, hole) => {
-    if (!Array.isArray(ring) || ring.length < 3) return;
-    const s = Math.sign(signedArea(ring)) * (hole ? -1 : 1);   // material sits to the left after this sign
-    for (let i = 0; i < ring.length; i++) {
-      const a = ring[(i + ring.length - 1) % ring.length], v = ring[i], b = ring[(i + 1) % ring.length];
-      const cross = (v[0] - a[0]) * (b[1] - v[1]) - (v[1] - a[1]) * (b[0] - v[0]);
-      if (Math.abs(cross) < 1e-9 || covered(v)) continue;
-      n += cross * s > 0 ? 1 : -1;
-    }
-  };
-  for (const poly of polys) { if (!poly) continue; walk(poly.outer, false); for (const h of poly.holes || []) walk(h, true); }
-  return n;
-}
-
-/** Plan 3.12 "Area closure". */
-function closureRows(state, fill, nrsf, gsf) {
-  const corridor = Array.isArray(fill.corridor) ? fill.corridor : [];
-  const counted = corridor.slice();
-  const take = (rings) => {
-    let sum = 0;
-    for (const ring of rings) {
-      if (!ring || ring.length < 3) continue;
-      const a = absArea(ring);
-      sum += Math.max(0, a - overlapWith(ring, counted));
-      counted.push({ outer: ring, holes: [] });
-    }
-    return sum;
-  };
-  const corridorSf = multiArea(corridor);
-  const core = coreRing(fill);
-  const coreSf = take(core ? [core] : []);
-  const stairsSf = take(stairsOf(fill).map((s) => ringOf(s.outer)));
-  const elevSf = take(elevatorsOf(fill).map((s) => ringOf(s.outer)));
-  const supportSf = take((fill.support || []).map((s) => ringOf(s && s.outer)));
-  const strip = gsf - (nrsf + corridorSf + coreSf + stairsSf + elevSf + supportSf);
-  const ext = isNum(state.extWall) ? state.extWall : 1.0;
-  const runs = Array.isArray(fill.runs) ? fill.runs : [];
-  const legs = Array.isArray(fill.corners) ? fill.corners.reduce((s, c) => s + 2 * (isNum(c.e) ? c.e : 0), 0) : 0;
-  // Corner squares: the strip along the runs and legs is measured on the area line, so each plate corner that no block
-  // covers adds one ext × ext square (convex corner) or takes one away (reflex corner). A point tower has four convex ones.
-  const blocks = [core, ...stairsOf(fill).map((s) => ringOf(s.outer)), ...elevatorsOf(fill).map((s) => ringOf(s.outer)),
-    ...(fill.support || []).map((s) => ringOf(s && s.outer))].filter((r) => r && r.length >= 3);
-  const cornerSq = runs.length ? cornerSquares(fill.plate, blocks) : 0;
-  const expected = ext * (runs.reduce((s, r) => s + (isNum(r.length) ? r.length : 0), 0) + legs) + ext * ext * cornerSq;
-  return {
-    gsf: r1(gsf), nrsf: r1(nrsf), corridor: r1(corridorSf), core: r1(coreSf), stairs: r1(stairsSf), elevators: r1(elevSf), support: r1(supportSf),
-    strip: r1(strip), expected: r1(expected), diff: r1(strip - expected), ok: runs.length === 0 || Math.abs(strip - expected) <= 1,
-  };
-}
-
-function levelRow(state, group, fill, hotel) {
-  const units = Array.isArray(fill.units) ? fill.units : [];
-  const types = mixTypes(state);
-  const nrsfExact = units.reduce((s, u) => s + unitArea(u), 0);
-  const gsfExact = multiArea(fill.plate);
-  const nrsf = r1(nrsfExact), gsf = r1(gsfExact);
-  const byType = {};
-  for (const u of units) byType[u.type] = (byType[u.type] || 0) + 1;
-  const bayOf = new Map(types.map((t) => [t.id, isNum(t.bays) ? t.bays : 1]));
-  const bays = units.reduce((s, u) => s + (isNum(u.bays) ? u.bays : bayOf.get(u.type) || 1), 0);
-  const exposures = { N: 0, E: 0, S: 0, W: 0 };
-  for (const u of units) for (const e of new Set(u.exposures || [])) if (e in exposures) exposures[e]++;
-  const width = clearWidth(state);
-  const cn = corridorNumbers(state, fill, width, hotel);
-  const t = targetsFor(state, fill, hotel);
-  let mix = null;
-  if (t.counts) {
-    const scored = hotel ? units.filter((u) => !u.accessible) : units;
-    const s = scoreMix(scored, t.counts, types.filter((ty) => ty.id in t.counts));
-    mix = { targets: t.counts, byType: s.byType, misses: s.misses };
-  }
-  const support = supportRows(fill);
-  const closure = closureRows(state, fill, nrsfExact, gsfExact);
-  const stairsArr = stairsOf(fill);
-  return {
-    group: group.id,
-    units: units.length, keys: units.length, bays,
-    byType, mix,
-    nrsf, gsf, efficiency: gsf > 0 ? r4(nrsfExact / gsfExact) : 0,
-    avgUnitArea: units.length ? r1(nrsfExact / units.length) : 0,
-    corners: units.filter((u) => u.corner).length,
-    exposures,
-    accessible: units.filter((u) => u.accessible).length,
-    corridor: { lengthFt: cn.lengthFt, perUnit: cn.lengthFt !== null && units.length ? r1(cn.lengthFt / units.length) : null },
-    stairDoors: { count: stairsArr.length, pathFt: cn.stairPathFt, doors: cn.doors, deadEnds: cn.deadEnds, deadEndMax: cn.deadEndMax },
-    support,
-    closure,
-    hotel: hotel ? cn.reach : null,
-    shortRuns: shortRuns(state, fill, hotel),
-    dropped: t.dropped,
-  };
-}
-
-/** Runs shorter than the smallest usable width of any type at their depth. */
-function shortRuns(state, fill, hotel) {
-  const out = [];
-  const types = mixTypes(state);
-  for (const r of Array.isArray(fill.runs) ? fill.runs : []) {
-    if (!isNum(r.length)) continue;
-    if (!hotel && !isNum(r.depth)) continue;
-    const eff = effectiveTypes(types, hotel ? null : r.depth, hotel ? "hotel" : "multifamily").types;
-    if (!eff.length) continue;
-    const min = Math.min(...eff.map((e) => e.lo));
-    if (r.length < min - EPS) out.push({ run: r.id, length: r1(r.length), min: r1(min) });
-  }
-  return out;
-}
-
-/* ------------------------------------------------------------ computeMetrics */
-
-const levelIndices = (levels) => (Array.isArray(levels) ? levels : []).map((l) => (l && typeof l === "object" ? l.index : l)).filter(isNum);
-
-const add = (obj, key, n) => { obj[key] = (obj[key] || 0) + n; };
-
-/**
- * Plan 3.12. → {
- *   mode, caution, floors,
- *   groups: [{ id, label, first, levels, floors, row }],
- *   levels: [{ index, ...row }]           one row per level of every group
- *   building: { units, keys, bays, nrsf, gsf, efficiency, avgUnitArea, corners, exposures, corridorFt,
- *               byType, mix: [{ type, count, share, target, diff, avgArea }], accessible, support },
- *   buildWarnings, massing: { usedAt, currentAt }, warnings }
- */
-function computeMetrics(state, built) {
-  need(state && typeof state === "object", "computeMetrics", "state");
-  need(built && Array.isArray(built.groups), "computeMetrics", "built.groups");
-  const hotel = state.mode === "hotel";
-  const types = mixTypes(state);
-  const groups = [], levels = [], buildWarnings = [];
-  for (const w of Array.isArray(built.warnings) ? built.warnings : []) buildWarnings.push({ ...w });
-
-  const total = { units: 0, bays: 0, nrsf: 0, gsf: 0, corners: 0, corridorFt: 0, accessible: 0, exposures: { N: 0, E: 0, S: 0, W: 0 }, byType: {}, areaByType: {}, targets: {}, support: 0, floors: 0 };
-  for (const g of built.groups) {
-    if (!g || !g.fill) continue;
-    const idx = levelIndices(g.levels);
-    const floors = idx.length || 1;
-    const row = levelRow(state, g, g.fill, hotel);
-    groups.push({ id: g.id, label: g.label !== undefined ? g.label : null, first: g.first !== undefined ? g.first : idx[0], levels: idx, floors, row });
-    for (const i of idx.length ? idx : [1]) levels.push({ index: i, ...row });
-    for (const w of Array.isArray(g.fill.warnings) ? g.fill.warnings : []) buildWarnings.push({ ...w, where: w.where && typeof w.where === "object" ? { ...w.where, group: g.id } : { group: g.id } });
-
-    total.floors += floors;
-    total.units += row.units * floors; total.bays += row.bays * floors;
-    total.nrsf += row.nrsf * floors; total.gsf += row.gsf * floors;
-    total.corners += row.corners * floors; total.accessible += row.accessible * floors;
-    total.corridorFt += (row.corridor.lengthFt || 0) * floors;
-    total.support += row.support.areaSf * floors;
-    for (const k of Object.keys(total.exposures)) total.exposures[k] += row.exposures[k] * floors;
-    for (const u of g.fill.units || []) {
-      add(total.byType, u.type, floors);
-      add(total.areaByType, u.type, unitArea(u) * floors);
-    }
-    if (row.mix) for (const k of Object.keys(row.mix.targets)) add(total.targets, k, row.mix.targets[k] * floors);
-  }
-
-  const ids = types.map((t) => t.id);
-  for (const id of Object.keys(total.byType)) if (!ids.includes(id)) ids.push(id);
-  const mixRows = ids.map((id) => {
-    const count = total.byType[id] || 0, target = total.targets[id] || 0;
-    return { type: id, count, share: total.units ? r4(count / total.units) : 0, target, diff: count - target, avgArea: count ? r1(total.areaByType[id] / count) : 0 };
-  });
-
-  const req = requiredAccessible({ ...state, mode: hotel ? "hotel" : "multifamily" }, total.units);
-  const accessible = hotel
-    ? { required: req.keys, rollIn: req.rollIn, row: req.row, beyond: req.beyond, provided: total.accessible, caution: "Seeds for an editable table. Verify against the adopted code." }
-    : { required: req.typeA, row: req.row, provided: total.accessible, caution: "Seeds for an editable table. Verify against the adopted code." };
-
-  const m = {
-    mode: hotel ? "hotel" : "multifamily",
-    caution: CAUTION,
-    floors: total.floors,
-    groups, levels,
-    building: {
-      units: total.units, keys: total.units, bays: total.bays,
-      nrsf: r1(total.nrsf), gsf: r1(total.gsf), efficiency: total.gsf > 0 ? r4(total.nrsf / total.gsf) : 0,
-      avgUnitArea: total.units ? r1(total.nrsf / total.units) : 0,
-      corners: total.corners, exposures: total.exposures, corridorFt: r1(total.corridorFt),
-      byType: total.byType, mix: mixRows, accessible, supportSf: r1(total.support),
-    },
-    buildWarnings,
-    massing: {
-      usedAt: built.massingUpdatedAt !== undefined ? built.massingUpdatedAt : null,
-      currentAt: built.currentMassingUpdatedAt !== undefined ? built.currentMassingUpdatedAt : null,
-    },
-  };
-  m.warnings = checks(state, m);   // so one list reaches the page, the notes, and the exports
-  return m;
-}
-
-/* ----------------------------------------------------------------- checks */
-
-const warn = (code, message, where = null, severity = "warn") => ({ code, severity, where, message });
-
-function later(current, used) {
-  if (current === null || current === undefined || used === null || used === undefined) return false;
-  const a = Date.parse(current), b = Date.parse(used);
-  if (Number.isFinite(a) && Number.isFinite(b)) return a > b;
-  return String(current) > String(used);
-}
-
-/**
- * Plan 3.12 "Flags". → Warning[] { code, severity, where, message }:
- * the build and fill warnings (core-blocks-corridor and the rest), type-does-not-fit, run-too-short,
- * mix-miss, area-closure and stale-massing. The optional third argument { massingUpdatedAt } is the
- * massing time now, for stale-massing when the metrics do not carry it.
- */
-function checks(state, metrics, ctx = {}) {
-  need(state && metrics && Array.isArray(metrics.groups), "checks", "state and metrics");
-  const out = [];
-  const pass = Array.isArray(metrics.buildWarnings) ? metrics.buildWarnings : [];
-  for (const w of pass) out.push({ ...w, where: w.where ? { ...w.where } : null });
-  const has = (code) => pass.some((w) => w.code === code);
-
-  for (const g of metrics.groups) {
-    const label = g.label || g.id;
-    const row = g.row;
-    if (!has("type-does-not-fit")) {
-      const seen = new Set();
-      for (const d of row.dropped || []) {
-        const k = `${d.id}@${d.depth}`;
-        if (seen.has(k)) continue;
-        seen.add(k);
-        out.push(warn("type-does-not-fit", `${d.name || d.id} does not fit a depth of ${round2(d.depth)} ft (${label}): it needs a width of at least ${round2(d.lo)} ft but its area range allows at most ${round2(d.hi)} ft. The type drops out of this fill and the other shares renormalize.`, { group: g.id, type: d.id, depth: d.depth }, "info"));
-      }
-    }
-    if (!has("run-too-short")) {
-      for (const r of row.shortRuns || []) out.push(warn("run-too-short", `Run ${r.run} is ${r.length} ft long, shorter than the narrowest unit (${r.min} ft) (${label}). It stays as support. Move a block or edit the mix.`, { group: g.id, run: r.run }));
-    }
-    if (row.mix) {
-      for (const id of row.mix.misses) {
-        const r = row.mix.byType.find((b) => b.type === id);
-        const t = (state.mix && (state.mix[mixKey(state)] || []).find((x) => x.id === id)) || {};
-        out.push(warn("mix-miss", `${t.name || id} has ${r.count} placed against a target of ${r.target} (${label}). The level is off by ${Math.abs(r.diff)} units. Edit the shares or the blocks.`, { group: g.id, type: id }, "info"));
-      }
-    }
-    if (row.closure && !row.closure.ok) {
-      out.push(warn("area-closure", `The areas of ${label} do not close: the strip left is ${row.closure.strip} sf against ${row.closure.expected} sf for the exterior allowance (difference ${row.closure.diff} sf).`, { group: g.id }));
-    }
-  }
-
-  const used = metrics.massing ? metrics.massing.usedAt : null;
-  const current = ctx && ctx.massingUpdatedAt !== undefined ? ctx.massingUpdatedAt : metrics.massing ? metrics.massing.currentAt : null;
-  if (later(current, used)) out.push(warn("stale-massing", "The massing changed after this fill. Re-fill to follow the new plates.", { usedAt: used, currentAt: current }));
-  return out;
-}
-
-return { computeMetrics, checks };
 })();
 
 /* ---- src/plate/derived.js ---- */
@@ -7176,9 +7917,12 @@ const PlateDerivedMod = (() => {
               built.massingUpdatedAt (else state.massingUpdatedAt, else null)   the massing updatedAt the fill used.
      metrics  computeMetrics result. Optional. Not read here: every number comes from the geometry.
 
-   levels[]  index, name, z, ftf, plate, corridor, core { outer, stairs, elevators }, support, units, metrics { units, nrsf, gsf, efficiency }
+   levels[]  index, name, z, ftf, plate, corridor, core { outer, stairs, elevators, rooms? }, support, units, metrics { units, nrsf, gsf, efficiency }
+             core.rooms (optional, an auto core only): [{ id, kind, outer }]; kinds stair, elevator, service-elevator, trash,
+             electrical, shaft, linen, ice, data. The rooms tile core.outer.
              (name, z and ftf are optional keys; the rooms CSV, the DXF and the SketchUp export read them.)
-   units[]   id "<level>-<nn>" (run order), type (the type NAME, e.g. "1BR"), outer, area, exposures, corner, bay, ring, demising, accessible
+   units[]   id "<level>-<nn>" (run order), type (the type NAME, e.g. "1BR"), outer, area, exposures, corner, bay, ring, demising, accessible,
+             flags? (optional, sorted): "area-high" when the fill flagged the unit larger than its type's area range (rework plan 3)
    mix[]     { type, count, share, avgArea } over the whole building (level x group floors)
    metrics   { units, nrsf, gsf, efficiency, corridorFt } over the whole building; hotel adds bays.
              corridorFt = clear corridor polygon area / clear width, summed over the levels.
@@ -7416,6 +8160,8 @@ function unitRecord(u, id, table) {
   rec.ring = isNum(u.ring) ? u.ring : 0;
   rec.demising = (Array.isArray(u.demising) ? u.demising : []).map(lineOf).filter(Boolean);
   rec.accessible = typeof u.accessible === "string" ? u.accessible : !!u.accessible;
+  const flags = [...(Array.isArray(u.flags) ? u.flags : []), ...(u.areaHigh ? ["area-high"] : [])];
+  if (flags.length) rec.flags = [...new Set(flags.map(String))].sort();
   return rec;
 }
 
@@ -7437,6 +8183,9 @@ function levelOf(rec, table, width) {
   elevIn.forEach((s, k) => { const o = cleanOuter(s.outer); if (o) elevators.push({ id: s.id ?? `E${k + 1}`, outer: o }); });
   const support = [];
   (Array.isArray(f.support) ? f.support : []).forEach((s, k) => { const o = cleanOuter(s.outer); if (o) support.push({ id: s.id ?? `B${k + 1}`, outer: o, kind: s.kind ?? "support" }); });
+  const roomsIn = Array.isArray(f.coreRooms) ? f.coreRooms : core && Array.isArray(core.rooms) ? core.rooms : [];
+  const rooms = [];
+  roomsIn.forEach((r, k) => { const o = cleanOuter(r.outer); if (o) rooms.push({ id: r.id ?? `R${k + 1}`, kind: String(r.kind ?? "shaft"), outer: o }); });
 
   const nrsfRaw = units.reduce((s, u) => s + Math.abs(ringAreaSigned(u.outer)), 0);
   const gsfRaw = multiPolyArea(plate);
@@ -7444,7 +8193,7 @@ function levelOf(rec, table, width) {
   const bays = units.reduce((s, u) => { const row = typeRow(table, u.type); return s + (row ? row.bays : 1); }, 0);
   const out = {
     index: rec.index, name: rec.name, z: r3(rec.z), ftf: r3(rec.ftf),
-    plate, corridor, core: { outer: coreRing, stairs, elevators }, support, units,
+    plate, corridor, core: { outer: coreRing, stairs, elevators, ...(rooms.length ? { rooms } : {}) }, support, units,
     metrics: { units: units.length, nrsf: r1(nrsfRaw), gsf: r1(gsfRaw), efficiency: gsfRaw > 0 ? r4(nrsfRaw / gsfRaw) : 0 },
   };
   return { level: out, raw: { nrsf: nrsfRaw, gsf: gsfRaw, corridorFt, bays } };
@@ -7959,7 +8708,8 @@ function defaultState() {
     },
     extWall: 1.0,
 
-    core: { rect: [-15, 2.835, 15, 32.5] },
+    // Core mode (rework plan 4.2): "auto" | "manual" | "none". 8.1 has an explicit core rectangle, so it is manual.
+    core: { mode: 'manual', rect: [-15, 2.835, 15, 32.5] },
     stairs: {
       mode: 'auto',
       size: [11, 22],
@@ -7999,6 +8749,11 @@ function defaultState() {
     locks: [],
     placement: null,
 
+    // Rework plan 5: unit depth cap in ft (null = off). Per group: levels.groups[gid].maxDepth wins.
+    fill: { maxDepth: null },
+    // Rework plan 6: the advisor's target area depth in ft (null = mode default: multifamily 30, hotel 26).
+    targetDepth: null,
+
     view: {
       style: 'model',
       labels: true, walls: true, bays: true,
@@ -8023,7 +8778,7 @@ function hotelBar(s) {
   s.mode = 'hotel';
   s.plate.w = 240;
   s.plate.d = 60;
-  s.core.rect = null;
+  s.core = { mode: 'auto', rect: null };
   s.corridor.kind = 'auto';
   s.corridor.width = 6.0;
   s.accessible.perFloor = 1;
@@ -8039,7 +8794,7 @@ function lPlate(s) {
     segments: 64,
     points: [[0, 0], [200, 0], [200, 60], [60, 60], [60, 140], [0, 140]],
   };
-  s.core.rect = null;
+  s.core = { mode: 'auto', rect: null };
   s.corridor.kind = 'auto';
   s.elevators.count = 0;
 }
@@ -8057,7 +8812,7 @@ function uPlate(s) {
       [140, 60], [60, 60], [60, 140], [0, 140],
     ],
   };
-  s.core.rect = null;
+  s.core = { mode: 'auto', rect: null };
   s.corridor.kind = 'auto';
   s.corridor.spine = [
     [[30, 30], [170, 30]],
@@ -8072,7 +8827,7 @@ function uPlate(s) {
 function pointTower(s) {
   s.plate.w = 100;
   s.plate.d = 100;
-  s.core.rect = [-15, -15, 15, 15];
+  s.core = { mode: 'manual', rect: [-15, -15, 15, 15] };   // the explicit 30 x 30 core of 8.5 stays manual
   s.corridor.kind = 'point';
 }
 
@@ -8091,7 +8846,7 @@ function courtyardO(s) {
     [[92.5, 77.5], [-92.5, 77.5]],
     [[-92.5, 77.5], [-92.5, -77.5]],
   ];
-  s.core.rect = [95.335, -15, 125, 15];
+  s.core = { mode: 'manual', rect: [95.335, -15, 125, 15] };
   s.stairs.mode = 'manual';
   s.stairs.items = [
     { id: 'S1', rect: [-5.5, -88.5, 5.5, -66.5] },

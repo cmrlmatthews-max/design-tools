@@ -31,6 +31,8 @@ MODS = {
     'mix': ('MixMod', 'plate/mix.js'),
     'levels': ('LevelsMod', 'plate/levels.js'),
     'corridor': ('CorridorMod', 'plate/corridor.js'),
+    'core': ('CoreMod', 'plate/core.js'),
+    'advisor': ('AdvisorMod', 'plate/advisor.js'),
     'fill': ('FillMod', 'plate/fill.js'),
     'pmetrics': ('PlateMetricsMod', 'plate/metrics.js'),
     'pderived': ('PlateDerivedMod', 'plate/derived.js'),
