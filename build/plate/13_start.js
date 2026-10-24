@@ -9,6 +9,7 @@ Options.syncDirty();
 if (!Render.init(document.getElementById('canvasHost'))) Store.subscribe(() => UI.updateHud(Derived.get()));
 Select.init();
 ProjectUI.start();
+Advice.start();
 
 TopBar.init({ tool: 'plate', sections: () => UI.sectionCtl, remember: UI.rememberSection, onSite: () => Render.frameSite(), onBuilding: () => Render.frameBuilding() });   // 08z_topbar.js: Collapse all and the zoom buttons
 
@@ -25,6 +26,8 @@ window.__plate = {
   getBuilt: () => Derived.get().built,
   getScene: () => Derived.get().scene,
   getWarnings: () => Derived.get().warnings,
+  getAdvice: () => Advice.computeNow(),                      // the advisor list for the current state, computed now (the page computes it after the fill settles)
+  getAdviceState: () => Advice.get(),
   loadPreset: (id) => Options.loadPreset(id),
   newDesign: (opts) => Options.newDesign(opts),            // { confirm: false } skips the unsaved-changes question (tests)
   hasUnsavedChanges: () => Options.hasUnsavedChanges(),
@@ -98,6 +101,14 @@ window.__plate = {
   setUnitType: (k, id) => Select.setUnitType(k, id),
   refill: () => Select.refill(),
   addBlock: (target, rect) => Select.addBlock(target, rect),
+  splitUnit: (k) => Select.splitUnit(k),
+  mergeUnit: (dir, k) => Select.mergeUnit(dir, k),
+  neighbors: (k) => Select.neighbors(k),
+  remainders: () => Select.remainders(),
+  fillRemainder: (id, o) => Select.fillRemainder(id, o),
+  drawUnitBetween: (p1, p2) => Select.drawUnitBetween(p1, p2),
+  setCoreMode: (m) => Select.setCoreMode(m),
+  resetCore: () => Select.resetCore(),
   deleteBlock: (it) => Select.deleteBlock(it),
   setBlockRect: (it, rect, live) => Select.setBlockRect(it, rect, live),
   snapPoint: (p, o) => Select.snapPoint(p, o),

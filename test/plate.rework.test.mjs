@@ -469,5 +469,20 @@ t("performance: a 39-unit level (8.6) fills in well under 50 ms", () => {
   ok(ms < 50, `${ms} ms`);
 });
 
+t("a locked unit keeps its exterior strip: area closure stays within 1 sf (review fix)", () => {
+  // 8.1 with the first unit locked (20 ft studio at x -139..-119): the 1 ft strip in front of it is allowance, not support.
+  // support = 4 stair-end pieces of 11 x 21.5 = 946.0 sf; closure diff = 0 within 1 sf
+  const st = clone(PRESETS.find((p) => p.id === "double-loaded-bar").state);
+  const u = buildPlates(st).groups[0].fill.units[0];
+  st.locks = [{ id: "U-01", outer: u.outer, type: u.type }];
+  const built = buildPlates(st);
+  const f = built.groups[0].fill;
+  const sup = f.support.reduce((s, x) => s + Math.abs(CO.GEO.ringArea(x.outer)), 0);
+  ok(Math.abs(sup - 946) < 0.5, `support ${sup}`);
+  const m = MT.computeMetrics(st, built);
+  const warnCodes = MT.checks(st, m).map((w) => w.code);
+  ok(!warnCodes.includes("area-closure"), warnCodes.join(","));
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

@@ -395,3 +395,24 @@ table.cmp td[title], table.cmp th[title] { cursor: help; }
   .panel-collapse { padding: 0; }
   .panel-collapse .pc-txt { display: none; }
 }
+
+/* ---- rework: advisor line, large tag, mix table, unfilled runs (docs/plate-planner-rework-plan.md section 7) ---------------- */
+.hud-advice {
+  display: block; width: 100%; margin: 8px 0 0; padding: 6px 8px; border: 0; border-left: 3px solid var(--accent); border-radius: 4px;
+  background: var(--accent-soft); color: var(--ink); font: inherit; font-size: 12px; line-height: 1.35; text-align: left; cursor: pointer;
+}
+.hud-advice[hidden] { display: none; }
+.hud-advice-text { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+.hud[data-collapsed="false"] .hud-advice-text { -webkit-line-clamp: unset; display: block; }
+.hud-advice.stale { opacity: .7; }
+.tag-large {
+  margin-left: 4px; padding: 0 6px; border-radius: 8px; background: var(--warn-soft); color: #a35400; font-size: 10.5px; font-weight: 600; line-height: 16px;
+}
+.tier-table td.type-cell { text-align: left; }
+.type-wrap { display: flex; align-items: center; gap: 6px; }
+.type-wrap .sw { flex: 0 0 12px; }
+.type-name { text-align: left; }
+.tier-table tr.dropped td.none { white-space: normal; font-style: italic; }
+.adv-item { display: grid; gap: 6px; }
+.adv-item .btn { justify-self: start; }
+.warn-all { margin-top: 8px; }

@@ -9,12 +9,18 @@
    Picking is plane math: a ray to the plane at the elevation of the editing level, then the plan point is tested against the unit
    rings. There are no picking meshes. A bay line is hit within BAY_PX screen pixels (16 on a mouse, 28 on touch).
 
+   Rework (docs/plate-planner-rework-plan.md section 7.2): a bay drag stops at the width range of the two types (widthMin, widthMax), with both
+   widths shown beside the line; Split and Merge on the unit card; a tap on an unfilled run (a "remainder") opens a card that fills it with
+   locked units; Draw > Unit takes two taps on one run; a core drag sets the core to Manual; the card of the core resets it to Auto.
+   Every edit is a Store write, so Undo and Redo work.
+
    Selection and the drawing in progress live HERE, never in the Store, so they are never saved, exported or undone. A lock is state:
    `locks` for a drawn plate, `levels.groups[gid].locks` for a project. Locked units keep their outline and type through every fill.
    ========================================================================== */
 const Select = (() => {
   const $ = (id) => document.getElementById(id);
-  const PICK_PX = 6, PICK_MS = 400, BAY_PX = 16, BAY_PX_TOUCH = 28;
+  const PICK_PX = 6, PICK_MS = 400, BAY_PX = 16, BAY_PX_TOUCH = 28;       // BAY_PX_TOUCH is a 56 px wide target; the touch dot is 24 px, the hit area more than 44 pt
+  const COARSE = !!(window.matchMedia && matchMedia('(pointer: coarse)').matches);
   const D = () => Derived.get();
   const raycaster = new THREE.Raycaster();
   const ndc = new THREE.Vector2();
@@ -93,6 +99,18 @@ const Select = (() => {
     const [t0, t1] = extent(ring, t), [n0, n1] = extent(ring, nv);
     return { t, n: nv, t0, t1, n0, n1, w: t1 - t0, d: n1 - n0 };
   }
+  /** The width range a type allows in a run (rework plan 7.2): widthMin to widthMax, times the bays for a hotel key. */
+  function widthRangeOf(t) {
+    const hotel = Store.raw().mode === 'hotel', k = hotel ? Math.max(1, t.bays || 1) : 1;
+    return [t.widthMin * k, t.widthMax * k];
+  }
+  /** { lo, hi } for a type id, or null. */
+  function bayRange(typeId) {
+    const t = typeOf(typeId);
+    if (!t) return null;
+    const [lo, hi] = widthRangeOf(t);
+    return { lo, hi };
+  }
   /** The usable width range of the unit's own type at its depth, or null. */
   function rangeFor(typeId, depth) {
     const s = Store.raw();
@@ -153,8 +171,7 @@ const Select = (() => {
       return onEdge ? [pt[0] + e.t[0] * delta, pt[1] + e.t[1] * delta] : [pt[0], pt[1]];
     });
     const outerA = shift(base.A), outerB = shift(base.B);
-    const fa = frameOf(L, { outer: outerA }), fb = frameOf(L, { outer: outerB });
-    const ra = rangeFor(base.typeA, fa.d), rb = rangeFor(base.typeB, fb.d);
+    const ra = bayRange(base.typeA), rb = bayRange(base.typeB);          // the width range of each type, not the area range (rework plan 7.2)
     const wA = Math.abs(extent(outerA, e.t)[1] - extent(outerA, e.t)[0]), wB = Math.abs(extent(outerB, e.t)[1] - extent(outerB, e.t)[0]);
     const eps = 0.001;
     const okA = !ra || (wA >= ra.lo - eps && wA <= ra.hi + eps), okB = !rb || (wB >= rb.lo - eps && wB <= rb.hi + eps);
@@ -206,7 +223,7 @@ const Select = (() => {
     if (!L || !s0) return null;
     if (s0.kind === 'core') return L.core;
     if (s0.kind === 'stair') { const b = L.stairs.find((x) => x.id === s0.id); return b ? b.outer : null; }
-    if (s0.kind === 'support') { const b = L.support.find((x) => x.id === s0.id); return b ? b.outer : null; }
+    if (s0.kind === 'support' || s0.kind === 'remainder') { const b = L.support.find((x) => x.id === s0.id && (s0.kind === 'support' || x.kind === 'remainder')); return b ? b.outer : null; }
     return null;
   }
   function selRing() {
@@ -268,10 +285,12 @@ const Select = (() => {
     if (!p || !L) return null;
     const x = p[0], y = p[1];
     for (const b of L.support) if (pointInRing(x, y, b.outer) && b.kind !== 'pocket' && b.kind !== 'remainder' && b.userBlock !== false && isUserSupport(b.id)) return { kind: 'support', id: b.id };
-    for (const s of L.stairs) if (pointInRing(x, y, s.outer)) return { kind: 'stair', id: s.id };
+    const roomIds = new Set((L.coreRooms || []).map((r) => r.id));
+    for (const s of L.stairs) if (!roomIds.has(s.id) && pointInRing(x, y, s.outer)) return { kind: 'stair', id: s.id };      // the stairs of an auto core are part of the core
     for (const e of L.elevators) if (pointInRing(x, y, e.outer)) return { kind: 'core', id: 'core' };
     if (L.core && pointInRing(x, y, L.core)) return { kind: 'core', id: 'core' };
     for (let k = 0; k < L.units.length; k++) if (pointInRing(x, y, L.units[k].outer)) return { kind: 'unit', id: String(k), k };
+    for (const b of L.support) if (b.kind === 'remainder' && pointInRing(x, y, b.outer)) return { kind: 'remainder', id: b.id };       // an unfilled run is tappable
     for (const b of L.support) if (pointInRing(x, y, b.outer)) return { kind: 'support', id: b.id };
     return null;
   }
@@ -342,8 +361,29 @@ const Select = (() => {
       if (a) group.add(a); if (b) group.add(b);
     }
     handles = visibleBays().map((e) => ({ e, w: planToWorld(e.mid[0], e.mid[1], z) }));
-    const d = dots(handles.map((hh) => hh.w), 13);
+    const d = dots(handles.map((hh) => hh.w), COARSE ? 24 : 13);       // 44 pt touch handle on a touch screen (rework plan 7.2)
     if (d) group.add(d);
+    Render.requestRender();
+  }
+
+  /* ---- the two widths beside a dragged bay line (rework plan 7.2) ------------------------------------------------------- */
+  let widthLabel = null;
+  function clearBayWidths() {
+    if (widthLabel && previewGroup) { previewGroup.remove(widthLabel); if (widthLabel.geometry) widthLabel.geometry.dispose(); if (widthLabel.material) { if (widthLabel.material.map) widthLabel.material.map.dispose(); widthLabel.material.dispose(); } }
+    widthLabel = null;
+    Render.requestRender();
+  }
+  function showBayWidths(e, delta, base) {
+    if (!previewGroup) return;
+    clearBayWidths();
+    const m = bayMove(e, delta, base);
+    const ub = D().bounds.union, unit = clamp(Math.max(ub.maxX - ub.minX, ub.maxY - ub.minY) / 300, 1, 2.2);
+    const len = Math.hypot(e.q[0] - e.p[0], e.q[1] - e.p[1]) || 1;
+    const along = [(e.q[0] - e.p[0]) / len, (e.q[1] - e.p[1]) / len];
+    const x = e.mid[0] + e.t[0] * delta + along[0] * len * 0.28, y = e.mid[1] + e.t[1] * delta + along[1] * len * 0.28;
+    widthLabel = Overlays.label(`${fmt(m.wa)}  |  ${fmt(m.wb)}`, x, y, topZ() + 0.35, { height: 2.4 * unit, color: m.ok ? '#1d2733' : CONFIG.flagColor });
+    widthLabel.userData.bayWidths = true;
+    previewGroup.add(widthLabel);
     Render.requestRender();
   }
 
@@ -351,6 +391,7 @@ const Select = (() => {
   const DRAWS = {
     polygon: { word: 'plate outline', min: 3, closed: true },
     rect: { word: 'block', min: 2, max: 2, closed: false },
+    unit: { word: 'unit', min: 2, max: 2, closed: false },          // two taps on one run (rework plan 7.2)
   };
   function drawBar() {
     let bar = $('drawBar');
@@ -367,7 +408,9 @@ const Select = (() => {
     bar.hidden = !draw;
     if (!draw) return;
     const k = DRAWS[draw.kind], n = draw.pts.length;
-    $('drawText').textContent = draw.kind === 'rect'
+    $('drawText').textContent = draw.kind === 'unit'
+      ? (n < 1 ? 'Draw a unit: tap the first cut line on a run.' : 'Draw a unit: tap the second cut line on the same run.')
+      : draw.kind === 'rect'
       ? (n < 1 ? `Add ${draw.label || 'a block'}: tap the first corner.` : `Add ${draw.label || 'a block'}: tap the opposite corner.`)
       : (n < 1 ? 'Draw the plate outline: tap the first point.' : `Drawing the plate outline: ${n} point${n === 1 ? '' : 's'}. Tap the first point or press Enter to finish. Esc cancels.`);
     $('drawFinish').disabled = n < k.min;
@@ -402,7 +445,10 @@ const Select = (() => {
     const z = topZ() + 0.3;
     const accent = cssColorOf('--accent', '#23508f');
     const pts = hover ? draw.pts.concat([[hover.x, hover.y]]) : draw.pts;
-    if (draw.kind === 'rect' && pts.length === 2) {
+    if (draw.kind === 'unit' && pts.length === 2) {
+      const l = fatLine(ringPos(pts, z, false), accent, 3, 1, 12, true);
+      if (l) previewGroup.add(l);
+    } else if (draw.kind === 'rect' && pts.length === 2) {
       const r = [Math.min(pts[0][0], pts[1][0]), Math.min(pts[0][1], pts[1][1]), Math.max(pts[0][0], pts[1][0]), Math.max(pts[0][1], pts[1][1])];
       const l = fatLine(ringPos(rectRing(r), z), accent, 3, 1, 12, true);
       if (l) previewGroup.add(l);
@@ -431,12 +477,19 @@ const Select = (() => {
     if (k.max && draw.pts.length >= k.max) finishDraw();
     return true;
   }
+  const DRAW_UNIT_WORDS = { 'off the run': 'Tap two points inside the units or the unfilled run.', 'other run': 'Tap two points on the same run.', 'too narrow': 'That unit is too narrow. Tap two points farther apart.', 'no band': 'No room for a unit between those points.' };
   function finishDraw() {
     if (!draw) return null;
     const k = DRAWS[draw.kind], pts = draw.pts.map((p) => [rnd(p[0]), rnd(p[1])]);
     if (pts.length < k.min) { Toast.show(`A ${k.word} needs at least ${k.min} points.`, 'warn'); return null; }
     const kind = draw.kind, target = draw.target;
     endDraw();
+    if (kind === 'unit') {
+      const r = drawUnitBetween(pts[0], pts[1]);
+      if (!r.ok) { Toast.show(DRAW_UNIT_WORDS[r.reason] || 'The unit did not fit there. Tap two points on one run.', 'warn', 5000); return null; }
+      Toast.show(`Unit drawn: ${typeOf(r.type) ? typeOf(r.type).name : r.type}, ${fmt(r.width)} wide.`);
+      return { kind, ...r };
+    }
     if (kind === 'polygon') {
       const ring = ringArea(pts) < 0 ? pts.slice().reverse() : pts;
       if (Math.abs(ringArea(ring)) < 100) { Toast.show('That outline is too small.', 'warn'); return null; }
@@ -469,7 +522,7 @@ const Select = (() => {
       Store.set('stairs', { ...s.stairs, mode: 'manual', items: [...items, { id, rect: r }] }, { live: false });
       item = { kind: 'stair', id };
     } else if (target.type === 'core') {
-      Store.set('core.rect', r, { live: false });
+      setCoreRect(r, false);
       item = { kind: 'core', id: 'core' };
     }
     if (item) setSel(item);
@@ -486,7 +539,7 @@ const Select = (() => {
   /* ---- editing blocks --------------------------------------------------------------------------------------------- */
   function rectOf(it) {
     const s = Store.raw();
-    if (it.kind === 'core') { const r = s.core.rect; if (r) return r.slice(); const L = editing(); return L && L.core ? ringRect(L.core) : null; }
+    if (it.kind === 'core') { const r = s.core.mode === 'manual' && s.core.rect; if (r) return r.slice(); const L = editing(); return L && L.core ? ringRect(L.core).map(rnd3) : null; }
     if (it.kind === 'support') { const b = s.support.find((x) => x.id === it.id); return b ? b.rect.slice() : null; }
     if (it.kind === 'stair') { const m = manualStairs().find((x) => x.id === it.id); return m ? m.rect : null; }
     return null;
@@ -495,10 +548,7 @@ const Select = (() => {
   function setBlockRect(it, rect, live = false) {
     const s = Store.raw();
     const r = rect.map(rnd3);
-    if (it.kind === 'core') {
-      if (s.source === 'project') { noticeOnce('core', 'The core comes from the massing. Move it in the Mid-Rise Generator.'); return false; }
-      return Store.set('core.rect', r, { live }), true;
-    }
+    if (it.kind === 'core') return setCoreRect(r, live);       // a drag sets the core to Manual (rework plan 7.2)
     if (it.kind === 'support') {
       const i = s.support.findIndex((x) => x.id === it.id);
       if (i < 0) return false;
@@ -532,12 +582,36 @@ const Select = (() => {
       return true;
     }
     if (it.kind === 'core') {
-      if (s.source === 'project') { noticeOnce('core', 'The core comes from the massing.'); return false; }
-      Store.set('core.rect', null, { live: false });
+      Store.set('core', { mode: 'none', rect: null }, { live: false });
       clear();
       return true;
     }
     return false;
+  }
+  /** The core takes a rectangle and the mode Manual (one Store write, so one undo step per drag). */
+  function setCoreRect(rect, live = false) {
+    const r = rect.map(rnd3);
+    Store.set('core', { mode: 'manual', rect: r }, { live });
+    return true;
+  }
+  /** Core mode from the panel or the card: 'auto' | 'manual' | 'none'. Manual with no rectangle takes the rectangle of the core now. */
+  function setCoreMode(mode) {
+    if (!['auto', 'manual', 'none'].includes(mode)) return false;
+    const s = Store.raw();
+    if (mode === 'manual') {
+      const L = editing();
+      const r = (s.core.rect && s.core.rect.length === 4 ? s.core.rect : null) || (L && L.core ? ringRect(L.core).map(rnd3) : [-15, -15, 15, 15]);
+      return Store.set('core', { mode: 'manual', rect: r }, { live: false }), true;
+    }
+    return Store.set('core', { mode, rect: mode === 'none' ? null : s.core.rect || null }, { live: false }), true;
+  }
+  /** "Reset core to auto": the manual rectangle goes and the fill makes the core again. */
+  function resetCore() {
+    const s = Store.raw();
+    if (s.core.mode === 'auto' && !s.core.rect) return false;
+    Store.set('core', { mode: 'auto', rect: null }, { live: false });
+    if (sel && sel.kind === 'core') onChanged();
+    return true;
   }
 
   /* ---- editing units ------------------------------------------------------------------------------------------------- */
@@ -631,6 +705,223 @@ const Select = (() => {
     return trial;
   }
 
+  /* ---- split, merge, fill an unfilled run, draw a unit (rework plan 7.2) ------------------------------------------------ */
+  const GEOM = CorridorMod.GEO;
+  const MIN_PIECE = 5;                                      // ft: the narrowest piece a split, a merge or a fill makes
+  const SNAP_DEFAULT = 0.5;
+  /** A rectangle in the run frame of `fr` (t along the run, n into the unit): the strip between t-positions a and b, wide in n. */
+  function stripRing(fr, a, b) {
+    const pt = (s, q) => [fr.t[0] * s + fr.n[0] * q, fr.t[1] * s + fr.n[1] * q];
+    const q0 = fr.n0 - 2, q1 = fr.n1 + 2;
+    return [pt(a, q0), pt(b, q0), pt(b, q1), pt(a, q1)];
+  }
+  /** frameOf with a canonical direction (t points east, or north on a run along y), so that a unit and an unfilled run of one run agree. */
+  function canonFrame(L, ring) {
+    const f = frameOf(L, { outer: ring });
+    const flip = f.t[0] < -1e-9 || (Math.abs(f.t[0]) <= 1e-9 && f.t[1] < 0);
+    if (!flip) return f;
+    return { t: [-f.t[0], -f.t[1]], n: [-f.n[0], -f.n[1]], t0: -f.t1, t1: -f.t0, n0: -f.n1, n1: -f.n0, w: f.w, d: f.d };
+  }
+  const sameBand = (a, b) => Math.abs(a.t[0] * b.t[1] - a.t[1] * b.t[0]) < 0.05 && Math.abs(a.n0 - b.n0) < 0.5 && Math.abs(a.n1 - b.n1) < 0.5;
+  /** The biggest piece of a ring cut to the strip a..b (as a clean ring), or null. */
+  function cutRing(ring, fr, a, b, clipTo = null) {
+    let mp = GEOM.bool('int', [{ outer: ring, holes: [] }], [{ outer: stripRing(fr, a, b), holes: [] }]);
+    if (clipTo && mp.length) mp = GEOM.bool('int', mp, clipTo);
+    mp = mp.filter((q) => Math.abs(ringArea(q.outer)) > 0.25).sort((p, q) => Math.abs(ringArea(q.outer)) - Math.abs(ringArea(p.outer)));
+    return mp.length ? cleanOuter(mp[0].outer) : null;
+  }
+  /** The area-line zone of the editing level: the plate inset by the exterior wall (an unfilled run reaches the plate edge). */
+  function areaZone(L) {
+    const ext = Number(Store.raw().extWall) || 0;
+    return ext > 0 ? GEOM.offsetMP(L.plate, -ext) : L.plate;
+  }
+  /** The deficit (target less placed) of every type on the editing group, for a tie-break. */
+  function deficits() {
+    const out = {};
+    for (const r of D().hud.mix || []) out[r.type] = (r.target || 0) - (r.count || 0);
+    return out;
+  }
+  /**
+   * The type that fits a width best at a depth: the width inside the type's width range first, then an area inside the area range,
+   * then the larger deficit, then the width nearest the type's preferred width (then `prefer`). → { id, fits (width in range), areaOk }
+   */
+  function bestTypeFor(width, depth, { prefer = null } = {}) {
+    const hotel = Store.raw().mode === 'hotel', def = deficits();
+    let best = null;
+    for (const t of mixList()) {
+      const [lo, hi] = widthRangeOf(t);
+      const miss = width < lo - 0.01 ? lo - width : width > hi + 0.01 ? width - hi : 0;
+      const area = width * depth;
+      const areaOk = hotel || (area >= t.areaMin - 0.5 && area <= t.areaMax + 0.5);
+      const pref = hotel ? (t.target || (lo + hi) / 2) * Math.max(1, t.bays || 1) : t.targetArea / depth;
+      const key = [miss > 0 ? 1 : 0, miss, areaOk ? 0 : 1, -(def[t.id] || 0), Math.abs(width - pref), t.id === prefer ? 0 : 1];
+      if (!best || cmpKey(key, best.key) < 0) best = { id: t.id, key, fits: miss === 0, areaOk };
+    }
+    return best;
+  }
+  const cmpKey = (a, b) => { for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] < b[i] ? -1 : 1; return 0; };
+  /** Locks without the ones that sit on `rings` (same outline). */
+  const withoutLocks = (locks, rings) => locks.filter((l) => !rings.some((r) => sameRing(l.outer, r)));
+  const lockRing = (locks, outer, type) => putLock(locks, outer, type, null);
+  /** The sort key of a unit along a run, so that "left" is west on a run along x and north on a run along y. */
+  const leftKey = (t, c) => (Math.abs(t[0]) >= Math.abs(t[1]) ? c[0] : -c[1]);
+
+  /**
+   * Split: the unit becomes two units of half the width. Each half takes the type whose width range holds the half width
+   * (deficit order); with no such type it keeps the type of the unit (the half is then flagged). Both halves are locks.
+   * → { ok, types: [a, b], widths } | { ok: false, reason }
+   */
+  function splitUnit(k = sel && sel.kind === 'unit' ? sel.k : -1) {
+    const L = editing(), u = unitAt(k);
+    if (!L || !u) return { ok: false, reason: 'no unit' };
+    const fr = frameOf(L, u);
+    if (fr.w < MIN_PIECE * 2 - 1e-6) return { ok: false, reason: 'too narrow' };
+    const mid = (fr.t0 + fr.t1) / 2;
+    const A = cutRing(u.outer, fr, fr.t0 - 1, mid), B = cutRing(u.outer, fr, mid, fr.t1 + 1);
+    if (!A || !B) return { ok: false, reason: 'no cut' };
+    const half = fr.w / 2;
+    const pick = () => { const b = bestTypeFor(half, fr.d, { prefer: u.type }); return b.fits ? b.id : u.type; };
+    const tA = pick(), tB = pick();
+    let locks = withoutLocks(locksNow(), [u.outer]);
+    locks = lockRing(lockRing(locks, A, tA), B, tB);
+    writeLocks(locks);
+    reselectAt(ringCentroidXY(A));
+    return { ok: true, types: [tA, tB], widths: [half, half] };
+  }
+
+  /** The neighbors of a unit across a bay line in the same run: { dir: -1 | 1, j } for "left" and "right". */
+  function neighborsOf(k) {
+    const L = editing(), u = unitAt(k);
+    if (!L || !u) return {};
+    const fr = frameOf(L, u), ck = ringCentroidXY(u.outer), key = leftKey(fr.t, ck);
+    const out = {};
+    for (const e of bayEdges()) {
+      if (e.a !== k && e.b !== k) continue;
+      const j = e.a === k ? e.b : e.a, v = L.units[j];
+      const fj = frameOf(L, v);
+      if (Math.abs(fr.t[0] * fj.t[1] - fr.t[1] * fj.t[0]) > 0.05) continue;       // another run
+      if (Math.abs(fr.n0 - fj.n0) > 0.5 || Math.abs(fr.n1 - fj.n1) > 0.5) continue;
+      const dk = leftKey(fr.t, ringCentroidXY(v.outer)) - key;
+      const dir = dk < 0 ? -1 : 1;
+      if (!out[dir] || Math.abs(dk) < Math.abs(out[dir].dk)) out[dir] = { j, dk };
+    }
+    return { '-1': out[-1] ? out[-1].j : null, '1': out[1] ? out[1].j : null };
+  }
+  /**
+   * Merge: the unit and its neighbor on one side (dir -1 = left, 1 = right) become one lock. The type is the best fit of the width.
+   * → { ok, type, width } | { ok: false, reason }
+   */
+  function mergeUnit(dir, k = sel && sel.kind === 'unit' ? sel.k : -1) {
+    const L = editing(), u = unitAt(k);
+    if (!L || !u) return { ok: false, reason: 'no unit' };
+    const j = neighborsOf(k)[String(dir)];
+    if (j === null || j === undefined) return { ok: false, reason: 'no neighbor' };
+    const v = unitAt(j);
+    const mp = GEOM.bool('union', [{ outer: u.outer, holes: [] }], [{ outer: v.outer, holes: [] }]);
+    if (mp.length !== 1 || (mp[0].holes || []).length) return { ok: false, reason: 'not one piece' };
+    const outer = cleanOuter(mp[0].outer);
+    const fr = frameOf(L, { outer });
+    const best = bestTypeFor(fr.w, fr.d, { prefer: u.type });
+    writeLocks(lockRing(withoutLocks(locksNow(), [u.outer, v.outer]), outer, best.id));
+    reselectAt(ringCentroidXY(outer));
+    return { ok: true, type: best.id, width: fr.w };
+  }
+
+  /** The unfilled runs of the editing level: [{ id, outer, length, depth }]. */
+  function remainders() {
+    const L = editing();
+    if (!L) return [];
+    return L.support.filter((b) => b.kind === 'remainder').map((b) => { const fr = frameOf(L, { outer: b.outer }); return { id: b.id, outer: b.outer, length: fr.w, depth: fr.d }; });
+  }
+  /** The unit counts (1 to 3) that give every piece a width inside the width range of some type. */
+  function fitCounts(length) {
+    const out = [];
+    for (let n = 1; n <= 3; n++) {
+      const w = length / n;
+      if (mixList().some((t) => { const [lo, hi] = widthRangeOf(t); return w >= lo - 0.01 && w <= hi + 0.01; })) out.push(n);
+    }
+    return out;
+  }
+  /** The count that suits a type: the piece width nearest its preferred width, inside its range when it can. */
+  function countForType(length, t, depth) {
+    const [lo, hi] = widthRangeOf(t);
+    const pref = Store.raw().mode === 'hotel' ? (t.target || (lo + hi) / 2) * Math.max(1, t.bays || 1) : t.targetArea / depth;
+    let best = null;
+    for (let n = 1; n <= 3; n++) {
+      const w = length / n, miss = w < lo - 0.01 ? lo - w : w > hi + 0.01 ? w - hi : 0;
+      const key = [miss > 0 ? 1 : 0, miss, Math.abs(w - pref)];
+      if (!best || cmpKey(key, best.key) < 0) best = { n, key };
+    }
+    return best.n;
+  }
+  /**
+   * Fill an unfilled run: `count` (1 to 3) locked units of equal width (the pieces of the strip, inside the area line), all of
+   * `type` or, with no type, each with the best fit. Without a count the type picks its own count.
+   * → { ok, count, types } | { ok: false, reason }
+   */
+  function fillRemainder(id, { count = null, type = null } = {}) {
+    const L = editing();
+    const r = remainders().find((x) => x.id === id);
+    if (!L || !r) return { ok: false, reason: 'no unfilled run' };
+    const t = type ? typeOf(type) : null;
+    if (type && !t) return { ok: false, reason: 'no type' };
+    const fr = frameOf(L, { outer: r.outer });
+    const n = count || (t ? countForType(fr.w, t, fr.d) : (fitCounts(fr.w)[0] || 1));
+    if (!(n >= 1 && n <= 3) || fr.w / n < MIN_PIECE - 1e-6) return { ok: false, reason: 'too short' };
+    const zone = areaZone(L), w = fr.w / n;
+    const pieces = [];
+    for (let i = 0; i < n; i++) {
+      const ring = cutRing(r.outer, fr, i === 0 ? fr.t0 - 1 : fr.t0 + i * w, i === n - 1 ? fr.t1 + 1 : fr.t0 + (i + 1) * w, zone);
+      if (!ring) return { ok: false, reason: 'no cut' };
+      pieces.push(ring);
+    }
+    let locks = withoutLocks(locksNow(), pieces);
+    const types = [];
+    for (const ring of pieces) {
+      const f2 = frameOf(L, { outer: ring });
+      const ty = t ? t.id : bestTypeFor(f2.w, f2.d).id;
+      types.push(ty);
+      locks = lockRing(locks, ring, ty);
+    }
+    writeLocks(locks);
+    reselectAt(ringCentroidXY(pieces[0]));
+    return { ok: true, count: n, types };
+  }
+
+  /**
+   * Draw a unit: two plan points on the same run. The unit spans the band between the two cut lines (snapped to the grid); it
+   * becomes a lock with the best-fit type. → { ok, type, width } | { ok: false, reason }
+   */
+  function drawUnitBetween(p1, p2) {
+    const L = editing();
+    if (!L) return { ok: false, reason: 'no level' };
+    const holders = [...L.units.map((u, k) => ({ kind: 'unit', k, outer: u.outer })), ...L.support.filter((b) => b.kind === 'remainder').map((b) => ({ kind: 'remainder', outer: b.outer }))];
+    const at = (p) => holders.find((x) => pointInRing(p[0], p[1], x.outer)) || null;
+    const h1 = at(p1), h2 = at(p2);
+    if (!h1 || !h2) return { ok: false, reason: 'off the run' };
+    const f1 = canonFrame(L, h1.outer), f2 = canonFrame(L, h2.outer);
+    if (!sameBand(f1, f2)) return { ok: false, reason: 'other run' };
+    const fr = f1;
+    const sn = Store.raw().view.snap, g = sn.on ? sn.grid || SNAP_DEFAULT : 0;
+    const q = (p) => { const v = p[0] * fr.t[0] + p[1] * fr.t[1]; return g ? Math.round(v / g) * g : v; };
+    const a = Math.min(q(p1), q(p2)), b = Math.max(q(p1), q(p2));
+    if (b - a < MIN_PIECE - 1e-6) return { ok: false, reason: 'too narrow' };
+    // the run: every unit and unfilled run with the same direction and depth band, inside the area line
+    const same = holders.filter((x) => sameBand(fr, canonFrame(L, x.outer)));
+    const region = GEOM.bool('int', GEOM.bool('union', same.map((x) => ({ outer: x.outer, holes: [] })), []), areaZone(L));
+    const stripMP = [{ outer: stripRing(fr, a, b), holes: [] }];
+    const piece = GEOM.bool('int', region, stripMP).filter((x) => Math.abs(ringArea(x.outer)) > 0.25).sort((x, y) => Math.abs(ringArea(y.outer)) - Math.abs(ringArea(x.outer)))[0];
+    if (!piece) return { ok: false, reason: 'no band' };
+    const outer = cleanOuter(piece.outer);
+    const fo = frameOf(L, { outer });
+    const best = bestTypeFor(fo.w, fo.d);
+    // the new lock replaces every lock it covers by more than 1 sf
+    const covered = locksNow().filter((l) => { const x = GEOM.bool('int', [{ outer: l.outer, holes: [] }], [{ outer, holes: [] }]); return x.some((m) => Math.abs(ringArea(m.outer)) > 1); }).map((l) => l.outer);
+    writeLocks(lockRing(withoutLocks(locksNow(), covered), outer, best.id));
+    reselectAt(ringCentroidXY(outer));
+    return { ok: true, type: best.id, width: fo.w };
+  }
+
   /* ---- pointer handling ------------------------------------------------------------------------------------------------ */
   const downs = new Map();
   function bayHit(cx, cy, touch) {
@@ -698,6 +989,7 @@ const Select = (() => {
         if (Math.abs(clampd) < 1e-6 && !drag.started) return;
         drag.started = true;
         moveBay(drag.e, clampd, true, drag.base, drag.prev);
+        showBayWidths(drag.e, clampd, drag.base);
         return;
       }
       if (drag.type === 'block') {
@@ -723,6 +1015,7 @@ const Select = (() => {
     try { Render.canvas().releasePointerCapture(e.pointerId); } catch (err) { /* ignore */ }
     const was = drag.started, d0 = drag;
     drag = null;
+    clearBayWidths();
     Render.setOrbitEnabled(true);
     if (was) {
       Store.commit();
@@ -788,6 +1081,7 @@ const Select = (() => {
     if (u.corner) rows.push(['Corner', 'wrap unit']);
     if (u.accessible) rows.push(['Accessible', typeof u.accessible === 'string' ? u.accessible : 'yes']);
     const flags = [];
+    if (u.areaHigh && t) flags.push(`Large: the area is above the ${Math.round(t.areaMin)} to ${Math.round(t.areaMax)} sf range of this type. The run is deep.`);
     if (u.flagged && t) {
       if (Store.raw().mode === 'hotel') flags.push(`Width is outside ${t.widthMin} to ${t.widthMax} ft`);
       else flags.push(`Area is outside ${Math.round(t.areaMin)} to ${Math.round(t.areaMax)} sf`);
@@ -804,16 +1098,37 @@ const Select = (() => {
     cardRefs.actions.textContent = '';
     cardRefs.types.textContent = '';
     cardRefs.types.hidden = true;
+    const typeChips = (onPick, current) => {
+      cardRefs.types.hidden = false;
+      const deep = new Set(D().hud.deep || []);
+      for (const t of mixList()) {
+        cardRefs.types.append(h('button', { class: 'chip', type: 'button', 'data-type': t.id, 'aria-pressed': String(t.id === current), title: `${deep.has(t.id) ? 'Large at this depth. ' : ''}${t.name}`, onclick: () => onPick(t) },
+          h('span', { class: 'sw', style: `background:${t.color}` }), t.name, deep.has(t.id) ? h('span', { class: 'tag-large' }, 'large') : null));
+      }
+    };
     if (sel.kind === 'unit') {
       const u = unitAt(sel.k);
       if (!u) return;
       info = describeUnit(u, L);
-      cardRefs.types.hidden = false;
-      for (const t of mixList()) {
-        cardRefs.types.append(h('button', { class: 'chip', type: 'button', 'data-type': t.id, 'aria-pressed': String(t.id === u.type), title: `Change to ${t.name}`, onclick: () => { const r = setUnitType(sel.k, t.id); if (!r.ok) Toast.show(`${t.name} does not fit this run.`, 'warn', 4000); } },
-          h('span', { class: 'sw', style: `background:${t.color}` }), t.name));
+      typeChips((t) => { const r = setUnitType(sel.k, t.id); if (!r.ok) Toast.show(`${t.name} does not fit this run.`, 'warn', 4000); }, u.type);
+      const fr = frameOf(L, u), nb = neighborsOf(sel.k);
+      cardRefs.actions.append(
+        h('button', { class: 'btn outline sm', type: 'button', 'data-action': 'lock', 'aria-pressed': String(u.locked), onclick: () => toggleLock() }, u.locked ? 'Unlock' : 'Lock (L)'),
+        h('button', { class: 'btn outline sm', type: 'button', 'data-action': 'split', disabled: fr.w < MIN_PIECE * 2 - 1e-6, title: 'Cut the unit into two units of half the width', onclick: () => { const r = splitUnit(); if (!r.ok) Toast.show('The unit is too narrow to split.', 'warn', 4000); } }, 'Split'),
+        h('button', { class: 'btn outline sm', type: 'button', 'data-action': 'merge-left', disabled: nb['-1'] === null, title: 'Join this unit and the unit on its left', onclick: () => { const r = mergeUnit(-1); if (!r.ok) Toast.show('These two units do not join into one piece.', 'warn', 4000); } }, 'Merge \u2190'),
+        h('button', { class: 'btn outline sm', type: 'button', 'data-action': 'merge-right', disabled: nb['1'] === null, title: 'Join this unit and the unit on its right', onclick: () => { const r = mergeUnit(1); if (!r.ok) Toast.show('These two units do not join into one piece.', 'warn', 4000); } }, 'Merge \u2192'));
+    } else if (sel.kind === 'remainder') {
+      const r = remainders().find((x) => x.id === sel.id);
+      if (!r) return;
+      const counts = fitCounts(r.length);
+      info = {
+        title: 'Unfilled run', sub: `${fmt(r.length)} long, ${sf(Math.abs(ringArea(r.outer)))}`,
+        rows: [['Length', fmt(r.length)], ['Depth', fmt(r.depth)], ['Why', 'The run is shorter than the narrowest unit.'], ['Fill', counts.length ? 'Pick a count or a type. The units split the run evenly and lock.' : 'No count of units fits this length. Move a block or the core.']],
+      };
+      typeChips((t) => { const x = fillRemainder(sel.id, { type: t.id }); if (!x.ok) Toast.show('The run is too short for that type.', 'warn', 4000); }, null);
+      for (const n of [1, 2, 3]) {
+        cardRefs.actions.append(h('button', { class: 'btn outline sm', type: 'button', 'data-action': `fill-${n}`, disabled: !counts.includes(n), title: counts.includes(n) ? `${n} unit${n === 1 ? '' : 's'} of ${fmt(r.length / n)}` : 'That width is outside every type range', onclick: () => { const x = fillRemainder(sel.id, { count: n }); if (!x.ok) Toast.show('The run is too short for that count.', 'warn', 4000); } }, `${n} unit${n === 1 ? '' : 's'}`));
       }
-      cardRefs.actions.append(h('button', { class: 'btn outline sm', type: 'button', 'data-action': 'lock', 'aria-pressed': String(u.locked), onclick: () => toggleLock() }, u.locked ? 'Unlock' : 'Lock (L)'));
     } else {
       const r = rectOf(sel);
       const ring = selRing();
@@ -821,10 +1136,17 @@ const Select = (() => {
       let label = BLOCK_WORDS[sel.kind] || sel.kind;
       if (sel.kind === 'support') { const b = L.support.find((x) => x.id === sel.id); if (b) label = `${b.kind.charAt(0).toUpperCase()}${b.kind.slice(1)} block`; }
       info = { title: sel.kind === 'core' ? 'Core' : `${label} ${sel.id}`, sub: sf(area), rows: r ? [['Size', `${fmt(r[2] - r[0])} x ${fmt(r[3] - r[1])}`], ['Lower left', `${fmt(r[0])}, ${fmt(r[1])}`]] : [['Area', sf(area)]] };
+      if (sel.kind === 'core') {
+        const cm = Store.raw().core.mode, prog = D().hud.core;
+        info.rows.push(['Mode', { auto: 'Auto: the fill makes the core', manual: 'Manual: you set the rectangle', none: 'None' }[cm] || cm]);
+        if (prog && prog.cabs !== null && prog.cabs !== undefined) info.rows.push(['Elevators', `${prog.cabs} passenger${prog.service ? `, ${prog.service} service` : ''}`]);
+        info.rows.push(['Move it', 'Drag the core. It becomes Manual.']);
+        cardRefs.actions.append(h('button', { class: 'btn outline sm', type: 'button', 'data-action': 'reset-core', disabled: cm === 'auto' && !Store.raw().core.rect, onclick: () => resetCore() }, 'Reset core to auto'));
+      }
       if (sel.kind === 'stair' && Store.raw().stairs.mode !== 'manual') info.rows.push(['Mode', 'Moving it switches the stairs to Manual']);
       if (sel.kind === 'support' && !isUserSupport(sel.id)) info.rows.push(['Source', 'from the fill']);
       if ((sel.kind === 'support' && isUserSupport(sel.id)) || (sel.kind === 'stair' && Store.raw().stairs.mode === 'manual') || sel.kind === 'core') {
-        cardRefs.actions.append(h('button', { class: 'btn outline sm danger-text', type: 'button', 'data-action': 'delete', onclick: () => deleteBlock(sel) }, 'Delete'));
+        cardRefs.actions.append(h('button', { class: 'btn outline sm danger-text', type: 'button', 'data-action': 'delete', onclick: () => deleteBlock(sel) }, sel.kind === 'core' ? 'Remove core' : 'Delete'));
       }
     }
     cardRefs.title.textContent = info.title;
@@ -886,7 +1208,9 @@ const Select = (() => {
     startDraw, cancelDraw, finishDraw, drawing: () => (draw ? { kind: draw.kind, points: draw.pts.length } : null),
     drawTap: (cx, cy, alt) => (draw ? addDrawPoint(cx, cy, !!alt) : false),
     drawPoint: (x, y) => { if (!draw) return false; draw.pts.push([x, y]); syncDrawBar(); renderPreview(); return true; },
-    addBlock, deleteBlock, setBlockRect, rectOf,
+    addBlock, deleteBlock, setBlockRect, rectOf, setCoreMode, resetCore,
+    // split, merge, unfilled runs, draw a unit
+    splitUnit, mergeUnit, neighbors: (k) => neighborsOf(k), remainders, fillRemainder, drawUnitBetween, fitCounts, bestTypeFor: (w, d) => bestTypeFor(w, d),
     // units and locks
     selectUnit: (k) => setSel({ kind: 'unit', id: String(k), k }), toggleLock, unlockAll, setUnitType, refill, locks: locksNow, frameOf: (k) => { const L = editing(); const u = unitAt(k); return L && u ? frameOf(L, u) : null; },
     // bay lines

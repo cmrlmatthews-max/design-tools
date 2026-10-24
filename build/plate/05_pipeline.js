@@ -8,12 +8,14 @@
    ========================================================================== */
 const SEVERITY_ORDER = { error: 0, warn: 1, info: 2 };
 const mapWarning = (w) => ({ id: w.code || w.id, level: w.severity || w.level || 'warn', text: w.message || w.text || String(w.code || w.id || ''), where: w.where || null });
+/** The unit-count word for a mode. */
+const unitWordOf = (mode) => (mode === 'hotel' ? 'keys' : 'units');
 const sortWarnings = (list) => list.map((w, i) => [w, i]).sort((a, b) => ((SEVERITY_ORDER[a[0].level] ?? 1) - (SEVERITY_ORDER[b[0].level] ?? 1)) || (a[1] - b[1])).map((x) => x[0]);
 
 const emptyHud = () => ({
   units: 0, nrsf: 0, gsf: 0, efficiency: 0, avgUnit: 0, corners: 0, exposures: { N: 0, E: 0, S: 0, W: 0 }, accessible: 0, corridorFt: 0,
   corridorPerUnit: null, stairDoors: 0, stairPathFt: null, deadEnds: [], deadEndMax: null, support: null, mix: [], hotel: null, closure: null,
-  floors: 1, building: null, warnCount: 0,
+  floors: 1, building: null, warnCount: 0, inRange: null, areaHigh: 0, dropped: [], deep: [], core: null,
 });
 
 function emptyDerived(message) {
@@ -54,8 +56,9 @@ function locksFor(s, gid) {
 }
 
 /** True when a unit of the fill is out of the range its type allows. */
-function unitFlagged(s, row, u) {
+function unitFlagged(s, row, u, areaHigh) {
   if (!row) return true;
+  if (areaHigh) return false;                 // rework plan 7.1: a large unit of a deep run has its own orange mark
   const list = (s.mix && s.mix[s.mode]) || [];
   const t = list.find((x) => x.id === row.id);
   if (!t) return false;
@@ -78,18 +81,21 @@ function sceneOf(s, built, derived, editingIndex) {
     const rec = recs.get(L.index) || {};
     const gid = rec.groupId;
     const locks = locksFor(s, gid);
+    const fillUnits = rec.fill && Array.isArray(rec.fill.units) && rec.fill.units.length === L.units.length ? rec.fill.units : null;
     const units = L.units.map((u, k) => {
       const row = look(u.type);
       const lock = locks.find((l) => sameRing(l.outer, u.outer)) || null;
+      const areaHigh = Array.isArray(u.flags) && u.flags.includes('area-high');
       return {
         k, id: u.id, type: row ? row.id : u.type, typeName: u.type, color: row ? row.color : '#9aa3ad', outer: u.outer, area: u.area,
         exposures: u.exposures, corner: u.corner, accessible: u.accessible, bay: u.bay, ring: u.ring, demising: u.demising,
-        locked: !!lock, lockId: lock ? lock.id : null, flagged: unitFlagged(s, row, u),
+        locked: !!lock, lockId: lock ? lock.id : null, flagged: unitFlagged(s, row, u, areaHigh), areaHigh, runId: fillUnits ? fillUnits[k].runId || null : null,
       };
     });
     return {
       index: L.index, name: L.name, z: L.z, ftf: L.ftf, groupId: gid || null, editing: L.index === editingIndex,
       plate: L.plate, corridor: L.corridor, core: L.core.outer, stairs: L.core.stairs, elevators: L.core.elevators, support: L.support,
+      coreRooms: L.core.rooms || [], coreMode: rec.fill ? rec.fill.coreMode || null : null, maxDepth: rec.fill ? rec.fill.maxDepth || null : null,
       units, wallLines: PlateDerivedMod.corridorWallLines(L, wall),
     };
   });
@@ -102,12 +108,19 @@ function summarize(s, metrics, group) {
   if (!row) return emptyHud();
   const b = metrics.building;
   const mixRows = row.mix ? row.mix.byType.map((r) => ({ type: r.type, count: r.count, target: r.target, diff: r.diff, avgArea: r.avgArea })) : [];
+  const fill = group.fill || null;
+  const prog = fill && fill.coreProgram ? fill.coreProgram : null;
+  const dropped = [...new Set([...(row.dropped || []), ...(fill && Array.isArray(fill.dropped) ? fill.dropped : [])].map((d) => d.id))];
   return {
     units: row.units, nrsf: row.nrsf, gsf: row.gsf, efficiency: row.efficiency, avgUnit: row.avgUnitArea, corners: row.corners, exposures: row.exposures,
     accessible: row.accessible, corridorFt: row.corridor.lengthFt, corridorPerUnit: row.corridor.perUnit,
     stairDoors: row.stairDoors.count, stairPathFt: row.stairDoors.pathFt, deadEnds: row.stairDoors.deadEnds || [], deadEndMax: row.stairDoors.deadEndMax,
     support: row.support, mix: mixRows, hotel: row.hotel, closure: row.closure, floors: group.floors, bays: row.bays,
-    building: { units: b.units, nrsf: b.nrsf, gsf: b.gsf, efficiency: b.efficiency, floors: metrics.floors, accessible: b.accessible, corridorFt: b.corridorFt, mix: b.mix, supportSf: b.supportSf },
+    inRange: typeof row.inRange === 'number' ? row.inRange : null, areaHigh: row.areaHighCount || 0, avgArea: row.avgArea, targetAvgArea: row.targetAvgArea,
+    dropped, deep: fill && Array.isArray(fill.deep) ? fill.deep.map((d) => d.id) : [],
+    core: fill ? { mode: fill.coreMode || null, cabs: prog ? prog.cabs : null, autoCabs: prog ? prog.autoCabs : null, service: prog ? prog.service : null, rooms: (fill.coreRooms || []).length } : null,
+    building: { units: b.units, nrsf: b.nrsf, gsf: b.gsf, efficiency: b.efficiency, floors: metrics.floors, accessible: b.accessible, corridorFt: b.corridorFt, mix: b.mix, supportSf: b.supportSf,
+      inRange: typeof b.inRange === 'number' ? b.inRange : null, areaHigh: b.areaHighCount || 0, avgArea: b.avgArea, targetAvgArea: b.targetAvgArea },
     warnCount: 0,
   };
 }
@@ -124,6 +137,7 @@ function computeDerived(s, { project = null, fillStamp = null, currentStamp = nu
     const groups = metrics.groups.map((g) => ({ id: g.id, label: g.label || g.id, first: g.first, levels: g.levels, floors: g.floors, row: g.row }));
     const sel = s.levels && s.levels.selected;
     const group = groups.find((g) => g.id === sel) || groups[0] || null;
+    if (group) { const bg = built.groups.find((g) => g.id === group.id); group.fill = bg ? bg.fill : null; }
     const editIndex = group ? group.levels[0] !== undefined ? group.levels[0] : group.first : 1;
     const levels = sceneOf(s, built, derived, editIndex);
     const editing = levels.find((l) => l.editing) || levels[0] || null;
@@ -131,7 +145,7 @@ function computeDerived(s, { project = null, fillStamp = null, currentStamp = nu
     const contextRings = [];
     for (const L of levels) if (L.groupId !== (editing && editing.groupId) && L.index === (groups.find((g) => g.id === L.groupId) || {}).first) contextRings.push(outerRingsOf(L.plate));
     const hud = summarize(s, metrics, group);
-    hud.warnCount = warnings.filter((w) => w.level !== 'info').length;
+    hud.warnCount = warnings.length;          // rework plan 7.3: the badge counts the whole list (checks() output, de-duplicated by code and where)
     const stack = levels.length ? Math.max(...levels.map((l) => l.z + l.ftf)) : 0;
     const rings = levels.flatMap((l) => outerRingsOf(l.plate));
     const bounds = computeBounds(rings, Math.max(stack, CONFIG.slabHeight + 2));
@@ -168,4 +182,46 @@ const Derived = (() => {
     return { key: `${d.geomId}`, quality: Store.gestureActive() ? 'draft' : 'full' };
   }
   return { get, display };
+})();
+
+/* ==========================================================================
+   ADVICE  (rework plan section 6)
+   The efficiency advisor makes real test fits, so it can take a few hundred milliseconds. It never runs in a drag: it waits until the
+   state stops changing (ADVICE_MS after the last change), then computes once for the current Derived result and tells the listeners.
+   Until then the last list stays (flagged as not fresh). Pure input: Derived.get(); it never writes to the Store.
+   ========================================================================== */
+const Advice = (() => {
+  const ADVICE_MS = 350;
+  let list = [], key = null, timer = null, started = false, error = null;
+  const listeners = [];
+  const notify = () => listeners.forEach((fn) => { try { fn(); } catch (e) { console.error(e); } });
+  function computeNow() {
+    const d = Derived.get();
+    if (!d.ok || !d.built || !d.metrics) { list = []; key = d.id; error = null; notify(); return list; }
+    try {
+      list = AdvisorMod.advise(d.state, d.built, d.metrics, { fillPlate: FillMod.buildPlates });
+      error = null;
+    } catch (e) { console.error(e); list = []; error = e && e.message ? e.message : 'failed'; }
+    key = d.id;
+    notify();
+    return list;
+  }
+  function schedule() {
+    if (timer) clearTimeout(timer);
+    timer = null;
+    if (Store.gestureActive()) return;                      // never in the drag path
+    timer = setTimeout(() => { timer = null; if (Store.gestureActive()) return schedule(); if (key !== Derived.get().id) computeNow(); }, ADVICE_MS);
+  }
+  function start() {
+    if (started) return;
+    started = true;
+    Store.subscribe(() => schedule());
+    schedule();
+  }
+  return {
+    start, computeNow, schedule,
+    /** { list, fresh } : fresh is true when the list belongs to the current build. */
+    get: () => ({ list, fresh: key === Derived.get().id, error }),
+    onChange: (fn) => listeners.push(fn),
+  };
 })();

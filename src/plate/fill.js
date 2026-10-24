@@ -416,7 +416,21 @@ export function runsAndCorners(zone, plate, corridor, blocks, state, cache = nul
   const { rings, bands, zone0 } = base;
   const warnings = [];
   const hotel = modeOf(state) === "hotel";
-  const { corners: cz, pockets, remainders: left } = classifyLeftovers(zone0, bands, rings, blockList, { hotel });
+  const { corners: cz, pockets, remainders: left0 } = classifyLeftovers(zone0, bands, rings, blockList, { hotel });
+  // A locked unit is a unit: the exterior strip in front of it stays exterior allowance, not a leftover piece.
+  const lockFronts = [];
+  for (const blk of blockList) {
+    if (blk.kind !== "lock") continue;
+    for (const b of bands) {
+      if (mpArea(bool("int", b.band, [{ outer: blk.outer, holes: [] }])) <= 0.01) continue;
+      const [lo, hi] = projRange(b.fr, blk.outer);
+      lockFronts.push(...strip(b.fr, lo, hi, b.maxT - 0.01, b.maxT + ext + 0.01));   // t runs from the corridor face to the facade
+    }
+  }
+  const left = lockFronts.length
+    ? left0.flatMap((r) => bool("diff", [{ outer: r.outer, holes: r.holes || [] }], lockFronts.map((q) => ({ outer: q, holes: [] })))
+      .filter((q) => Math.abs(ringArea(q.outer)) > 0.25).map((q) => ({ outer: q.outer, holes: q.holes, why: r.why })))
+    : left0;
   const types = mixTypes(state);
   const cornerId = (state.mix && state.mix.cornerType) || "2br";
   const cornerType = types.find((t) => t.id === cornerId) || null;
@@ -964,19 +978,28 @@ export function fillLevel(level, state, { counters = null, locks = null, accessi
     let best = { ri: 0, s: 0, d: Infinity };
     rings.forEach((R, ri) => { for (const e of R.edges) { const d = segDist(c, e.a, e.b); if (d < best.d) best = { ri, s: ringParam(R, c), d }; } });
     const R = rings[best.ri] || { id: 0 };
-    units.push({ type: l.type, outer: rr3(l.outer), area: r1(Math.abs(ringArea(l.outer))), width: null, accessible: false, bays: 1, bay: null, ring: R.id, demising: [], door: null, runId: null, locked: true, lockId: l.id, key: [best.ri, best.s] });
+    // facade length of the lock (its stretch of area line): the metrics closure counts the exterior strip in front of it
+    const facadeLen = rc.bands.reduce((sum, b) => { if (mpArea(bool("int", b.band, [{ outer: l.outer, holes: [] }])) <= 0.01) return sum; const [lo, hi] = projRange(b.fr, l.outer); return sum + Math.max(0, Math.min(hi, b.s1) - Math.max(lo, 0)); }, 0);
+    units.push({ type: l.type, outer: rr3(l.outer), area: r1(Math.abs(ringArea(l.outer))), width: null, facadeLen: r3(facadeLen), accessible: false, bays: 1, bay: null, ring: R.id, demising: [], door: null, runId: null, locked: true, lockId: l.id, key: [best.ri, best.s] });
   }
   units.sort((a, b) => a.key[0] - b.key[0] || a.key[1] - b.key[1]);
 
   // gross remainders of the reserved stretches
   const blk = blockMP(blocks);
+  // a locked unit is a unit: the exterior strip in front of it stays exterior allowance, not a remainder
+  const lockFronts = (bandId) => {
+    const band = rc.bands.find((b) => b.id === bandId);
+    if (!band) return [];
+    return lockList.filter((l) => mpArea(bool("int", band.band, [{ outer: l.outer, holes: [] }])) > 0.01)
+      .map((l) => { const [lo, hi] = projRange(band.fr, l.outer); return { outer: strip(band.fr, lo, hi, band.maxT - 0.01, band.maxT + ext + 0.01)[0], holes: [] }; });
+  };
   const otherBands = (id) => rc.bands.filter((b) => b.id !== id).flatMap((b) => b.band);
   const trims = rc.trims || [];
   const fixed = [...units.map((u) => ({ outer: u.outer, holes: [] })), ...pockets, ...trims, ...remainders.map((r) => ({ outer: r.outer, holes: [] }))];
   let taken = fixed.length ? bool("union", fixed, []) : [];
   for (const x of extra) {
     let g = bool("int", strip(x.fr, x.a, x.b, 0, x.maxT + ext + 1), plate);
-    const minus = [...asMP(clear), ...blk, ...otherBands(x.bandId), ...taken];
+    const minus = [...asMP(clear), ...blk, ...otherBands(x.bandId), ...taken, ...lockFronts(x.bandId)];
     if (minus.length) g = bool("diff", g, minus);
     for (const pc of g) if (Math.abs(ringArea(pc.outer)) > 0.25) { remainders.push({ outer: pc.outer, why: x.why }); taken = bool("union", [...taken, pc], []); }
   }

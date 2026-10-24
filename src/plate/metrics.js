@@ -514,7 +514,9 @@ function closureRows(state, fill, nrsf, gsf) {
   const cornerSq = runs.length ? cornerSquares(fill.plate, blocks) : 0;
   // leftover pieces that stop at the area line (a hotel corner with no wrap unit) leave the strip along them open too
   const contact = runs.length ? leftoverContact(fill) : 0;
-  const expected = ext * (runs.reduce((s, r) => s + (isNum(r.length) ? r.length : 0), 0) + legs + contact) + ext * ext * cornerSq;
+  // locked units sit on reserved stretches (no run): their exterior strip is still the allowance
+  const lockLen = (Array.isArray(fill.units) ? fill.units : []).reduce((s, u) => s + (u && u.locked && isNum(u.facadeLen) ? u.facadeLen : 0), 0);
+  const expected = ext * (runs.reduce((s, r) => s + (isNum(r.length) ? r.length : 0), 0) + legs + contact + lockLen) + ext * ext * cornerSq;
   return {
     gsf: r1(gsf), nrsf: r1(nrsf), corridor: r1(corridorSf), core: r1(coreSf), stairs: r1(stairsSf), elevators: r1(elevSf), support: r1(supportSf),
     strip: r1(strip), expected: r1(expected), diff: r1(strip - expected), ok: runs.length === 0 || Math.abs(strip - expected) <= 1,
@@ -540,7 +542,10 @@ function levelRow(state, group, fill, hotel) {
   if (t.counts) {
     const scored = hotel ? units.filter((u) => !u.accessible) : units;
     const s = scoreMix(scored, t.counts, types.filter((ty) => ty.id in t.counts));
-    mix = { targets: t.counts, byType: s.byType, misses: s.misses };
+    // average unit area per type on this level (the page mix table shows it)
+    const sum = {}, n = {};
+    for (const u of units) { sum[u.type] = (sum[u.type] || 0) + unitArea(u); n[u.type] = (n[u.type] || 0) + 1; }
+    mix = { targets: t.counts, byType: s.byType.map((r) => ({ ...r, avgArea: n[r.type] ? r1(sum[r.type] / n[r.type]) : 0 })), misses: s.misses };
   }
   const support = supportRows(fill);
   const closure = closureRows(state, fill, nrsfExact, gsfExact);
