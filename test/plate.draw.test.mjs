@@ -9,6 +9,7 @@ const FL = await import("../src/plate/fill.js");
 const CO = await import("../src/plate/corridor.js");
 const DR = await import("../src/plate/draw.js");
 const SG = await import("../src/plate/suggest.js");
+const MIX = await import("../src/plate/mix.js");
 const MT = await import("../src/plate/metrics.js");
 const DV = await import("../src/plate/derived.js");
 const LV = await import("../src/plate/levels.js");
@@ -181,6 +182,23 @@ t("D6 too-short stretch: units [] and the note", () => {
   const g = suggestRun(f, s, st);
   eq(g, { units: [], note: "This stretch (13'-8\") is too short for any type. Extend a neighbor or leave it open." });
   eq(f.units[0].match, "large", "a 264.3 ft unit is large");
+});
+
+/* ------------------------------------------------------------ D6b shallow stretch: the note names the cause */
+
+// At 21'-2" (21.1667 ft) deep, each type needs width = areaMin / depth. 1BR: 650 / 21.1667 = 30.71 > 28 (max), so
+// 1BR, 1BR + den (40.16 > 32), 2BR (47.24 > 40) and 3BR (61.42 > 48) drop. Studio keeps 450 / 21.1667 = 21.26 to 24.
+// 3 studios reach 3 × 24 = 72 ft; 4 need 4 × 21.26 = 85.04 ft. 80 ft falls between them: the stretch is not too short.
+t("D6b shallow 80 ft stretch: the note names the depth and the gap, not 'too short'", () => {
+  const M = SG.shortNote(80, 21 + 2 / 12, MIX.MULTIFAMILY_TYPES, "multifamily");
+  eq(M, "At 21'-2\" deep, only Studio fits. The other types need more width than their maximum. 3 units cover up to 72'-0\", and 4 need at least 85'-0\". This stretch (80'-0\") falls between them. Make the wing deeper, change the unit widths, or draw the units.");
+  // 18 ft deep: studio needs 450 / 18 = 25 > 24, so no type fits.
+  eq(SG.shortNote(80, 18, MIX.MULTIFAMILY_TYPES, "multifamily"), "At 18'-0\" deep, no unit type fits inside its width limits. Make the wing deeper or change the unit widths.");
+  // 13'-8" at 28.665 ft deep is shorter than the narrowest studio (20 ft): the old note stays.
+  eq(SG.shortNote(13.667, 28.665, MIX.MULTIFAMILY_TYPES, "multifamily"), "This stretch (13'-8\") is too short for any type. Extend a neighbor or leave it open.");
+  // 25 ft deep, 80 ft fills (studio, studio, 2BR): suggestRun does not reach shortNote.
+  const [r] = FL.fillRuns([{ id: "S", length: 80, depth: 25 }], MIX.MULTIFAMILY_TYPES, {}, { mode: "multifamily" });
+  eq(r.short, false);
 });
 
 /* ------------------------------------------------------------ D7 free draw */
@@ -496,6 +514,7 @@ t("text: warnings and notes are short sentences with no contractions", () => {
     texts.push(...MT.computeMetrics(st, b).warnings.map((w) => w.message), ...b.notes);
   }
   const z = blank("double-loaded-bar"), f = layOf(z);
+  texts.push(SG.shortNote(80, 21 + 2 / 12, MIX.MULTIFAMILY_TYPES, "multifamily"), SG.shortNote(80, 18, MIX.MULTIFAMILY_TYPES, "multifamily"), SG.shortNote(26, 30, MIX.MULTIFAMILY_TYPES, "multifamily"));
   texts.push(suggestRun(f, z, { runId: "R1", a: 0, b: 10 }).note, paintUnit(f, z, "R1", 10, 10.2).message, freeUnit(f, z, [[-100, -20], [-96, -20], [-96, -16]]).message);
   for (const x of texts) {
     ok(typeof x === "string" && x.length > 0, "text");

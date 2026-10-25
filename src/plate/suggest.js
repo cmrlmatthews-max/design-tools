@@ -24,7 +24,7 @@
 import { GEO } from "./corridor.js";
 import { fillRuns, fmtFtIn } from "./fill.js";
 import { matchFor } from "./draw.js";
-import { MULTIFAMILY_TYPES, HOTEL_TYPES } from "./mix.js";
+import { MULTIFAMILY_TYPES, HOTEL_TYPES, effectiveTypes } from "./mix.js";
 
 const { asMP, bool, ringArea, frameRect, rr3, r3 } = GEO;
 
@@ -45,6 +45,33 @@ export function placedCounts(units) {
   return out;
 }
 
+const listNames = (names) => (names.length <= 1 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`);
+
+/** The note for a stretch that takes no units: names the real cause (draw plan 2.3).
+    The types that fit at this depth set the width range. A stretch can be too short, too shallow for every type,
+    or fall in a gap between unit counts (for example 3 studios reach 72'-0" and 4 need 85'-0"). */
+export function shortNote(length, depth, types, mode) {
+  const L = fmtFtIn(length);
+  const tooShort = `This stretch (${L}) is too short for any type. Extend a neighbor or leave it open.`;
+  const hotel = mode === "hotel";
+  const eff = effectiveTypes(types, hotel ? 1 : depth, hotel ? "hotel" : "multifamily");
+  const kept = eff.types || [];
+  const D = fmtFtIn(depth);
+  if (!kept.length) return `At ${D} deep, no unit type fits inside its width limits. Make the wing deeper or change the unit widths.`;
+  const minLo = Math.min(...kept.map((t) => t.lo)), maxHi = Math.max(...kept.map((t) => t.hi));
+  if (!(length >= minLo - 1e-9)) return tooShort;
+  const someDropped = !hotel && (eff.dropped || []).length > 0;
+  const names = kept.map((t) => t.name);
+  const lead = someDropped ? `At ${D} deep, only ${listNames(names)} ${names.length === 1 ? "fits" : "fit"}. The other types need more width than their maximum. ` : "";
+  const fix = someDropped ? "Make the wing deeper, change the unit widths, or draw the units." : "Extend a neighbor, change the unit widths, or draw the units.";
+  const nBelow = Math.floor(length / maxHi + 1e-9), nAbove = Math.ceil(length / minLo - 1e-9);
+  if (nBelow >= 1 && nAbove > nBelow && nBelow * maxHi < length - 1e-6 && nAbove * minLo > length + 1e-6) {
+    const unit = (n) => (n === 1 ? "unit" : "units");
+    return `${lead}${nBelow} ${unit(nBelow)} cover up to ${fmtFtIn(nBelow * maxHi)}, and ${nAbove} need at least ${fmtFtIn(nAbove * minLo)}. This stretch (${L}) falls between them. ${fix}`;
+  }
+  return `${lead}No mix of unit widths adds up to this stretch (${L}). ${fix}`;
+}
+
 /** Ghost units for one open stretch (draw plan 2.3). */
 export function suggestRun(layout, state, freeStretch, { counters = null } = {}) {
   need(layout, "suggestRun", "layout"); need(state, "suggestRun", "state"); need(freeStretch, "suggestRun", "freeStretch");
@@ -61,7 +88,7 @@ export function suggestRun(layout, state, freeStretch, { counters = null } = {})
   const tooShort = { units: [], note: `This stretch (${fmtFtIn(length)}) is too short for any type. Extend a neighbor or leave it open.` };
   if (!(length > 0)) return tooShort;
   const [res] = fillRuns([{ id: "S", length, depth }], types, counts, { mode, placed });
-  if (!res || res.short || !res.units.length) return tooShort;
+  if (!res || res.short || !res.units.length) return { units: [], note: shortNote(length, depth, types, mode) };
   const fr = { o: run.start, u: run.u, n: run.n };
   const band = asMP(run.band);
   const runKey = `${run.ring}:${run.edge}:${r1(run.from)}`;

@@ -64,6 +64,7 @@ export function placedCounts(units)                                    // → { 
 
 - Uses the existing exact-feasibility fill (`slotsFor`, `fillRuns`) on the one free stretch, with deficit counters started from the units already drawn on the whole group, so suggestions move the mix toward the targets.
 - A stretch that fits no unit returns `units: []` and a note: "This stretch (13'-8") is too short for any type. Extend a neighbor or leave it open."
+  - The note names the real cause (`shortNote` in `suggest.js`). A stretch shorter than the narrowest type keeps the note above. A stretch too shallow for every type says so ("At 18'-0" deep, no unit type fits inside its width limits…"). A stretch that falls between unit counts names the types that fit and the gap, for example: "At 21'-2" deep, only Studio fits… 3 units cover up to 72'-0", and 4 need at least 85'-0". This stretch (80'-0") falls between them…"
 - Pure and deterministic.
 
 ### 2.4 Paint rule — `src/plate/draw.js` (new)
