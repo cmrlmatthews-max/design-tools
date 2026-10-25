@@ -153,6 +153,21 @@ const ProjectUI = (() => {
     if (!quiet) Toast.show(z == null || typed ? 'Centered on the site.' : `Centered on the site. Ground floor at ${Units.formatFeetInches(placement().baseZ)} above sea level.`);
     return true;
   }
+  /** A new design inside an open project (Storage.newDesign): the tower starts at the site center, on the ground there, with the
+   *  site neighbors as context. With no site, at the project origin on the ground plane. Changes `st` in place (one undo step). */
+  function prepareNew(st) {
+    if (!project.doc) return st;
+    const info = siteInfo();
+    if (!info) { st.placement = ZERO(); if (st.context) st.context.fromSite = false; return st; }
+    const z = groundAt(info.center[0], info.center[1]);
+    st.placement = { x: Math.round(info.center[0] * 100) / 100, y: Math.round(info.center[1] * 100) / 100, rotation: 0, baseZ: z == null ? 0 : Math.round(z * 10) / 10 };
+    if (st.context) {
+      const r = num(st.context.radius, CONFIG.contextRadius);
+      const res = siteBlocks(st.placement, r, false, []);
+      if (res) Object.assign(st.context, { blocks: res.blocks, fromSite: true, show: true, radius: r });
+    }
+    return st;
+  }
   /** The site buildings near the tower become context blocks (fromSite = true). One undo step. Returns the count, or -1.
    *  opts { quiet, merge (no new undo step when the Store supports it), keepManual (default: the Keep manual blocks toggle) }. */
   function contextFromSite(radius, { quiet = false, merge = false, keepManual, follow = true } = {}) {
@@ -750,7 +765,7 @@ const ProjectUI = (() => {
   return {
     has, hasSite, siteInfo, sitePlace, groundAt, gradingFfe, boundaryKey, boundaryLocal, placement,
     start, openDoc, close, create, rename, flush, send, openMenu, exportFile, importFile, nameControl, buildSite,
-    centerOnSite, contextFromSite, markDirty, askReplace, renderPill,
+    centerOnSite, contextFromSite, prepareNew, markDirty, askReplace, renderPill,
     baseMode, setBaseMode, groundUnderFootprint, followGround, baseFor, baseControl, siteDerived,
     writeSun, sunHoursStored, sunDerived: () => sunDerived(Store.snapshot()),
     doc: () => project.doc,

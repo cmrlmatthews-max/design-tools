@@ -46,7 +46,12 @@ const Options = (() => {
     const s = fillDefaults(raw);
     if (name) s.name = name;
     if (Render.comparing()) Compare.exit();
+    // in a project, a design with no placement of its own (a preset, an option saved outside the project) starts at the site
+    // center on the ground there, not at elevation 0 below the site
+    const place = ProjectUI.has() && !(s.placement && typeof s.placement === 'object');
+    if (place) ProjectUI.prepareNew(s);
     Store.replace(s);
+    if (place) ProjectUI.followGround({ merge: true });
     link(id, s);
     reframe();
     return s;
@@ -96,7 +101,9 @@ const Options = (() => {
     if (Render.comparing()) Compare.exit();
     const s = defaultState();
     s.name = uniqueName0('Untitled');
+    ProjectUI.prepareNew(s);                                  // in a project: start at the site center, on the ground (not at sea level)
     Store.replace(s);
+    if (ProjectUI.has()) ProjectUI.followGround({ merge: true });   // the base follows the lowest ground under the footprint
     link(null, s);
     if (Render.ready()) Render.setView('axon', true);       // always Axon, whatever view was on screen
     Toast.show('New design started.');

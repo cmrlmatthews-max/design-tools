@@ -13284,7 +13284,12 @@ const Options = (() => {
     const s = fillDefaults(raw);
     if (name) s.name = name;
     if (Render.comparing()) Compare.exit();
+    // in a project, a design with no placement of its own (a preset, an option saved outside the project) starts at the site
+    // center on the ground there, not at elevation 0 below the site
+    const place = ProjectUI.has() && !(s.placement && typeof s.placement === 'object');
+    if (place) ProjectUI.prepareNew(s);
     Store.replace(s);
+    if (place) ProjectUI.followGround({ merge: true });
     link(id, s);
     reframe();
     return s;
@@ -13334,7 +13339,9 @@ const Options = (() => {
     if (Render.comparing()) Compare.exit();
     const s = defaultState();
     s.name = uniqueName0('Untitled');
+    ProjectUI.prepareNew(s);                                  // in a project: start at the site center, on the ground (not at sea level)
     Store.replace(s);
+    if (ProjectUI.has()) ProjectUI.followGround({ merge: true });   // the base follows the lowest ground under the footprint
     link(null, s);
     if (Render.ready()) Render.setView('axon', true);       // always Axon, whatever view was on screen
     Toast.show('New design started.');
@@ -13630,6 +13637,21 @@ const ProjectUI = (() => {
     followGround({ merge: true });                     // the base follows the lowest ground under the footprint (the Store hook has done it already)
     if (!quiet) Toast.show(z == null || typed ? 'Centered on the site.' : `Centered on the site. Ground floor at ${Units.formatFeetInches(placement().baseZ)} above sea level.`);
     return true;
+  }
+  /** A new design inside an open project (Storage.newDesign): the tower starts at the site center, on the ground there, with the
+   *  site neighbors as context. With no site, at the project origin on the ground plane. Changes `st` in place (one undo step). */
+  function prepareNew(st) {
+    if (!project.doc) return st;
+    const info = siteInfo();
+    if (!info) { st.placement = ZERO(); if (st.context) st.context.fromSite = false; return st; }
+    const z = groundAt(info.center[0], info.center[1]);
+    st.placement = { x: Math.round(info.center[0] * 100) / 100, y: Math.round(info.center[1] * 100) / 100, rotation: 0, baseZ: z == null ? 0 : Math.round(z * 10) / 10 };
+    if (st.context) {
+      const r = num(st.context.radius, CONFIG.contextRadius);
+      const res = siteBlocks(st.placement, r, false, []);
+      if (res) Object.assign(st.context, { blocks: res.blocks, fromSite: true, show: true, radius: r });
+    }
+    return st;
   }
   /** The site buildings near the tower become context blocks (fromSite = true). One undo step. Returns the count, or -1.
    *  opts { quiet, merge (no new undo step when the Store supports it), keepManual (default: the Keep manual blocks toggle) }. */
@@ -14228,7 +14250,7 @@ const ProjectUI = (() => {
   return {
     has, hasSite, siteInfo, sitePlace, groundAt, gradingFfe, boundaryKey, boundaryLocal, placement,
     start, openDoc, close, create, rename, flush, send, openMenu, exportFile, importFile, nameControl, buildSite,
-    centerOnSite, contextFromSite, markDirty, askReplace, renderPill,
+    centerOnSite, contextFromSite, prepareNew, markDirty, askReplace, renderPill,
     baseMode, setBaseMode, groundUnderFootprint, followGround, baseFor, baseControl, siteDerived,
     writeSun, sunHoursStored, sunDerived: () => sunDerived(Store.snapshot()),
     doc: () => project.doc,
@@ -17990,6 +18012,29 @@ async function runSiteLayerTests() {
       await wait(350);
       const fill = [fillDefaults({ view: { siteStyle: 'bogus' } }).view.siteStyle, fillDefaults({ view: { siteStyle: 'glass' } }).view.siteStyle, fillDefaults({}).view.siteStyle];
       return eq([labels, a, b, hidden, fill], [['Solid', 'Glass', 'Wireframe'], [true, 'true'], ['glass', 'true', 'false'], true, ['solid', 'glass', 'solid']]);
+    });
+
+    await t('7n. New design inside a site project starts at the site center, on the ground there (not at elevation 0), with the site neighbors as context', async () => {
+      await openSite();
+      Store.set('placement', { x: 0, y: 0, rotation: 0, baseZ: 0 }, { live: false });
+      await Options.newDesign({ confirm: false });
+      await wait(300);
+      const info = ProjectUI.siteInfo(), p = Store.raw().placement;
+      const ground = ProjectUI.groundAt(info.center[0], info.center[1]);
+      const under = ProjectUI.groundUnderFootprint ? ProjectUI.groundUnderFootprint() : null;
+      const expZ = under != null ? under : Math.round(ground * 10) / 10;
+      const ctx = Store.raw().context;
+      return eq([Math.abs(p.x - info.center[0]) < 0.01, Math.abs(p.y - info.center[1]) < 0.01, Math.abs(p.baseZ - expZ) < 0.11, ground > 1, !!ctx.fromSite],
+        [true, true, true, true, true]) || `placement ${JSON.stringify(p)}, ground ${ground}, under ${under}`;
+    });
+
+    await t('7p. a preset loaded inside a site project also starts at the site center, on the ground there', async () => {
+      await openSite();
+      Store.set('placement', { x: 0, y: 0, rotation: 0, baseZ: 0 }, { live: false });
+      Options.loadPreset(CONFIG.presets[CONFIG.presets.length - 1].id);
+      await wait(300);
+      const info = ProjectUI.siteInfo(), p = Store.raw().placement;
+      return eq([Math.abs(p.x - info.center[0]) < 0.01, Math.abs(p.y - info.center[1]) < 0.01, p.baseZ > 999], [true, true, true]) || `placement ${JSON.stringify(p)}`;
     });
 
     await t('7. closing the project removes the layer; the slab and shadow plane come back', async () => {
