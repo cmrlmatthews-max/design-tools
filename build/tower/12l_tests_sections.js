@@ -367,6 +367,19 @@ async function runTopBarTests() {
       return eq(openIds(), []);
     });
     /* ---- the core moved to the Plate Planner (docs/plate-planner-rework-plan.md 4.1, 8.2) ---- */
+    await t('M1. the Metrics button and key M hide the metrics panel fully and show it again; the choice is kept', () => {
+      const hud = document.getElementById('hud'), btn = document.getElementById('tbMetrics');
+      if (!hud || !btn) return 'no Metrics button';
+      const before = TopBar.hudHidden();
+      TopBar.setHudHidden(false);
+      btn.click();
+      const hidden = [hud.dataset.hidden, hud.getClientRects().length, localStorage.getItem('cmrlm.hud.hidden'), btn.getAttribute('aria-pressed')];
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'm', bubbles: true }));
+      const shown = [hud.dataset.hidden, hud.getClientRects().length > 0, localStorage.getItem('cmrlm.hud.hidden')];
+      TopBar.setHudHidden(before);
+      return eq([hidden, shown, !!btn.closest('#topbar'), btn.textContent.trim()], [['true', 0, 'true', 'false'], ['false', true, 'false'], true, 'Metrics']);
+    });
+
     await t('C1. no Core card in the panel and no Core area or Efficiency row in the HUD; the HUD says the Plate Planner sets the core', () => {
       const titles = [...document.querySelectorAll('#sections section.acc')].map((a) => (a.querySelector('.acc-head') || a).textContent.trim());
       const labels = [...document.querySelectorAll('#hud dt')].map((e) => e.textContent.trim());

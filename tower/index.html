@@ -3064,7 +3064,7 @@ function validateDoc(doc) {
   if (!doc || typeof doc !== "object") return { ok: false, errors: ["document: not an object"], counts };
   if (doc.format !== FORMAT) err("format", `must be "${FORMAT}"`);
   if (doc.version !== VERSION) err("version", `must be ${VERSION}`);
-  if (!["tower", "site", "midrise", "parking", "facade", "grading", "plate"].includes(doc.source)) err("source", "must be tower, site, midrise, parking, facade, grading, or plate");
+  if (!["tower", "site", "midrise", "parking", "facade", "grading", "plate", "viewer"].includes(doc.source)) err("source", "must be tower, site, midrise, parking, facade, grading, plate, or viewer");
   if (doc.units !== "feet") err("units", "must be feet");
   if (!Number.isFinite(doc.zShift)) err("zShift", "must be a number");
   const tagNames = new Set(), matNames = new Set();
@@ -19329,6 +19329,19 @@ async function runTopBarTests() {
       return eq(openIds(), []);
     });
     /* ---- the core moved to the Plate Planner (docs/plate-planner-rework-plan.md 4.1, 8.2) ---- */
+    await t('M1. the Metrics button and key M hide the metrics panel fully and show it again; the choice is kept', () => {
+      const hud = document.getElementById('hud'), btn = document.getElementById('tbMetrics');
+      if (!hud || !btn) return 'no Metrics button';
+      const before = TopBar.hudHidden();
+      TopBar.setHudHidden(false);
+      btn.click();
+      const hidden = [hud.dataset.hidden, hud.getClientRects().length, localStorage.getItem('cmrlm.hud.hidden'), btn.getAttribute('aria-pressed')];
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'm', bubbles: true }));
+      const shown = [hud.dataset.hidden, hud.getClientRects().length > 0, localStorage.getItem('cmrlm.hud.hidden')];
+      TopBar.setHudHidden(before);
+      return eq([hidden, shown, !!btn.closest('#topbar'), btn.textContent.trim()], [['true', 0, 'true', 'false'], ['false', true, 'false'], true, 'Metrics']);
+    });
+
     await t('C1. no Core card in the panel and no Core area or Efficiency row in the HUD; the HUD says the Plate Planner sets the core', () => {
       const titles = [...document.querySelectorAll('#sections section.acc')].map((a) => (a.querySelector('.acc-head') || a).textContent.trim());
       const labels = [...document.querySelectorAll('#hud dt')].map((e) => e.textContent.trim());
@@ -19383,6 +19396,7 @@ runAllTests = ((base) => async function runAllWithTopBar() {
    Shared page part, placed after the UI part in all seven tools. The markup lives in each tool's body.html:
      #panelCollapse   the Collapse all button, in the panel head beside the tab row (the Site Model: at the top of the panel)
      #tbZoom          the zoom group in the top bar, with #tbZoomSite and #tbZoomBuilding
+     #tbMetrics       added here when the page has a #hud: hides or shows the metrics panel (key M; kept in localStorage)
    TopBar.init wires them:
      TopBar.init({
        tool,                    // 'tower' | 'midrise' | 'parking' | 'facade' | 'grading' | 'plate' | 'site' (a label for tests)
@@ -19423,15 +19437,56 @@ const TopBar = (() => {
     if (site) { site.hidden = typeof cfg.onSite !== 'function'; site.onclick = zoomSite; }
     if (building) { building.hidden = typeof cfg.onBuilding !== 'function'; building.onclick = zoomBuilding; }
     if (group) group.hidden = (!site || site.hidden) && (!building || building.hidden);
+    initHud();
+  }
+
+  /* ---- Hide the metrics panel (#hud) fully. One choice for every tool, kept in localStorage. Key M toggles it. ---- */
+  const HUD_KEY = 'cmrlm.hud.hidden';
+  const readHidden = () => { try { return localStorage.getItem(HUD_KEY) === 'true'; } catch (e) { return false; } };
+  const writeHidden = (v) => { try { localStorage.setItem(HUD_KEY, v ? 'true' : 'false'); } catch (e) { /* private mode: keep it for this visit */ } };
+  function hudHidden() { const h = $('hud'); return !!h && h.dataset.hidden === 'true'; }
+  function setHudHidden(hide, { remember = true } = {}) {
+    const h = $('hud');
+    if (!h) return false;
+    h.dataset.hidden = hide ? 'true' : 'false';
+    const b = $('tbMetrics');
+    if (b) { b.setAttribute('aria-pressed', hide ? 'false' : 'true'); b.title = hide ? 'Show the metrics panel (M)' : 'Hide the metrics panel (M)'; }
+    if (remember) writeHidden(hide);
+    return true;
+  }
+  function initHud() {
+    const h = $('hud'), group = $('tbZoom');
+    if (!h || $('tbMetrics')) return;
+    if (!document.getElementById('hudHideCss')) {
+      const st = document.createElement('style');
+      st.id = 'hudHideCss';
+      st.textContent = '.hud[data-hidden="true"]{display:none !important}.tb-zbtn[aria-pressed="false"]{opacity:.55}';
+      document.head.appendChild(st);
+    }
+    if (group) {
+      const b = document.createElement('button');
+      b.className = 'btn tb-zbtn'; b.id = 'tbMetrics'; b.type = 'button'; b.setAttribute('aria-label', 'Show or hide the metrics panel');
+      b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span class="tb-ztxt">Metrics</span>';
+      b.onclick = () => setHudHidden(!hudHidden());
+      group.appendChild(b);
+      group.hidden = false;
+    }
+    document.addEventListener('keydown', (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || (e.key !== 'm' && e.key !== 'M')) return;
+      const t = e.target, tag = t && t.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
+      setHudHidden(!hudHidden());
+    });
+    setHudHidden(readHidden(), { remember: false });
   }
 
   /** For tests: what is wired and shown. */
   function info() {
     const vis = (id) => { const e = $(id); return !!e && !e.hidden && e.getClientRects().length > 0; };
-    return { tool: cfg ? cfg.tool : null, ready: !!cfg, collapse: vis('panelCollapse'), site: vis('tbZoomSite'), building: vis('tbZoomBuilding') };
+    return { tool: cfg ? cfg.tool : null, ready: !!cfg, collapse: vis('panelCollapse'), site: vis('tbZoomSite'), building: vis('tbZoomBuilding'), metrics: vis('tbMetrics'), hudHidden: hudHidden() };
   }
 
-  return { init, collapseAll, zoomSite, zoomBuilding, info };
+  return { init, collapseAll, zoomSite, zoomBuilding, info, setHudHidden, hudHidden };
 })();
 
 
