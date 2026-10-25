@@ -5,6 +5,7 @@
                                                        k, split, size, area, rooms, notes, options, depths? }   ctx.fit optional
    coreLayout2(program, center, axis, state, opts) → { rect, outer, rooms: [{ id, kind, outer }], size }
    autoCore(plate, level, state, ctx)              → { outer, rect, rooms, program, size, axis, center }
+   manualCoreRooms(program, rect, opts)            → { fits, rooms, size, need? } (the program inside a manual core rectangle)
    coreContext(state, groups)                      → { floors, units, unitArea, perGroup } (buildPlates passes it to every level)
    normalizeCore(core)                             → { mode, rect } (the load rule, for the page store)
    coreModeOf(state), manualCoreRect(state)        re-exported from corridor.js
@@ -257,6 +258,60 @@ export function coreLayout2(program, center, axis, state, { withStairs = true } 
     rect = [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
   }
   return { rect, outer, rooms, size: [r3(A), r3(B)] };
+}
+
+/**
+ * Draw plan follow-up: the core program laid inside a manual core rectangle [x0, y0, x1, y1]. The rows run along the
+ * long side; each row's last room stretches (a shaft) to fill the length; the depth beyond the rows is one shaft between
+ * them; with core stairs, each stair column is the stair (11 × 22) and a shaft above it. Every square foot is a named room.
+ * opts.toward: a point; the top row (the passenger cabs) goes to the side of the core that faces it.
+ * → { fits: true, rooms: [{ id, kind, outer }], size: [A, B] } or { fits: false, rooms: [], need: [A, B], size }
+ */
+export function manualCoreRooms(program, rect, { withStairs = true, toward = null } = {}) {
+  need(program, "manualCoreRooms", "program"); need(rect, "manualCoreRooms", "rect");
+  const [x0, y0, x1, y1] = [Math.min(rect[0], rect[2]), Math.min(rect[1], rect[3]), Math.max(rect[0], rect[2]), Math.max(rect[1], rect[3])];
+  const w = x1 - x0, h = y1 - y0;
+  const alongX = w >= h;
+  const A = alongX ? w : h, B = alongX ? h : w;
+  let fr = alongX ? { o: [x0, y0], u: [1, 0], n: [0, 1] } : { o: [x1, y0], u: [0, 1], n: [-1, 0] };
+  // the cab row (the +n side) faces `toward` (a bar core: the corridor) when it is given
+  if (Array.isArray(toward)) {
+    const c = [(x0 + x1) / 2, (y0 + y1) / 2];
+    if ((toward[0] - c[0]) * fr.n[0] + (toward[1] - c[1]) * fr.n[1] < 0) fr = alongX ? { o: [x0, y1], u: [1, 0], n: [0, -1] } : { o: [x0, y0], u: [0, 1], n: [1, 0] };
+  }
+  const sa = program.stair[0], sb = program.stair[1];
+  const k = program.k || 2;
+  const R = program.rows.R;
+  const needA = (withStairs ? 2 * sa : 0) + R, needB = Math.max(11 * k, withStairs ? sb : 0);
+  if (A < needA - 1e-6 || B < needB - 1e-6) return { fits: false, rooms: [], need: [r3(needA), r3(needB)], size: [r3(A), r3(B)] };
+  const s0 = withStairs ? sa : 0, s1 = A - (withStairs ? sa : 0), R2 = s1 - s0;
+  const stretch = (row) => {
+    const list = (row || []).map((r) => ({ ...r }));
+    const gap = R2 - rowLen(list);
+    if (gap > 1e-9) { const last = list[list.length - 1]; if (last && last.kind === "shaft") last.len += gap; else list.push({ kind: "shaft", len: gap }); }
+    return list;
+  };
+  const counters = {};
+  const rooms = [];
+  const add = (kind, a, b, t0, t1) => {
+    if (b - a < 1e-9 || t1 - t0 < 1e-9) return;
+    counters[kind] = (counters[kind] || 0) + 1;
+    rooms.push({ id: `${ROOM_CODE[kind] || "R"}${counters[kind]}`, kind, outer: rr3(frameRect(fr, a, b, t0, t1)) });
+  };
+  const placed = [];
+  const lay = (row, t0, t1) => { let x = s0; for (const r of row) { placed.push({ r, a: x, b: x + r.len, t0, t1 }); x += r.len; } };
+  lay(stretch(program.rows.top), B - 11, B);
+  if (k === 3) lay(stretch(program.rows.mid), 11, 22);
+  lay(stretch(program.rows.bottom), 0, 11);
+  if (withStairs) add("stair", 0, sa, 0, sb);
+  for (const kd of ["elevator", "service-elevator"]) for (const p of placed) if (p.r.kind === kd) add(kd, p.a, p.b, p.t0, p.t1);
+  if (withStairs && B > sb + 1e-9) add("shaft", 0, sa, sb, B);
+  for (const p of placed) if (p.r.kind !== "elevator" && p.r.kind !== "service-elevator") add(p.r.kind, p.a, p.b, p.t0, p.t1);
+  const band0 = 11 * (k === 3 ? 2 : 1);
+  if (B - 11 - band0 > 1e-9) add("shaft", s0, s1, band0, B - 11);
+  if (withStairs && B > sb + 1e-9) add("shaft", A - sa, A, sb, B);
+  if (withStairs) add("stair", A - sa, A, 0, sb);
+  return { fits: true, rooms, size: [r3(A), r3(B)] };
 }
 
 /**

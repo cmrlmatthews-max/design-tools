@@ -12,7 +12,7 @@ const CONFIG = {
     maxHistory: 50,       // undo steps
     maxSupport: 24,       // support blocks
     maxStairs: 12,        // manual stairs
-    maxLocks: 400,
+    maxUnits: 600,        // drawn units per layout
   },
   presets: PresetsMod.PRESETS,
   storageKey: 'plate.options.v1',
@@ -31,11 +31,12 @@ const CONFIG = {
   elevColor: '#8b94a0',
   supportColor: '#c9cdd2',
   pocketColor: '#dcdfe3',
-  remainderColor: '#f0f2f4',           // an unfilled run: very light fill under a dashed outline
-  areaHighColor: '#e07a00',            // orange: a unit larger than its type's area range
+  openColor: '#e9edf1',                // an open stretch: a very light band
+  ghostLine: '#23508f',                // the dashed outline of a suggested (ghost) unit
+  smallColor: '#2f6fd0',               // blue: a unit smaller than its type's range
+  areaHighColor: '#e07a00',            // orange: a unit larger than its type's range
   flagColor: '#d03a30',
   lineColor: '#1d242b',
-  lockColor: '#c07a0e',
   accentColor: '#23508f',
   slabHeight: 0.8,                      // ft, thickness of a unit slab in the single-level views
   stackGap: 0,                          // ft, extra gap between stacked levels

@@ -8,13 +8,16 @@ globalThis.ClipperLib = createRequire(import.meta.url)("clipper-lib");
 const FL = await import("../src/plate/fill.js");
 const CO = await import("../src/plate/corridor.js");
 const MX = await import("../src/plate/mix.js");
-const { PRESETS, defaultState } = await import("../src/plate/presets.js");
+const { PRESETS } = await import("../src/plate/presets.js");
+// Draw plan 6: these tests run the fill engine (fillPlates, the old buildPlates). defaultState() is now the blank point
+// tower, so the 8.1 preset stands in where a test expects the 8.1 base (17 units and the rest).
+const defaultState = () => JSON.parse(JSON.stringify(PRESETS.find((p) => p.id === "double-loaded-bar").state));
 const { assemble } = await import("../src/midrise/assemble.js");
 const { midriseDerived } = await import("../src/midrise/derived.js");
 const MR = await import("../src/midrise/presets.js");
 const TG = await import("../src/tower/geometry.js");
 const TP = await import("../src/tower/presets.js");
-const { buildPlates, fillLevel, fillRuns, slotsFor, unitZone, runsAndCorners } = FL;
+const { fillPlates: buildPlates, fillLevel, fillRuns, slotsFor, unitZone, runsAndCorners } = FL;
 const { spineFor, corridorPolygon, stairBlocks, corridorGraph, GEO } = CO;
 
 let pass = 0, fail = 0;

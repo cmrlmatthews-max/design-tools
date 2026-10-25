@@ -55,6 +55,9 @@
      through metrics.buildWarnings. Derived here: type-does-not-fit and run-too-short
      (only when the fill passed none), mix-miss, stale-massing, area-closure.
    - Areas round to 0.1 sf, lengths to 0.1 ft, efficiency to 0.0001, points to 0.001.
+   - Draw plan (a fill with layout: true, from layoutLevel): the closure adds the open area (closure.open) and checks
+     the strip against fill.allowance; the row carries layout: true and openArea; no mix-miss and no run-too-short.
+     unitsInRange reads u.match when a unit carries it.
    ========================================================================== */
 
 import { effectiveTypes, countsFor, scoreMix, requiredAccessible, MULTIFAMILY_TYPES, HOTEL_TYPES } from "./mix.js";
@@ -369,6 +372,11 @@ export function unitsInRange(state, units) {
   for (const u of list) {
     const a = unitArea(u);
     sum += a;
+    // draw plan 3.3: a drawn unit carries its match
+    if (u.match === "large" || u.match === "small" || u.match === "in-range") {
+      if (u.match === "large") high++; else if (u.match === "in-range") inRange++;
+      continue;
+    }
     const t = rows.get(u.type);
     const hasRange = t && isNum(t.areaMax) && state.mode !== "hotel";
     const isHigh = !!u.areaHigh || (hasRange && a > t.areaMax + 0.5);
@@ -501,7 +509,15 @@ function closureRows(state, fill, nrsf, gsf) {
   const stairsSf = take(stairsOf(fill).map((s) => ringOf(s.outer)));
   const elevSf = take(elevatorsOf(fill).map((s) => ringOf(s.outer)));
   const supportSf = take((fill.support || []).map((s) => ringOf(s && s.outer)));
-  const strip = gsf - (nrsf + corridorSf + coreSf + stairsSf + elevSf + supportSf);
+  // draw plan 2.2: a drawn layout adds its open area (the unit zone no unit covers) and gives its exterior allowance
+  const openSf = fill.layout && isNum(fill.openArea) ? fill.openArea : 0;
+  const strip = gsf - (nrsf + corridorSf + coreSf + stairsSf + elevSf + supportSf + openSf);
+  if (fill.layout && isNum(fill.allowance)) {
+    return {
+      gsf: r1(gsf), nrsf: r1(nrsf), corridor: r1(corridorSf), core: r1(coreSf), stairs: r1(stairsSf), elevators: r1(elevSf), support: r1(supportSf), open: r1(openSf),
+      strip: r1(strip), expected: r1(fill.allowance), diff: r1(strip - fill.allowance), ok: Math.abs(strip - fill.allowance) <= 1,
+    };
+  }
   const ext = isNum(state.extWall) ? state.extWall : 1.0;
   // a run the fill left unfilled (slots: 0) is a remainder out to the plate edge: its exterior strip is inside it
   const runs = (Array.isArray(fill.runs) ? fill.runs : []).filter((r) => r.slots !== 0);
@@ -518,7 +534,7 @@ function closureRows(state, fill, nrsf, gsf) {
   const lockLen = (Array.isArray(fill.units) ? fill.units : []).reduce((s, u) => s + (u && u.locked && isNum(u.facadeLen) ? u.facadeLen : 0), 0);
   const expected = ext * (runs.reduce((s, r) => s + (isNum(r.length) ? r.length : 0), 0) + legs + contact + lockLen) + ext * ext * cornerSq;
   return {
-    gsf: r1(gsf), nrsf: r1(nrsf), corridor: r1(corridorSf), core: r1(coreSf), stairs: r1(stairsSf), elevators: r1(elevSf), support: r1(supportSf),
+    gsf: r1(gsf), nrsf: r1(nrsf), corridor: r1(corridorSf), core: r1(coreSf), stairs: r1(stairsSf), elevators: r1(elevSf), support: r1(supportSf), open: 0,
     strip: r1(strip), expected: r1(expected), diff: r1(strip - expected), ok: runs.length === 0 || Math.abs(strip - expected) <= 1,
   };
 }
@@ -566,8 +582,10 @@ function levelRow(state, group, fill, hotel) {
     support,
     closure,
     hotel: hotel ? cn.reach : null,
-    shortRuns: shortRuns(state, fill, hotel),
+    shortRuns: fill.layout ? [] : shortRuns(state, fill, hotel),
     dropped: t.dropped,
+    layout: !!fill.layout,
+    openArea: fill.layout && isNum(fill.openArea) ? r1(fill.openArea) : 0,
   };
 }
 
@@ -710,7 +728,7 @@ export function checks(state, metrics, ctx = {}) {
     if (!has("run-too-short")) {
       for (const r of row.shortRuns || []) out.push(warn("run-too-short", `Run ${r.run} is ${r.length} ft long, shorter than the narrowest unit (${r.min} ft) (${label}). It stays as support. Move a block or edit the mix.`, { group: g.id, run: r.run }));
     }
-    if (row.mix) {
+    if (row.mix && !row.layout) {          // draw plan 4: a drawn layout raises no mix-miss
       for (const id of row.mix.misses) {
         const r = row.mix.byType.find((b) => b.type === id);
         const t = (state.mix && (state.mix[mixKey(state)] || []).find((x) => x.id === id)) || {};
@@ -724,7 +742,7 @@ export function checks(state, metrics, ctx = {}) {
 
   const used = metrics.massing ? metrics.massing.usedAt : null;
   const current = ctx && ctx.massingUpdatedAt !== undefined ? ctx.massingUpdatedAt : metrics.massing ? metrics.massing.currentAt : null;
-  if (later(current, used)) out.push(warn("stale-massing", "The massing changed after this fill. Re-fill to follow the new plates.", { usedAt: used, currentAt: current }));
+  if (later(current, used)) out.push(warn("stale-massing", "The massing changed after this layout. Check the units against the new plates.", { usedAt: used, currentAt: current }));
   // rework plan 7.3: one list, de-duplicated by code + where (the first one stays); the page badge counts this list
   const seenKey = new Set();
   return out.filter((w) => {

@@ -8,7 +8,7 @@ async function runUiTests() {
   const { results, t } = make();
   const savedState = Store.snapshot(), savedTab = UI.activeTab();
   Options.holdAutosave(true);
-  const fresh = () => { Store.replace(fillDefaults(defaultState())); UI.updateHud(Derived.get()); };
+  const fresh = () => { Store.replace(TestHelp.presetState('double-loaded-bar')); UI.updateHud(Derived.get()); };
   try {
     fresh();
     await t('the title bar says Plate Planner with the CMRLM mark', () => eq([document.querySelector('.app-title').textContent, document.querySelector('.wordmark').textContent], ['Plate Planner', 'CMRLM']));
@@ -77,16 +77,17 @@ async function runUiTests() {
       const items = document.querySelectorAll('#tabpanel-units .item').length;
       return eq([items >= 5, !!$('cornerType'), $('cornerType').value], [true, true, '2br']);
     });
-    await t('a share edit in the panel changes the counts', () => {
-      const a = Derived.get().editing.units.filter((u) => u.type === '3br').length;
+    await t('a share edit in the panel changes the Suggest target, not the drawn units (changed: shares no longer fill the plate)', () => {
+      const tgt = () => Derived.get().hud.mix.find((r) => r.type === '3br');
+      const a = tgt() ? tgt().target : 0;
       Store.set('mix.multifamily.4.share', 0.2, { live: false });
-      const b = Derived.get().editing.units.filter((u) => u.type === '3br').length;
+      const b = tgt() ? tgt().target : 0;
       Store.set('mix.multifamily.4.share', 0.05, { live: false });
       return eq([b > a, Derived.get().hud.units], [true, 17]);
     });
-    await t('Re-fill and Unlock all are buttons of the Units tab', () => {
+    await t('the Units tab has no Re-fill, Unlock all or Draw unit button, and the HUD has no stale notice', () => {
       const labels = [...document.querySelectorAll('#tabpanel-units button')].map((b) => b.textContent);
-      return eq([labels.includes('Re-fill'), labels.includes('Unlock all')], [true, true]);
+      return eq([labels.includes('Re-fill'), labels.includes('Unlock all'), labels.includes('Draw unit'), !!$('staleNote'), !!$('staleRefill'), [...document.querySelectorAll('button')].some((b) => /^Re-fill$/.test(b.textContent))], [false, false, false, false, false, false]);
     });
 
     /* ---- Checks and View tabs ---- */
@@ -173,11 +174,11 @@ async function runUiTests() {
       Pop.close();
       return eq([/centerline of the demising walls/.test(txt), /corridor face of the corridor wall/.test(txt), /inside face of the exterior wall/.test(txt), /never checks a code/.test(txt), /Caution: the accessible counts/.test(txt)], [true, true, true, true, true]);
     });
-    await t('the Option menu lists the six presets and Compare', () => {
+    await t('the Option menu lists the seven presets (the blank point tower is new) and Compare', () => {
       $('btnOption').click();
       const ids = [...document.querySelectorAll('#optionMenu [id]')].map((b) => b.id);
       Pop.close();
-      return eq([ids.filter((i) => i.startsWith('preset-')).length, ids.includes('miCompare'), ids.includes('miNewDesign')], [6, true, true]);
+      return eq([ids.filter((i) => i.startsWith('preset-')).length, ids.includes('miCompare'), ids.includes('miNewDesign')], [7, true, true]);
     });
     await t('Save, Duplicate, Compare of two options and Exit', async () => {
       const id = Options.save();

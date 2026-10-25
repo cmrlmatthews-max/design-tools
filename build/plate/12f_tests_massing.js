@@ -23,13 +23,25 @@ async function runMassingTests() {
   const mem = SiteFixture.memory();
   ProjectUI.reset();
   ProjectUI.configure({ storage: mem, navigate: () => {}, updateUrl: () => {} });
-  const fresh = () => { Store.replace(fillDefaults(defaultState())); };
+  const fresh = () => { Store.replace(TestHelp.presetState('double-loaded-bar')); };
   const errors = [];
   const onErr = (e) => { errors.push(String(e && e.message ? e.message : e)); };
   window.addEventListener('error', onErr);
   const unitsMesh = () => Render.sceneObjects().find((o) => o.userData && o.userData.units && o.isMesh && o.parent && o.parent.visible);
   const yRange = (m) => { m.geometry.computeBoundingBox(); return [Math.round(m.geometry.boundingBox.min.y * 100) / 100, Math.round(m.geometry.boundingBox.max.y * 100) / 100]; };
-  const openPlain = () => { const doc = ProjectMod.writeSection(ProjectMod.newProject({ name: 'Massing fixture' }), 'massing', MassingFixture.massing()); ProjectMod.saveProject(mem, doc); ProjectUI.openDoc(doc); return doc; };
+  const openPlain = () => { const doc = ProjectMod.writeSection(ProjectMod.newProject({ name: 'Massing fixture' }), 'massing', MassingFixture.massing()); ProjectMod.saveProject(mem, doc); ProjectUI.openDoc(doc); seedUnits(); return doc; };
+  /** Draw-first: a group starts blank and a blank level has no units mesh. Draw one unit in every group so the level meshes exist (changed test fixture). */
+  const seedUnits = () => {
+    const d0 = Derived.get(), sel0 = d0.group.id;
+    for (const g of d0.groups) {
+      Store.set('levels.selected', g.id, { live: false });
+      const info = Select.layoutInfo();
+      if (info && info.runs.length) Select.paintOnRun(info.runs[0].id, 0, Math.min(24, info.runs[0].length));
+      else if (info && info.cornerZones.length) Select.paintCorner(info.cornerZones[0].id);     // a point tower has corner zones and no run
+    }
+    Store.set('levels.selected', sel0, { live: false });
+    Select.clear();
+  };
   const viewRow = () => [...document.querySelectorAll('#tabpanel-view .toggle-row')].find((b) => b.textContent.trim() === 'Massing');
 
   try {

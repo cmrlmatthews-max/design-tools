@@ -43,7 +43,7 @@ async function runSiteTests() {
   const mem = SiteFixture.memory();
   ProjectUI.reset();
   ProjectUI.configure({ storage: mem, navigate: () => {}, updateUrl: () => {} });
-  const fresh = () => { Store.replace(fillDefaults(defaultState())); };
+  const fresh = () => { Store.replace(TestHelp.presetState('double-loaded-bar')); };
   const errors = [];
   const onErr = (e) => { errors.push(String(e && e.message ? e.message : e)); };
   window.addEventListener('error', onErr);

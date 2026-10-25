@@ -5,8 +5,9 @@
      state      the plate state
      built      buildPlates(state, …) result
      metrics    computeMetrics(state, built) result (optional: the numbers come from the fill when it is missing)
-     fillPlate  buildPlates, injected so that this module has no import cycle; it makes the real test fit of
-                plate-too-deep. Without it, plate-too-deep carries no test fit.
+     fillPlate  fillPlates (fill.js, the automatic fill), injected so that this module has no import cycle; it makes the
+                real test fit of plate-too-deep. Without it, plate-too-deep carries no test fit. (Draw plan: buildPlates
+                lays out drawn units only, so a test fit needs fillPlates.)
    ADVISOR_CAUTION   the caution line for the card
 
    Caution: design-stage numbers from a test fit. The advisor never edits the massing.
@@ -120,6 +121,7 @@ function testFitState(state, fill, m, size) {
     s.plate = { ...(s.plate || {}), shape: "polygon", points: [pt(-hu, -hn), pt(hu, -hn), pt(hu, hn), pt(-hu, hn)] };
   }
   s.locks = [];
+  s.units = [];
   s.support = [];
   s.levels = { showPodium: false, selected: null, groups: {} };
   s.corridor = { ...(s.corridor || {}), kind: fill.kind, spine: null };
@@ -153,7 +155,8 @@ function tooDeep(state, built, fill, row, target, fillPlate, where) {
   const dmin = Math.min(...deep.map((r) => r.depth)), dmax = Math.max(...deep.map((r) => r.depth));
   const depthText = Math.abs(dmax - dmin) < 0.05 ? fmtFt(dmax) : `${fmtFt(dmin).replace(" ft", "")} to ${fmtFt(dmax)}`;
   const rng = unitsInRange(state, fill.units);
-  let head = `The units are ${depthText} deep. The target is ${fmtFt(target)}.`;
+  // draw plan: a blank plate has runs and no units
+  let head = `${(fill.units || []).length ? "The units are" : "The runs are"} ${depthText} deep. The target is ${fmtFt(target)}.`;
   if (rng.areaHighCount > 0) {
     head += ` ${rng.areaHighCount} of ${rng.units} units are larger than their area range (average ${fmtSf(rng.avgArea)}${isNum(rng.targetAvgArea) ? `, target ${fmtSf(rng.targetAvgArea)}` : ""}).`;
   }
@@ -297,7 +300,10 @@ export function advise(state, built, metrics, { fillPlate = null } = {}) {
   if (co) items.push(co);
   const un = unfilled(fill, where);
   if (un) items.push(un);
-  if (!items.length && row.efficiency < 0.70) {
+  // draw plan: a layout with open area over 10% of the unit zone is not drawn yet, so a low efficiency says nothing
+  const zoneSf = fill.layout && Array.isArray(fill.zone) ? mpArea(asMP(fill.zone)) : 0;
+  const undrawn = !!fill.layout && isNum(fill.openArea) && zoneSf > 0 && fill.openArea > 0.10 * zoneSf;
+  if (!items.length && row.efficiency < 0.70 && !undrawn) {
     items.push({
       code: "efficiency-low", severity: "info",
       message: `Efficiency is ${fmtPct(row.efficiency)}. Typical test fits reach 75 to 82%.`,

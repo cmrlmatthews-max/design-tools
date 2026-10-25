@@ -32,7 +32,7 @@ async function runProjectTests() {
   ProjectUI.configure({ storage: mem, navigate: (url) => { went.push(url); }, updateUrl: () => {} });
   const stored = (id) => ProjectMod.loadProject(mem, id);
   const open = (opts) => { const doc = ProjectFixture.project(opts); ProjectMod.saveProject(mem, doc); ProjectUI.openDoc(doc); return doc; };
-  const fresh = () => { Store.replace(fillDefaults(defaultState())); };
+  const fresh = () => { Store.replace(TestHelp.presetState('double-loaded-bar')); };
 
   try {
     fresh();
@@ -43,10 +43,10 @@ async function runProjectTests() {
       const d = Derived.get();
       return eq([ProjectUI.has(), Store.get('source'), d.ok, d.groups.length, d.groups[0] && d.groups[0].floors, d.groups[0] && /^Levels 1.5 \(5 floors\)$/.test(d.groups[0].label)], [true, 'project', true, 1, 5, true]);
     });
-    await t('the placement of the massing is copied into the plan (x 40, y 60) and the fill covers both bars', () => {
+    await t('the placement of the massing is copied into the plan (x 40, y 60); the group starts blank with open stretches on both bars (changed: no auto-fill)', () => {
       const d = Derived.get();
-      const units = d.editing ? d.editing.units.length : 0;
-      return eq([d.built.placement, units > 20, d.hud.building.floors], [{ x: 40, y: 60, rotation: 0, baseZ: 0 }, true, 5]);
+      const info = Render.ready() ? Select.layoutInfo() : null;
+      return eq([d.built.placement, d.editing.units.length, info ? info.free.length >= 2 : true, d.hud.open > 1000, d.hud.building.floors], [{ x: 40, y: 60, rotation: 0, baseZ: 0 }, 0, true, true, 5]);
     });
     await t('the Plate tab names the project and the source chips say "project"', () => {
       UI.setTab('plate'); UI.updateHud(Derived.get());
@@ -82,11 +82,7 @@ async function runProjectTests() {
       ProjectUI.openDoc(stored(id));
       return eq([Store.get('source'), Store.get('mix.cornerType')], ['project', '1br']);
     });
-    await t('a fill current with the massing shows no stale notice', () => {
-      UI.updateHud(Derived.get());
-      return eq([Derived.get().stale, $('staleNote').hidden], [false, true]);
-    });
-    await t('a newer massing updatedAt shows the stale notice; Re-fill clears it', async () => {
+    await t('a newer massing updatedAt shows no stale notice and no Re-fill button (changed: nothing re-fills in draw-first)', async () => {
       const id = ProjectUI.doc().id;
       ProjectUI.flush();
       await wait(30);
@@ -96,10 +92,7 @@ async function runProjectTests() {
       fresh();
       ProjectUI.openDoc(stored(id));
       UI.updateHud(Derived.get());
-      const stale = [Derived.get().stale, $('staleNote').hidden];
-      $('staleRefill').click();
-      UI.updateHud(Derived.get());
-      return eq([stale, Derived.get().stale, $('staleNote').hidden], [[true, false], false, true]);
+      return eq([Derived.get().stale, !!$('staleNote'), !!$('staleRefill'), Derived.get().warnings.some((w) => w.id === 'stale-massing')], [false, false, false, false]);
     });
     await t('Send to Parking Deck and Send to Facade Studio save the project and open ../parking/ and ../facade/ with ?project=<id>', async () => {
       const id = ProjectUI.doc().id;
@@ -121,7 +114,7 @@ async function runProjectTests() {
       await wait(1300);
       return eq([ProjectUI.status().readOnly, stored(doc.id).sections.plates.schema], [true, 99]);
     });
-    await t('a Tower massing (90 ft square plates, a 40 ft core, no spines) fills with a point corridor and units on every level', () => {
+    await t('a Tower massing (90 ft square plates, a 40 ft core, no spines) opens with a point corridor and a blank layout with open area on every level (changed: no auto-fill)', () => {
       const sq = (h) => [[-h, -h], [h, -h], [h, h], [-h, h]];
       const lv = (index, h) => ({ index, name: `Level ${index}`, zone: 'tower', z: (index - 1) * 11, ftf: 11, program: 'residential', plates: [{ outer: sq(h), holes: [] }], core: sq(20.125), spines: [], seeds: [] });
       let doc = ProjectMod.newProject({ name: 'Tower fixture' });
@@ -131,9 +124,9 @@ async function runProjectTests() {
       ProjectUI.openDoc(doc);
       const d = Derived.get();
       const fills = d.built.groups.map((g) => g.fill);
-      return eq([Store.get('corridor.kind'), d.groups.length, fills.every((f) => f && f.kind === 'point' && f.units.length > 0), d.hud.building.floors], ['auto', 2, true, 3]);
+      return eq([Store.get('corridor.kind'), d.groups.length, fills.every((f) => f && f.kind === 'point' && f.layout === true && f.units.length === 0 && f.openArea > 1000), d.hud.building.floors], ['auto', 2, true, 3]);
     });
-    await t('a hotel tower (117 by 93 ft plates, a 52 by 42 ft core) opens in hotel mode and fills with keys; the mode notice stays quiet', () => {
+    await t('a hotel tower (117 by 93 ft plates, a 52 by 42 ft core) opens in hotel mode with an open layout; the mode notice stays quiet (changed: no keys until drawn)', () => {
       const rect = (w, d) => [[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2]];
       const lv = (index) => ({ index, name: `Level ${index}`, zone: 'tower', z: (index - 1) * 15, ftf: 15, program: 'hotel', plates: [{ outer: rect(117, 93), holes: [] }], core: rect(52, 42), spines: [], seeds: [] });
       let doc = ProjectMod.newProject({ name: 'Hotel tower' });
@@ -142,7 +135,7 @@ async function runProjectTests() {
       fresh();
       ProjectUI.openDoc(doc);
       const d = Derived.get();
-      return eq([ProjectUI.massingMode(), Store.get('mode'), d.hud.building.units > 10], ['hotel', 'hotel', true]);
+      return eq([ProjectUI.massingMode(), Store.get('mode'), d.hud.open > 1000], ['hotel', 'hotel', true]);
     });
     await t('a project with no massing keeps the drawn plate', () => {
       const doc = ProjectFixture.project({ name: 'Empty', withMassing: false });

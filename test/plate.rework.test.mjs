@@ -12,12 +12,15 @@ const AD = await import("../src/plate/advisor.js");
 const MT = await import("../src/plate/metrics.js");
 const MX = await import("../src/plate/mix.js");
 const DV = await import("../src/plate/derived.js");
-const { PRESETS, defaultState } = await import("../src/plate/presets.js");
+const { PRESETS } = await import("../src/plate/presets.js");
+// Draw plan 6: these tests run the fill engine (fillPlates, the old buildPlates). defaultState() is now the blank point
+// tower, so the 8.1 preset stands in where a test expects the 8.1 base.
+const defaultState = () => JSON.parse(JSON.stringify(PRESETS.find((p) => p.id === "double-loaded-bar").state));
 const { TEST_CASES } = await import("../src/plate/testcases.js");
 const TG = await import("../src/tower/geometry.js");
 const TD = await import("../src/tower/derived.js");
 const TPR = await import("../src/tower/presets.js");
-const { buildPlates } = FL;
+const { fillPlates: buildPlates } = FL;
 const { GEO } = CO;
 
 let pass = 0, fail = 0;

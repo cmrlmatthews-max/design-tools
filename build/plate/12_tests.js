@@ -41,7 +41,7 @@ const TestHelp = (() => {
 async function runTests() {
   const { eq, near, within, make, presetState } = TestHelp;
   const { results, t } = make();
-  const def = () => fillDefaults(defaultState());
+  const def = () => TestHelp.presetState('double-loaded-bar');
 
   /* ---- shell helpers ---- */
   await t('formatFeetInches 312.5', () => eq(Units.formatFeetInches(312.5), `312'-6"`));
@@ -61,15 +61,20 @@ async function runTests() {
   });
 
   /* ---- the default plate (plan section 8.1) ---- */
-  await t('the default plate: 17 units, NRSF 15,077.8 sf, efficiency 0.7732 on the HUD numbers', () => {
+  await t('the bar 8.1 preset: 17 units, NRSF 15,077.8 sf, efficiency 0.7732 on the HUD numbers', () => {
     const d = computeDerived(def()), h = d.hud;
     return eq([d.ok, h.units, Math.abs(h.nrsf - 15077.8) <= 0.5, h.efficiency, h.gsf], [true, 17, true, 0.7732, 19500]);
   });
-  await t('the default plate has no warning that blocks the fill', () => {
+  await t('the bar 8.1 preset has no warning that blocks the fill', () => {
     const d = computeDerived(def());
     return eq([d.warnings.filter((w) => w.level === 'error').length, d.warnings.length === d.metrics.warnings.length], [0, true]);
   });
-  await t('the page is showing the default numbers (17, 15,078 sf, 77.3%)', () => {
+  await t('the default state is blank: no units, the Blank point tower, and a state with locks migrates them to units', () => {
+    const d = fillDefaults(defaultState());
+    const m = fillDefaults({ locks: [{ id: 'U-01', outer: [[0, 0], [20, 0], [20, 30], [0, 30]], type: '1br' }] });
+    return eq([d.name, d.units.length, d.locks, m.units.length, m.locks], ['Blank point tower', 0, undefined, 1, undefined]);
+  });
+  await t('the page is showing the bar 8.1 numbers (17, 15,078 sf, 77.3%)', () => {
     if (!document.getElementById('mUnits')) return true;
     const saved = Store.snapshot();
     Store.replace(def());
@@ -139,15 +144,17 @@ async function runTests() {
     const d = computeDerived(s);
     return eq([d.ok, d.hud.units > 0, d.hud.bays >= d.hud.units], [true, true, true]);
   });
-  await t('a share change moves the counts: 2BR 0.50 gives more 2BR than the default', () => {
+  await t('a share change moves the Suggest target: 2BR 0.50 gives a larger 2BR target than the bar 8.1 shares (changed: shares no longer fill the plate)', () => {
+    const tgt = (d) => d.hud.mix.find((r) => r.type === '2br').target;
     const a = computeDerived(def());
     const s = def(); s.mix.multifamily.find((x) => x.id === '2br').share = 0.5; s.mix.multifamily.find((x) => x.id === '1br').share = 0.25;
     const b = computeDerived(s);
-    const n2 = (d) => d.editing.units.filter((u) => u.type === '2br').length;
-    return eq(n2(b) > n2(a), true);
+    return eq([tgt(b) > tgt(a), b.hud.units], [true, 17]);
   });
 
-  /* ---- exports ---- */
+  /* ---- exports (on the bar 8.1 plate: the page itself starts blank) ---- */
+  const savedForExports = Store.snapshot();
+  Store.replace(def());
   await t('the SketchUp document has source "plate", a solid per unit, and validates', () => {
     const doc = FileExports.sketchupDoc();
     const v = SkFmt.validateDoc(doc);
@@ -199,12 +206,13 @@ async function runTests() {
     return eq(back, s);
   });
   await t('fillDefaults fills a partial state and drops nothing the user typed', () => {
-    const s = fillDefaults({ plate: { w: 180 }, mode: 'hotel', locks: [{ id: 'U-01', outer: [[0, 0], [10, 0], [10, 10]], type: 'king' }] });
-    return eq([s.plate.w, s.plate.d, s.mode, s.locks.length, s.corridor.wall, s.mix.hotel.length], [180, 65, 'hotel', 1, 0.5, 3]);
+    const s = fillDefaults({ plate: { w: 180 }, mode: 'hotel', units: [{ id: 'U-01', type: 'king', mode: 'free', outer: [[0, 0], [10, 0], [10, 10]] }] });
+    return eq([s.plate.w, s.plate.d, s.mode, s.units.length, s.locks, s.corridor.wall, s.mix.hotel.length], [180, 117, 'hotel', 1, undefined, 0.5, 3]);
   });
   await t('every preset survives fillDefaults unchanged', () => {
     const bad = CONFIG.presets.filter((p) => JSON.stringify(fillDefaults(deepClone(p.state))) !== JSON.stringify(fillDefaults(fillDefaults(deepClone(p.state))))).map((p) => p.id);
     return eq(bad, []);
   });
+  Store.replace(savedForExports);
   return results;
 }

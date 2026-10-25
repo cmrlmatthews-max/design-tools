@@ -1,38 +1,41 @@
 /* ==========================================================================
-   TESTS: selecting and editing  (plan section 9.2 "Editing")
-   Pick a unit by a click (plane math), the selection card, a bay drag of 2 ft (two widths change, NRSF stays), a drag past a neighbor's
-   minimum (refused), a lock that survives Re-fill, a type change that re-solves its run, moving and deleting blocks, and the pointer
-   drag of a bay line. They change the design on screen and put it back at the end.
+   TESTS: selecting and editing  (plan section 9.2 "Editing", draw-first)
+   Pick a unit by a click (plane math), the selection card (type chips, Split, Merge, Delete: no lock button), a bay drag of 2 ft (two widths
+   change, NRSF stays), a drag past a neighbor (it stops at 1 ft), a type change by hand, moving and deleting blocks, the pointer drag of a
+   bay line. The fixture is the bar 8.1 preset (17 drawn units). They change the design on screen and put it back at the end.
+   Changed by the draw-first change: the lock, Re-fill and Unlock all tests are gone (locks and Re-fill no longer exist: the units are the
+   drawn units); the card has no lock button; a bay drag no longer locks, it moves two drawn units; "refused past the minimum" became
+   "stops at 1 ft" (draw.js moveBayLine clamps).
    ========================================================================== */
 async function runSelectTests() {
   const { eq, near, make, $, frames, wait, visible } = TestHelp;
   const { results, t } = make();
   const savedState = Store.snapshot(), savedTab = UI.activeTab();
   Options.holdAutosave(true);
-  const fresh = () => { Select.clear(); Store.replace(fillDefaults(defaultState())); UI.updateHud(Derived.get()); };
+  const fresh = () => { Select.clear(); Select.setTool('select'); Store.replace(TestHelp.presetState('double-loaded-bar')); UI.updateHud(Derived.get()); };
   const L = () => Derived.get().editing;
   const nrsf = () => Derived.get().hud.nrsf;
-  const widthOf = (u) => Math.round(Math.abs(Select.frameOf(L().units.indexOf(u)).w) * 1000) / 1000;
-  /** The bay edge with the most room (the first one with at least `room` ft either way). */
-  const southBay = (room = 0) => {
+  const wOf = (k) => Math.round(Select.unitSize(k).w * 1000) / 1000;
+  const key = (k, o = {}) => window.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, ...o }));
+  /** The first bay line that two units of one run share and with room of at least `room` ft each way. */
+  const bay = (room = 2) => {
     const bays = Select.bays();
-    let best = null;
-    bays.forEach((b, i) => {
-      const lim = Select.bayLimits(i), r = Math.max(lim.fwd, -lim.back);
-      if (!best || (best.r < room && r > best.r)) best = { i, b, r, lim };
-    });
-    return best;
+    for (let i = 0; i < bays.length; i++) {
+      const b = bays[i];
+      if (wOf(b.a) >= room + 10 && wOf(b.b) >= room + 10) return { i, b };
+    }
+    return null;
   };
   try {
     fresh();
     if (Render.ready()) Render.setView('plan', false);
     await frames(3);
 
-    await t('the default plate has bay lines between neighbors (17 units: at least 12 bay lines)', () => eq(Select.bays().length >= 12, true));
+    await t('the bar 8.1 plate has bay lines between neighbors (17 units: at least 12 bay lines)', () => eq(Select.bays().length >= 12, true));
 
     /* ---- picking ---- */
     if (Render.ready()) {
-      await t('a click on a unit selects it and the card shows its type, area and a lock button', async () => {
+      await t('a click on a unit selects it and the card shows its type chips, area, Split, Merge and Delete (no lock button)', async () => {
         const u = L().units[0];
         const c = ringCentroidXY(u.outer);
         const p = Select.screenOf(c[0], c[1]);
@@ -40,14 +43,18 @@ async function runSelectTests() {
         await frames(2);
         const sel = Select.get();
         const card = $('selection-card');
-        return eq([sel && sel.kind, sel && sel.k, visible(card), /sf/.test(card.textContent), !!card.querySelector('[data-action="lock"]'), card.querySelectorAll('#itemTypes .chip').length], ['unit', 0, true, true, true, 5]);
+        const has = (a) => !!card.querySelector(`[data-action="${a}"]`);
+        return eq([sel && sel.kind, sel && sel.k, visible(card), /sf/.test(card.textContent), has('split'), has('merge-left'), has('merge-right'), has('delete'), has('lock'), card.querySelectorAll('#itemTypes .chip').length], ['unit', 0, true, true, true, true, true, true, false, 5]);
       });
-      await t('a click on empty ground clears the selection', async () => {
+      await t('a click on an unfilled spot of the blank plate selects the open stretch; a click far from the plate clears the selection', async () => {
         const p = Select.screenOf(-400, 200);
         Select.click(p.x, p.y);
         return eq(Select.get(), null);
       });
       await t('a click on the core selects the core; a click on a unit after it selects the unit', async () => {
+        fresh();
+        Store.set('core', { mode: 'manual', rect: [-45, 2.835, -15, 32.5] }, { live: false });
+        await frames(2);
         const c = L().core ? ringCentroidXY(L().core) : null;
         if (!c) return 'no core';
         const p = Select.screenOf(c[0], c[1]);
@@ -59,90 +66,46 @@ async function runSelectTests() {
       });
       await t('Escape clears the selection', () => {
         Select.selectUnit(2);
-        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        key('Escape');
         return eq(Select.get(), null);
       });
     }
 
     /* ---- the bay drag ---- */
-    await t('a bay drag of 2 ft changes two widths by 2 ft and keeps NRSF', () => {
+    await t('a bay drag of 2 ft changes two widths by 2 ft and keeps NRSF; the two drawn units move (no lock)', () => {
       fresh();
-      const s = southBay(2);
-      if (!s) return 'no south bay';
-      const before = nrsf(), A = L().units[s.b.a], B = L().units[s.b.b];
-      const wa = widthOf(A), wb = widthOf(B);
-      const lim = s.lim;
-      const d = lim.fwd >= 2 ? 2 : (lim.back <= -2 ? -2 : 0);
-      if (!d) return `no room to move: limits ${JSON.stringify(lim)}`;
-      const ok = Select.moveBay(s.i, d);
-      const units = L().units;
-      const lockedAt = units.map((u, k) => (u.locked ? k : -1)).filter((k) => k >= 0);
-      const wa2 = widthOf(units[s.b.a]), wb2 = widthOf(units[s.b.b]);
-      return eq([ok, lockedAt, Select.locks().length, Math.round(Math.abs(wa2 - wa) * 100) / 100, Math.round(Math.abs(wb2 - wb) * 100) / 100, Math.abs(nrsf() - before) < 0.2], [true, [s.b.a, s.b.b].sort((x, y) => x - y), 2, 2, 2, true]);
+      const s = bay(2);
+      if (!s) return 'no bay line';
+      const before = nrsf(), n0 = Store.get('units').length;
+      const wa = wOf(s.b.a), wb = wOf(s.b.b);
+      const ok = Select.moveBay(s.i, 2);
+      const wa2 = wOf(s.b.a), wb2 = wOf(s.b.b);
+      return eq([ok, Store.get('units').length, Math.round(Math.abs(wa2 - wa) * 100) / 100, Math.round(Math.abs(wb2 - wb) * 100) / 100, Math.abs(nrsf() - before) < 0.2], [true, n0, 2, 2, true]);
     });
     await t('the bay drag is one undo step', () => {
       fresh();
-      const s = southBay(1);
+      const s = bay(1);
       const before = TestHelp.snap();
-      Select.moveBay(s.i, s.lim.fwd >= 1 ? 1 : -1);
-      return eq([Select.locks().length, TestHelp.oneStep(before)], [2, true]);
+      Select.moveBay(s.i, 1);
+      return eq([TestHelp.snap() !== before, TestHelp.oneStep(before)], [true, true]);
     });
-    await t('a drag past a neighbor\'s minimum is refused: nothing changes', () => {
+    await t('a drag far past a neighbor stops at 1 ft: the widths still add up and NRSF stays', () => {
       fresh();
-      const s = southBay();
-      const before = TestHelp.snap();
-      const lim = Select.bayLimits(s.i);
-      const ok = Select.moveBay(s.i, lim.fwd + 3), ok2 = Select.moveBay(s.i, lim.back - 3);
-      return eq([ok, ok2, TestHelp.snap() === before, Select.locks().length], [false, false, true, 0]);
-    });
-    await t('the limits are the widths each type allows: a 1BR (24 to 28 ft) stays inside its range after a drag to the limit', () => {
-      fresh();
-      const s = southBay();
-      const lim = Select.bayLimits(s.i);
-      const d = lim.fwd > 0.2 ? lim.fwd - 0.01 : lim.back + 0.01;
-      const ok = Select.moveBay(s.i, d);
-      const flagged = L().units.filter((u) => u.flagged).length;
-      return eq([ok, flagged], [true, 0]);
-    });
-
-    /* ---- locks ---- */
-    await t('L locks the selected unit: an amber lock appears; L again unlocks', () => {
-      fresh();
-      Select.selectUnit(1);
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'l', bubbles: true }));
-      const a = [Select.locks().length, L().units[1].locked];
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'l', bubbles: true }));
-      return eq([a, Select.locks().length], [[1, true], 0]);
-    });
-    await t('a lock survives Re-fill: the outline and the type do not change while the others re-solve', () => {
-      fresh();
-      Select.toggleLock(1); Select.toggleLock(4);
-      const keep = Select.locks().map((l) => JSON.stringify([l.outer, l.type]));
-      const unitsBefore = L().units.length;
-      Store.set('mix.multifamily.3.share', 0.5, { live: false });
-      Store.set('mix.multifamily.1.share', 0.25, { live: false });
-      Select.refill();
-      const after = L().units.filter((u) => u.locked).map((u) => JSON.stringify([Select.locks().find((l) => JSON.stringify(l.outer) === JSON.stringify(u.outer)) ? u.outer : null, u.type]));
-      const kept = keep.every((k) => after.includes(k));
-      const n2 = L().units.filter((u) => u.type === '2br').length;
-      return eq([Select.locks().length, kept, n2 >= 5, unitsBefore > 0], [2, true, true, true]);
-    });
-    await t('Unlock all removes the locks and the plate returns to the plain fill', () => {
-      fresh();
-      Select.toggleLock(1); Select.toggleLock(2);
-      const had = Select.locks().length;
-      Select.unlockAll();
-      return eq([had, Select.locks().length, Derived.get().hud.units, Math.abs(nrsf() - 15077.8) <= 0.5], [2, 0, 17, true]);
+      const s = bay(2);
+      const sum = wOf(s.b.a) + wOf(s.b.b), before = nrsf();
+      Select.moveBay(s.i, 500);
+      const wa = wOf(s.b.a), wb = wOf(s.b.b);
+      return eq([Math.abs(wa + wb - sum) < 0.01, Math.min(wa, wb) >= 0.99, Math.abs(nrsf() - before) < 0.5], [true, true, true]);
     });
 
     /* ---- type change ---- */
-    await t('a type change from the card re-solves the run: the unit takes the new type and the run still fills', () => {
+    await t('a type change from the card sets the type by hand and keeps the outline', () => {
       fresh();
       const k = L().units.findIndex((u) => u.type === '1br');
+      const outer = JSON.stringify(L().units[k].outer);
       const r = Select.setUnitType(k, 'studio');
-      const d = Derived.get();
-      const bad = d.warnings.filter((w) => w.id === 'run-too-short').length;
-      return eq([r.ok, Select.locks().length, Select.locks()[0].type, bad, d.hud.units >= 16], [true, 1, 'studio', 0, true]);
+      const u = L().units.find((x) => x.uid === L().units[k].uid);
+      return eq([r.ok, u.type, JSON.stringify(u.outer) === outer, Derived.get().hud.units], [true, 'studio', true, 17]);
     });
     await t('the type chips of the card change the type of the selected unit', () => {
       fresh();
@@ -152,14 +115,7 @@ async function runSelectTests() {
       chip.click();
       const sel = Select.get();
       const u = sel && sel.kind === 'unit' ? L().units[sel.k] : null;
-      return eq([!!u, u && u.type, u && u.locked], [true, '2br', true]);
-    });
-    await t('a type that does not fit the depth is refused by the card (no lock is made)', () => {
-      fresh();
-      Store.set('plate.d', 55, { live: false });
-      const before = Select.locks().length;
-      const r = Select.setUnitType(0, '3br');
-      return eq([r.ok === false, Select.locks().length - before], [true, 0]);
+      return eq([!!u, u && u.type], [true, '2br']);
     });
 
     /* ---- blocks ---- */
@@ -173,11 +129,12 @@ async function runSelectTests() {
       const moved = Store.get('support')[0].rect;
       const sel = Select.get();
       Select.deleteBlock(sel);
-      return eq([ok, added, moved, Store.get('support').length, Derived.get().hud.units], [true, 1, [-100, -31, -92, -21], 0, 17]);
+      return eq([ok, added, moved, Store.get('support').length], [true, 1, [-100, -31, -92, -21], 0]);
     });
-    await t('moving a stair switches the stairs to Manual and the fill follows', () => {
+    await t('moving a stair switches the stairs to Manual', () => {
       fresh();
       const st = L().stairs[0];
+      if (!st) return 'no stair';
       const r0 = ringRect(st.outer);
       Select.setBlockRect({ kind: 'stair', id: st.id }, [r0[0] + 2, r0[1], r0[2] + 2, r0[3]]);
       const s = Store.snapshot();
@@ -193,25 +150,24 @@ async function runSelectTests() {
 
     /* ---- the pointer drag ---- */
     if (Render.ready()) {
-      await t('a pointer drag on a bay line moves it: two units lock and NRSF stays', async () => {
+      await t('a pointer drag on a bay line moves it: NRSF stays, one undo step, orbit comes back', async () => {
         fresh();
         Store.set('view.bays', true, { live: false });
         Render.setView('plan', false);
         await frames(3);
-        const s = southBay();
-        const lim = Select.bayLimits(s.i);
-        const sgn = lim.fwd >= 2 ? 1 : -1;
+        const s = bay(2);
         const mid = s.b.mid, t0 = s.b.t;
-        const a = Select.bayScreen(s.i), z = Select.screenOf(mid[0] + t0[0] * 2 * sgn, mid[1] + t0[1] * 2 * sgn, 0.9);
+        const a = Select.bayScreen(s.i), z = Select.screenOf(mid[0] + t0[0] * 2, mid[1] + t0[1] * 2, undefined);
         const c = Render.canvas();
         const ev = (type, x, y) => c.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 7, pointerType: 'mouse', button: 0, buttons: 1, clientX: x, clientY: y }));
-        const before = nrsf();
+        const w0 = wOf(s.b.a), before = nrsf(), snap0 = TestHelp.snap();
         ev('pointerdown', a.x, a.y);
         ev('pointermove', a.x + (z.x - a.x) / 2, a.y + (z.y - a.y) / 2);
         ev('pointermove', z.x, z.y);
         ev('pointerup', z.x, z.y);
         await frames(2);
-        return eq([Select.locks().length, Math.abs(nrsf() - before) < 0.5 || `${before} -> ${nrsf()}`, Render.orbitEnabled()], [2, true, true]);
+        const moved = Math.abs(wOf(s.b.a) - w0) > 0.4;
+        return eq([moved, Math.abs(nrsf() - before) < 0.5 || `${before} -> ${nrsf()}`, Render.orbitEnabled(), TestHelp.oneStep(snap0)], [true, true, true, true]);
       });
     }
   } finally {

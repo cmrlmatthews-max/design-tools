@@ -592,7 +592,7 @@ if (existsSync(new URL("../src/plate/fill.js", import.meta.url))) {
   console.log("real (fill.js)");
   let FL = null;
   try { FL = await import("../src/plate/fill.js"); } catch (e) { console.log("  skip real: " + e.message.split("\n")[0]); }
-  if (FL && typeof FL.buildPlates === "function") {
+  if (FL && typeof FL.fillPlates === "function") {
     const draw = (over) => ({
       ...baseState(), name: "Option A",
       stairs: { mode: "auto", size: [11, 22], items: [] },
@@ -605,7 +605,7 @@ if (existsSync(new URL("../src/plate/fill.js", import.meta.url))) {
     t("real 8.1: buildPlates → computeMetrics runs and the numbers sit near section 8.1", () => {
       // Plan 3.2: "auto" with a core and no spine resolves to a point corridor, so 8.1 names the bar kind (as presets.js does).
       const bar = draw({ corridor: { ...baseState().corridor, kind: "bar" } });
-      built = FL.buildPlates(bar, { project: null });
+      built = FL.fillPlates(bar, { project: null });   // draw plan 6: the fill engine (buildPlates no longer fills)
       const m = MT.computeMetrics(bar, built);
       const row = m.groups[0].row;
       console.log(`       units ${row.units}, nrsf ${row.nrsf}, eff ${row.efficiency}, corridor ${row.corridor.lengthFt}, path ${row.stairDoors.pathFt}, dead ${row.stairDoors.deadEndMax}, closure ${JSON.stringify(row.closure)}`);

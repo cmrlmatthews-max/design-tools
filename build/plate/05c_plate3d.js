@@ -3,8 +3,9 @@
    Builds the three.js objects of a plate fill from one Derived result (plan section 6):
      the plate slab (white), the units as thin slabs (white in Model style, colored by type in Diagram style) with dark demising lines and
      the corridor wall line, the corridor (light gray), the core and the stairs (mid gray, with tread lines), the elevators (crossed boxes),
-     support blocks and pockets (hatched), unit labels (type and area), accessible symbols, red outlines on flagged units, amber outlines
-     on locked units, bay-line handles, the context (other level groups as a faint outline, site neighbors as a ghost).
+     support blocks and pockets (hatched), the open stretches (a very light band), the empty corner zones (a faint dashed outline), unit
+     labels (type and area), accessible symbols, an orange outline on a large unit and a blue outline on a small one (draw plan 3.2), the
+     context (other level groups as a faint outline, site neighbors as a ghost).
    Every drawn level comes from D.scene.levels: { index, name, z, ftf, editing, plate, corridor, core, stairs, elevators, support, units }.
    With "3D levels" off, only the editing level is drawn, at elevation 0; with it on, every filled level stands at its z and ftf.
    Everything the renderer owns (materials) is created here with userData.ownMat, so the renderer disposes it on rebuild.
@@ -176,8 +177,13 @@ const Plate3D = (() => {
     if (L.core) addBlock(L.core, CONFIG.coreColor, slab);
     for (const s of L.stairs) addBlock(s.outer, CONFIG.stairColor, slab);
     for (const e of L.elevators) addBlock(e.outer, CONFIG.elevColor, slab);
-    for (const b of L.support) addBlock(b.outer, b.kind === 'remainder' ? CONFIG.remainderColor : b.kind === 'pocket' || b.kind === 'leftover' || b.kind === 'trim' ? CONFIG.pocketColor : CONFIG.supportColor, slab * (b.kind === 'remainder' ? 0.3 : 0.8));
+    for (const b of L.support) addBlock(b.outer, b.kind === 'pocket' || b.kind === 'leftover' || b.kind === 'trim' ? CONFIG.pocketColor : CONFIG.supportColor, slab * 0.8);
     const bm = mergedMesh(blockGeos); if (bm) { bm.userData.blocks = true; model.push(bm); }
+
+    // the open stretches: a very light band (draw plan 4); no warning, no hatch
+    const openGeos = [];
+    for (const p of polyRings(L.open)) { const g = slabGeo(p.outer, p.holes, z0, 0.05); if (g) openGeos.push(tint(g, col(CONFIG.openColor))); }
+    const om = mergedMesh(openGeos); if (om) { om.userData.open = true; model.push(om); }
 
     // units
     const unitGeos = [];
@@ -197,37 +203,28 @@ const Plate3D = (() => {
     if (state.view.walls) for (const ln of L.wallLines || []) lineSeg(walls, ln[0], ln[1], top + 0.02);
     for (const p of polyRings(L.plate)) { ringSegs(det, p.outer, top); for (const h2 of p.holes || []) ringSegs(det, h2, top); }
     for (const p of polyRings(L.corridor)) { ringSegs(det, p.outer, top); for (const h2 of p.holes || []) ringSegs(det, h2, top); }
-    const blockRings = [L.core, ...L.stairs.map((s) => s.outer), ...L.elevators.map((e) => e.outer), ...L.support.filter((b) => b.kind !== 'remainder').map((b) => b.outer)].filter((r) => r && r.length >= 3);
+    const blockRings = [L.core, ...L.stairs.map((s) => s.outer), ...L.elevators.map((e) => e.outer), ...L.support.map((b) => b.outer)].filter((r) => r && r.length >= 3);
     for (const r of blockRings) ringSegs(det, r, top);
     // core rooms: each one a separate rectangle with a thin line (rework plan 7.1)
     const roomLines = [];
     for (const r of L.coreRooms || []) if (r.outer && r.outer.length >= 3) ringSegs(roomLines, r.outer, top + 0.015);
-    // an unfilled run: no hatch, a dashed dark outline
+    // an empty corner zone: a faint dashed outline
     const gaps = [];
-    for (const b of L.support) if (b.kind === 'remainder') ringSegs(gaps, b.outer, top + 0.02);
-    // large units (area above the type's range on a deep run): a thin orange outline
-    const big = [];
-    for (const u of L.units) if (u.areaHigh) ringSegs(big, u.outer, top + 0.03);
+    for (const z of L.cornerZones || []) if (z.outer && z.outer.length >= 3) ringSegs(gaps, z.outer, top + 0.02);
+    // the type match (draw plan 3.2): a large unit has an orange outline, a small one a blue outline
+    const big = [], small = [];
+    for (const u of L.units) { if (u.match === 'large') ringSegs(big, u.outer, top + 0.03); else if (u.match === 'small') ringSegs(small, u.outer, top + 0.03); }
     const hat = [], tr = [], xs = [];
-    for (const b of L.support) if (b.kind !== 'remainder') for (const [a, c] of hatch(b.outer, 4.8, 0.8)) lineSeg(hat, a, c, top + 0.01);
+    for (const b of L.support) for (const [a, c] of hatch(b.outer, 4.8, 0.8)) lineSeg(hat, a, c, top + 0.01);
     for (const s of L.stairs) for (const [a, c] of treads(s.outer)) lineSeg(tr, a, c, top + 0.01);
     for (const e of L.elevators) for (const [a, c] of cross(e.outer)) lineSeg(xs, a, c, top + 0.01);
     const L1 = [fat(det, lineHex, 1.2, { order: 5, opacity: 0.8 }), fat(outl, lineHex, 1, { order: 5, opacity: 0.55 }), fat(dem, lineHex, 1.6, { order: 6 }),
       fat(walls, lineHex, 1, { order: 6, dashed: true, dash: 1.5, gap: 1, opacity: 0.8 }), fat(hat, lineHex, 0.8, { order: 5, opacity: 0.4 }),
       fat(tr, lineHex, 0.8, { order: 5, opacity: 0.5 }), fat(xs, lineHex, 1, { order: 5, opacity: 0.7 }),
-      fat(roomLines, lineHex, 0.8, { order: 5, opacity: 0.65 }), fat(gaps, lineHex, 1.4, { order: 6, dashed: true, dash: 2.4, gap: 1.6, opacity: 0.9 }),
-      fat(big, CONFIG.areaHighColor, 1.8, { order: 7 })];
+      fat(roomLines, lineHex, 0.8, { order: 5, opacity: 0.65 }), fat(gaps, lineHex, 1.2, { order: 6, dashed: true, dash: 2.4, gap: 1.6, opacity: 0.55 }),
+      fat(big, CONFIG.areaHighColor, 2.2, { order: 7 }), fat(small, CONFIG.smallColor, 2.2, { order: 7 })];
     for (const o of L1) if (o) { o.userData.level = L.index; overlay.push(o); }
 
-    if (!L.editing && stack) return;
-    // flagged (red) and locked (amber) outlines
-    const flag = [], lock = [];
-    for (const u of L.units) {
-      if (u.flagged) ringSegs(flag, u.outer, top + 0.04);
-      if (u.locked) ringSegs(lock, u.outer, top + 0.05);
-    }
-    const f1 = fat(flag, CONFIG.flagColor, 2.6, { order: 8 }), f2 = fat(lock, CONFIG.lockColor, 2.4, { order: 8, dashed: true, dash: 4, gap: 2 });
-    for (const o of [f1, f2]) if (o) { o.userData.flags = true; overlay.push(o); }
   }
 
   /** The unit labels and the accessible marks of the editing level (flat text, scaled with the plan). */
@@ -245,7 +242,7 @@ const Plate3D = (() => {
     if (state.view.labels) {
       for (const u of L.units) {
         const p = u.label || ringCentroidXY(u.outer);
-        add(`${u.typeName}${u.areaHigh ? ' · large' : ''}\n${Math.round(u.area).toLocaleString('en-US')} sf`, p[0], p[1], { height: 2.5 * unit, color: u.flagged ? CONFIG.flagColor : u.areaHigh ? '#a85600' : '#1d2733' }, `u-${u.id}`);
+        add(`${u.typeName}${u.match === 'large' ? ' · large' : u.match === 'small' ? ' · small' : ''}\n${Math.round(u.area).toLocaleString('en-US')} sf`, p[0], p[1], { height: 2.5 * unit, color: u.match === 'large' ? '#a85600' : u.match === 'small' ? '#1f55a8' : '#1d2733' }, `u-${u.id}`);
       }
     }
     for (const u of L.units) {
@@ -255,12 +252,15 @@ const Plate3D = (() => {
     }
     for (const b of L.support) {
       const p = ringCentroidXY(b.outer);
-      if (b.kind === 'remainder') {
-        add(`Unfilled · ${Units.formatFeetInches(ringLong(b.outer))}`, p[0], p[1], { height: 2 * unit, color: '#33404b' }, `b-${b.id}`);
-        continue;
-      }
       if (Math.abs(ringArea(b.outer)) < 20) continue;               // too small for a word
       add(kindLabel(b.kind), p[0], p[1], { height: 1.9 * unit, color: '#4a535c' }, `b-${b.id}`);
+    }
+    // the open stretches: the length of each, so the architect sees what is left (the stretches of one run are labeled one by one)
+    if (state.view.labels) {
+      for (const f of L.free || []) {
+        if (f.length < 4) continue;
+        add(Units.formatFeetInches(f.length), (f.start[0] + f.end[0]) / 2, (f.start[1] + f.end[1]) / 2, { height: 1.7 * unit, color: '#5b6671' }, `f-${f.id}`);
+      }
     }
     // the rooms of an auto core: a short word in each, sized to the room
     for (const r of L.coreRooms || []) {

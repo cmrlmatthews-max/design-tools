@@ -1,9 +1,9 @@
 /* ==========================================================================
    PIPELINE
-   state (+ project) -> FillMod.buildPlates (levels, groups, plate, corridor, blocks, runs, units) -> PlateMetricsMod.computeMetrics
-   -> PlateDerivedMod.platesDerived (the clean geometry the page draws and the exports write).
+   state (+ project) -> FillMod.buildPlates (draw plan 2.2: levels, groups, plate, corridor, blocks, runs, the DRAWN units, open stretches; it never
+   fills) -> PlateMetricsMod.computeMetrics -> PlateDerivedMod.platesDerived (the clean geometry the page draws and the exports write).
    One cached run per change. Every module is pure (src/plate/*); this file only calls them in order and normalizes what the page
-   needs: the HUD numbers, the warnings, the scene (levels with colored, flagged, locked units), the groups and the bounds.
+   needs: the HUD numbers, the warnings, the scene (levels with colored units and their type match, the open stretches and the empty corner zones), the groups and the bounds.
    buildPlates is the only function that reads the project. Never throws: a failure becomes one error warning and an empty result.
    ========================================================================== */
 const SEVERITY_ORDER = { error: 0, warn: 1, info: 2 };
@@ -15,7 +15,7 @@ const sortWarnings = (list) => list.map((w, i) => [w, i]).sort((a, b) => ((SEVER
 const emptyHud = () => ({
   units: 0, nrsf: 0, gsf: 0, efficiency: 0, avgUnit: 0, corners: 0, exposures: { N: 0, E: 0, S: 0, W: 0 }, accessible: 0, corridorFt: 0,
   corridorPerUnit: null, stairDoors: 0, stairPathFt: null, deadEnds: [], deadEndMax: null, support: null, mix: [], hotel: null, closure: null,
-  floors: 1, building: null, warnCount: 0, inRange: null, areaHigh: 0, dropped: [], deep: [], core: null,
+  floors: 1, building: null, warnCount: 0, inRange: null, areaHigh: 0, dropped: [], deep: [], core: null, open: 0,
 });
 
 function emptyDerived(message) {
@@ -49,29 +49,13 @@ const sameRing = (a, b) => {
   return Math.abs(Math.abs(ringArea(a)) - Math.abs(ringArea(b))) < 0.05;
 };
 
-/** The locks that apply to a group: the group's locks for a project, the state's locks for a drawn plate. */
-function locksFor(s, gid) {
-  if (s.source === 'project') { const g = s.levels && s.levels.groups && s.levels.groups[gid]; return g && Array.isArray(g.locks) ? g.locks : []; }
-  return Array.isArray(s.locks) ? s.locks : [];
+/** The drawn units that apply to a group: the group's units for a project, the state's units for a drawn plate. */
+function unitsFor(s, gid) {
+  if (s.source === 'project') { const g = s.levels && s.levels.groups && s.levels.groups[gid]; return g && Array.isArray(g.units) ? g.units : []; }
+  return Array.isArray(s.units) ? s.units : [];
 }
 
-/** True when a unit of the fill is out of the range its type allows. */
-function unitFlagged(s, row, u, areaHigh) {
-  if (!row) return true;
-  if (areaHigh) return false;                 // rework plan 7.1: a large unit of a deep run has its own orange mark
-  const list = (s.mix && s.mix[s.mode]) || [];
-  const t = list.find((x) => x.id === row.id);
-  if (!t) return false;
-  if (s.mode === 'hotel') {
-    if (!u.bay || typeof u.bay.from !== 'number') return false;
-    const w = Math.abs(u.bay.to - u.bay.from);
-    return w < t.widthMin * (t.bays || 1) - 0.25 || w > t.widthMax * (t.bays || 1) + 0.25;
-  }
-  if (u.accessible) return false;
-  return u.area < t.areaMin - 0.5 || u.area > t.areaMax + 0.5;
-}
-
-/** The normalized scene: one entry per level with colored, flagged and locked units and the corridor wall lines. */
+/** The normalized scene: one entry per level with colored units (with their type match), the open stretches and the corridor wall lines. */
 function sceneOf(s, built, derived, editingIndex) {
   const look = typeLookup(s);
   const recs = new Map();
@@ -80,22 +64,24 @@ function sceneOf(s, built, derived, editingIndex) {
   const levels = derived.levels.map((L) => {
     const rec = recs.get(L.index) || {};
     const gid = rec.groupId;
-    const locks = locksFor(s, gid);
     const fillUnits = rec.fill && Array.isArray(rec.fill.units) && rec.fill.units.length === L.units.length ? rec.fill.units : null;
     const units = L.units.map((u, k) => {
       const row = look(u.type);
-      const lock = locks.find((l) => sameRing(l.outer, u.outer)) || null;
-      const areaHigh = Array.isArray(u.flags) && u.flags.includes('area-high');
+      const fu = fillUnits ? fillUnits[k] : null;
+      const match = fu && fu.match ? fu.match : 'in-range';
       return {
-        k, id: u.id, type: row ? row.id : u.type, typeName: u.type, color: row ? row.color : '#9aa3ad', outer: u.outer, area: u.area,
+        k, id: u.id, uid: fu ? fu.uid || null : null, mode: fu ? fu.mode || 'free' : 'free', type: row ? row.id : u.type, typeName: u.type, color: row ? row.color : '#9aa3ad', outer: u.outer, area: u.area,
         exposures: u.exposures, corner: u.corner, accessible: u.accessible, bay: u.bay, ring: u.ring, demising: u.demising,
-        locked: !!lock, lockId: lock ? lock.id : null, flagged: unitFlagged(s, row, u, areaHigh), areaHigh, runId: fillUnits ? fillUnits[k].runId || null : null,
+        match, flagged: match !== 'in-range', areaHigh: match === 'large', small: match === 'small', typeSet: !!(fu && fu.typeSet), clipped: !!(fu && fu.clipped),
+        width: fu && typeof fu.width === 'number' ? fu.width : null, runId: fu ? fu.runId || null : null, runKey: fu ? fu.runKey || null : null,
       };
     });
     return {
       index: L.index, name: L.name, z: L.z, ftf: L.ftf, groupId: gid || null, editing: L.index === editingIndex,
       plate: L.plate, corridor: L.corridor, core: L.core.outer, stairs: L.core.stairs, elevators: L.core.elevators, support: L.support,
       coreRooms: L.core.rooms || [], coreMode: rec.fill ? rec.fill.coreMode || null : null, maxDepth: rec.fill ? rec.fill.maxDepth || null : null,
+      open: rec.fill && Array.isArray(rec.fill.open) ? rec.fill.open : [], openArea: rec.fill && typeof rec.fill.openArea === 'number' ? rec.fill.openArea : 0,
+      free: rec.fill && Array.isArray(rec.fill.free) ? rec.fill.free : [], cornerZones: rec.fill && Array.isArray(rec.fill.cornerZones) ? rec.fill.cornerZones : [],
       units, wallLines: PlateDerivedMod.corridorWallLines(L, wall),
     };
   });
@@ -112,7 +98,7 @@ function summarize(s, metrics, group) {
   const prog = fill && fill.coreProgram ? fill.coreProgram : null;
   const dropped = [...new Set([...(row.dropped || []), ...(fill && Array.isArray(fill.dropped) ? fill.dropped : [])].map((d) => d.id))];
   return {
-    units: row.units, nrsf: row.nrsf, gsf: row.gsf, efficiency: row.efficiency, avgUnit: row.avgUnitArea, corners: row.corners, exposures: row.exposures,
+    units: row.units, open: typeof row.openArea === 'number' ? row.openArea : 0, nrsf: row.nrsf, gsf: row.gsf, efficiency: row.efficiency, avgUnit: row.avgUnitArea, corners: row.corners, exposures: row.exposures,
     accessible: row.accessible, corridorFt: row.corridor.lengthFt, corridorPerUnit: row.corridor.perUnit,
     stairDoors: row.stairDoors.count, stairPathFt: row.stairDoors.pathFt, deadEnds: row.stairDoors.deadEnds || [], deadEndMax: row.stairDoors.deadEndMax,
     support: row.support, mix: mixRows, hotel: row.hotel, closure: row.closure, floors: group.floors, bays: row.bays,
@@ -132,7 +118,7 @@ function computeDerived(s, { project = null, fillStamp = null, currentStamp = nu
     if (fillStamp !== null && fillStamp !== undefined) built.massingUpdatedAt = fillStamp;
     if (currentStamp !== null && currentStamp !== undefined) built.currentMassingUpdatedAt = currentStamp;
     const metrics = PlateMetricsMod.computeMetrics(s, built);
-    const warnings = sortWarnings((metrics.warnings || []).map(mapWarning));
+    const warnings = sortWarnings((metrics.warnings || []).map(mapWarning).filter((w) => w.id !== 'stale-massing'));     // draw-first: nothing re-fills, so the stale notice has no action
     const derived = PlateDerivedMod.platesDerived(s, built, metrics);
     const groups = metrics.groups.map((g) => ({ id: g.id, label: g.label || g.id, first: g.first, levels: g.levels, floors: g.floors, row: g.row }));
     const sel = s.levels && s.levels.selected;
@@ -151,7 +137,7 @@ function computeDerived(s, { project = null, fillStamp = null, currentStamp = nu
     const bounds = computeBounds(rings, Math.max(stack, CONFIG.slabHeight + 2));
     return {
       ok: true, state: s, built, metrics, derived, warnings, groups, group, editing, hud, bounds, rotation: 0,
-      scene: { levels, contextRings, groups }, notes: built.notes || [], stale: warnings.some((w) => w.id === 'stale-massing'), source: built.source,
+      scene: { levels, contextRings, groups }, notes: built.notes || [], stale: false, source: built.source,
     };
   } catch (e) {
     console.error(e);
@@ -199,7 +185,7 @@ const Advice = (() => {
     const d = Derived.get();
     if (!d.ok || !d.built || !d.metrics) { list = []; key = d.id; error = null; notify(); return list; }
     try {
-      list = AdvisorMod.advise(d.state, d.built, d.metrics, { fillPlate: FillMod.buildPlates });
+      list = AdvisorMod.advise(d.state, d.built, d.metrics, { fillPlate: FillMod.fillPlates });
       error = null;
     } catch (e) { console.error(e); list = []; error = e && e.message ? e.message : 'failed'; }
     key = d.id;
