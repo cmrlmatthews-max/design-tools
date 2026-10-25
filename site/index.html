@@ -5687,6 +5687,8 @@ const App = (() => {
     }
     const saved = flushProject();
     if (saved && saved.ok === false) return false;
+    // send the stored project, not the copy in this page: another tool (the Tower Generator) may have saved its section since
+    try { project.doc = ProjectMod.loadProject(storageOf(), project.doc.id, storageNotice()) || project.doc; } catch (e) { /* keep the copy in memory */ }
     let url = null;
     try { url = ProjectMod.sendTo(storageOf(), project.doc, toolId, 'site', storageNotice()); } catch (e) {
       console.error(e);

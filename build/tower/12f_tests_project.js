@@ -243,6 +243,66 @@ async function runProjectTests() {
       const back = stored(doc.id);
       return eq([!!ProjectMod.getSection(back, 'parking'), ProjectMod.getSection(back, 'massing').state.segments[0].floors], [true, 13]);
     });
+    /* ---- a second Tower page on the same project (a second tab, the Sun Study page, a page that Back brings back) ---- */
+    const keepId = ProjectUI.doc().id;      // the tests after this block go on with this project
+    const presetState = (id) => fillDefaults(deepClone(CONFIG.presets.find((p) => p.id === id).state));
+    const shapes = (st) => st.segments.map((g) => g.shape.type).join(',');
+    /** A project whose massing is the L tower, open on this page and saved once; then "another page" saves the U tower. */
+    const twoPages = () => {
+      const doc = ProjectFixture.siteProject({ withMassing: towerMassing(presetState('l-multifamily-podium'), { x: 500, y: 500, rotation: 0, baseZ: 1015 }) });
+      ProjectMod.saveProject(mem, doc);
+      ProjectUI.openDoc(doc);
+      ProjectUI.flush();
+      const u = presetState('u-multifamily-podium');
+      u.placement = { x: 500, y: 500, rotation: 0, baseZ: 1015 };
+      ProjectMod.saveProject(mem, ProjectMod.writeSection(stored(doc.id), 'massing', towerMassing(u, u.placement)));
+      return doc.id;
+    };
+    const towerPlatePoints = (sec) => sec.derived.levels.filter((l) => l.zone !== 'podium' && l.plates.length).map((l) => l.plates[0].outer.length);
+    await t('a sun change on an older Tower page never writes its older tower over a newer one (the Facade Studio reads the newer U)', () => {
+      const id = twoPages();
+      const before = shapes(Store.raw());
+      Store.set('sun.dates', ['03-20'], { live: false });
+      ProjectUI.flush();
+      const sec = ProjectMod.getSection(stored(id), 'massing');
+      const pts = towerPlatePoints(sec);
+      return eq([before, shapes(sec.state), sec.state.sun.dates, pts.length > 0 && pts.every((n) => n === 8), shapes(Store.raw()), ProjectUI.status().dirty],
+        ['L,L', 'U,U', ['03-20'], true, 'U,U', false]);
+    });
+    await t('a geometry change on an older Tower page is merged key by key onto the newer tower (the other keys stay as stored)', () => {
+      const id = twoPages();
+      Store.set('podium.floors', 8, { live: false });
+      ProjectUI.flush();
+      const st = ProjectMod.getSection(stored(id), 'massing').state;
+      return eq([shapes(st), st.podium.floors, st.name, Store.raw().podium.floors], ['U,U', 8, 'U-shaped multifamily on podium', 8]);
+    });
+    await t('back at the front, an older Tower page shows the newer stored tower and saves nothing of its own', () => {
+      const id = twoPages();
+      const at = ProjectMod.getSection(stored(id), 'massing').updatedAt;
+      const changed = ProjectUI.syncStored();
+      const again = ProjectUI.syncStored();
+      const after = ProjectMod.getSection(stored(id), 'massing').updatedAt;
+      Store.set('segments.1.floors', 20, { live: false });
+      ProjectUI.flush();
+      const st = ProjectMod.getSection(stored(id), 'massing').state;
+      return eq([changed, again, shapes(Store.raw()), after === at, ProjectUI.status().dirty, shapes(st), st.segments[1].floors], [true, false, 'U,U', true, false, 'U,U', 20]);
+    });
+    await t('a massing that another tool saved after this tower brings the replace question back; No keeps that massing', async () => {
+      const doc = ProjectFixture.siteProject({ withMassing: towerMassing(presetState('l-multifamily-podium')) });
+      ProjectMod.saveProject(mem, doc);
+      ProjectUI.openDoc(doc);
+      ProjectUI.flush();
+      ProjectMod.saveProject(mem, ProjectMod.writeSection(stored(doc.id), 'massing', midMassing));
+      Store.set('segments.1.floors', 9, { live: false });
+      const res = ProjectUI.flush();
+      await wait(50);
+      const asked = !!modal();
+      answer(false);
+      await wait(50);
+      return eq([res.asking, asked, ProjectMod.getSection(stored(doc.id), 'massing').tool, ProjectUI.status().readOnly], [true, true, 'midrise', true]);
+    });
+    ProjectUI.openDoc(stored(keepId));
+
     await t('rename changes the project name in the file and the pill', () => {
       ProjectUI.rename('Fixture renamed');
       ProjectUI.flush();
