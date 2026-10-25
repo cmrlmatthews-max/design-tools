@@ -24,10 +24,11 @@ This file is the one place that lists every tool in the suite, who builds it, an
 | `parking` | Parking Deck Generator | `parking/` | Version 1 live | Home |
 | `facade` | Facade Studio | `facade/` | Version 1 live | Home |
 | `grading` | Grading Sketch | `grading/` | Version 1 live | Home |
+| `viewer` | Model Viewer | `viewer/` | Built, in review | Home |
 | `view` | View Study | `view/` | Later | — |
 | `egress` | Egress Sketch | `egress/` | Later | — |
 | — | Yield Study | — | Skipped for now | — |
-| — | Model Explorer | — | Skipped for now | — |
+| — | Model Explorer | — | Skipped for now. Became the Model Viewer (October 25, 2026) | — |
 
 Branch `site-base-style` (October 23, 2026): in progress, not merged. It adds the base elevation that follows the ground, the site style (Solid, Glass, Wireframe), the AI-ready image with the site and the Hero render prompt, and collapsed panel sections.
 
@@ -45,7 +46,7 @@ Branch `site-base-style` (October 23, 2026): in progress, not merged. It adds th
 
 ## 4. Pipeline order
 
-Site → Massing (Tower or Mid-Rise) → Plates → Parking → Facade → Sun → Grading → Egress.
+Site → Massing (Tower or Mid-Rise) → Plates → Parking → Facade → Sun → Grading → Model Viewer (every section in one model). Later: Egress Sketch.
 
 Each tool reads the sections before it and writes only its own section. The Workspace page (the menu page) shows the project and the tools in this order.
 

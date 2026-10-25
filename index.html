@@ -131,7 +131,7 @@ li.warn .stl{color:var(--red)}
 <div class="hw">
 <h3>1 · What a project is</h3>
 <p>A project is one file that holds the work of every tool for one design study. Each tool writes one part of the file. That part is the section of the tool. A tool reads the sections of the tools before it.</p>
-<p>The tools run in this order: Site → Massing (Tower or Mid-Rise) → Plates → Parking → Facade → Sun → Grading → Egress (planned). The <b>Tools</b> list on this page uses the same order.</p>
+<p>The tools run in this order: Site → Massing (Tower or Mid-Rise) → Plates → Parking → Facade → Sun → Grading → Model Viewer (every section in one model). Later: Egress Sketch. The <b>Tools</b> list on this page uses the same order.</p>
 <ul>
 <li><b>Open project</b>: the project that the tools on this page open. The <b>Project schedule</b> marks it <b>Open</b>.</li>
 <li><b>Site layer</b>: the project site from the Site Model. It shows the ground, the site boundary, roads, water, trees, and neighbor buildings. Every tool draws it.</li>
@@ -198,7 +198,7 @@ li.warn .stl{color:var(--red)}
 <tr><td>Facade Studio</td><td>Massing; Plates: balconies by unit; Site: roads; Sun: dates and sun hours</td><td>Facade: faces, glazing, balconies</td><td>Grading Sketch</td></tr>
 <tr><td>Sun Study</td><td>Site location; Massing; context blocks from the site (shadows)</td><td>Sun: dates, sun positions, sun hours</td><td>— (inside the Tower Generator, View tab)</td></tr>
 <tr><td>Grading Sketch</td><td>Site: ground; Massing: footprint; Parking: deck footprint</td><td>Grading: finished floor elevations, proposed ground, walls, earthwork</td><td>—</td></tr>
-<tr><td>Egress Sketch</td><td>Planned</td><td>Planned</td><td>—</td></tr>
+<tr><td>Model Viewer</td><td>Every section of the project</td><td>Nothing</td><td>—</td></tr>
 </tbody></table>
 
 <h3>6 · Rules</h3>
@@ -239,7 +239,7 @@ li.warn .stl{color:var(--red)}
 </section>
 <div class="lists"><section><div class="dt"><svg viewBox="0 0 44 44" class="bub" aria-hidden="true"><circle cx="22" cy="22" r="20" fill="#fff" stroke="#1D2733" stroke-width="1.4"/><line x1="4" y1="22" x2="40" y2="22" stroke="#1D2733" stroke-width="1"/><text x="22" y="18" text-anchor="middle" class="rc" font-size="13" fill="#1D2733">8</text><text x="22" y="35" text-anchor="middle" class="rc" font-size="9.5" fill="#1D2733">G-001</text></svg><div><h2 class="dtt" style="margin:0">Tools</h2><div class="dts" id="toolSub">No project open</div></div></div>
 <p id="open" class="hint">No project open. Each tool opens on its own.</p>
-<ol><li class="tool" data-section="site"><div class="tag"><svg class="tri" viewBox="0 0 26 23" aria-hidden="true"><path d="M13,1.5 L24.5,21.5 L1.5,21.5 Z"/><text x="13" y="18" text-anchor="middle" font-size="11">1</text></svg></div><div class="c"><h3 class="t">Site Model</h3><p class="d">Context model of a real site from public map data, with Revit CSV and DXF downloads.</p><p class="stl"></p><div class="stamps"><a class="stamp" id="siteOpen" data-base="site/" href="site/" aria-label="Open Site Model">Open</a></div></div></li><li class="tool" data-section="massing"><div class="tag"><svg class="tri" viewBox="0 0 26 23" aria-hidden="true"><path d="M13,1.5 L24.5,21.5 L1.5,21.5 Z"/><text x="13" y="18" text-anchor="middle" font-size="11">2</text></svg></div><div class="c"><h3 class="t">Massing</h3><p class="d">Tower or mid-rise form with live floor-area metrics. A project holds one massing.</p><p class="stl"></p><div class="stamps"><a class="stamp" data-base="tower/" href="tower/">Tower Generator</a><a class="stamp" data-base="midrise/" href="midrise/">Mid-Rise Generator</a></div></div></li><li class="tool" data-section="plates"><div class="tag"><svg class="tri" viewBox="0 0 26 23" aria-hidden="true"><path d="M13,1.5 L24.5,21.5 L1.5,21.5 Z"/><text x="13" y="18" text-anchor="middle" font-size="11">3</text></svg></div><div class="c"><h3 class="t">Plate Planner</h3><p class="d">Counted test fit of every floor plate: corridor, stairs, core, and units by type, with net rentable area and efficiency. Multifamily or hotel.</p><p class="stl"></p><div class="stamps"><a class="stamp" data-base="plate/" href="plate/" aria-label="Open Plate Planner">Open</a></div></div></li><li class="tool" data-section="parking"><div class="tag"><svg class="tri" viewBox="0 0 26 23" aria-hidden="true"><path d="M13,1.5 L24.5,21.5 L1.5,21.5 Z"/><text x="13" y="18" text-anchor="middle" font-size="11">4</text></svg></div><div class="c"><h3 class="t">Parking Deck</h3><p class="d">Stalls, aisles, ramps, and columns for a parking deck.</p><p class="stl"></p><div class="stamps"><a class="stamp" data-base="parking/" href="parking/" aria-label="Open Parking Deck">Open</a></div></div></li><li class="tool" data-section="facade"><div class="tag"><svg class="tri" viewBox="0 0 26 23" aria-hidden="true"><path d="M13,1.5 L24.5,21.5 L1.5,21.5 Z"/><text x="13" y="18" text-anchor="middle" font-size="11">5</text></svg></div><div class="c"><h3 class="t">Facade Studio</h3><p class="d">Facade systems, glazing ratios, and balconies by face.</p><p class="stl"></p><div class="stamps"><a class="stamp" data-base="facade/" href="facade/" aria-label="Open Facade Studio">Open</a></div></div></li><li class="tool" data-section="sun"><div class="tag"><svg class="tri" viewBox="0 0 26 23" aria-hidden="true"><path d="M13,1.5 L24.5,21.5 L1.5,21.5 Z"/><text x="13" y="18" text-anchor="middle" font-size="11">6</text></svg></div><div class="c"><h3 class="t">Sun Study</h3><p class="d">Sun paths, real shadows, shadow study sheets, and sun hours on the ground. Inside the Tower Generator (View tab).</p><p class="stl"></p><div class="stamps"><a class="stamp" data-base="tower/?study=sun" href="tower/?study=sun" aria-label="Open the Sun Study in the Tower Generator">Open</a></div></div></li><li class="tool" data-section="grading"><div class="tag"><svg class="tri" viewBox="0 0 26 23" aria-hidden="true"><path d="M13,1.5 L24.5,21.5 L1.5,21.5 Z"/><text x="13" y="18" text-anchor="middle" font-size="11">7</text></svg></div><div class="c"><h3 class="t">Grading Sketch</h3><p class="d">Rough site grading and the finished floor elevation.</p><p class="stl"></p><div class="stamps"><a class="stamp" data-base="grading/" href="grading/" aria-label="Open Grading Sketch">Open</a></div></div></li><li class="tool plan" data-section="egress"><div class="tag"><svg class="tri" viewBox="0 0 26 23" aria-hidden="true"><path d="M13,1.5 L24.5,21.5 L1.5,21.5 Z"/><text x="13" y="18" text-anchor="middle" font-size="11">8</text></svg></div><div class="c"><h3 class="t">Egress Sketch</h3><p class="d">Exit stairs, doors, and corridors checked for egress.</p><p class="stl">Planned</p><div class="stamps"><button class="stamp" type="button" disabled aria-label="Egress Sketch is planned">Planned</button></div></div></li></ol></section>
+<ol><li class="tool" data-section="site"><div class="tag"><svg class="tri" viewBox="0 0 26 23" aria-hidden="true"><path d="M13,1.5 L24.5,21.5 L1.5,21.5 Z"/><text x="13" y="18" text-anchor="middle" font-size="11">1</text></svg></div><div class="c"><h3 class="t">Site Model</h3><p class="d">Context model of a real site from public map data, with Revit CSV and DXF downloads.</p><p class="stl"></p><div class="stamps"><a class="stamp" id="siteOpen" data-base="site/" href="site/" aria-label="Open Site Model">Open</a></div></div></li><li class="tool" data-section="massing"><div class="tag"><svg class="tri" viewBox="0 0 26 23" aria-hidden="true"><path d="M13,1.5 L24.5,21.5 L1.5,21.5 Z"/><text x="13" y="18" text-anchor="middle" font-size="11">2</text></svg></div><div class="c"><h3 class="t">Massing</h3><p class="d">Tower or mid-rise form with live floor-area metrics. A project holds one massing.</p><p class="stl"></p><div class="stamps"><a class="stamp" data-base="tower/" href="tower/">Tower Generator</a><a class="stamp" data-base="midrise/" href="midrise/">Mid-Rise Generator</a></div></div></li><li class="tool" data-section="plates"><div class="tag"><svg class="tri" viewBox="0 0 26 23" aria-hidden="true"><path d="M13,1.5 L24.5,21.5 L1.5,21.5 Z"/><text x="13" y="18" text-anchor="middle" font-size="11">3</text></svg></div><div class="c"><h3 class="t">Plate Planner</h3><p class="d">Counted test fit of every floor plate: corridor, stairs, core, and units by type, with net rentable area and efficiency. Multifamily or hotel.</p><p class="stl"></p><div class="stamps"><a class="stamp" data-base="plate/" href="plate/" aria-label="Open Plate Planner">Open</a></div></div></li><li class="tool" data-section="parking"><div class="tag"><svg class="tri" viewBox="0 0 26 23" aria-hidden="true"><path d="M13,1.5 L24.5,21.5 L1.5,21.5 Z"/><text x="13" y="18" text-anchor="middle" font-size="11">4</text></svg></div><div class="c"><h3 class="t">Parking Deck</h3><p class="d">Stalls, aisles, ramps, and columns for a parking deck.</p><p class="stl"></p><div class="stamps"><a class="stamp" data-base="parking/" href="parking/" aria-label="Open Parking Deck">Open</a></div></div></li><li class="tool" data-section="facade"><div class="tag"><svg class="tri" viewBox="0 0 26 23" aria-hidden="true"><path d="M13,1.5 L24.5,21.5 L1.5,21.5 Z"/><text x="13" y="18" text-anchor="middle" font-size="11">5</text></svg></div><div class="c"><h3 class="t">Facade Studio</h3><p class="d">Facade systems, glazing ratios, and balconies by face.</p><p class="stl"></p><div class="stamps"><a class="stamp" data-base="facade/" href="facade/" aria-label="Open Facade Studio">Open</a></div></div></li><li class="tool" data-section="sun"><div class="tag"><svg class="tri" viewBox="0 0 26 23" aria-hidden="true"><path d="M13,1.5 L24.5,21.5 L1.5,21.5 Z"/><text x="13" y="18" text-anchor="middle" font-size="11">6</text></svg></div><div class="c"><h3 class="t">Sun Study</h3><p class="d">Sun paths, real shadows, shadow study sheets, and sun hours on the ground. Inside the Tower Generator (View tab).</p><p class="stl"></p><div class="stamps"><a class="stamp" data-base="tower/?study=sun" href="tower/?study=sun" aria-label="Open the Sun Study in the Tower Generator">Open</a></div></div></li><li class="tool" data-section="grading"><div class="tag"><svg class="tri" viewBox="0 0 26 23" aria-hidden="true"><path d="M13,1.5 L24.5,21.5 L1.5,21.5 Z"/><text x="13" y="18" text-anchor="middle" font-size="11">7</text></svg></div><div class="c"><h3 class="t">Grading Sketch</h3><p class="d">Rough site grading and the finished floor elevation.</p><p class="stl"></p><div class="stamps"><a class="stamp" data-base="grading/" href="grading/" aria-label="Open Grading Sketch">Open</a></div></div></li><li class="tool" data-section="viewer"><div class="tag"><svg class="tri" viewBox="0 0 26 23" aria-hidden="true"><path d="M13,1.5 L24.5,21.5 L1.5,21.5 Z"/><text x="13" y="18" text-anchor="middle" font-size="11">8</text></svg></div><div class="c"><h3 class="t">Model Viewer</h3><p class="d">Every section of the project in one model, with a summary table. View only.</p><p class="stl"></p><div class="stamps"><a class="stamp" data-base="viewer/" href="viewer/" aria-label="Open Model Viewer">Open</a></div></div></li></ol><p class="hint">Later: Egress Sketch — exit stairs, doors, and corridors checked for egress.</p></section>
 <section class="sched" id="testBox" hidden><div class="st">Self-test</div><pre id="testOut" hidden></pre></section>
 </div>
 </div><aside class="tb">
@@ -315,6 +315,14 @@ function statusFor(doc, key) {
   const d = fmtDay(s.updatedAt);
   return { text: "Has data" + (d ? " · " + d : ""), cls: "data" };
 }
+// The Model Viewer owns no section. It reads all of them, so it shows data when any section has data.
+function viewerStatus(doc) {
+  for (const key in KNOWN) {
+    const s = statusFor(doc, key);
+    if (s.cls === "data") return s;
+  }
+  return { text: "Empty", cls: "" };
+}
 
 /* ---------- drawing helpers ---------- */
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -322,7 +330,7 @@ const pad2 = (n) => String(n).padStart(2, "0");
 const shortDate = (iso) => { const d = new Date(iso); return isNaN(d) ? "" : pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()) + "-" + pad2(d.getFullYear() % 100); };
 const shortTime = (iso) => fmt(iso, { hour: "numeric", minute: "2-digit" }, "");
 const SEC = [["site", "Site", "SM", "Site Model"], ["massing", "Massing", "MS", "Massing"], ["plates", "Plates", "PL", "Plate Planner"], ["parking", "Parking", "PK", "Parking Deck"], ["facade", "Facade", "FC", "Facade Studio"], ["sun", "Sun", "SN", "Sun Study"], ["grading", "Grading", "GR", "Grading Sketch"], ["egress", "Egress", "EG", "Egress Sketch"]];
-const PLANNED = { egress: 1 };
+const PLANNED = {};
 const INK = "#1D2733";
 
 // data | empty | newer | plan, the same words the pipeline legend uses
@@ -372,19 +380,21 @@ function renderTools() {
   hint.replaceChildren();
   if (d) hint.append("Open project:", h("strong", {}, d.name), h("button", { class: "link", id: "closeBtn", type: "button" }, "Close"));
   else hint.append(openId ? "The open project could not be read. Each tool opens on its own." : "No project is open. Each tool opens on its own.");
-  let withData = 0;
+  let withData = 0, sections = 0;
   document.querySelectorAll("li.tool[data-section]").forEach((card) => {
     card.querySelectorAll("a[data-base]").forEach((a) => a.setAttribute("href", a.dataset.base + (d ? (a.dataset.base.indexOf("?") < 0 ? "?" : "&") + "project=" + encodeURIComponent(d.id) : "")));
+    const viewer = card.dataset.section === "viewer";
+    if (!viewer) sections++;
     if (card.classList.contains("plan")) return;   // planned cards stay as written
-    const s = d ? statusFor(d, card.dataset.section) : { text: "", cls: "" };
+    const s = d ? (viewer ? viewerStatus(d) : statusFor(d, card.dataset.section)) : { text: "", cls: "" };
     card.querySelector(".stl").textContent = s.text;
     card.classList.toggle("warn", s.cls === "warn");
-    if (s.cls === "data") withData++;
+    if (s.cls === "data" && !viewer) withData++;
   });
   const so = $("#siteOpen");
   so.textContent = d ? "Open with project" : "Open";
   so.setAttribute("aria-label", (d ? "Open with project" : "Open") + ", Site Model");
-  $("#toolSub").textContent = d ? withData + " of 8 with data" : "No project open";
+  $("#toolSub").textContent = d ? withData + " of " + sections + " with data" : "No project open";
   $("#tbName").textContent = d ? d.name : "—";
   $("#tbFrame").textContent = frameText(d);
   $("#tbUpd").textContent = d ? shortDate(d.updatedAt) || "—" : "—";

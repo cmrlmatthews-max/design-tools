@@ -24,7 +24,8 @@ The tools run in this pipeline order. The Workspace page (section 9) shows them 
 | 5 | `facade` | Facade Studio | `facade` | Planned |
 | 6 | `tower` | Sun Study (inside the Tower Generator) | `sun` | Work Claude |
 | 7 | `grading` | Grading Sketch | `grading` | Later |
-| 8 | `egress` | Egress Sketch | `egress` | Later |
+| 8 | `viewer` | Model Viewer | none (reads every section) | Built |
+| 9 | `egress` | Egress Sketch | `egress` | Later |
 
 A project holds one massing. Either the Tower Generator or the Mid-Rise Generator owns the `massing` section, never both. The section's `tool` field says which one wrote it last.
 
@@ -332,7 +333,7 @@ All tools live on one origin (`https://<user>.github.io/design-tools/`), so they
 `index.html` becomes the Workspace. Same look as today: same tokens, same type, CMRLM mark.
 
 - Top: project list (name, updated, size), New project, Import, Delete (with a confirm). Selecting a project makes it the open project (`cmrlm.project.last`).
-- Below: one card per tool in pipeline order: Site Model, Massing (Tower Generator or Mid-Rise Generator, two buttons), Plate Planner, Parking Deck, Facade Studio, Sun Study, Grading Sketch, Egress Sketch. A planned tool shows "Planned" and no button.
+- Below: one card per tool in pipeline order: Site Model, Massing (Tower Generator or Mid-Rise Generator, two buttons), Plate Planner, Parking Deck, Facade Studio, Sun Study, Grading Sketch, Model Viewer. The Egress Sketch is listed under Later and has no card yet. A planned tool shows "Planned" and no button.
 - Each card shows the section status for the open project: "Empty", "Has data · <updatedAt>", or "Newer version" (schema newer than the tool on this page). The card opens the tool with `?project=<id>`.
 - With no project open, the cards open the tools plain, as today.
 - The page reads project.js directly as an ES module (it has no build step).
