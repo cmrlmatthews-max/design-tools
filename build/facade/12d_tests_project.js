@@ -91,6 +91,21 @@ async function runProjectTests() {
       const b = stored(ProjectUI.doc().id).sections.facade.state.balconies.spacing;
       return eq([a, b], [2, 4]);
     });
+    await t('a newer massing that another page saved reaches this page, also with a change of this page not saved yet', () => {
+      const doc = open({}, 'Two pages');
+      const more = (n) => { const lv = ProjectFixture.courtyardLevels(); for (let i = 0; i < n; i++) lv.push({ ...lv[lv.length - 1], index: lv.length + 1, z: lv[lv.length - 1].z + 10 }); return lv; };
+      const otherPage = (n) => ProjectMod.saveProject(mem, ProjectMod.writeSection(stored(doc.id), 'massing', { tool: 'midrise', schema: 1, placement: { x: 40, y: 60, rotation: 0, baseZ: 0 }, state: {}, derived: { levels: more(n), metrics: {} } }));
+      ProjectUI.flush();
+      otherPage(1);
+      const quiet = ProjectUI.reloadData();
+      const n1 = Derived.get().levels.length;
+      Store.set('balconies.spacing', 4, { live: false });          // a change of this page, not saved yet (the 1 s wait)
+      otherPage(2);
+      const busy = ProjectUI.reloadData();
+      const back = stored(doc.id);
+      return eq([quiet, n1, busy, Derived.get().levels.length, ProjectUI.status().dirty, back.sections.facade.state.balconies.spacing, back.sections.massing.derived.levels.length],
+        [true, 7, true, 8, false, 4, 8]);
+    });
     await t('a project saved by a newer tool is read only: opened, not written', async () => {
       const doc = ProjectFixture.project({ name: 'Newer' });
       doc.sections.facade = { tool: 'facade', schema: 99, placement: { x: 0, y: 0, rotation: 0, baseZ: 0 }, state: {}, derived: { faces: [], metrics: {} }, updatedAt: new Date().toISOString() };

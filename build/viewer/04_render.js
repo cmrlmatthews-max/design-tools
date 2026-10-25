@@ -485,11 +485,25 @@ const Render = (() => {
     return { type: 'ortho', zoom: (2 * ORTHO_HALF) / vis, minDist: reach, target: worldVec(cx, cy, H / 2), dir: new THREE.Vector3(...planToWorld(d[0], d[1], 0)).normalize() };
   }
 
+  /* Plan view locks the orientation (Cade, October 25, 2026): no orbit; a left drag and one finger pan; the wheel and two
+     fingers zoom. Any other view button orbits again. planLock survives the Site and Building zoom buttons. */
+  let planLock = false;
+  function applyPlanLock() {
+    if (!controls) return;
+    controls.enableRotate = !planLock;
+    controls.mouseButtons = planLock
+      ? { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }
+      : { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+    controls.touches = planLock ? { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN } : { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+  }
+
   function setView(id, animate = true) {
     if (!renderer) return;
     const custom = !!id && typeof id === 'object';
     const goal = custom ? id : viewTarget(id, id === 'axon' ? axonBox() : buildingBox(), hostAspect());
-    preset = custom ? null : id;
+    if (!custom) planLock = id === 'plan';
+    preset = custom ? (planLock ? 'plan' : null) : id;
+    applyPlanLock();
     tween = null;
     if (goal.type !== camType) switchCamera(goal.type);
     const curTarget = controls.target.clone();
@@ -699,7 +713,7 @@ const Render = (() => {
     controls.minZoom = 0.01; controls.maxZoom = 80;
     controls.screenSpacePanning = true;
     controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
-    controls.addEventListener('start', () => { tween = null; if (preset) { preset = null; viewListeners.forEach((fn) => fn(null)); } });
+    controls.addEventListener('start', () => { tween = null; if (preset && !planLock) { preset = null; viewListeners.forEach((fn) => fn(null)); } });
     controls.addEventListener('change', () => { needsRender = true; });
     bindPointer(renderer.domElement);
     const ro = new ResizeObserver(resize);

@@ -190,11 +190,21 @@ async function runTopBarTests() {
     });
 
     /* ---- the zoom buttons (section 5) ---- */
-    await t('Z5. the Site and Building buttons are in the top bar with names, touch-size targets and visible labels', () => {
+    await t('Z5. the Site and Building buttons are in the bottom bar (not the top bar) with names, touch-size targets and visible labels', () => {
       const s = $('tbZoomSite'), b = $('tbZoomBuilding');
       if (!s || !b) return 'missing zoom buttons';
       const hit = (e) => e.getBoundingClientRect().height >= 40;
-      return eq([!!s.closest('#topbar'), !!b.closest('#topbar'), !!s.getAttribute('aria-label'), !!b.getAttribute('aria-label'), hit(s), hit(b), s.textContent.trim(), b.textContent.trim()], [true, true, true, true, true, true, 'Site', 'Building']);
+      return eq([!!s.closest('#viewBar'), !!b.closest('#viewBar'), !!s.closest('#topbar') || !!b.closest('#topbar'), !!s.getAttribute('aria-label'), !!b.getAttribute('aria-label'), hit(s), hit(b), s.textContent.trim(), b.textContent.trim()], [true, true, false, true, true, true, true, 'Site', 'Building']);
+    });
+    await t('B1. the bottom bar holds the view buttons, Site, Building, Model / Diagram, Metrics; none of them is in the top bar', () => {
+      const want = ['views', 'tbZoomSite', 'tbZoomBuilding', 'styleToggle', 'tbMetrics']; const i = TopBar.barInfo(want);
+      const bar = document.getElementById('viewBar'), vp = document.getElementById('viewport');
+      if (!bar || !vp) return 'no bottom bar';
+      const r = bar.getBoundingClientRect(), v = vp.getBoundingClientRect();
+      const inside = r.left >= v.left - 1 && r.right <= v.right + 1 && r.bottom <= v.bottom + 1 && r.top >= v.top;
+      const metrics = document.getElementById('tbMetrics');
+      const pressed = !metrics || metrics.getAttribute('aria-pressed') === String(!TopBar.hudHidden());
+      return eq([i.missing, i.inTop, want.filter((id) => !i.inBar.includes(id)), i.views >= 6, inside, pressed], [[], [], [], true, true, true]);
     });
     await t('Z6. the buttons call the Render zoom functions (Site → frameSite, Building → frameBuilding)', () => {
       if (!live) return true;

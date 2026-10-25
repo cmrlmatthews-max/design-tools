@@ -9,6 +9,11 @@
    ProjectMod.writeSection returns a new project and does not change the one it gets. So a save loads the project fresh from
    storage, writes the sections on that copy and saves it (another tool may have saved from a second tab).
    Every storage call is inside try/catch. Tests inject storage, navigation and the address bar with configure().
+   Two Tower pages can hold the same project (a second tab, the Sun Study page, a page that Back brings back). Each page keeps
+   the massing it last loaded or wrote (`seen`: its updatedAt; `base`: its state). A page never writes over a newer massing
+   from another Tower page: when the page comes back to the front (or storage changes), it takes the stored tower; when it
+   saves after the massing changed elsewhere, its own changes since `base` (for example the sun settings) are merged onto
+   the stored tower, key by key, and that merged tower is shown and written (syncStored, mergeStored below).
    ========================================================================== */
 const ProjectUI = (() => {
   const $ = (id) => document.getElementById(id);
@@ -23,6 +28,8 @@ const ProjectUI = (() => {
     replaceNeeded: false, replaceTool: null, confirmed: false, asking: false, renamed: null,
     keepManual: false,           // "Keep manual blocks" next to Context from site
     sunHours: null,              // the sun-hours payload written into the sun section (null = none)
+    seen: null,                  // massing.updatedAt as this page last loaded or wrote it (null = no massing yet)
+    base: null,                  // the tower state of that massing (this page's changes are the keys that differ from it)
     storage: null,
     navigate: (url) => { window.location.assign(url); },
     updateUrl: (id) => {
@@ -404,6 +411,73 @@ const ProjectUI = (() => {
     return false;
   }
 
+  /* ---- a second Tower page on the same project (see the header) ---------------------------------- */
+  const CHANGED_TEXT = 'Another page changed this tower. This page shows the saved tower now.';
+  const MERGED_TEXT = 'Another page changed this tower. The changes on this page are added to that tower.';
+  const stampOf = (sec) => (sec && typeof sec.updatedAt === 'string' ? sec.updatedAt : null);
+  function massingOf(doc) { try { return ProjectMod.getSection(doc, 'massing'); } catch (e) { return null; } }
+  const towerSection = (sec) => !!sec && sec.tool === CONFIG.tool && isObjP(sec.state) && Object.keys(sec.state).length > 0;
+  /** This page now matches the massing of `doc` (after a load or a write). */
+  function markSeen(doc) {
+    project.seen = stampOf(massingOf(doc));
+    project.base = Store.snapshot();
+  }
+  /** True when another Tower page wrote the stored massing after this page last loaded or wrote it. */
+  const changedElsewhere = (doc) => { const sec = massingOf(doc); return towerSection(sec) && stampOf(sec) !== project.seen; };
+  /** The tower state of a massing section, ready for the Store. */
+  function storedState(sec) {
+    let st = deepClone(sec.state);
+    if (!(st.schema >= 2)) st = migrateTower(st, Number(st.schema) || 1);
+    return fillDefaults({ ...st, placement: isObjP(sec.placement) ? sec.placement : ZERO() });
+  }
+  /** The stored tower plus the changes this page made since `base`, key by key. A key this page did not change keeps the stored value. */
+  function mergeStored(sec) {
+    const next = storedState(sec);
+    const cur = Store.snapshot(), base = project.base || {};
+    for (const k of Object.keys(cur)) if (JSON.stringify(cur[k]) !== JSON.stringify(base[k])) next[k] = cur[k];
+    return fillDefaults(next);
+  }
+  /** Puts a tower state on screen without a save of its own (the caller saves or has the stored copy already). */
+  function showState(st) {
+    readyScreen();
+    const was = project.loading;
+    project.loading = true;
+    try { Store.replace(st, { resetHistory: true }); } finally { project.loading = was; }     // no undo back to the old tower
+  }
+  /** The stored project when another tool's massing replaced the tower since this page saw it: the question comes back. */
+  function foreignAgain(doc) {
+    const sec = massingOf(doc);
+    if (!sec || !sec.tool || sec.tool === CONFIG.tool) return false;
+    if (project.replaceNeeded && !project.confirmed) return true;
+    if (project.confirmed && stampOf(sec) === project.seen) return false;      // the massing the user agreed to replace
+    Object.assign(project, { replaceNeeded: true, replaceTool: sec.tool, confirmed: false });
+    return true;
+  }
+  /**
+   * When the page comes back to the front, or another page changed the stored project: take the stored tower when another Tower
+   * page wrote it. With a change of this page not saved yet, the save merges the two (flush). Returns true when the tower changed.
+   */
+  function syncStored() {
+    if (!project.doc || project.asking || Store.gestureActive()) return false;
+    let fresh = null;
+    try { fresh = ProjectMod.loadProject(storageOf(), project.doc.id, storageNotice()); } catch (e) { fresh = null; }
+    if (!fresh) return false;
+    if (!changedElsewhere(fresh)) {
+      if (!project.dirty && !project.renamed) { project.doc = fresh; foreignAgain(fresh); renderPill(); }
+      return false;
+    }
+    if (project.dirty) { flush(); return true; }
+    project.doc = fresh;
+    clearBoundary();
+    showState(storedState(massingOf(fresh)));
+    const s = sectionOf('sun');
+    if (s && s.tool === CONFIG.tool && isObjP(s.derived)) project.sunHours = s.derived.sunHours ? deepClone(s.derived.sunHours) : null;
+    markSeen(fresh);
+    renderPill();
+    Toast.show(CHANGED_TEXT, 'warn', 8000);
+    return true;
+  }
+
   /** The "massing" section patch for the design on screen. */
   function sectionPatch() {
     const st = Store.snapshot();
@@ -426,14 +500,18 @@ const ProjectUI = (() => {
     if (!doc || project.readOnly || !project.dirty) return { ok: true, skipped: true };
     if (project.replaceNeeded && !project.confirmed) { askReplace(); return { ok: true, skipped: true, asking: true }; }
     const opts = storageNotice();
+    let base = doc;
+    try { base = ProjectMod.loadProject(storageOf(), doc.id, opts) || doc; } catch (e) { base = doc; }
+    if (foreignAgain(base)) { project.doc = base; askReplace(); return { ok: true, skipped: true, asking: true }; }
+    // another Tower page wrote a newer massing: never write this page's older tower over it; merge this page's changes onto it
+    const merged = changedElsewhere(base);
+    if (merged) { project.doc = base; clearBoundary(); showState(mergeStored(massingOf(base))); }
     let patch;
     try { patch = sectionPatch(); } catch (e) {
       console.error(e);
       Toast.show(`The project could not be updated. ${e && e.message ? e.message : ''}`.trim(), 'bad', 8000);
       return { ok: false };
     }
-    let base = doc;
-    try { base = ProjectMod.loadProject(storageOf(), doc.id, opts) || doc; } catch (e) { base = doc; }
     let next = null;
     try { next = ProjectMod.writeSection(base, 'massing', patch); } catch (e) {
       if (e && e.readOnly) { project.readOnly = true; renderPill(); noticeOnce('readonly', e.message || READ_ONLY_TEXT); return { ok: false, readOnly: true }; }
@@ -458,6 +536,8 @@ const ProjectUI = (() => {
     }
     project.dirty = false;
     project.renamed = null;
+    markSeen(next);
+    if (merged) Toast.show(MERGED_TEXT, 'warn', 8000);
     if (res.warning) noticeOnce('warning', String(res.warning));
     renderPill();
     return res;
@@ -518,6 +598,7 @@ const ProjectUI = (() => {
       project.loading = true;
       try { Store.set('view.siteStyle', isObjP(Store.raw().placement) && Store.raw().placement.pinned === true ? 'solid' : 'glass', { live: false, merge: true }); } finally { project.loading = was; }
     }
+    markSeen(doc);
     renderPill();
     if (Render.ready()) Render.setView(Render.info().preset || 'axon', true);
     return doc;
@@ -526,7 +607,7 @@ const ProjectUI = (() => {
   function close() {
     flush();
     clearTimeout(project.timer);
-    Object.assign(project, { doc: null, timer: 0, dirty: false, readOnly: false, replaceNeeded: false, replaceTool: null, confirmed: false, renamed: null, sunHours: null });
+    Object.assign(project, { doc: null, timer: 0, dirty: false, readOnly: false, replaceNeeded: false, replaceTool: null, confirmed: false, renamed: null, sunHours: null, seen: null, base: null });
     clearBoundary();
     project.loading = true;
     try {
@@ -549,7 +630,7 @@ const ProjectUI = (() => {
       Toast.show(`The project could not be made. ${e && e.message ? e.message : ''}`.trim(), 'bad', 8000);
       return null;
     }
-    Object.assign(project, { doc, timer: 0, dirty: true, readOnly: false, replaceNeeded: false, replaceTool: null, confirmed: false, renamed: null, sunHours: null });
+    Object.assign(project, { doc, timer: 0, dirty: true, readOnly: false, replaceNeeded: false, replaceTool: null, confirmed: false, renamed: null, sunHours: null, seen: null, base: null });
     clearBoundary();
     project.loading = true;
     try {
@@ -733,8 +814,11 @@ const ProjectUI = (() => {
       if (project.doc && !project.loading && (!info || !info.live)) markDirty();
       renderPill();
     });
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
+    // back at the front (a tab switch, Back or Forward), or another page saved this project: take a newer stored tower
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); else syncStored(); });
     window.addEventListener('pagehide', () => { flush(); });
+    window.addEventListener('pageshow', (e) => { if (e.persisted) syncStored(); });
+    window.addEventListener('storage', (e) => { if (project.doc && !project.storage && (e.key === null || e.key === `cmrlm.project.${project.doc.id}`)) syncStored(); });
   }
   /** On start: with ?project=<id> open that project. Without one, a placement left over from an earlier project is cleared. Returns true when a project was opened. */
   function start() {
@@ -765,7 +849,7 @@ const ProjectUI = (() => {
   return {
     has, hasSite, siteInfo, sitePlace, groundAt, gradingFfe, boundaryKey, boundaryLocal, placement,
     start, openDoc, close, create, rename, flush, send, openMenu, exportFile, importFile, nameControl, buildSite,
-    centerOnSite, contextFromSite, prepareNew, markDirty, askReplace, renderPill,
+    centerOnSite, contextFromSite, prepareNew, markDirty, askReplace, renderPill, syncStored,
     baseMode, setBaseMode, groundUnderFootprint, followGround, baseFor, baseControl, siteDerived,
     writeSun, sunHoursStored, sunDerived: () => sunDerived(Store.snapshot()),
     doc: () => project.doc,
@@ -773,6 +857,6 @@ const ProjectUI = (() => {
     // tests: inject storage, navigation and the address bar
     configure: (o) => { Object.assign(project, o || {}); },
     restoreDefaults: () => { Object.assign(project, { storage: null, navigate: DEFAULT_NAV, updateUrl: DEFAULT_URL }); },
-    reset: () => { clearTimeout(project.timer); Object.assign(project, { doc: null, timer: 0, dirty: false, readOnly: false, loading: false, noted: {}, replaceNeeded: false, replaceTool: null, confirmed: false, asking: false, renamed: null, sunHours: null, keepManual: false }); clearBoundary(); renderPill(); },
+    reset: () => { clearTimeout(project.timer); Object.assign(project, { doc: null, timer: 0, dirty: false, readOnly: false, loading: false, noted: {}, replaceNeeded: false, replaceTool: null, confirmed: false, asking: false, renamed: null, sunHours: null, keepManual: false, seen: null, base: null }); clearBoundary(); renderPill(); },
   };
 })();

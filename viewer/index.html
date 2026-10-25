@@ -189,12 +189,13 @@ button { cursor: pointer; }
 .canvas-host canvas { display: block; width: 100%; height: 100%; touch-action: none; outline: none; }
 .gl-fail { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--ink-2); }
 
-.views {
+.viewbar {
   position: absolute; left: 12px; bottom: 12px; bottom: max(12px, env(safe-area-inset-bottom));
   display: flex; gap: 2px; padding: 3px;
   background: var(--hud-bg); border: 1px solid var(--line); border-radius: 12px;
   box-shadow: var(--shadow); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
 }
+.views { display: flex; align-items: center; gap: 2px; flex: none; }
 .views button {
   min-width: var(--hit); min-height: var(--hit); padding: 0 12px;
   border: 0; border-radius: 9px; background: transparent; color: var(--ink-2); font-size: 13px; font-weight: 500;
@@ -492,7 +493,7 @@ textarea.points:focus { border-color: var(--accent); outline: none; box-shadow: 
 
 /* compare */
 .viewport[data-compare="true"] .hud { display: none; }
-.viewport[data-compare="true"] .views { bottom: calc(var(--cmp-table-h, 0px) + 12px); }
+.viewport[data-compare="true"] .viewbar { bottom: calc(var(--cmp-table-h, 0px) + 12px); }
 .compare { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
 .cmp-bar {
   position: absolute; top: 10px; left: 12px; right: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
@@ -736,7 +737,7 @@ textarea.ai-preview {
 .section-host { position: relative; min-height: 0; overflow: hidden; }
 .section-host canvas { position: absolute; left: 0; top: 0; display: block; }
 .viewport[data-section="true"] .canvas-host { bottom: 190px; }
-.viewport[data-section="true"] .views, .viewport[data-section="true"] .legend { translate: 0 -190px; }
+.viewport[data-section="true"] .viewbar, .viewport[data-section="true"] .legend { translate: 0 -190px; }
 .viewport[data-section="true"] .toasts { translate: 0 -190px; }
 .tier-table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin: 4px 0 8px; }
 .tier-table th, .tier-table td { padding: 4px 6px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -757,7 +758,7 @@ textarea.ai-preview {
 #groundChips .chip, #propertyChips .chip, #balanceChips .chip, #styleChips .chip, #intervalChips .chip, #exagChips .chip { justify-content: center; text-align: center; white-space: normal; line-height: 1.2; }
 
 /* ---- batch fixes phase D: Collapse all (panel head) and the Site / Building zoom buttons (top bar); build/shared/08z_topbar.js ---- */
-.tb-zoom { gap: 2px; margin-right: 4px; }
+.tb-zoom { gap: 2px; }
 .tb-zoom[hidden], .tb-zbtn[hidden], .panel-collapse[hidden] { display: none; }
 .tb-zbtn { padding: 0 10px; font-size: 13px; font-weight: 500; }
 .tb-zbtn .tb-ztxt { white-space: nowrap; }
@@ -825,6 +826,41 @@ a.btn.edit-link { color: var(--ink); text-decoration: none; }
 #selection-card .kv { grid-template-columns: auto 1fr; gap: 3px 14px; }
 #selection-card .kv dd { text-align: right; }
 .canvas-host canvas { cursor: default; }
+
+/* ---- the bottom bar: view buttons, Site / Building, Model / Diagram, Snap and Metrics in one bar (build/shared/08z_topbar.js) ---- */
+.viewbar {
+  z-index: 3; align-items: center; max-width: calc(100% - 24px); box-sizing: border-box;
+  overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: none;
+}
+.viewbar::-webkit-scrollbar { display: none; }
+.viewbar > .vb-g { flex: none; display: flex; align-items: center; gap: 2px; }
+.viewbar > .vb-g[hidden], .viewbar > .vb-g:empty { display: none; }
+.viewbar > .vb-g:not(.vb-lead) { margin-left: 3px; padding-left: 5px; border-left: 1px solid var(--line-2); }
+.viewbar .tb-zoom { margin-right: 0; }
+.viewbar .seg { padding: 0; background: transparent; border-radius: 0; }
+.viewbar .seg button, .viewbar .btn, .viewbar .tb-zbtn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: var(--hit); min-width: var(--hit); padding: 0 12px; border: 0; border-radius: 9px;
+  background: transparent; color: var(--ink-2); font-size: 13px; font-weight: 500; white-space: nowrap; box-shadow: none;
+}
+.viewbar .seg button:hover, .viewbar .btn:hover { background: var(--surface-2); color: var(--ink); }
+.viewbar .seg button[aria-pressed="true"], .viewbar .btn[aria-pressed="true"], .viewbar .btn.is-on { background: var(--accent-soft); color: var(--accent); box-shadow: none; }
+.viewbar .btn.has-text { padding: 0 12px; }
+.viewbar .btn .btn-text { display: inline; }
+.viewbar .btn svg, .viewbar .seg button svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.viewbar .btn-split { gap: 0; }
+.viewbar .btn-split .btn.caret-only { min-width: 28px; padding: 0 4px; margin-left: 0; }
+.viewbar button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+@media (max-width: 899px) {
+  .viewbar .vb-txt, .viewbar .btn .btn-text, .viewbar .tb-ztxt { display: none; }
+  .viewbar .btn, .viewbar .btn.has-text, .viewbar .tb-zbtn, .viewbar .seg button { padding: 0; }
+  .viewbar .views button { padding: 0 10px; min-width: 40px; }
+  .viewbar .btn-split .btn.caret-only { min-width: 24px; }
+}
+@media (pointer: coarse) {
+  .viewbar .views button, .viewbar .seg button, .viewbar .btn { min-height: 44px; min-width: 44px; }
+  .viewbar .btn-split .btn.caret-only { min-width: 32px; }
+}
 </style>
 </head>
 <body>
@@ -839,11 +875,6 @@ a.btn.edit-link { color: var(--ink); text-decoration: none; }
     <div class="tb-group" id="tbProject"></div>
     <span class="proj-pill" id="projPill" hidden></span>
     <div class="tb-spacer"></div>
-    <div class="tb-group tb-zoom" id="tbZoom" role="group" aria-label="Zoom the view">
-      <button class="btn tb-zbtn" id="tbZoomSite" type="button" title="Zoom to the whole site" aria-label="Zoom to the whole site"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V5h4M16 5h4v4M20 15v4h-4M8 19H4v-4"/><path d="M9 14l1.2-4 4.8-1 1 5z"/></svg><span class="tb-ztxt">Site</span></button>
-      <button class="btn tb-zbtn" id="tbZoomBuilding" type="button" title="Zoom to the building" aria-label="Zoom to the building"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 20V5l9-2v17M15 8h3v12M4 20h16M9.5 8h2M9.5 12h2M9.5 16h2"/></svg><span class="tb-ztxt">Building</span></button>
-    </div>
-    <div class="seg" id="styleToggle" role="group" aria-label="Visual style"></div>
     <div class="tb-group" id="tbExport"></div>
     <div class="tb-group" id="tbHelp"></div>
   </header>
@@ -853,7 +884,15 @@ a.btn.edit-link { color: var(--ink); text-decoration: none; }
       <div class="canvas-host" id="canvasHost"></div>
       <aside class="hud" id="hud" data-collapsed="true" aria-label="Numbers and warnings" hidden></aside>
       <div class="legend" id="legend" hidden role="group" aria-label="Color legend"></div>
-      <nav class="views" id="views" aria-label="Preset views"></nav>
+      <div class="viewbar" id="viewBar" role="toolbar" aria-label="View and display controls">
+        <nav class="views vb-g" id="views" aria-label="Preset views"></nav>
+        <div class="vb-g tb-zoom" id="tbZoom" role="group" aria-label="Zoom the view">
+          <button class="btn tb-zbtn" id="tbZoomSite" type="button" title="Zoom to the whole site" aria-label="Zoom to the whole site"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V5h4M16 5h4v4M20 15v4h-4M8 19H4v-4"/><path d="M9 14l1.2-4 4.8-1 1 5z"/></svg><span class="tb-ztxt">Site</span></button>
+          <button class="btn tb-zbtn" id="tbZoomBuilding" type="button" title="Zoom to the building" aria-label="Zoom to the building"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 20V5l9-2v17M15 8h3v12M4 20h16M9.5 8h2M9.5 12h2M9.5 16h2"/></svg><span class="tb-ztxt">Building</span></button>
+        </div>
+        <div class="seg vb-g" id="styleToggle" role="group" aria-label="Visual style"></div>
+        <div class="vb-g" id="tbHud" role="group" aria-label="Metrics panel"></div>
+      </div>
       <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
       <section class="empty-state" id="emptyState" aria-label="No project open" hidden>
         <div class="empty-card">
@@ -4876,11 +4915,25 @@ const Render = (() => {
     return { type: 'ortho', zoom: (2 * ORTHO_HALF) / vis, minDist: reach, target: worldVec(cx, cy, H / 2), dir: new THREE.Vector3(...planToWorld(d[0], d[1], 0)).normalize() };
   }
 
+  /* Plan view locks the orientation (Cade, October 25, 2026): no orbit; a left drag and one finger pan; the wheel and two
+     fingers zoom. Any other view button orbits again. planLock survives the Site and Building zoom buttons. */
+  let planLock = false;
+  function applyPlanLock() {
+    if (!controls) return;
+    controls.enableRotate = !planLock;
+    controls.mouseButtons = planLock
+      ? { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }
+      : { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+    controls.touches = planLock ? { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN } : { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+  }
+
   function setView(id, animate = true) {
     if (!renderer) return;
     const custom = !!id && typeof id === 'object';
     const goal = custom ? id : viewTarget(id, id === 'axon' ? axonBox() : buildingBox(), hostAspect());
-    preset = custom ? null : id;
+    if (!custom) planLock = id === 'plan';
+    preset = custom ? (planLock ? 'plan' : null) : id;
+    applyPlanLock();
     tween = null;
     if (goal.type !== camType) switchCamera(goal.type);
     const curTarget = controls.target.clone();
@@ -5090,7 +5143,7 @@ const Render = (() => {
     controls.minZoom = 0.01; controls.maxZoom = 80;
     controls.screenSpacePanning = true;
     controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
-    controls.addEventListener('start', () => { tween = null; if (preset) { preset = null; viewListeners.forEach((fn) => fn(null)); } });
+    controls.addEventListener('start', () => { tween = null; if (preset && !planLock) { preset = null; viewListeners.forEach((fn) => fn(null)); } });
     controls.addEventListener('change', () => { needsRender = true; });
     bindPointer(renderer.domElement);
     const ro = new ResizeObserver(resize);
@@ -6322,10 +6375,14 @@ const Help = (() => {
 })();
 
 /* ==========================================================================
-   TopBar: the Collapse all button and the Site / Building zoom buttons (docs/batch-fixes-technical-plan.md sections 4 and 5)
+   TopBar: the Collapse all button, the bottom bar and the Site / Building zoom buttons (docs/batch-fixes-technical-plan.md sections 4 and 5)
    Shared page part, placed after the UI part in all seven tools. The markup lives in each tool's body.html:
      #panelCollapse   the Collapse all button, in the panel head beside the tab row (the Site Model: at the top of the panel)
-     #tbZoom          the zoom group in the top bar, with #tbZoomSite and #tbZoomBuilding
+     #viewBar         the one bottom bar in the 3D view. Its groups, left to right (each has class vb-g):
+                        #views (the view buttons), #tbZoom (#tbZoomSite and #tbZoomBuilding), #styleToggle (Model / Diagram),
+                        #tbSnap (Snap and its menu; Tower, Mid-Rise, Parking), #tbHud (holds #tbMetrics)
+                      A thin divider shows before every group except the first one that is on screen (class vb-lead marks that one).
+     #tbMetrics       added here when the page has a #hud: hides or shows the metrics panel (key M; kept in localStorage); pressed while the panel shows
    TopBar.init wires them:
      TopBar.init({
        tool,                    // 'tower' | 'midrise' | 'parking' | 'facade' | 'grading' | 'plate' | 'site' (a label for tests)
@@ -6366,15 +6423,112 @@ const TopBar = (() => {
     if (site) { site.hidden = typeof cfg.onSite !== 'function'; site.onclick = zoomSite; }
     if (building) { building.hidden = typeof cfg.onBuilding !== 'function'; building.onclick = zoomBuilding; }
     if (group) group.hidden = (!site || site.hidden) && (!building || building.hidden);
+    initHud();
+    initBar();
+  }
+
+  /* ---- The bottom bar: dividers, and an icon on each Model / Diagram button so the label can hide on narrow screens ---- */
+  const STYLE_ICONS = {
+    model: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>',
+    diagram: '<path d="M12 3a9 9 0 100 18 2.2 2.2 0 002-3 2.2 2.2 0 012-3h1.5A3.5 3.5 0 0021 11.5C21 6.8 17 3 12 3z"/><circle cx="8" cy="10" r="1"/><circle cx="12" cy="7" r="1"/><circle cx="16" cy="10" r="1"/>',
+    cutfill: '<path d="M3 15l5-5 4 3 4-6 5 8"/><path d="M3 19h18"/>',
+  };
+  const DOT_ICON = '<circle cx="12" cy="12" r="6"/>';
+  function decorateStyle() {
+    const seg = $('styleToggle');
+    if (!seg) return;
+    for (const b of seg.querySelectorAll('button')) {
+      if (b.querySelector('.vb-txt')) continue;
+      const text = b.textContent.trim();
+      const span = document.createElement('span');
+      span.className = 'vb-txt'; span.textContent = text;
+      b.textContent = '';
+      b.insertAdjacentHTML('afterbegin', '<svg viewBox="0 0 24 24" aria-hidden="true">' + (STYLE_ICONS[b.dataset.style] || DOT_ICON) + '</svg>');
+      b.append(span);
+      if (!b.getAttribute('aria-label')) b.setAttribute('aria-label', text);
+      if (!b.title) b.title = text;
+    }
+  }
+  /** Marks the first group on screen with vb-lead, so the others get a divider on their left. */
+  function syncBar() {
+    const bar = $('viewBar');
+    if (!bar) return;
+    let lead = true;
+    for (const g of bar.querySelectorAll(':scope > .vb-g')) {
+      const shown = !g.hidden && g.querySelector(':scope > :not([hidden])') !== null;
+      g.classList.toggle('vb-lead', shown && lead);
+      if (shown) lead = false;
+    }
+  }
+  function initBar() {
+    const bar = $('viewBar');
+    if (!bar) return;
+    decorateStyle();
+    syncBar();
+    if (typeof MutationObserver === 'function') {
+      new MutationObserver(() => { decorateStyle(); syncBar(); }).observe(bar, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden'] });
+    }
+  }
+  /** For tests: the ids of the controls inside the bottom bar, and the ids of the same controls found inside the top bar. */
+  function barInfo(list) {
+    const bar = $('viewBar'), top = $('topbar');
+    const ids = list || ['views', 'tbZoomSite', 'tbZoomBuilding', 'styleToggle', 'tbSnap', 'tbMetrics'];
+    const inBar = [], inTop = [], missing = [];
+    for (const id of ids) {
+      const e = $(id);
+      if (!e) { missing.push(id); continue; }
+      if (bar && bar.contains(e)) inBar.push(id);
+      if (top && top.contains(e)) inTop.push(id);
+    }
+    return { bar: !!bar, inBar, inTop, missing, views: bar ? bar.querySelectorAll('#views button').length : 0 };
+  }
+
+  /* ---- Hide the metrics panel (#hud) fully. One choice for every tool, kept in localStorage. Key M toggles it. ---- */
+  const HUD_KEY = 'cmrlm.hud.hidden';
+  const readHidden = () => { try { return localStorage.getItem(HUD_KEY) === 'true'; } catch (e) { return false; } };
+  const writeHidden = (v) => { try { localStorage.setItem(HUD_KEY, v ? 'true' : 'false'); } catch (e) { /* private mode: keep it for this visit */ } };
+  function hudHidden() { const h = $('hud'); return !!h && h.dataset.hidden === 'true'; }
+  function setHudHidden(hide, { remember = true } = {}) {
+    const h = $('hud');
+    if (!h) return false;
+    h.dataset.hidden = hide ? 'true' : 'false';
+    const b = $('tbMetrics');
+    if (b) { b.setAttribute('aria-pressed', hide ? 'false' : 'true'); b.title = hide ? 'Show the metrics panel (M)' : 'Hide the metrics panel (M)'; }
+    if (remember) writeHidden(hide);
+    return true;
+  }
+  function initHud() {
+    const h = $('hud'), group = $('tbHud') || $('tbZoom');
+    if (!h || $('tbMetrics')) return;
+    if (!document.getElementById('hudHideCss')) {
+      const st = document.createElement('style');
+      st.id = 'hudHideCss';
+      st.textContent = '.hud[data-hidden="true"]{display:none !important}';
+      document.head.appendChild(st);
+    }
+    if (group) {
+      const b = document.createElement('button');
+      b.className = 'btn tb-zbtn'; b.id = 'tbMetrics'; b.type = 'button'; b.setAttribute('aria-label', 'Show or hide the metrics panel');
+      b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span class="tb-ztxt">Metrics</span>';
+      b.onclick = () => setHudHidden(!hudHidden());
+      group.appendChild(b);
+    }
+    document.addEventListener('keydown', (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || (e.key !== 'm' && e.key !== 'M')) return;
+      const t = e.target, tag = t && t.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
+      setHudHidden(!hudHidden());
+    });
+    setHudHidden(readHidden(), { remember: false });
   }
 
   /** For tests: what is wired and shown. */
   function info() {
     const vis = (id) => { const e = $(id); return !!e && !e.hidden && e.getClientRects().length > 0; };
-    return { tool: cfg ? cfg.tool : null, ready: !!cfg, collapse: vis('panelCollapse'), site: vis('tbZoomSite'), building: vis('tbZoomBuilding') };
+    return { tool: cfg ? cfg.tool : null, ready: !!cfg, collapse: vis('panelCollapse'), site: vis('tbZoomSite'), building: vis('tbZoomBuilding'), metrics: vis('tbMetrics'), hudHidden: hudHidden() };
   }
 
-  return { init, collapseAll, zoomSite, zoomBuilding, info };
+  return { init, collapseAll, zoomSite, zoomBuilding, info, barInfo, syncBar, setHudHidden, hudHidden };
 })();
 
 /* ==========================================================================
@@ -6434,10 +6588,20 @@ async function runPageTests() {
     const notes = ['layers', 'levels', 'view', 'summary'].map((id) => !!document.querySelector(`#tabpanel-${id} .no-project`));
     return eq([visible($('hud')), visible($('views')), notes], [false, false, [true, true, true, true]]);
   });
-  await t('the top bar: Tools home, CMRLM, Project, Site and Building zoom, Model and Diagram, Export, Help', () => {
+  await t('the top bar: Tools home, CMRLM, Project, Export, Help; Site, Building, Model and Diagram are in the bottom bar', () => {
     const home = $('tbHome');
     return eq([home.getAttribute('href'), document.querySelector('.wordmark').textContent, !!$('btnProject'), visible($('tbZoomSite')), visible($('tbZoomBuilding')), [...$('styleToggle').querySelectorAll('button')].map((b) => b.textContent), !!$('btnExport'), !!$('btnHelp')],
       ['../', 'CMRLM', true, true, true, ['Model', 'Diagram'], true, true]);
+  });
+  await t('B1. the bottom bar holds the view buttons, Site, Building, Model / Diagram, Metrics; none of them is in the top bar', () => {
+    const want = ['views', 'tbZoomSite', 'tbZoomBuilding', 'styleToggle', 'tbMetrics']; const i = TopBar.barInfo(want);
+    const bar = document.getElementById('viewBar'), vp = document.getElementById('viewport');
+    if (!bar || !vp) return 'no bottom bar';
+    const r = bar.getBoundingClientRect(), v = vp.getBoundingClientRect();
+    const inside = r.left >= v.left - 1 && r.right <= v.right + 1 && r.bottom <= v.bottom + 1 && r.top >= v.top;
+    const metrics = document.getElementById('tbMetrics');
+    const pressed = !metrics || metrics.getAttribute('aria-pressed') === String(!TopBar.hudHidden());
+    return eq([i.missing, i.inTop, want.filter((id) => !i.inBar.includes(id)), i.views >= 6, inside, pressed], [[], [], [], true, true, true]);
   });
   await t('the panel tabs are Layers, Levels, View, Summary', () => eq([...$('panelTabs').querySelectorAll('.tab')].map((b) => b.textContent), ['Layers', 'Levels', 'View', 'Summary']));
   await t('the Project menu has Import and Export and no New', async () => {

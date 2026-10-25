@@ -671,11 +671,21 @@ const SiteTests = (() => {
       App.rebuildBlocks();
       return eq(blockState(), { ...ALL_FOLDED, data: true });
     }));
-    await t('zoom: the top bar has a Site button with a name and a touch-size target; the Building button is hidden here', () => {
+    await t('zoom: the bottom bar has a Site button with a name and a touch-size target; the Building button is hidden here', () => {
       const s = $('tbZoomSite'), b = $('tbZoomBuilding');
       if (!s || !b) return 'missing zoom buttons';
       const r = s.getBoundingClientRect();
-      return eq([!!s.closest('#topbar'), !!s.getAttribute('aria-label'), r.height >= 40, s.textContent.trim(), b.hidden, b.getClientRects().length, TopBar.info().building], [true, true, true, 'Site', true, 0, false]);
+      return eq([!!s.closest('#viewBar'), !!s.closest('#topbar'), !!s.getAttribute('aria-label'), r.height >= 40, s.textContent.trim(), b.hidden, b.getClientRects().length, TopBar.info().building], [true, false, true, true, 'Site', true, 0, false]);
+    });
+    await t('B1. the bottom bar holds the view buttons, Site, Building, Model / Diagram; none of them is in the top bar', () => {
+      const want = ['views', 'tbZoomSite', 'tbZoomBuilding']; const i = TopBar.barInfo(want);
+      const bar = document.getElementById('viewBar'), vp = document.getElementById('viewport');
+      if (!bar || !vp) return 'no bottom bar';
+      const r = bar.getBoundingClientRect(), v = vp.getBoundingClientRect();
+      const inside = r.left >= v.left - 1 && r.right <= v.right + 1 && r.bottom <= v.bottom + 1 && r.top >= v.top;
+      const metrics = document.getElementById('tbMetrics');
+      const pressed = !metrics || metrics.getAttribute('aria-pressed') === String(!TopBar.hudHidden());
+      return eq([i.missing, i.inTop, want.filter((id) => !i.inBar.includes(id)), i.views >= 2, inside, pressed], [[], [], [], true, true, true]);
     });
     await t('zoom: the Site button calls Scene.frameSite', () => {
       const orig = Scene.frameSite;

@@ -10,12 +10,7 @@
     <div class="tb-group" id="tbProject"></div>
     <span class="proj-pill" id="projPill" hidden></span>
     <div class="tb-spacer"></div>
-    <div class="tb-group tb-zoom" id="tbZoom" role="group" aria-label="Zoom the view">
-      <button class="btn tb-zbtn" id="tbZoomSite" type="button" title="Zoom to the whole site" aria-label="Zoom to the whole site"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V5h4M16 5h4v4M20 15v4h-4M8 19H4v-4"/><path d="M9 14l1.2-4 4.8-1 1 5z"/></svg><span class="tb-ztxt">Site</span></button>
-      <button class="btn tb-zbtn" id="tbZoomBuilding" type="button" title="Zoom to the building" aria-label="Zoom to the building"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 20V5l9-2v17M15 8h3v12M4 20h16M9.5 8h2M9.5 12h2M9.5 16h2"/></svg><span class="tb-ztxt">Building</span></button>
-    </div>
     <div class="tb-group" id="tbHistory"></div>
-    <div class="seg" id="styleToggle" role="group" aria-label="Visual style"></div>
     <div class="tb-group" id="tbExport"></div>
     <div class="tb-group" id="tbHelp"></div>
   </header>
@@ -25,7 +20,15 @@
       <div class="canvas-host" id="canvasHost"></div>
       <aside class="hud" id="hud" data-collapsed="true" aria-label="Metrics and warnings"></aside>
       <div class="legend" id="legend" hidden role="group" aria-label="Color legend"></div>
-      <nav class="views" id="views" aria-label="Preset views"></nav>
+      <div class="viewbar" id="viewBar" role="toolbar" aria-label="View and display controls">
+        <nav class="views vb-g" id="views" aria-label="Preset views"></nav>
+        <div class="vb-g tb-zoom" id="tbZoom" role="group" aria-label="Zoom the view">
+          <button class="btn tb-zbtn" id="tbZoomSite" type="button" title="Zoom to the whole site" aria-label="Zoom to the whole site"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V5h4M16 5h4v4M20 15v4h-4M8 19H4v-4"/><path d="M9 14l1.2-4 4.8-1 1 5z"/></svg><span class="tb-ztxt">Site</span></button>
+          <button class="btn tb-zbtn" id="tbZoomBuilding" type="button" title="Zoom to the building" aria-label="Zoom to the building"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 20V5l9-2v17M15 8h3v12M4 20h16M9.5 8h2M9.5 12h2M9.5 16h2"/></svg><span class="tb-ztxt">Building</span></button>
+        </div>
+        <div class="seg vb-g" id="styleToggle" role="group" aria-label="Visual style"></div>
+        <div class="vb-g" id="tbHud" role="group" aria-label="Metrics panel"></div>
+      </div>
       <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
       <div class="compare" id="compare" hidden>
         <div class="cmp-bar" id="cmpBar"></div>

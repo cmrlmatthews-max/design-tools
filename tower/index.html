@@ -191,12 +191,13 @@ button { cursor: pointer; }
 .canvas-host canvas { display: block; width: 100%; height: 100%; touch-action: none; outline: none; }
 .gl-fail { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--ink-2); }
 
-.views {
+.viewbar {
   position: absolute; left: 12px; bottom: 12px; bottom: max(12px, env(safe-area-inset-bottom));
   display: flex; gap: 2px; padding: 3px;
   background: var(--hud-bg); border: 1px solid var(--line); border-radius: 12px;
   box-shadow: var(--shadow); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
 }
+.views { display: flex; align-items: center; gap: 2px; flex: none; }
 .views button {
   min-width: var(--hit); min-height: var(--hit); padding: 0 12px;
   border: 0; border-radius: 9px; background: transparent; color: var(--ink-2); font-size: 13px; font-weight: 500;
@@ -494,7 +495,7 @@ textarea.points:focus { border-color: var(--accent); outline: none; box-shadow: 
 
 /* compare */
 .viewport[data-compare="true"] .hud { display: none; }
-.viewport[data-compare="true"] .views { bottom: calc(var(--cmp-table-h, 0px) + 12px); }
+.viewport[data-compare="true"] .viewbar { bottom: calc(var(--cmp-table-h, 0px) + 12px); }
 .compare { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
 .cmp-bar {
   position: absolute; top: 10px; left: 12px; right: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
@@ -747,7 +748,7 @@ textarea.ai-preview {
 .hdl-rotate .hdl-glyph svg { stroke: var(--accent-ink); }
 
 /* ---- batch fixes phase D: Collapse all (panel head) and the Site / Building zoom buttons (top bar); build/shared/08z_topbar.js ---- */
-.tb-zoom { gap: 2px; margin-right: 4px; }
+.tb-zoom { gap: 2px; }
 .tb-zoom[hidden], .tb-zbtn[hidden], .panel-collapse[hidden] { display: none; }
 .tb-zbtn { padding: 0 10px; font-size: 13px; font-weight: 500; }
 .tb-zbtn .tb-ztxt { white-space: nowrap; }
@@ -777,6 +778,41 @@ textarea.ai-preview {
 /* Sun Study mode (?study=sun): the "Edit the tower" link in the top bar */
 a.tb-edit { text-decoration: none; color: var(--ink); white-space: nowrap; flex: none; }
 a.tb-edit:hover, a.tb-edit:focus-visible { text-decoration: none; }
+
+/* ---- the bottom bar: view buttons, Site / Building, Model / Diagram, Snap and Metrics in one bar (build/shared/08z_topbar.js) ---- */
+.viewbar {
+  z-index: 3; align-items: center; max-width: calc(100% - 24px); box-sizing: border-box;
+  overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: none;
+}
+.viewbar::-webkit-scrollbar { display: none; }
+.viewbar > .vb-g { flex: none; display: flex; align-items: center; gap: 2px; }
+.viewbar > .vb-g[hidden], .viewbar > .vb-g:empty { display: none; }
+.viewbar > .vb-g:not(.vb-lead) { margin-left: 3px; padding-left: 5px; border-left: 1px solid var(--line-2); }
+.viewbar .tb-zoom { margin-right: 0; }
+.viewbar .seg { padding: 0; background: transparent; border-radius: 0; }
+.viewbar .seg button, .viewbar .btn, .viewbar .tb-zbtn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: var(--hit); min-width: var(--hit); padding: 0 12px; border: 0; border-radius: 9px;
+  background: transparent; color: var(--ink-2); font-size: 13px; font-weight: 500; white-space: nowrap; box-shadow: none;
+}
+.viewbar .seg button:hover, .viewbar .btn:hover { background: var(--surface-2); color: var(--ink); }
+.viewbar .seg button[aria-pressed="true"], .viewbar .btn[aria-pressed="true"], .viewbar .btn.is-on { background: var(--accent-soft); color: var(--accent); box-shadow: none; }
+.viewbar .btn.has-text { padding: 0 12px; }
+.viewbar .btn .btn-text { display: inline; }
+.viewbar .btn svg, .viewbar .seg button svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.viewbar .btn-split { gap: 0; }
+.viewbar .btn-split .btn.caret-only { min-width: 28px; padding: 0 4px; margin-left: 0; }
+.viewbar button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+@media (max-width: 899px) {
+  .viewbar .vb-txt, .viewbar .btn .btn-text, .viewbar .tb-ztxt { display: none; }
+  .viewbar .btn, .viewbar .btn.has-text, .viewbar .tb-zbtn, .viewbar .seg button { padding: 0; }
+  .viewbar .views button { padding: 0 10px; min-width: 40px; }
+  .viewbar .btn-split .btn.caret-only { min-width: 24px; }
+}
+@media (pointer: coarse) {
+  .viewbar .views button, .viewbar .seg button, .viewbar .btn { min-height: 44px; min-width: 44px; }
+  .viewbar .btn-split .btn.caret-only { min-width: 32px; }
+}
 </style>
 </head>
 <body>
@@ -792,13 +828,7 @@ a.tb-edit:hover, a.tb-edit:focus-visible { text-decoration: none; }
     <div class="tb-group" id="tbProject"></div>
     <span class="proj-pill" id="projPill" hidden></span>
     <div class="tb-spacer"></div>
-    <div class="tb-group tb-zoom" id="tbZoom" role="group" aria-label="Zoom the view">
-      <button class="btn tb-zbtn" id="tbZoomSite" type="button" title="Zoom to the whole site" aria-label="Zoom to the whole site"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V5h4M16 5h4v4M20 15v4h-4M8 19H4v-4"/><path d="M9 14l1.2-4 4.8-1 1 5z"/></svg><span class="tb-ztxt">Site</span></button>
-      <button class="btn tb-zbtn" id="tbZoomBuilding" type="button" title="Zoom to the building" aria-label="Zoom to the building"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 20V5l9-2v17M15 8h3v12M4 20h16M9.5 8h2M9.5 12h2M9.5 16h2"/></svg><span class="tb-ztxt">Building</span></button>
-    </div>
     <div class="tb-group" id="tbHistory"></div>
-    <div class="seg" id="styleToggle" role="group" aria-label="Visual style"></div>
-    <div class="btn-split" id="tbSnap"></div>
     <div class="tb-group" id="tbExport"></div>
   </header>
 
@@ -807,7 +837,16 @@ a.tb-edit:hover, a.tb-edit:focus-visible { text-decoration: none; }
       <div class="canvas-host" id="canvasHost"></div>
       <aside class="hud" id="hud" data-collapsed="true" aria-label="Metrics and warnings"></aside>
       <div class="legend" id="legend" hidden role="group" aria-label="Color legend"></div>
-      <nav class="views" id="views" aria-label="Preset views"></nav>
+      <div class="viewbar" id="viewBar" role="toolbar" aria-label="View and display controls">
+        <nav class="views vb-g" id="views" aria-label="Preset views"></nav>
+        <div class="vb-g tb-zoom" id="tbZoom" role="group" aria-label="Zoom the view">
+          <button class="btn tb-zbtn" id="tbZoomSite" type="button" title="Zoom to the whole site" aria-label="Zoom to the whole site"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V5h4M16 5h4v4M20 15v4h-4M8 19H4v-4"/><path d="M9 14l1.2-4 4.8-1 1 5z"/></svg><span class="tb-ztxt">Site</span></button>
+          <button class="btn tb-zbtn" id="tbZoomBuilding" type="button" title="Zoom to the building" aria-label="Zoom to the building"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 20V5l9-2v17M15 8h3v12M4 20h16M9.5 8h2M9.5 12h2M9.5 16h2"/></svg><span class="tb-ztxt">Building</span></button>
+        </div>
+        <div class="seg vb-g" id="styleToggle" role="group" aria-label="Visual style"></div>
+        <div class="btn-split vb-g" id="tbSnap"></div>
+        <div class="vb-g" id="tbHud" role="group" aria-label="Metrics panel"></div>
+      </div>
       <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
       <div class="compare" id="compare" hidden>
         <div class="cmp-bar" id="cmpBar"></div>
@@ -3064,7 +3103,7 @@ function validateDoc(doc) {
   if (!doc || typeof doc !== "object") return { ok: false, errors: ["document: not an object"], counts };
   if (doc.format !== FORMAT) err("format", `must be "${FORMAT}"`);
   if (doc.version !== VERSION) err("version", `must be ${VERSION}`);
-  if (!["tower", "site", "midrise", "parking", "facade", "grading", "plate"].includes(doc.source)) err("source", "must be tower, site, midrise, parking, facade, grading, or plate");
+  if (!["tower", "site", "midrise", "parking", "facade", "grading", "plate", "viewer"].includes(doc.source)) err("source", "must be tower, site, midrise, parking, facade, grading, plate, or viewer");
   if (doc.units !== "feet") err("units", "must be feet");
   if (!Number.isFinite(doc.zShift)) err("zShift", "must be a number");
   const tagNames = new Set(), matNames = new Set();
@@ -5531,11 +5570,25 @@ const Render = (() => {
     return Math.max(0.2, (host.clientWidth - clamp(insetProvider().right || 0, 0, host.clientWidth * 0.6)) / Math.max(1, host.clientHeight));
   }
 
+  /* Plan view locks the orientation (Cade, October 25, 2026): no orbit; a left drag and one finger pan; the wheel and two
+     fingers zoom. Any other view button orbits again. planLock survives the Site and Building zoom buttons. */
+  let planLock = false;
+  function applyPlanLock() {
+    if (!controls) return;
+    controls.enableRotate = !planLock;
+    controls.mouseButtons = planLock
+      ? { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }
+      : { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+    controls.touches = planLock ? { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN } : { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+  }
+
   function setView(id, animate = true) {
     if (!renderer) return;
     const custom = !!id && typeof id === 'object';       // a goal from fitBox (the zoom buttons) instead of a preset id
     const goal = custom ? id : viewTarget(id, framingBox(id), framingAspect());
-    preset = custom ? null : id;
+    if (!custom) planLock = id === 'plan';
+    preset = custom ? (planLock ? 'plan' : null) : id;
+    applyPlanLock();
     tween = null;
     if (goal.type !== camType) switchCamera(goal.type);
     const curTarget = controls.target.clone();
@@ -5959,7 +6012,7 @@ const Render = (() => {
     controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
     controls.addEventListener('start', () => {
       tween = null;
-      if (preset) { preset = null; viewListeners.forEach((fn) => fn(null)); }
+      if (preset && !planLock) { preset = null; viewListeners.forEach((fn) => fn(null)); }
     });
     controls.addEventListener('change', () => { needsRender = true; });
 
@@ -5977,6 +6030,7 @@ const Render = (() => {
   }
 
   return {
+    planLocked: () => planLock && !!controls && controls.enableRotate === false,
     init, setView, capture, captureClean, captureFlags: () => (lastCapture ? { ...lastCapture } : null), enterCompare, exitCompare,
     sceneFlags: () => ({ grid: gridMesh.visible, figure: figure.visible, model: layers.model.group.visible, context: layers.context.group.visible, envelope: layers.envelope.group.visible, children: scene.children.length }),
     setInsetProvider: (fn) => { insetProvider = fn; },
@@ -9669,9 +9723,17 @@ const Pop = (() => {
     const r = anchor.getBoundingClientRect(), w = el.offsetWidth;
     let left = opts.align === 'right' ? r.right - w : r.left;
     left = clamp(left, 8, Math.max(8, window.innerWidth - w - 8));
-    const top = Math.min(r.bottom + 6, window.innerHeight - 120);
-    el.style.left = `${left}px`; el.style.top = `${top}px`;
-    el.style.maxHeight = `${Math.max(160, window.innerHeight - top - 12)}px`;
+    let top = Math.min(r.bottom + 6, window.innerHeight - 120);
+    el.style.left = `${left}px`;
+    if (r.top > window.innerHeight / 2) {      // an anchor in the lower half (the bottom bar): open the menu above it
+      const maxH = Math.max(160, r.top - 6 - 12);
+      el.style.maxHeight = `${maxH}px`;
+      top = Math.max(12, r.top - 6 - Math.min(el.offsetHeight, maxH));
+      el.style.top = `${top}px`;
+    } else {
+      el.style.top = `${top}px`;
+      el.style.maxHeight = `${Math.max(160, window.innerHeight - top - 12)}px`;
+    }
     el.style.visibility = '';
     anchor.setAttribute('aria-expanded', 'true');
     const onDown = (e) => { if (!el.contains(e.target) && !anchor.contains(e.target)) close(); };
@@ -13494,6 +13556,11 @@ const Options = (() => {
    ProjectMod.writeSection returns a new project and does not change the one it gets. So a save loads the project fresh from
    storage, writes the sections on that copy and saves it (another tool may have saved from a second tab).
    Every storage call is inside try/catch. Tests inject storage, navigation and the address bar with configure().
+   Two Tower pages can hold the same project (a second tab, the Sun Study page, a page that Back brings back). Each page keeps
+   the massing it last loaded or wrote (`seen`: its updatedAt; `base`: its state). A page never writes over a newer massing
+   from another Tower page: when the page comes back to the front (or storage changes), it takes the stored tower; when it
+   saves after the massing changed elsewhere, its own changes since `base` (for example the sun settings) are merged onto
+   the stored tower, key by key, and that merged tower is shown and written (syncStored, mergeStored below).
    ========================================================================== */
 const ProjectUI = (() => {
   const $ = (id) => document.getElementById(id);
@@ -13508,6 +13575,8 @@ const ProjectUI = (() => {
     replaceNeeded: false, replaceTool: null, confirmed: false, asking: false, renamed: null,
     keepManual: false,           // "Keep manual blocks" next to Context from site
     sunHours: null,              // the sun-hours payload written into the sun section (null = none)
+    seen: null,                  // massing.updatedAt as this page last loaded or wrote it (null = no massing yet)
+    base: null,                  // the tower state of that massing (this page's changes are the keys that differ from it)
     storage: null,
     navigate: (url) => { window.location.assign(url); },
     updateUrl: (id) => {
@@ -13889,6 +13958,73 @@ const ProjectUI = (() => {
     return false;
   }
 
+  /* ---- a second Tower page on the same project (see the header) ---------------------------------- */
+  const CHANGED_TEXT = 'Another page changed this tower. This page shows the saved tower now.';
+  const MERGED_TEXT = 'Another page changed this tower. The changes on this page are added to that tower.';
+  const stampOf = (sec) => (sec && typeof sec.updatedAt === 'string' ? sec.updatedAt : null);
+  function massingOf(doc) { try { return ProjectMod.getSection(doc, 'massing'); } catch (e) { return null; } }
+  const towerSection = (sec) => !!sec && sec.tool === CONFIG.tool && isObjP(sec.state) && Object.keys(sec.state).length > 0;
+  /** This page now matches the massing of `doc` (after a load or a write). */
+  function markSeen(doc) {
+    project.seen = stampOf(massingOf(doc));
+    project.base = Store.snapshot();
+  }
+  /** True when another Tower page wrote the stored massing after this page last loaded or wrote it. */
+  const changedElsewhere = (doc) => { const sec = massingOf(doc); return towerSection(sec) && stampOf(sec) !== project.seen; };
+  /** The tower state of a massing section, ready for the Store. */
+  function storedState(sec) {
+    let st = deepClone(sec.state);
+    if (!(st.schema >= 2)) st = migrateTower(st, Number(st.schema) || 1);
+    return fillDefaults({ ...st, placement: isObjP(sec.placement) ? sec.placement : ZERO() });
+  }
+  /** The stored tower plus the changes this page made since `base`, key by key. A key this page did not change keeps the stored value. */
+  function mergeStored(sec) {
+    const next = storedState(sec);
+    const cur = Store.snapshot(), base = project.base || {};
+    for (const k of Object.keys(cur)) if (JSON.stringify(cur[k]) !== JSON.stringify(base[k])) next[k] = cur[k];
+    return fillDefaults(next);
+  }
+  /** Puts a tower state on screen without a save of its own (the caller saves or has the stored copy already). */
+  function showState(st) {
+    readyScreen();
+    const was = project.loading;
+    project.loading = true;
+    try { Store.replace(st, { resetHistory: true }); } finally { project.loading = was; }     // no undo back to the old tower
+  }
+  /** The stored project when another tool's massing replaced the tower since this page saw it: the question comes back. */
+  function foreignAgain(doc) {
+    const sec = massingOf(doc);
+    if (!sec || !sec.tool || sec.tool === CONFIG.tool) return false;
+    if (project.replaceNeeded && !project.confirmed) return true;
+    if (project.confirmed && stampOf(sec) === project.seen) return false;      // the massing the user agreed to replace
+    Object.assign(project, { replaceNeeded: true, replaceTool: sec.tool, confirmed: false });
+    return true;
+  }
+  /**
+   * When the page comes back to the front, or another page changed the stored project: take the stored tower when another Tower
+   * page wrote it. With a change of this page not saved yet, the save merges the two (flush). Returns true when the tower changed.
+   */
+  function syncStored() {
+    if (!project.doc || project.asking || Store.gestureActive()) return false;
+    let fresh = null;
+    try { fresh = ProjectMod.loadProject(storageOf(), project.doc.id, storageNotice()); } catch (e) { fresh = null; }
+    if (!fresh) return false;
+    if (!changedElsewhere(fresh)) {
+      if (!project.dirty && !project.renamed) { project.doc = fresh; foreignAgain(fresh); renderPill(); }
+      return false;
+    }
+    if (project.dirty) { flush(); return true; }
+    project.doc = fresh;
+    clearBoundary();
+    showState(storedState(massingOf(fresh)));
+    const s = sectionOf('sun');
+    if (s && s.tool === CONFIG.tool && isObjP(s.derived)) project.sunHours = s.derived.sunHours ? deepClone(s.derived.sunHours) : null;
+    markSeen(fresh);
+    renderPill();
+    Toast.show(CHANGED_TEXT, 'warn', 8000);
+    return true;
+  }
+
   /** The "massing" section patch for the design on screen. */
   function sectionPatch() {
     const st = Store.snapshot();
@@ -13911,14 +14047,18 @@ const ProjectUI = (() => {
     if (!doc || project.readOnly || !project.dirty) return { ok: true, skipped: true };
     if (project.replaceNeeded && !project.confirmed) { askReplace(); return { ok: true, skipped: true, asking: true }; }
     const opts = storageNotice();
+    let base = doc;
+    try { base = ProjectMod.loadProject(storageOf(), doc.id, opts) || doc; } catch (e) { base = doc; }
+    if (foreignAgain(base)) { project.doc = base; askReplace(); return { ok: true, skipped: true, asking: true }; }
+    // another Tower page wrote a newer massing: never write this page's older tower over it; merge this page's changes onto it
+    const merged = changedElsewhere(base);
+    if (merged) { project.doc = base; clearBoundary(); showState(mergeStored(massingOf(base))); }
     let patch;
     try { patch = sectionPatch(); } catch (e) {
       console.error(e);
       Toast.show(`The project could not be updated. ${e && e.message ? e.message : ''}`.trim(), 'bad', 8000);
       return { ok: false };
     }
-    let base = doc;
-    try { base = ProjectMod.loadProject(storageOf(), doc.id, opts) || doc; } catch (e) { base = doc; }
     let next = null;
     try { next = ProjectMod.writeSection(base, 'massing', patch); } catch (e) {
       if (e && e.readOnly) { project.readOnly = true; renderPill(); noticeOnce('readonly', e.message || READ_ONLY_TEXT); return { ok: false, readOnly: true }; }
@@ -13943,6 +14083,8 @@ const ProjectUI = (() => {
     }
     project.dirty = false;
     project.renamed = null;
+    markSeen(next);
+    if (merged) Toast.show(MERGED_TEXT, 'warn', 8000);
     if (res.warning) noticeOnce('warning', String(res.warning));
     renderPill();
     return res;
@@ -14003,6 +14145,7 @@ const ProjectUI = (() => {
       project.loading = true;
       try { Store.set('view.siteStyle', isObjP(Store.raw().placement) && Store.raw().placement.pinned === true ? 'solid' : 'glass', { live: false, merge: true }); } finally { project.loading = was; }
     }
+    markSeen(doc);
     renderPill();
     if (Render.ready()) Render.setView(Render.info().preset || 'axon', true);
     return doc;
@@ -14011,7 +14154,7 @@ const ProjectUI = (() => {
   function close() {
     flush();
     clearTimeout(project.timer);
-    Object.assign(project, { doc: null, timer: 0, dirty: false, readOnly: false, replaceNeeded: false, replaceTool: null, confirmed: false, renamed: null, sunHours: null });
+    Object.assign(project, { doc: null, timer: 0, dirty: false, readOnly: false, replaceNeeded: false, replaceTool: null, confirmed: false, renamed: null, sunHours: null, seen: null, base: null });
     clearBoundary();
     project.loading = true;
     try {
@@ -14034,7 +14177,7 @@ const ProjectUI = (() => {
       Toast.show(`The project could not be made. ${e && e.message ? e.message : ''}`.trim(), 'bad', 8000);
       return null;
     }
-    Object.assign(project, { doc, timer: 0, dirty: true, readOnly: false, replaceNeeded: false, replaceTool: null, confirmed: false, renamed: null, sunHours: null });
+    Object.assign(project, { doc, timer: 0, dirty: true, readOnly: false, replaceNeeded: false, replaceTool: null, confirmed: false, renamed: null, sunHours: null, seen: null, base: null });
     clearBoundary();
     project.loading = true;
     try {
@@ -14218,8 +14361,11 @@ const ProjectUI = (() => {
       if (project.doc && !project.loading && (!info || !info.live)) markDirty();
       renderPill();
     });
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
+    // back at the front (a tab switch, Back or Forward), or another page saved this project: take a newer stored tower
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); else syncStored(); });
     window.addEventListener('pagehide', () => { flush(); });
+    window.addEventListener('pageshow', (e) => { if (e.persisted) syncStored(); });
+    window.addEventListener('storage', (e) => { if (project.doc && !project.storage && (e.key === null || e.key === `cmrlm.project.${project.doc.id}`)) syncStored(); });
   }
   /** On start: with ?project=<id> open that project. Without one, a placement left over from an earlier project is cleared. Returns true when a project was opened. */
   function start() {
@@ -14250,7 +14396,7 @@ const ProjectUI = (() => {
   return {
     has, hasSite, siteInfo, sitePlace, groundAt, gradingFfe, boundaryKey, boundaryLocal, placement,
     start, openDoc, close, create, rename, flush, send, openMenu, exportFile, importFile, nameControl, buildSite,
-    centerOnSite, contextFromSite, prepareNew, markDirty, askReplace, renderPill,
+    centerOnSite, contextFromSite, prepareNew, markDirty, askReplace, renderPill, syncStored,
     baseMode, setBaseMode, groundUnderFootprint, followGround, baseFor, baseControl, siteDerived,
     writeSun, sunHoursStored, sunDerived: () => sunDerived(Store.snapshot()),
     doc: () => project.doc,
@@ -14258,7 +14404,7 @@ const ProjectUI = (() => {
     // tests: inject storage, navigation and the address bar
     configure: (o) => { Object.assign(project, o || {}); },
     restoreDefaults: () => { Object.assign(project, { storage: null, navigate: DEFAULT_NAV, updateUrl: DEFAULT_URL }); },
-    reset: () => { clearTimeout(project.timer); Object.assign(project, { doc: null, timer: 0, dirty: false, readOnly: false, loading: false, noted: {}, replaceNeeded: false, replaceTool: null, confirmed: false, asking: false, renamed: null, sunHours: null, keepManual: false }); clearBoundary(); renderPill(); },
+    reset: () => { clearTimeout(project.timer); Object.assign(project, { doc: null, timer: 0, dirty: false, readOnly: false, loading: false, noted: {}, replaceNeeded: false, replaceTool: null, confirmed: false, asking: false, renamed: null, sunHours: null, keepManual: false, seen: null, base: null }); clearBoundary(); renderPill(); },
   };
 })();
 
@@ -16820,6 +16966,66 @@ async function runProjectTests() {
       const back = stored(doc.id);
       return eq([!!ProjectMod.getSection(back, 'parking'), ProjectMod.getSection(back, 'massing').state.segments[0].floors], [true, 13]);
     });
+    /* ---- a second Tower page on the same project (a second tab, the Sun Study page, a page that Back brings back) ---- */
+    const keepId = ProjectUI.doc().id;      // the tests after this block go on with this project
+    const presetState = (id) => fillDefaults(deepClone(CONFIG.presets.find((p) => p.id === id).state));
+    const shapes = (st) => st.segments.map((g) => g.shape.type).join(',');
+    /** A project whose massing is the L tower, open on this page and saved once; then "another page" saves the U tower. */
+    const twoPages = () => {
+      const doc = ProjectFixture.siteProject({ withMassing: towerMassing(presetState('l-multifamily-podium'), { x: 500, y: 500, rotation: 0, baseZ: 1015 }) });
+      ProjectMod.saveProject(mem, doc);
+      ProjectUI.openDoc(doc);
+      ProjectUI.flush();
+      const u = presetState('u-multifamily-podium');
+      u.placement = { x: 500, y: 500, rotation: 0, baseZ: 1015 };
+      ProjectMod.saveProject(mem, ProjectMod.writeSection(stored(doc.id), 'massing', towerMassing(u, u.placement)));
+      return doc.id;
+    };
+    const towerPlatePoints = (sec) => sec.derived.levels.filter((l) => l.zone !== 'podium' && l.plates.length).map((l) => l.plates[0].outer.length);
+    await t('a sun change on an older Tower page never writes its older tower over a newer one (the Facade Studio reads the newer U)', () => {
+      const id = twoPages();
+      const before = shapes(Store.raw());
+      Store.set('sun.dates', ['03-20'], { live: false });
+      ProjectUI.flush();
+      const sec = ProjectMod.getSection(stored(id), 'massing');
+      const pts = towerPlatePoints(sec);
+      return eq([before, shapes(sec.state), sec.state.sun.dates, pts.length > 0 && pts.every((n) => n === 8), shapes(Store.raw()), ProjectUI.status().dirty],
+        ['L,L', 'U,U', ['03-20'], true, 'U,U', false]);
+    });
+    await t('a geometry change on an older Tower page is merged key by key onto the newer tower (the other keys stay as stored)', () => {
+      const id = twoPages();
+      Store.set('podium.floors', 8, { live: false });
+      ProjectUI.flush();
+      const st = ProjectMod.getSection(stored(id), 'massing').state;
+      return eq([shapes(st), st.podium.floors, st.name, Store.raw().podium.floors], ['U,U', 8, 'U-shaped multifamily on podium', 8]);
+    });
+    await t('back at the front, an older Tower page shows the newer stored tower and saves nothing of its own', () => {
+      const id = twoPages();
+      const at = ProjectMod.getSection(stored(id), 'massing').updatedAt;
+      const changed = ProjectUI.syncStored();
+      const again = ProjectUI.syncStored();
+      const after = ProjectMod.getSection(stored(id), 'massing').updatedAt;
+      Store.set('segments.1.floors', 20, { live: false });
+      ProjectUI.flush();
+      const st = ProjectMod.getSection(stored(id), 'massing').state;
+      return eq([changed, again, shapes(Store.raw()), after === at, ProjectUI.status().dirty, shapes(st), st.segments[1].floors], [true, false, 'U,U', true, false, 'U,U', 20]);
+    });
+    await t('a massing that another tool saved after this tower brings the replace question back; No keeps that massing', async () => {
+      const doc = ProjectFixture.siteProject({ withMassing: towerMassing(presetState('l-multifamily-podium')) });
+      ProjectMod.saveProject(mem, doc);
+      ProjectUI.openDoc(doc);
+      ProjectUI.flush();
+      ProjectMod.saveProject(mem, ProjectMod.writeSection(stored(doc.id), 'massing', midMassing));
+      Store.set('segments.1.floors', 9, { live: false });
+      const res = ProjectUI.flush();
+      await wait(50);
+      const asked = !!modal();
+      answer(false);
+      await wait(50);
+      return eq([res.asking, asked, ProjectMod.getSection(stored(doc.id), 'massing').tool, ProjectUI.status().readOnly], [true, true, 'midrise', true]);
+    });
+    ProjectUI.openDoc(stored(keepId));
+
     await t('rename changes the project name in the file and the pill', () => {
       ProjectUI.rename('Fixture renamed');
       ProjectUI.flush();
@@ -19241,11 +19447,21 @@ async function runTopBarTests() {
     });
 
     /* ---- the zoom buttons (section 5) ---- */
-    await t('Z5. the Site and Building buttons are in the top bar with names, touch-size targets and visible labels', () => {
+    await t('Z5. the Site and Building buttons are in the bottom bar (not the top bar) with names, touch-size targets and visible labels', () => {
       const s = $('tbZoomSite'), b = $('tbZoomBuilding');
       if (!s || !b) return 'missing zoom buttons';
       const hit = (e) => e.getBoundingClientRect().height >= 40;
-      return eq([!!s.closest('#topbar'), !!b.closest('#topbar'), !!s.getAttribute('aria-label'), !!b.getAttribute('aria-label'), hit(s), hit(b), s.textContent.trim(), b.textContent.trim()], [true, true, true, true, true, true, 'Site', 'Building']);
+      return eq([!!s.closest('#viewBar'), !!b.closest('#viewBar'), !!s.closest('#topbar') || !!b.closest('#topbar'), !!s.getAttribute('aria-label'), !!b.getAttribute('aria-label'), hit(s), hit(b), s.textContent.trim(), b.textContent.trim()], [true, true, false, true, true, true, true, 'Site', 'Building']);
+    });
+    await t('B1. the bottom bar holds the view buttons, Site, Building, Model / Diagram, Snap, Metrics; none of them is in the top bar', () => {
+      const want = ['views', 'tbZoomSite', 'tbZoomBuilding', 'styleToggle', 'tbSnap', 'tbMetrics']; const i = TopBar.barInfo(want);
+      const bar = document.getElementById('viewBar'), vp = document.getElementById('viewport');
+      if (!bar || !vp) return 'no bottom bar';
+      const r = bar.getBoundingClientRect(), v = vp.getBoundingClientRect();
+      const inside = r.left >= v.left - 1 && r.right <= v.right + 1 && r.bottom <= v.bottom + 1 && r.top >= v.top;
+      const metrics = document.getElementById('tbMetrics');
+      const pressed = !metrics || metrics.getAttribute('aria-pressed') === String(!TopBar.hudHidden());
+      return eq([i.missing, i.inTop, want.filter((id) => !i.inBar.includes(id)), i.views >= 6, inside, pressed], [[], [], [], true, true, true]);
     });
     await t('Z6. the buttons call the Render zoom functions (Site → frameSite, Building → frameBuilding)', () => {
       if (!live) return true;
@@ -19329,6 +19545,30 @@ async function runTopBarTests() {
       return eq(openIds(), []);
     });
     /* ---- the core moved to the Plate Planner (docs/plate-planner-rework-plan.md 4.1, 8.2) ---- */
+    await t('M1. the Metrics button and key M hide the metrics panel fully and show it again; the choice is kept', () => {
+      const hud = document.getElementById('hud'), btn = document.getElementById('tbMetrics');
+      if (!hud || !btn) return 'no Metrics button';
+      const before = TopBar.hudHidden();
+      TopBar.setHudHidden(false);
+      btn.click();
+      const hidden = [hud.dataset.hidden, hud.getClientRects().length, localStorage.getItem('cmrlm.hud.hidden'), btn.getAttribute('aria-pressed')];
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'm', bubbles: true }));
+      const shown = [hud.dataset.hidden, hud.getClientRects().length > 0, localStorage.getItem('cmrlm.hud.hidden')];
+      TopBar.setHudHidden(before);
+      return eq([hidden, shown, !!btn.closest('#viewBar'), !!btn.closest('#topbar'), btn.textContent.trim()], [['true', 0, 'true', 'false'], ['false', true, 'false'], true, false, 'Metrics']);
+    });
+
+    await t('P1. Plan locks the orientation (no orbit, a drag pans); Axon orbits again; a zoom button keeps the lock', () => {
+      if (!Render.ready()) return true;
+      Render.setView('plan', false);
+      const a = Render.planLocked(), p1 = Render.info().preset;
+      Render.frameBuilding(false);
+      const b = Render.planLocked();
+      Render.setView('axon', false);
+      const c = Render.planLocked();
+      return eq([a, p1, b, c], [true, 'plan', true, false]);
+    });
+
     await t('C1. no Core card in the panel and no Core area or Efficiency row in the HUD; the HUD says the Plate Planner sets the core', () => {
       const titles = [...document.querySelectorAll('#sections section.acc')].map((a) => (a.querySelector('.acc-head') || a).textContent.trim());
       const labels = [...document.querySelectorAll('#hud dt')].map((e) => e.textContent.trim());
@@ -19379,10 +19619,14 @@ runAllTests = ((base) => async function runAllWithTopBar() {
 })(runAllTests);
 
 /* ==========================================================================
-   TopBar: the Collapse all button and the Site / Building zoom buttons (docs/batch-fixes-technical-plan.md sections 4 and 5)
+   TopBar: the Collapse all button, the bottom bar and the Site / Building zoom buttons (docs/batch-fixes-technical-plan.md sections 4 and 5)
    Shared page part, placed after the UI part in all seven tools. The markup lives in each tool's body.html:
      #panelCollapse   the Collapse all button, in the panel head beside the tab row (the Site Model: at the top of the panel)
-     #tbZoom          the zoom group in the top bar, with #tbZoomSite and #tbZoomBuilding
+     #viewBar         the one bottom bar in the 3D view. Its groups, left to right (each has class vb-g):
+                        #views (the view buttons), #tbZoom (#tbZoomSite and #tbZoomBuilding), #styleToggle (Model / Diagram),
+                        #tbSnap (Snap and its menu; Tower, Mid-Rise, Parking), #tbHud (holds #tbMetrics)
+                      A thin divider shows before every group except the first one that is on screen (class vb-lead marks that one).
+     #tbMetrics       added here when the page has a #hud: hides or shows the metrics panel (key M; kept in localStorage); pressed while the panel shows
    TopBar.init wires them:
      TopBar.init({
        tool,                    // 'tower' | 'midrise' | 'parking' | 'facade' | 'grading' | 'plate' | 'site' (a label for tests)
@@ -19423,15 +19667,112 @@ const TopBar = (() => {
     if (site) { site.hidden = typeof cfg.onSite !== 'function'; site.onclick = zoomSite; }
     if (building) { building.hidden = typeof cfg.onBuilding !== 'function'; building.onclick = zoomBuilding; }
     if (group) group.hidden = (!site || site.hidden) && (!building || building.hidden);
+    initHud();
+    initBar();
+  }
+
+  /* ---- The bottom bar: dividers, and an icon on each Model / Diagram button so the label can hide on narrow screens ---- */
+  const STYLE_ICONS = {
+    model: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>',
+    diagram: '<path d="M12 3a9 9 0 100 18 2.2 2.2 0 002-3 2.2 2.2 0 012-3h1.5A3.5 3.5 0 0021 11.5C21 6.8 17 3 12 3z"/><circle cx="8" cy="10" r="1"/><circle cx="12" cy="7" r="1"/><circle cx="16" cy="10" r="1"/>',
+    cutfill: '<path d="M3 15l5-5 4 3 4-6 5 8"/><path d="M3 19h18"/>',
+  };
+  const DOT_ICON = '<circle cx="12" cy="12" r="6"/>';
+  function decorateStyle() {
+    const seg = $('styleToggle');
+    if (!seg) return;
+    for (const b of seg.querySelectorAll('button')) {
+      if (b.querySelector('.vb-txt')) continue;
+      const text = b.textContent.trim();
+      const span = document.createElement('span');
+      span.className = 'vb-txt'; span.textContent = text;
+      b.textContent = '';
+      b.insertAdjacentHTML('afterbegin', '<svg viewBox="0 0 24 24" aria-hidden="true">' + (STYLE_ICONS[b.dataset.style] || DOT_ICON) + '</svg>');
+      b.append(span);
+      if (!b.getAttribute('aria-label')) b.setAttribute('aria-label', text);
+      if (!b.title) b.title = text;
+    }
+  }
+  /** Marks the first group on screen with vb-lead, so the others get a divider on their left. */
+  function syncBar() {
+    const bar = $('viewBar');
+    if (!bar) return;
+    let lead = true;
+    for (const g of bar.querySelectorAll(':scope > .vb-g')) {
+      const shown = !g.hidden && g.querySelector(':scope > :not([hidden])') !== null;
+      g.classList.toggle('vb-lead', shown && lead);
+      if (shown) lead = false;
+    }
+  }
+  function initBar() {
+    const bar = $('viewBar');
+    if (!bar) return;
+    decorateStyle();
+    syncBar();
+    if (typeof MutationObserver === 'function') {
+      new MutationObserver(() => { decorateStyle(); syncBar(); }).observe(bar, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden'] });
+    }
+  }
+  /** For tests: the ids of the controls inside the bottom bar, and the ids of the same controls found inside the top bar. */
+  function barInfo(list) {
+    const bar = $('viewBar'), top = $('topbar');
+    const ids = list || ['views', 'tbZoomSite', 'tbZoomBuilding', 'styleToggle', 'tbSnap', 'tbMetrics'];
+    const inBar = [], inTop = [], missing = [];
+    for (const id of ids) {
+      const e = $(id);
+      if (!e) { missing.push(id); continue; }
+      if (bar && bar.contains(e)) inBar.push(id);
+      if (top && top.contains(e)) inTop.push(id);
+    }
+    return { bar: !!bar, inBar, inTop, missing, views: bar ? bar.querySelectorAll('#views button').length : 0 };
+  }
+
+  /* ---- Hide the metrics panel (#hud) fully. One choice for every tool, kept in localStorage. Key M toggles it. ---- */
+  const HUD_KEY = 'cmrlm.hud.hidden';
+  const readHidden = () => { try { return localStorage.getItem(HUD_KEY) === 'true'; } catch (e) { return false; } };
+  const writeHidden = (v) => { try { localStorage.setItem(HUD_KEY, v ? 'true' : 'false'); } catch (e) { /* private mode: keep it for this visit */ } };
+  function hudHidden() { const h = $('hud'); return !!h && h.dataset.hidden === 'true'; }
+  function setHudHidden(hide, { remember = true } = {}) {
+    const h = $('hud');
+    if (!h) return false;
+    h.dataset.hidden = hide ? 'true' : 'false';
+    const b = $('tbMetrics');
+    if (b) { b.setAttribute('aria-pressed', hide ? 'false' : 'true'); b.title = hide ? 'Show the metrics panel (M)' : 'Hide the metrics panel (M)'; }
+    if (remember) writeHidden(hide);
+    return true;
+  }
+  function initHud() {
+    const h = $('hud'), group = $('tbHud') || $('tbZoom');
+    if (!h || $('tbMetrics')) return;
+    if (!document.getElementById('hudHideCss')) {
+      const st = document.createElement('style');
+      st.id = 'hudHideCss';
+      st.textContent = '.hud[data-hidden="true"]{display:none !important}';
+      document.head.appendChild(st);
+    }
+    if (group) {
+      const b = document.createElement('button');
+      b.className = 'btn tb-zbtn'; b.id = 'tbMetrics'; b.type = 'button'; b.setAttribute('aria-label', 'Show or hide the metrics panel');
+      b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span class="tb-ztxt">Metrics</span>';
+      b.onclick = () => setHudHidden(!hudHidden());
+      group.appendChild(b);
+    }
+    document.addEventListener('keydown', (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || (e.key !== 'm' && e.key !== 'M')) return;
+      const t = e.target, tag = t && t.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
+      setHudHidden(!hudHidden());
+    });
+    setHudHidden(readHidden(), { remember: false });
   }
 
   /** For tests: what is wired and shown. */
   function info() {
     const vis = (id) => { const e = $(id); return !!e && !e.hidden && e.getClientRects().length > 0; };
-    return { tool: cfg ? cfg.tool : null, ready: !!cfg, collapse: vis('panelCollapse'), site: vis('tbZoomSite'), building: vis('tbZoomBuilding') };
+    return { tool: cfg ? cfg.tool : null, ready: !!cfg, collapse: vis('panelCollapse'), site: vis('tbZoomSite'), building: vis('tbZoomBuilding'), metrics: vis('tbMetrics'), hudHidden: hudHidden() };
   }
 
-  return { init, collapseAll, zoomSite, zoomBuilding, info };
+  return { init, collapseAll, zoomSite, zoomBuilding, info, barInfo, syncBar, setHudHidden, hudHidden };
 })();
 
 
@@ -19529,6 +19870,7 @@ window.__tower = {
   projectGroundAt: (x, y) => ProjectUI.groundAt(x, y),
   projectBoundary: () => ProjectUI.boundaryLocal(),
   projectAskReplace: () => ProjectUI.askReplace(),
+  projectSync: () => ProjectUI.syncStored(),           // what the page does when it comes back to the front
   placementGizmo: PlacementGizmo,
   siteLayerInfo: () => SiteLayer.info(),
   // sun study (SunUI 08d_sun.js, SunLayer 06d_sunhours.js, SunStudy 10b_sunstudy.js)
