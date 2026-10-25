@@ -678,7 +678,7 @@ const SiteTests = (() => {
       return eq([!!s.closest('#viewBar'), !!s.closest('#topbar'), !!s.getAttribute('aria-label'), r.height >= 40, s.textContent.trim(), b.hidden, b.getClientRects().length, TopBar.info().building], [true, false, true, true, 'Site', true, 0, false]);
     });
     await t('B1. the bottom bar holds the view buttons, Site, Building, Model / Diagram; none of them is in the top bar', () => {
-      const i = TopBar.barInfo(), want = ['views', 'tbZoomSite', 'tbZoomBuilding'];
+      const want = ['views', 'tbZoomSite', 'tbZoomBuilding']; const i = TopBar.barInfo(want);
       const bar = document.getElementById('viewBar'), vp = document.getElementById('viewport');
       if (!bar || !vp) return 'no bottom bar';
       const r = bar.getBoundingClientRect(), v = vp.getBoundingClientRect();

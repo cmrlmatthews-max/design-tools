@@ -286,7 +286,7 @@ async function runTopBarTests() {
       return eq([!!s.closest('#viewBar'), !!b.closest('#viewBar'), !!s.closest('#topbar') || !!b.closest('#topbar'), !!s.getAttribute('aria-label'), !!b.getAttribute('aria-label'), hit(s), hit(b), s.textContent.trim(), b.textContent.trim()], [true, true, false, true, true, true, true, 'Site', 'Building']);
     });
     await t('B1. the bottom bar holds the view buttons, Site, Building, Model / Diagram, Snap, Metrics; none of them is in the top bar', () => {
-      const i = TopBar.barInfo(), want = ['views', 'tbZoomSite', 'tbZoomBuilding', 'styleToggle', 'tbSnap', 'tbMetrics'];
+      const want = ['views', 'tbZoomSite', 'tbZoomBuilding', 'styleToggle', 'tbSnap', 'tbMetrics']; const i = TopBar.barInfo(want);
       const bar = document.getElementById('viewBar'), vp = document.getElementById('viewport');
       if (!bar || !vp) return 'no bottom bar';
       const r = bar.getBoundingClientRect(), v = vp.getBoundingClientRect();

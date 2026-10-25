@@ -94,9 +94,9 @@ const TopBar = (() => {
     }
   }
   /** For tests: the ids of the controls inside the bottom bar, and the ids of the same controls found inside the top bar. */
-  function barInfo() {
+  function barInfo(list) {
     const bar = $('viewBar'), top = $('topbar');
-    const ids = ['views', 'tbZoomSite', 'tbZoomBuilding', 'styleToggle', 'tbSnap', 'tbMetrics'];
+    const ids = list || ['views', 'tbZoomSite', 'tbZoomBuilding', 'styleToggle', 'tbSnap', 'tbMetrics'];
     const inBar = [], inTop = [], missing = [];
     for (const id of ids) {
       const e = $(id);

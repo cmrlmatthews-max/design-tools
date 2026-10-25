@@ -61,7 +61,7 @@ async function runPageTests() {
       ['../', 'CMRLM', true, true, true, ['Model', 'Diagram'], true, true]);
   });
   await t('B1. the bottom bar holds the view buttons, Site, Building, Model / Diagram, Metrics; none of them is in the top bar', () => {
-    const i = TopBar.barInfo(), want = ['views', 'tbZoomSite', 'tbZoomBuilding', 'styleToggle', 'tbMetrics'];
+    const want = ['views', 'tbZoomSite', 'tbZoomBuilding', 'styleToggle', 'tbMetrics']; const i = TopBar.barInfo(want);
     const bar = document.getElementById('viewBar'), vp = document.getElementById('viewport');
     if (!bar || !vp) return 'no bottom bar';
     const r = bar.getBoundingClientRect(), v = vp.getBoundingClientRect();
