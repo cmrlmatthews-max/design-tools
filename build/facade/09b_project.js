@@ -309,9 +309,16 @@ const ProjectUI = (() => {
       return doc;
     } catch (e) { console.error(e); Toast.show(e && e.message ? e.message : 'The file could not be imported.', 'bad', 8000); return null; }
   }
-  /** When the page comes back to the front, another tool may have changed the massing: take the fresh project data. */
+  /** When the page comes back to the front, or another page saved this project, another tool may have changed the massing:
+   *  take the fresh project data. A change of this page not saved yet is saved first (the save takes the fresh data too). */
   function reloadData() {
-    if (!project.doc || project.dirty) return false;
+    if (!project.doc) return false;
+    if (project.dirty) {
+      const before = dataKey();
+      flush();
+      if (dataKey() !== before) { renderPill(); Render.requestRender(); return true; }
+      return false;
+    }
     let fresh = null;
     try { fresh = ProjectMod.loadProject(storageOf(), project.doc.id, storageNotice()); } catch (e) { fresh = null; }
     if (!fresh) return false;
@@ -374,6 +381,9 @@ const ProjectUI = (() => {
     });
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); else reloadData(); });
     window.addEventListener('pagehide', () => { flush(); });
+    window.addEventListener('pageshow', (e) => { if (e.persisted) reloadData(); });      // Back or Forward brings the page back from the cache
+    // two windows side by side: the other page saves the project and this page shows the new massing at once
+    window.addEventListener('storage', (e) => { if (project.doc && !project.storage && (e.key === null || e.key === `cmrlm.project.${project.doc.id}`)) reloadData(); });
     const file = $('projFile');
     if (file) file.addEventListener('change', async () => {
       const f = file.files && file.files[0];

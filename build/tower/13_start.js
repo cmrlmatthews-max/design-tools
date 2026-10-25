@@ -93,6 +93,7 @@ window.__tower = {
   projectGroundAt: (x, y) => ProjectUI.groundAt(x, y),
   projectBoundary: () => ProjectUI.boundaryLocal(),
   projectAskReplace: () => ProjectUI.askReplace(),
+  projectSync: () => ProjectUI.syncStored(),           // what the page does when it comes back to the front
   placementGizmo: PlacementGizmo,
   siteLayerInfo: () => SiteLayer.info(),
   // sun study (SunUI 08d_sun.js, SunLayer 06d_sunhours.js, SunStudy 10b_sunstudy.js)
