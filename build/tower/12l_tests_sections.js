@@ -279,11 +279,21 @@ async function runTopBarTests() {
     });
 
     /* ---- the zoom buttons (section 5) ---- */
-    await t('Z5. the Site and Building buttons are in the top bar with names, touch-size targets and visible labels', () => {
+    await t('Z5. the Site and Building buttons are in the bottom bar (not the top bar) with names, touch-size targets and visible labels', () => {
       const s = $('tbZoomSite'), b = $('tbZoomBuilding');
       if (!s || !b) return 'missing zoom buttons';
       const hit = (e) => e.getBoundingClientRect().height >= 40;
-      return eq([!!s.closest('#topbar'), !!b.closest('#topbar'), !!s.getAttribute('aria-label'), !!b.getAttribute('aria-label'), hit(s), hit(b), s.textContent.trim(), b.textContent.trim()], [true, true, true, true, true, true, 'Site', 'Building']);
+      return eq([!!s.closest('#viewBar'), !!b.closest('#viewBar'), !!s.closest('#topbar') || !!b.closest('#topbar'), !!s.getAttribute('aria-label'), !!b.getAttribute('aria-label'), hit(s), hit(b), s.textContent.trim(), b.textContent.trim()], [true, true, false, true, true, true, true, 'Site', 'Building']);
+    });
+    await t('B1. the bottom bar holds the view buttons, Site, Building, Model / Diagram, Snap, Metrics; none of them is in the top bar', () => {
+      const i = TopBar.barInfo(), want = ['views', 'tbZoomSite', 'tbZoomBuilding', 'styleToggle', 'tbSnap', 'tbMetrics'];
+      const bar = document.getElementById('viewBar'), vp = document.getElementById('viewport');
+      if (!bar || !vp) return 'no bottom bar';
+      const r = bar.getBoundingClientRect(), v = vp.getBoundingClientRect();
+      const inside = r.left >= v.left - 1 && r.right <= v.right + 1 && r.bottom <= v.bottom + 1 && r.top >= v.top;
+      const metrics = document.getElementById('tbMetrics');
+      const pressed = !metrics || metrics.getAttribute('aria-pressed') === String(!TopBar.hudHidden());
+      return eq([i.missing, i.inTop, want.filter((id) => !i.inBar.includes(id)), i.views >= 6, inside, pressed], [[], [], [], true, true, true]);
     });
     await t('Z6. the buttons call the Render zoom functions (Site → frameSite, Building → frameBuilding)', () => {
       if (!live) return true;
@@ -377,7 +387,18 @@ async function runTopBarTests() {
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'm', bubbles: true }));
       const shown = [hud.dataset.hidden, hud.getClientRects().length > 0, localStorage.getItem('cmrlm.hud.hidden')];
       TopBar.setHudHidden(before);
-      return eq([hidden, shown, !!btn.closest('#topbar'), btn.textContent.trim()], [['true', 0, 'true', 'false'], ['false', true, 'false'], true, 'Metrics']);
+      return eq([hidden, shown, !!btn.closest('#viewBar'), !!btn.closest('#topbar'), btn.textContent.trim()], [['true', 0, 'true', 'false'], ['false', true, 'false'], true, false, 'Metrics']);
+    });
+
+    await t('P1. Plan locks the orientation (no orbit, a drag pans); Axon orbits again; a zoom button keeps the lock', () => {
+      if (!Render.ready()) return true;
+      Render.setView('plan', false);
+      const a = Render.planLocked(), p1 = Render.info().preset;
+      Render.frameBuilding(false);
+      const b = Render.planLocked();
+      Render.setView('axon', false);
+      const c = Render.planLocked();
+      return eq([a, p1, b, c], [true, 'plan', true, false]);
     });
 
     await t('C1. no Core card in the panel and no Core area or Efficiency row in the HUD; the HUD says the Plate Planner sets the core', () => {

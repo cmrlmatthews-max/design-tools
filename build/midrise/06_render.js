@@ -606,11 +606,25 @@ const Render = (() => {
     return Math.max(0.2, (host.clientWidth - clamp(insetProvider().right || 0, 0, host.clientWidth * 0.6)) / Math.max(1, host.clientHeight));
   }
 
+  /* Plan view locks the orientation (Cade, October 25, 2026): no orbit; a left drag and one finger pan; the wheel and two
+     fingers zoom. Any other view button orbits again. planLock survives the Site and Building zoom buttons. */
+  let planLock = false;
+  function applyPlanLock() {
+    if (!controls) return;
+    controls.enableRotate = !planLock;
+    controls.mouseButtons = planLock
+      ? { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }
+      : { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+    controls.touches = planLock ? { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN } : { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+  }
+
   function setView(id, animate = true) {
     if (!renderer) return;
     const custom = !!id && typeof id === 'object';       // a goal from fitBox (the zoom buttons) instead of a preset id
     const goal = custom ? id : viewTarget(id, framingBox(id), framingAspect());
-    preset = custom ? null : id;
+    if (!custom) planLock = id === 'plan';
+    preset = custom ? (planLock ? 'plan' : null) : id;
+    applyPlanLock();
     overlayVis = null;
     tween = null;
     if (goal.type !== camType) switchCamera(goal.type);
@@ -1038,7 +1052,7 @@ const Render = (() => {
     controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
     controls.addEventListener('start', () => {
       tween = null;
-      if (preset) { preset = null; overlayVis = null; viewListeners.forEach((fn) => fn(null)); }
+      if (preset && !planLock) { preset = null; overlayVis = null; viewListeners.forEach((fn) => fn(null)); }
     });
     controls.addEventListener('change', () => { needsRender = true; });
 
