@@ -75,9 +75,9 @@ export function platesSection(massing, { skipGroups = [] } = {}) {
   const s = PP.defaultState();
   s.source = "project"; s.core = { mode: "auto", rect: null }; s.corridor.kind = "auto";
   const project = { sections: { massing } };
-  const first = PF.buildPlates(s, { project });
+  const first = PF.fillPlates(s, { project });      // the automatic fill (Plate Planner draw plan: buildPlates lays out drawn units only)
   if (skipGroups.length) { s.levels = { groups: {} }; for (const g of first.groups) if (skipGroups.includes(g.first)) s.levels.groups[g.id] = { filled: false }; }
-  const built = skipGroups.length ? PF.buildPlates(s, { project }) : first;
+  const built = skipGroups.length ? PF.fillPlates(s, { project }) : first;
   const metrics = PM.computeMetrics(s, built);
   const derived = PD.platesDerived(s, built, metrics);
   derived.massingUpdatedAt = massing.updatedAt || derived.massingUpdatedAt || null;

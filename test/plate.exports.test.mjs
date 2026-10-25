@@ -652,7 +652,8 @@ try {
     return { built, d };
   };
   t("real: default state (8.1) through buildPlates, derived, writeSection, validate, and all four exports", () => {
-    const r = check("8.1", presets.defaultState());
+    // draw plan 6: defaultState() is the blank point tower; the 8.1 preset carries its frozen units (buildPlates lays them out)
+    const r = check("8.1", JSON.parse(JSON.stringify(presets.PRESETS.find((p) => p.id === "double-loaded-bar").state)));
     near(r.d.metrics.nrsf, 15077.8, 0.6); eq(r.d.metrics.units, 17);
   });
   t("real: every preset through derived and the exports", () => {
