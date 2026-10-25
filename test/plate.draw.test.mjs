@@ -12,6 +12,7 @@ const SG = await import("../src/plate/suggest.js");
 const MT = await import("../src/plate/metrics.js");
 const DV = await import("../src/plate/derived.js");
 const LV = await import("../src/plate/levels.js");
+const AD = await import("../src/plate/advisor.js");
 const { PRESETS, defaultState } = await import("../src/plate/presets.js");
 const { TEST_CASES } = await import("../src/plate/testcases.js");
 const { assemble } = await import("../src/midrise/assemble.js");
@@ -55,10 +56,11 @@ console.log("plate draw-first");
 
 /* ------------------------------------------------------------ D1 blank plate */
 
-// Default state "Blank point tower": 150 × 160 ft, auto core. GSF 150 × 160 = 24,000. Inset (extWall 1) 148 × 158 = 23,384.
+// Default state "Blank point tower": 106 × 117 ft, auto core. GSF 106 × 117 = 12,402. Inset (extWall 1) 104 × 115 = 11,960.
 // Auto core 33 × 44 = 1,452 (stairs and cabs inside it). Point corridor: the core grown by 5.67 → 44.34 × 55.34 = 2,453.8,
-// less the core = 1,001.8. Open area = 23,384 − 2,453.8 = 20,930.2. Exterior allowance = 24,000 − 23,384 = 616.
-// Closure: 0 + 1,001.8 + 1,452 + 20,930.2 + 616 = 24,000.0.
+// less the core = 1,001.8. Open area = 11,960 − 2,453.8 = 9,506.2. Exterior allowance = 12,402 − 11,960 = 442.
+// Closure: 0 + 1,001.8 + 1,452 + 9,506.2 + 442 = 12,402.0. Run depths: (106 − 44.34) ÷ 2 − 1 = 29.83 and
+// (117 − 55.34) ÷ 2 − 1 = 29.83, near the 30 ft target: the advisor gives no item.
 t("D1 blank plate: 0 units; free covers every run; closure within 1 sf; only the info line 'No units drawn yet'", () => {
   const s = defaultState();
   eq(s.name, "Blank point tower"); eq(s.units, []); eq(s.core, { mode: "auto", rect: null });
@@ -74,14 +76,17 @@ t("D1 blank plate: 0 units; free covers every run; closure within 1 sf; only the
   }
   eq(f.cornerZones.length, 4, "four empty corner zones");
   near(area(f.core), 1452, 0.01, "core 33 × 44");
-  near(f.openArea, 20930.2, 0.2, "open area");
-  near(f.allowance, 616, 0.1, "allowance");
+  near(f.openArea, 9506.2, 0.2, "open area");
+  near(f.allowance, 442, 0.1, "allowance");
+  for (const r of f.runs) near(r.depth, 29.83, 0.001, `${r.id} depth`);
+  eq(f.coreFits, true, "auto core");
+  eq(AD.advise(s, b, MT.computeMetrics(s, b), { fillPlate: fillPlates }), [], "no advice on the default plate");
   const m = MT.computeMetrics(s, b);
   const c = m.groups[0].row.closure;
-  ok(c.ok, JSON.stringify(c)); near(c.open, 20930.2, 0.2); near(c.corridor, 1001.8, 0.1);
-  near(c.nrsf + c.corridor + c.core + c.stairs + c.elevators + c.support + c.open + c.expected, 24000, 1, "closure sum");
+  ok(c.ok, JSON.stringify(c)); near(c.open, 9506.2, 0.2); near(c.corridor, 1001.8, 0.1);
+  near(c.nrsf + c.corridor + c.core + c.stairs + c.elevators + c.support + c.open + c.expected, 12402, 1, "closure sum");
   eq(m.warnings.map((w) => [w.code, w.severity, w.message]), [["no-units", "info", "No units drawn yet."]], "warnings");
-  eq(m.groups[0].row.openArea, 20930.2);
+  eq(m.groups[0].row.openArea, 9506.2);
 });
 
 /* ------------------------------------------------------------ D2 paint */
@@ -304,9 +309,14 @@ t("D11 presets: section 8 values unchanged; the derived equals the automatic fil
     eq(f.free.length, 0, `${tc.id} no open stretch`);
     ok(f.units.every((u) => u.match === "in-range"), `${tc.id} every unit in range`);
     ok(!m.warnings.some((w) => w.code === "mix-miss" || w.code === "run-too-short" || w.code === "area-closure"), `${tc.id} ${m.warnings.map((w) => w.code)}`);
+    // the derived units, plate, corridor, support and metrics equal the automatic fill's. The core differs only where a
+    // manual core now holds the room program (8.1 and 8.6: the 2 cabs move inside the program rooms). The Type A flag
+    // (8.6: 39 units > 20 → max(1, ceil(0.02 × 39)) = 1) goes to the unit nearest the cabs, so it can move to a neighbor.
     const bf = fillPlates(s);
-    const d = diffs(DV.platesDerived(s, b, m), DV.platesDerived(s, bf, MT.computeMetrics(s, bf)));
-    eq(d, [], `${tc.id} derived`);
+    const dl = DV.platesDerived(s, b, m), df = DV.platesDerived(s, bf, MT.computeMetrics(s, bf));
+    const flat = (dv) => ({ ...dv, levels: dv.levels.map((l) => ({ ...l, core: { outer: l.core.outer, stairs: l.core.stairs }, units: l.units.map((u) => ({ ...u, accessible: null })) })) });
+    eq(diffs(flat(dl), flat(df)), [], `${tc.id} derived`);
+    eq(dl.levels[0].units.filter((u) => u.accessible).length, df.levels[0].units.filter((u) => u.accessible).length, `${tc.id} accessible count`);
   }
 });
 
@@ -382,6 +392,58 @@ t("a block moved onto drawn units clips them; area closure stays within 1 sf", (
   for (const u of f.units) near(GEO.mpArea(GEO.bool("int", mp([u.outer]), mp([f.core]))), 0, 0.01, `${u.id} off the core`);
   ok(MT.computeMetrics(s, b).groups[0].row.closure.ok, "closure");
   ok(f.free.some((x) => x.length > 1), "the core move opens a stretch");
+});
+
+/* ------------------------------------------------------------ follow-ups: manual core rooms, stale text, advisor */
+
+// 8.5 blank with a manual core 50 × 30 (x −25..25, y −15..15). One floor at 10,000 sf: 2 passenger cabs, no service cab.
+// Program (2 rows of 11): top E, E, shaft 6; bottom trash 8, electrical 8, shaft 6 → R = 22; A = 2 × 11 + 22 = 44, B = 22.
+// In 50 × 30: rows stretch to 50 − 22 = 28 (each last shaft + 6), the middle band 28 × (30 − 22) = 224 is a shaft, each
+// stair column is the stair 11 × 22 and a shaft 11 × 8. Σ = 2 × 242 + 2 × 88 + 28 × 11 + 28 × 11 + 224 = 1,500 = 50 × 30.
+// A 15 × 15 core is less than 44 × 22: coreFits false, no rooms, one block.
+t("manual core: the program tiles a larger rectangle exactly; a 15 × 15 core does not fit", () => {
+  const s = blank("point-tower"); s.core = { mode: "manual", rect: [-25, -15, 25, 15] };
+  const b = buildPlates(s);
+  const f = b.groups[0].fill;
+  eq(f.coreMode, "manual"); eq(f.coreFits, true);
+  const rooms = f.coreRooms;
+  const sum = rooms.reduce((a, r) => a + area(r.outer), 0);
+  near(sum, 1500, 0.01, "Σ rooms");
+  near(GEO.mpArea(GEO.bool("union", mp(rooms.map((r) => r.outer)), [])), 1500, 0.01, "no overlap");
+  near(GEO.mpArea(GEO.bool("diff", mp([f.core]), mp(rooms.map((r) => r.outer)))), 0, 0.01, "no gap");
+  const by = {}; for (const r of rooms) by[r.kind] = (by[r.kind] || 0) + 1;
+  eq(by, { stair: 2, elevator: 2, shaft: 5, trash: 1, electrical: 1 });
+  near(rooms.filter((r) => r.kind === "shaft").reduce((a, r) => a + area(r.outer), 0), 2 * 88 + 2 * 12 * 11 + 224, 0.01, "shafts 664");
+  eq(f.stairs.map((x) => x.id), ["S1", "S2"]); eq(f.elevators.map((x) => x.id), ["E1", "E2"]);
+  ok(f.stairs.every((x) => x.door), "stair doors");
+  ok(MT.computeMetrics(s, b).groups[0].row.closure.ok, "closure");
+  eq(DV.platesDerived(s, b, null).levels[0].core.rooms.length, 11, "derived rooms");
+  const t15 = blank("point-tower"); t15.core = { mode: "manual", rect: [-7.5, -7.5, 7.5, 7.5] };
+  const g = layOf(t15);
+  eq(g.coreFits, false); eq(g.coreRooms, []);
+  near(area(g.core), 225, 0.01, "one block");
+  eq(g.warnings.find((w) => w.code === "core-rooms-do-not-fit").message, "The core rooms do not fit in the core. The program needs 44 × 22 ft. The core stays one block.");
+  eq(layOf(blank("hotel-bar")).coreFits, null, "no core");
+});
+
+t("stale-massing text and the advisor on a plate not drawn yet", () => {
+  const s = blank("double-loaded-bar");
+  const b = buildPlates(s);
+  const m = MT.computeMetrics(s, b);
+  const st = MT.checks(s, m, { massingUpdatedAt: "2030-01-01T00:00:00Z" }).find((w) => w.code === "stale-massing");
+  ok(!st, "no stamp on a drawn plate");
+  const w = MT.checks(s, { ...m, massing: { usedAt: "2026-01-01T00:00:00Z", currentAt: "2026-02-01T00:00:00Z" } }).find((x) => x.code === "stale-massing");
+  eq(w.message, "The massing changed after this layout. Check the units against the new plates.");
+  // blank 8.1: efficiency 0, open area 15,077.8 of a 15,077.8 sf zone (100% > 10%): no efficiency-low
+  ok(!AD.advise(s, b, m, { fillPlate: fillPlates }).some((x) => x.code === "efficiency-low"), "undrawn plate");
+  // the frozen 8.1 with a support block over the south band (x −100..100): the units there are clipped or gone, the open
+  // area is under 10% of the zone, and the efficiency is under 0.70: efficiency-low stays
+  const d = preset("double-loaded-bar"); d.support = [{ id: "B1", kind: "storage", rect: [-100, -31.5, 100, -2.835] }];
+  const bd = buildPlates(d), md = MT.computeMetrics(d, bd);
+  const fd = bd.groups[0].fill;
+  ok(fd.openArea < 0.1 * GEO.mpArea(fd.zone), `open ${fd.openArea}`);
+  ok(md.groups[0].row.efficiency < 0.70, `efficiency ${md.groups[0].row.efficiency}`);
+  ok(AD.advise(d, bd, md, { fillPlate: fillPlates }).some((x) => x.code === "efficiency-low"), "a drawn plate keeps efficiency-low");
 });
 
 /* ------------------------------------------------------------ contract */

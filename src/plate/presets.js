@@ -94,13 +94,15 @@ function base81() {
   };
 }
 
-// The default state for a new design (draw plan section 6): "Blank point tower", a drawn 150 by 160 ft plate,
+// The default state for a new design (draw plan section 6): "Blank point tower", a drawn 106 by 117 ft plate,
 // an automatic core and corridor (a compact plate gives a point corridor), and no units. Builds a new object on each call.
+// 106 × 117 (not the plan's 150 × 160, which gives 51 ft deep runs): with its auto core of 44 × 33 ft the four runs are
+// 29.83 ft deep, near the 30 ft target, so a new design opens without a plate-too-deep advice.
 export function defaultState() {
   const s = base81();
   s.name = 'Blank point tower';
-  s.plate.w = 150;
-  s.plate.d = 160;
+  s.plate.w = 106;
+  s.plate.d = 117;
   s.core = { mode: 'auto', rect: null };
   s.corridor.kind = 'auto';
   s.units = [];
@@ -389,7 +391,7 @@ export const PRESETS = [
   {
     id: 'blank-point-tower',
     name: 'Blank point tower',
-    description: 'The default for a new design. Drawn 150 by 160 ft plate, automatic core and point corridor, no units. Draw the units along the facade.',
+    description: 'The default for a new design. Drawn 106 by 117 ft plate (runs 29.8 ft deep), automatic core and point corridor, no units. Draw the units along the facade.',
     state: defaultState(),
   },
 ];

@@ -207,7 +207,7 @@ async function runTests() {
   });
   await t('fillDefaults fills a partial state and drops nothing the user typed', () => {
     const s = fillDefaults({ plate: { w: 180 }, mode: 'hotel', units: [{ id: 'U-01', type: 'king', mode: 'free', outer: [[0, 0], [10, 0], [10, 10]] }] });
-    return eq([s.plate.w, s.plate.d, s.mode, s.units.length, s.locks, s.corridor.wall, s.mix.hotel.length], [180, 160, 'hotel', 1, undefined, 0.5, 3]);
+    return eq([s.plate.w, s.plate.d, s.mode, s.units.length, s.locks, s.corridor.wall, s.mix.hotel.length], [180, 117, 'hotel', 1, undefined, 0.5, 3]);
   });
   await t('every preset survives fillDefaults unchanged', () => {
     const bad = CONFIG.presets.filter((p) => JSON.stringify(fillDefaults(deepClone(p.state))) !== JSON.stringify(fillDefaults(fillDefaults(deepClone(p.state))))).map((p) => p.id);

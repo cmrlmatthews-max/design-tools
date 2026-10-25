@@ -300,8 +300,10 @@ export function advise(state, built, metrics, { fillPlate = null } = {}) {
   if (co) items.push(co);
   const un = unfilled(fill, where);
   if (un) items.push(un);
-  // draw plan: a blank plate (no drawn units) gets no efficiency-low item
-  if (!items.length && row.efficiency < 0.70 && (fill.units || []).length > 0) {
+  // draw plan: a layout with open area over 10% of the unit zone is not drawn yet, so a low efficiency says nothing
+  const zoneSf = fill.layout && Array.isArray(fill.zone) ? mpArea(asMP(fill.zone)) : 0;
+  const undrawn = !!fill.layout && isNum(fill.openArea) && zoneSf > 0 && fill.openArea > 0.10 * zoneSf;
+  if (!items.length && row.efficiency < 0.70 && !undrawn) {
     items.push({
       code: "efficiency-low", severity: "info",
       message: `Efficiency is ${fmtPct(row.efficiency)}. Typical test fits reach 75 to 82%.`,

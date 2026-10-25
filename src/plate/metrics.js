@@ -742,7 +742,7 @@ export function checks(state, metrics, ctx = {}) {
 
   const used = metrics.massing ? metrics.massing.usedAt : null;
   const current = ctx && ctx.massingUpdatedAt !== undefined ? ctx.massingUpdatedAt : metrics.massing ? metrics.massing.currentAt : null;
-  if (later(current, used)) out.push(warn("stale-massing", "The massing changed after this fill. Re-fill to follow the new plates.", { usedAt: used, currentAt: current }));
+  if (later(current, used)) out.push(warn("stale-massing", "The massing changed after this layout. Check the units against the new plates.", { usedAt: used, currentAt: current }));
   // rework plan 7.3: one list, de-duplicated by code + where (the first one stays); the page badge counts this list
   const seenKey = new Set();
   return out.filter((w) => {

@@ -30,7 +30,11 @@
      allowance   sf of the exterior strip that no block takes (the metrics closure: GSF = NRSF + corridor + core + stairs
                  + elevators + support + open + allowance)
      counts      the level targets (plan 3.6) for the suggestions and the placed-against-target table
-   Warnings of a layout: no-units (info), unit-clipped (info), unit-blocked, type-does-not-fit (info), and the corridor
+     coreFits    true: an auto core, or a manual core rectangle that holds the room program (core.js manualCoreRooms; its
+                 rooms are coreRooms, its stairs and cabs are stairs and elevators); false: a manual core too small or not
+                 a rectangle (coreRooms [], the core is one block); null: no core
+   Warnings of a layout: no-units (info), unit-clipped (info), unit-blocked, type-does-not-fit (info),
+   core-rooms-do-not-fit (info), and the corridor
    and core warnings of the fill. No mix-miss, run-too-short or type-area-high.
 
    LevelFill = { index, kind, width, spine, plate, inset, corridor, corridorClear, core, coreMode, coreRooms, coreProgram, maxDepth,
@@ -93,7 +97,7 @@
    ========================================================================== */
 
 import { GEO, spineFor, corridorPolygon, stairBlocks, corridorGraph, coreLayout, corridorKind, stairDoor } from "./corridor.js";
-import { autoCore, coreContext } from "./core.js";
+import { autoCore, coreContext, coreProgram, manualCoreRooms } from "./core.js";
 import { effectiveTypes, weightedWidth, countsFor, requiredAccessible, MULTIFAMILY_TYPES, HOTEL_TYPES } from "./mix.js";
 import { levelsFrom, groupLevels } from "./levels.js";
 import { migrateUnits, matchFor } from "./draw.js";
@@ -810,7 +814,7 @@ const pad2 = (n) => String(n).padStart(2, "0");
  * stairs, elevators, support, back-of-house, blocks, bands, runs, corners, pockets, leftovers (plan 3.4 and 3.5).
  * `locks` enter as blocks (fillLevel only; layoutLevel passes none and places its units after).
  */
-function levelFrame(level, state, { locks = null, rotation = null, core: coreCtx = null, maxDepth = null } = {}, fn = "fillLevel") {
+function levelFrame(level, state, { locks = null, rotation = null, core: coreCtx = null, maxDepth = null, manualRooms = false } = {}, fn = "fillLevel") {
   need(level, fn, "level"); need(state, fn, "state");
   const plate = asMP(need(level.plate, fn, "level.plate"));
   if (!plate.length) throw new Error(`${fn}: the input "level.plate" has no ring.`);
@@ -839,8 +843,22 @@ function levelFrame(level, state, { locks = null, rotation = null, core: coreCtx
     ? bool("int", bool("diff", offsetMP([{ outer: core, holes: [] }], width), [{ outer: core, holes: [] }]), plate)
     : corridorPolygon(spine, width, plate);
   if (core && kind !== "point") core = coreMove(core, clear, plate, warnings);
-  const stairs = auto && auto.withStairs
-    ? auto.rooms.filter((r) => r.kind === "stair").map((r) => ({ id: r.id, outer: r.outer, door: stairDoor(r.outer, clear, plate) }))
+  // draw plan follow-up (layoutLevel only): the auto room program inside a manual core rectangle, when it fits
+  let manual = null;
+  if (manualRooms && core && !auto) {
+    const bb = bboxOf([core]);
+    const isRect = Math.abs(Math.abs(ringArea(core)) - (bb[2] - bb[0]) * (bb[3] - bb[1])) < 0.01;
+    const ctx = coreCtx && (isNum(coreCtx.units) || isNum(coreCtx.levelGsf)) ? coreCtx : { ...(coreCtx || {}), levelGsf: mpArea(plate) };
+    const program = coreProgram(state, ctx);
+    const stairSeeds = (Array.isArray(level.seeds) ? level.seeds : []).filter((x) => x && (x.kind === "stair" || x.kind === "exterior-stair"));
+    const sm = state.stairs && state.stairs.mode;
+    const withStairs = kind === "point" && sm !== "manual" && !(sm === "seeds" || stairSeeds.length);
+    const lay = isRect ? manualCoreRooms(program, bb, { withStairs, toward: kind === "point" ? null : centroidOf(clear) }) : { fits: false, rooms: [] };
+    manual = { ...lay, program, withStairs };
+  }
+  const roomStairs = (rooms) => rooms.filter((r) => r.kind === "stair").map((r) => ({ id: r.id, outer: r.outer, door: stairDoor(r.outer, clear, plate) }));
+  const stairs = auto && auto.withStairs ? roomStairs(auto.rooms)
+    : manual && manual.fits && manual.withStairs ? roomStairs(manual.rooms)
     : stairBlocks(kind, spine, plate, st2, level.seeds);
   const stairSize = state.stairs && Array.isArray(state.stairs.size) ? state.stairs.size : [11, 22];
 
@@ -867,6 +885,8 @@ function levelFrame(level, state, { locks = null, rotation = null, core: coreCtx
   if (seedCabs.length) seedCabs.forEach((s, k) => elevators.push({ id: `E${k + 1}`, outer: rr3(s.outer), service: false }));
   else if (auto) {
     for (const r of auto.rooms) if (r.kind === "elevator" || r.kind === "service-elevator") elevators.push({ id: r.id, outer: r.outer, service: r.kind === "service-elevator" });
+  } else if (manual && manual.fits) {
+    for (const r of manual.rooms) if (r.kind === "elevator" || r.kind === "service-elevator") elevators.push({ id: r.id, outer: r.outer, service: r.kind === "service-elevator" });
   } else if (core) {
     const lay = coreLayout(core, stairSize, cab, guestN + serviceN, { withStairs: kind === "point" });
     if (!lay.fits) warnings.push(warn("elevators-do-not-fit", "The elevator cabs do not fit inside the core.", where));
@@ -892,7 +912,7 @@ function levelFrame(level, state, { locks = null, rotation = null, core: coreCtx
       }
     }
   }
-  if (core && !auto && hotel && state.hotelBoh && state.hotelBoh.on !== false && !seedCabs.length) {
+  if (core && !auto && !(manual && manual.fits) && hotel && state.hotelBoh && state.hotelBoh.on !== false && !seedCabs.length) {
     let best = null;
     for (const b of base.bands) {
       if (mpArea(bool("int", b.band, [core])) <= 1) continue;
@@ -922,7 +942,7 @@ function levelFrame(level, state, { locks = null, rotation = null, core: coreCtx
   const cap = isNum(maxDepth) && maxDepth > 0 ? maxDepth : null;
   const rc = runsAndCorners(null, plate, clear, blocks, state, base, { maxDepth: cap });
   return { plate, mode, hotel, ext, rot, warnings, where, kind, spine, width, auto, core, clear, stairs, support, lockList,
-    elevators, boh, blocks, base, rc, cap };
+    elevators, boh, blocks, base, rc, cap, manual };
 }
 
 export function fillLevel(level, state, { counters = null, locks = null, accessible = null, rotation = null, core: coreCtx = null, maxDepth = null } = {}) {
@@ -1185,8 +1205,8 @@ export function fmtFtIn(v) {
  *   dropped, depth, graph, warnings …) plus { layout: true, free, openArea, open, cornerZones, zone, allowance }.
  */
 export function layoutLevel(level, state, { units = null, core: coreCtx = null, maxDepth = null, rotation = null, accessible = null } = {}) {
-  const F = levelFrame(level, state, { locks: [], rotation, core: coreCtx, maxDepth }, "layoutLevel");
-  const { plate, mode, hotel, rot, warnings, where, kind, spine, width, auto, core, clear, stairs, support, elevators, boh, blocks, base, rc, cap } = F;
+  const F = levelFrame(level, state, { locks: [], rotation, core: coreCtx, maxDepth, manualRooms: true }, "layoutLevel");
+  const { plate, mode, hotel, rot, warnings, where, kind, spine, width, auto, core, clear, stairs, support, elevators, boh, blocks, base, rc, cap, manual } = F;
   const { runs, corners, pockets, rings, bands } = rc;
   const ext = F.ext;
   const types = mixTypes(state);
@@ -1392,7 +1412,10 @@ export function layoutLevel(level, state, { units = null, core: coreCtx = null, 
   const placedCount = {};
   for (const u of out) if (u.type !== "accessible") placedCount[u.type] = (placedCount[u.type] || 0) + 1;
   const graph = corridorGraph(spine, stairs, out, { corridor, width });
-  const coreRooms = auto ? auto.rooms.map((r) => ({ id: r.id, kind: r.kind, outer: r.outer })) : [];
+  const roomsOf = auto ? auto.rooms : manual && manual.fits ? manual.rooms : [];
+  const coreRooms = roomsOf.map((r) => ({ id: r.id, kind: r.kind, outer: r.outer }));
+  const coreFits = auto ? true : manual ? !!manual.fits : null;
+  if (manual && !manual.fits) warnings.push(warn("core-rooms-do-not-fit", `The core rooms do not fit in the core. The program needs ${manual.need ? `${r1(manual.need[0])} × ${r1(manual.need[1])} ft` : "a rectangle"}. The core stays one block.`, where, "info"));
   const linen = boh.concat(support, coreRooms).filter((b) => b.kind === "linen");
   let reach = null;
   if (hotel && linen.length) {
@@ -1406,7 +1429,7 @@ export function layoutLevel(level, state, { units = null, core: coreCtx = null, 
     layout: true,
     index: level.index, kind, width, spine, plate, inset: rmp(base.inset),
     corridor, corridorClear: clear, core: core ? rr3(core) : null,
-    coreMode: auto ? "auto" : core ? "manual" : "none", coreRooms, coreProgram: auto ? auto.program : null, maxDepth: cap,
+    coreMode: auto ? "auto" : core ? "manual" : "none", coreRooms, coreFits, coreProgram: auto ? auto.program : manual ? manual.program : null, maxDepth: cap,
     stairs, elevators, support: support_, units: out,
     runs: runs.map((r) => {
       const s = at(r.fr, r.a, 0), e = at(r.fr, r.b, 0);

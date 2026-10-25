@@ -79,7 +79,7 @@ async function runReworkTests() {
       const afterDrag = snap();
       const moved = Select.resetCore();
       const back = [Store.get('core.mode'), Store.get('core.rect'), L().coreRooms.length > 0];
-      return eq([auto0 > 0, manual, moved, back, oneStep(afterDrag)], [true, ['manual', true, 0], true, ['auto', null, true], true]);
+      return eq([auto0 > 0, manual, moved, back, oneStep(afterDrag)], [true, ['manual', true, 11], true, ['auto', null, true], true]);
     });
     await t('core mode chips: Auto, Manual and None set the mode; None draws no core; the Reset button follows the mode', () => {
       deep();

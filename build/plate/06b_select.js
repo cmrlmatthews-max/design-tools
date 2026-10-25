@@ -1317,7 +1317,7 @@ const Select = (() => {
       info = { title: sel.kind === 'core' ? 'Core' : `${label} ${sel.id}`, sub: sf(area), rows: r ? [['Size', `${fmt(r[2] - r[0])} x ${fmt(r[3] - r[1])}`], ['Lower left', `${fmt(r[0])}, ${fmt(r[1])}`]] : [['Area', sf(area)]] };
       if (sel.kind === 'core') {
         const st = Store.raw(), cm = st.core.mode, prog = D().hud.core;
-        const fits = L.coreRooms && L.coreRooms.length > 0;
+        const fits = L.coreFits === false ? false : !!(L.coreRooms && L.coreRooms.length > 0);
         info.rows.push(['Mode', { auto: 'Auto: the tool makes the core', manual: 'Manual: you set the rectangle', none: 'None' }[cm] || cm]);
         if (cm === 'manual') info.rows.push(['Rooms', fits ? 'Drawn inside the core.' : 'Rooms do not fit. The core stays one block.']);
         if (prog && prog.cabs !== null && prog.cabs !== undefined) info.rows.push(['Elevators', `${prog.cabs} passenger${prog.service ? `, ${prog.service} service` : ''}`]);
