@@ -164,7 +164,7 @@ textarea.points:focus { border-color: var(--accent); outline: none; box-shadow: 
 
 /* compare */
 .viewport[data-compare="true"] .hud { display: none; }
-.viewport[data-compare="true"] .views { bottom: calc(var(--cmp-table-h, 0px) + 12px); }
+.viewport[data-compare="true"] .viewbar { bottom: calc(var(--cmp-table-h, 0px) + 12px); }
 .compare { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
 .cmp-bar {
   position: absolute; top: 10px; left: 12px; right: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
@@ -408,7 +408,7 @@ textarea.ai-preview {
 .section-host { position: relative; min-height: 0; overflow: hidden; }
 .section-host canvas { position: absolute; left: 0; top: 0; display: block; }
 .viewport[data-section="true"] .canvas-host { bottom: 190px; }
-.viewport[data-section="true"] .views, .viewport[data-section="true"] .legend { translate: 0 -190px; }
+.viewport[data-section="true"] .viewbar, .viewport[data-section="true"] .legend { translate: 0 -190px; }
 .viewport[data-section="true"] .toasts { translate: 0 -190px; }
 .tier-table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin: 4px 0 8px; }
 .tier-table th, .tier-table td { padding: 4px 6px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -429,7 +429,7 @@ textarea.ai-preview {
 #groundChips .chip, #propertyChips .chip, #balanceChips .chip, #styleChips .chip, #intervalChips .chip, #exagChips .chip { justify-content: center; text-align: center; white-space: normal; line-height: 1.2; }
 
 /* ---- batch fixes phase D: Collapse all (panel head) and the Site / Building zoom buttons (top bar); build/shared/08z_topbar.js ---- */
-.tb-zoom { gap: 2px; margin-right: 4px; }
+.tb-zoom { gap: 2px; }
 .tb-zoom[hidden], .tb-zbtn[hidden], .panel-collapse[hidden] { display: none; }
 .tb-zbtn { padding: 0 10px; font-size: 13px; font-weight: 500; }
 .tb-zbtn .tb-ztxt { white-space: nowrap; }
@@ -497,3 +497,38 @@ a.btn.edit-link { color: var(--ink); text-decoration: none; }
 #selection-card .kv { grid-template-columns: auto 1fr; gap: 3px 14px; }
 #selection-card .kv dd { text-align: right; }
 .canvas-host canvas { cursor: default; }
+
+/* ---- the bottom bar: view buttons, Site / Building, Model / Diagram, Snap and Metrics in one bar (build/shared/08z_topbar.js) ---- */
+.viewbar {
+  z-index: 3; align-items: center; max-width: calc(100% - 24px); box-sizing: border-box;
+  overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: none;
+}
+.viewbar::-webkit-scrollbar { display: none; }
+.viewbar > .vb-g { flex: none; display: flex; align-items: center; gap: 2px; }
+.viewbar > .vb-g[hidden], .viewbar > .vb-g:empty { display: none; }
+.viewbar > .vb-g:not(.vb-lead) { margin-left: 3px; padding-left: 5px; border-left: 1px solid var(--line-2); }
+.viewbar .tb-zoom { margin-right: 0; }
+.viewbar .seg { padding: 0; background: transparent; border-radius: 0; }
+.viewbar .seg button, .viewbar .btn, .viewbar .tb-zbtn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: var(--hit); min-width: var(--hit); padding: 0 12px; border: 0; border-radius: 9px;
+  background: transparent; color: var(--ink-2); font-size: 13px; font-weight: 500; white-space: nowrap; box-shadow: none;
+}
+.viewbar .seg button:hover, .viewbar .btn:hover { background: var(--surface-2); color: var(--ink); }
+.viewbar .seg button[aria-pressed="true"], .viewbar .btn[aria-pressed="true"], .viewbar .btn.is-on { background: var(--accent-soft); color: var(--accent); box-shadow: none; }
+.viewbar .btn.has-text { padding: 0 12px; }
+.viewbar .btn .btn-text { display: inline; }
+.viewbar .btn svg, .viewbar .seg button svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.viewbar .btn-split { gap: 0; }
+.viewbar .btn-split .btn.caret-only { min-width: 28px; padding: 0 4px; margin-left: 0; }
+.viewbar button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+@media (max-width: 899px) {
+  .viewbar .vb-txt, .viewbar .btn .btn-text, .viewbar .tb-ztxt { display: none; }
+  .viewbar .btn, .viewbar .btn.has-text, .viewbar .tb-zbtn, .viewbar .seg button { padding: 0; }
+  .viewbar .views button { padding: 0 10px; min-width: 40px; }
+  .viewbar .btn-split .btn.caret-only { min-width: 24px; }
+}
+@media (pointer: coarse) {
+  .viewbar .views button, .viewbar .seg button, .viewbar .btn { min-height: 44px; min-width: 44px; }
+  .viewbar .btn-split .btn.caret-only { min-width: 32px; }
+}

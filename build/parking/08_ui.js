@@ -61,9 +61,17 @@ const Pop = (() => {
     const r = anchor.getBoundingClientRect(), w = el.offsetWidth;
     let left = opts.align === 'right' ? r.right - w : r.left;
     left = clamp(left, 8, Math.max(8, window.innerWidth - w - 8));
-    const top = Math.min(r.bottom + 6, window.innerHeight - 120);
-    el.style.left = `${left}px`; el.style.top = `${top}px`;
-    el.style.maxHeight = `${Math.max(160, window.innerHeight - top - 12)}px`;
+    let top = Math.min(r.bottom + 6, window.innerHeight - 120);
+    el.style.left = `${left}px`;
+    if (r.top > window.innerHeight / 2) {      // an anchor in the lower half (the bottom bar): open the menu above it
+      const maxH = Math.max(160, r.top - 6 - 12);
+      el.style.maxHeight = `${maxH}px`;
+      top = Math.max(12, r.top - 6 - Math.min(el.offsetHeight, maxH));
+      el.style.top = `${top}px`;
+    } else {
+      el.style.top = `${top}px`;
+      el.style.maxHeight = `${Math.max(160, window.innerHeight - top - 12)}px`;
+    }
     el.style.visibility = '';
     anchor.setAttribute('aria-expanded', 'true');
     const onDown = (e) => { if (!el.contains(e.target) && !anchor.contains(e.target)) close(); };

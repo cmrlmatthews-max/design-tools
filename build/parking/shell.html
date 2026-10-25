@@ -189,12 +189,13 @@ button { cursor: pointer; }
 .canvas-host canvas { display: block; width: 100%; height: 100%; touch-action: none; outline: none; }
 .gl-fail { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--ink-2); }
 
-.views {
+.viewbar {
   position: absolute; left: 12px; bottom: 12px; bottom: max(12px, env(safe-area-inset-bottom));
   display: flex; gap: 2px; padding: 3px;
   background: var(--hud-bg); border: 1px solid var(--line); border-radius: 12px;
   box-shadow: var(--shadow); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
 }
+.views { display: flex; align-items: center; gap: 2px; flex: none; }
 .views button {
   min-width: var(--hit); min-height: var(--hit); padding: 0 12px;
   border: 0; border-radius: 9px; background: transparent; color: var(--ink-2); font-size: 13px; font-weight: 500;

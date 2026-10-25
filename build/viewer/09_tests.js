@@ -55,10 +55,20 @@ async function runPageTests() {
     const notes = ['layers', 'levels', 'view', 'summary'].map((id) => !!document.querySelector(`#tabpanel-${id} .no-project`));
     return eq([visible($('hud')), visible($('views')), notes], [false, false, [true, true, true, true]]);
   });
-  await t('the top bar: Tools home, CMRLM, Project, Site and Building zoom, Model and Diagram, Export, Help', () => {
+  await t('the top bar: Tools home, CMRLM, Project, Export, Help; Site, Building, Model and Diagram are in the bottom bar', () => {
     const home = $('tbHome');
     return eq([home.getAttribute('href'), document.querySelector('.wordmark').textContent, !!$('btnProject'), visible($('tbZoomSite')), visible($('tbZoomBuilding')), [...$('styleToggle').querySelectorAll('button')].map((b) => b.textContent), !!$('btnExport'), !!$('btnHelp')],
       ['../', 'CMRLM', true, true, true, ['Model', 'Diagram'], true, true]);
+  });
+  await t('B1. the bottom bar holds the view buttons, Site, Building, Model / Diagram, Metrics; none of them is in the top bar', () => {
+    const i = TopBar.barInfo(), want = ['views', 'tbZoomSite', 'tbZoomBuilding', 'styleToggle', 'tbMetrics'];
+    const bar = document.getElementById('viewBar'), vp = document.getElementById('viewport');
+    if (!bar || !vp) return 'no bottom bar';
+    const r = bar.getBoundingClientRect(), v = vp.getBoundingClientRect();
+    const inside = r.left >= v.left - 1 && r.right <= v.right + 1 && r.bottom <= v.bottom + 1 && r.top >= v.top;
+    const metrics = document.getElementById('tbMetrics');
+    const pressed = !metrics || metrics.getAttribute('aria-pressed') === String(!TopBar.hudHidden());
+    return eq([i.missing, i.inTop, want.filter((id) => !i.inBar.includes(id)), i.views >= 6, inside, pressed], [[], [], [], true, true, true]);
   });
   await t('the panel tabs are Layers, Levels, View, Summary', () => eq([...$('panelTabs').querySelectorAll('.tab')].map((b) => b.textContent), ['Layers', 'Levels', 'View', 'Summary']));
   await t('the Project menu has Import and Export and no New', async () => {
