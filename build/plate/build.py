@@ -34,6 +34,8 @@ MODS = {
     'core': ('CoreMod', 'plate/core.js'),
     'advisor': ('AdvisorMod', 'plate/advisor.js'),
     'fill': ('FillMod', 'plate/fill.js'),
+    'draw': ('DrawMod', 'plate/draw.js'),
+    'suggest': ('SuggestMod', 'plate/suggest.js'),
     'pmetrics': ('PlateMetricsMod', 'plate/metrics.js'),
     'pderived': ('PlateDerivedMod', 'plate/derived.js'),
     'pexports': ('PlateExportsMod', 'plate/exports.js'),
@@ -185,6 +187,7 @@ PARTS = [
     '12e_tests_site.js',
     '12f_tests_massing.js',
     '12g_tests_rework.js',    # split, merge, fill a remainder, draw a unit, depth cap, core reset, one warnings list (rework plan 8.2)
+    '12h_tests_draw.js',      # draw-first: paint, suggest, free draw, core move and resize, clear level, undo, hint (draw plan 6)
     '12l_tests_sections.js',  # collapsed sections and the prompt panel (site base style plan, section 4)
     os.path.join(SHARED, '08z_topbar.js'),           # TopBar: Collapse all and the Site / Building zoom buttons (shared page part)
     '13_start.js',

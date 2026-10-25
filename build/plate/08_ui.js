@@ -295,12 +295,12 @@ const UI = (() => {
     if (gid) { const f = get('fill.maxDepth'); return typeof f === 'number' && f > 0 ? f : null; }       // a group with no cap of its own follows the global one
     return null;
   }
-  /** Writes the cap (null = off). A project group that has no entry yet gets a whole entry, so the fill still sees its locks and its filled flag. */
+  /** Writes the cap (null = off). A project group that has no entry yet gets a whole entry, so the group keeps its drawn units and its filled flag. */
   function capSet(v, live = false) {
     const gid = capGroupId();
     if (gid) {
       const g = get(`levels.groups.${gid}`);
-      if (!g) { Store.set(`levels.groups.${gid}`, { filled: true, locks: [], maxDepth: v }, { live }); return; }
+      if (!g) { Store.set(`levels.groups.${gid}`, { filled: true, units: [], maxDepth: v }, { live }); return; }
     }
     Store.set(capPath(), v, { live });
   }
@@ -427,19 +427,6 @@ const UI = (() => {
     el.textContent = Math.abs(sum - 1) < 0.005 ? `Shares add to 100%.` : `Shares add to ${Math.round(sum * 100)}%. The fill renormalizes them.`;
   }
 
-  function buildLocks() {
-    return {
-      children: els([
-        h('p', { class: 'help', id: 'lockNote' }),
-        h('div', { class: 'add-row' },
-          Controls.button('Re-fill', () => Select.refill(), 'solid sm'),
-          Controls.button('Unlock all', () => { if (!Select.unlockAll()) Toast.show('No units are locked.', 'warn'); }, 'outline sm'),
-          Controls.button('Draw unit', () => { if (Render.ready()) Select.startDraw('unit', { label: 'a unit' }); }, 'outline sm')),
-        Controls.help('Re-fill recomputes every unlocked unit from the mix. A locked unit keeps its outline and its type. Dragging a bay line, changing the type of a unit, splitting, merging or drawing a unit locks the units it touches.'),
-        Controls.help('Draw unit: tap two cut lines on one run. The unit fills the band between them. To fill an unfilled run, tap it in the plan.'),
-      ]),
-    };
-  }
   function buildAccessible() {
     return {
       children: els([
@@ -539,7 +526,6 @@ const UI = (() => {
     { id: 'corridor', tab: 'plate', title: 'Corridor', open: false, build: buildCorridor },
     { id: 'blocks', tab: 'plate', title: 'Blocks', open: false, build: buildBlocks },
     { id: 'mix', tab: 'units', title: 'Unit mix', open: false, build: buildMix },
-    { id: 'locks', tab: 'units', title: 'Locks and re-fill', open: false, build: buildLocks },
     { id: 'accessible', tab: 'units', title: 'Accessible', build: buildAccessible },
     { id: 'efficiency', tab: 'checks', title: 'Efficiency', open: false, build: buildEfficiency },
     { id: 'checkslist', tab: 'checks', title: 'Warnings', open: false, build: buildChecksList },
@@ -697,10 +683,11 @@ const UI = (() => {
           <span class="m"><span class="k" id="kUnits">Units</span><span class="v" id="mUnits">-</span></span>
           <span class="m"><span class="k">NRSF</span><span class="v" id="mNrsf">-</span></span>
           <span class="m"><span class="k">Efficiency</span><span class="v" id="mEff">-</span></span>
+          <span class="m" id="mOpenWrap"><span class="k">Open</span><span class="v" id="mOpen">-</span></span>
         </span>
+        <span class="hud-range" id="hudRange" hidden></span>
       </button>
       <button class="hud-advice" id="hudAdvice" type="button" hidden title="Open the Efficiency card in Checks"><span class="hud-advice-text" id="hudAdviceText"></span></button>
-      <div class="notice" id="staleNote" hidden role="status"><span id="staleText">The massing changed after this fill.</span> <button class="btn outline sm" type="button" id="staleRefill">Re-fill</button></div>
       <div class="hud-body" id="hudBody">
         <dl class="metrics compact">
           <div class="m"><dt>GSF</dt><dd id="mGsf">-</dd></div>
@@ -723,7 +710,6 @@ const UI = (() => {
         </div>
       </div>`;
     $('hudToggle').addEventListener('click', () => setHudOpen(hud.dataset.collapsed === 'true'));
-    $('staleRefill').addEventListener('click', () => Select.refill());
     const toChecks = (section) => { setTab('checks'); openSection(section); raiseSheet(); };
     $('warnAll').addEventListener('click', () => toChecks('checkslist'));
     $('hudAdvice').addEventListener('click', () => toChecks('efficiency'));
@@ -777,6 +763,9 @@ const UI = (() => {
     setText('mUnits', Units.formatInt(m.units));
     setText('mNrsf', SF(m.nrsf));
     setText('mEff', pct1(m.efficiency));
+    setText('mOpen', SF(m.open || 0));
+    const hr = $('hudRange');
+    if (hr) { hr.hidden = m.inRange === null || m.inRange === undefined || !m.units; if (!hr.hidden) hr.textContent = `Units in range ${Units.formatInt(m.inRange)} of ${Units.formatInt(m.units)}`; }
     setText('mGsf', SF(m.gsf));
     setText('mAvg', SF(m.avgUnit));
     setText('mCor', m.corridorFt ? `${FT(m.corridorFt)}${m.corridorPerUnit ? ` · ${FT(m.corridorPerUnit)} per ${hotel ? 'key' : 'unit'}` : ''}` : 'none');
@@ -809,7 +798,6 @@ const UI = (() => {
     $('warnBlock').dataset.n = String(nw);
     $('hudBadge').dataset.n = String(nw);
     $('hudBadge').textContent = `${nw} ${nw === 1 ? 'warning' : 'warnings'}`;
-    $('staleNote').hidden = !d.stale;
 
     updateNotes(d);
     updateGroups(d);
@@ -857,7 +845,7 @@ const UI = (() => {
     if (cn) {
       const L = d.editing, mode = st.core.mode, c = m.core;
       let text = '';
-      if (mode === 'none') text = 'No core. The fill makes none.';
+      if (mode === 'none') text = 'No core. The plate has none.';
       else if (L && L.core && L.core.length) {
         const r = ringRect(L.core), area = Math.abs(ringArea(L.core));
         const el = c && c.cabs !== null && c.cabs !== undefined ? ` ${c.cabs} passenger elevator${c.cabs === 1 ? '' : 's'}${c.service ? ` and ${c.service} service` : ''}.` : '';
@@ -867,8 +855,6 @@ const UI = (() => {
     }
     const dn = $('depthCapNote');
     if (dn) { const on = capNow() !== null; dn.textContent = `${on ? 'Units stop at the cap depth. The strip between the cap and the corridor becomes storage.' : 'Off: units run the full depth.'} ${capGroupId() ? 'The cap applies to the selected level group.' : 'The cap applies to the whole plate.'}`; }
-    const ln = $('lockNote');
-    if (ln) { const n = Select.locks().length; ln.textContent = n ? `${n} locked unit${n === 1 ? '' : 's'} in this ${st.source === 'project' ? 'group' : 'plate'}.` : 'No locked units.'; }
     const an = $('accNote');
     if (an && d.metrics) {
       const a = d.metrics.building.accessible;
@@ -899,8 +885,9 @@ const UI = (() => {
     }
     rows.push([CONFIG.corridorColor, 'Corridor', 'role-corridor'], [CONFIG.coreColor, 'Core, stairs, elevators', 'role-core'], [CONFIG.supportColor, 'Support', 'role-support']);
     const L = Derived.get().editing;
-    if (L && L.support.some((b) => b.kind === 'remainder')) rows.push([CONFIG.remainderColor, 'Unfilled run (tap to fill)', 'role-remainder']);
-    if (L && L.units.some((u) => u.areaHigh)) rows.push([CONFIG.areaHighColor, 'Large unit', 'role-large']);
+    if (L && L.open && L.open.length) rows.push([CONFIG.openColor, 'Open stretch', 'role-open']);
+    if (L && L.units.some((u) => u.areaHigh)) rows.push([CONFIG.areaHighColor, 'Large unit (outline)', 'role-large']);
+    if (L && L.units.some((u) => u.small)) rows.push([CONFIG.smallColor, 'Small unit (outline)', 'role-small']);
     const key = JSON.stringify([rows, v.style]);
     box.hidden = false;
     if (box.dataset.key === key) return;

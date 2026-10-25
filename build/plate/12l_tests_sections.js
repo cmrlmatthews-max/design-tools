@@ -125,7 +125,7 @@ async function runTopBarTests() {
   ProjectUI.reset();
   ProjectUI.configure({ storage: mem, navigate: () => {}, updateUrl: () => {} });
   const openSite = async () => {
-    Store.replace(fillDefaults(defaultState()), { resetHistory: true });
+    Store.replace(TestHelp.presetState('double-loaded-bar'), { resetHistory: true });
     const doc = SiteFixture.siteProject({ massing: (() => { const m = ProjectFixture.massing(); m.placement = { ...SiteFixture.PLACEMENT }; return m; })() });
     ProjectMod.saveProject(mem, doc);
     ProjectUI.openDoc(doc);
@@ -207,7 +207,7 @@ async function runTopBarTests() {
     });
     await t('Z7. no site open: Site frames a box that contains the model, keeps the camera direction and fits the box in the view', async () => {
       if (!live) return true;
-      Store.replace(fillDefaults(defaultState()), { resetHistory: true });
+      Store.replace(TestHelp.presetState('double-loaded-bar'), { resetHistory: true });
       await frames(3);
       Render.setView('axon', false);
       Render.camera().position.add(new THREE.Vector3(13, 4, -9));      // a view the presets do not make

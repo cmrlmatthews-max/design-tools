@@ -26,7 +26,7 @@ const STYLES = ['model', 'diagram'];
 /** The sizes a new support block takes (ft: along x, along y). */
 const SUPPORT_SIZES = { trash: [8, 10], electrical: [6, 8], storage: [10, 10], linen: [8, 14], ice: [6, 8], data: [6, 8] };
 
-/** The default design: "Double-loaded bar" (plan section 8.1). 17 units, NRSF 15,077.8 sf, efficiency 0.7732. */
+/** The default design: "Blank point tower" (draw plan section 6). A 150 by 160 ft plate, an automatic core, no units. */
 function defaultState() { return PresetsMod.defaultState(); }
 
 const isPt = (p) => Array.isArray(p) && p.length >= 2 && typeof p[0] === 'number' && typeof p[1] === 'number' && isFinite(p[0]) && isFinite(p[1]);
@@ -49,7 +49,7 @@ const cleanId = (raw, prefix, i, taken) => {
 
 /** Fill every missing field from the defaults so older or partial states (presets, imports) are complete. */
 function fillDefaults(src) {
-  const s = isObj(src) ? deepClone(src) : {};
+  const s = DrawMod.migrateUnits(isObj(src) ? src : {});       // draw plan 2.1: locks become units; a state with none is blank
   if (isObj(s.core)) s.core = CoreMod.normalizeCore(s.core);        // rework plan 4.2: a rect with no mode is manual, no rect and no mode is auto
   const base = defaultState();
   const merge = (t, d) => {
@@ -81,7 +81,7 @@ function fillDefaults(src) {
   if (!isObj(lv.groups)) lv.groups = {};
   for (const k of Object.keys(lv.groups)) {
     const g = isObj(lv.groups[k]) ? lv.groups[k] : {};
-    lv.groups[k] = { filled: g.filled !== false, locks: cleanLocks(g.locks) };
+    lv.groups[k] = { filled: g.filled !== false, units: Array.isArray(g.units) ? g.units : [] };
     const gd = cleanDepth(g.maxDepth);
     if (gd !== null) lv.groups[k].maxDepth = gd;
   }
@@ -157,8 +157,9 @@ function fillDefaults(src) {
   ac.perFloor = ac.perFloor === null || ac.perFloor === undefined ? null : Math.round(clamp(num(ac.perFloor, 1), 0, 20));
   s.housekeepingReach = clamp(num(s.housekeepingReach, 150), 20, 1000);
 
-  // locks and placement
-  s.locks = cleanLocks(s.locks);
+  // drawn units (cleaned by DrawMod.migrateUnits above) and placement
+  s.units = Array.isArray(s.units) ? s.units.slice(0, CONFIG.limits.maxUnits) : [];
+  delete s.locks;
   s.placement = isObj(s.placement) ? { x: num(s.placement.x, 0), y: num(s.placement.y, 0), rotation: num(s.placement.rotation, 0), baseZ: num(s.placement.baseZ, 0) } : null;
 
   // view
@@ -178,15 +179,6 @@ function fillDefaults(src) {
 
 /** A unit depth cap in ft (rework plan 5): a number from 10 to 100, else null (off). */
 function cleanDepth(v) { return typeof v === 'number' && isFinite(v) && v > 0 ? clamp(v, 10, 100) : null; }
-
-/** Locks: [{ id, outer: Ring, type }]. */
-function cleanLocks(arr) {
-  const taken = new Set();
-  return (Array.isArray(arr) ? arr : []).filter(isObj).slice(0, CONFIG.limits.maxLocks).map((l, i) => {
-    const outer = cleanPts(l.outer, 3);
-    return outer && typeof l.type === 'string' ? { id: cleanId(l.id, 'U-', i, taken), outer, type: l.type } : null;
-  }).filter(Boolean);
-}
 
 /** Saved options at an older schema step up here. Schema 1 is the first, so nothing changes yet. */
 function migrateState(state /* , fromSchema */) { return state; }
