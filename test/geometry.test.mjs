@@ -43,7 +43,6 @@ const base = (o = {}) => ({
   segments: [seg()],
   setbacks: [], mechanical: [], carves: [], cuts: [],
   crown: { type: "flat", height: 20, steps: 3, slopeSide: "front" },
-  core: { mode: "percent", percent: 20, w: 40, d: 30 },
   programs: {},
   targets: { gfa: 0, far: 0 },
   ...o,
@@ -167,32 +166,29 @@ test("10. two segments with shift -> total equals sum", () => {
 test("11. mechanical floor: +1 floor, +ftf height, in GFA, out of net area", () => {
   // 10 floors 100 x 100 + mechanical after floor 5 (16 ft, plate of floor 5 = 10,000 sf).
   // Floors = 11. Height = 100 + 16 = 116 ft. GFA = 110,000 sf.
-  // Core 20% = 2,000 sf per floor. Net = GFA - core (non-mech floors) - mech
-  //   = 110,000 - 10 x 2,000 - 10,000 = 80,000 sf.
+  // No core in the Tower Generator (it moved to the Plate Planner). Net (before core) = GFA - mech
+  //   = 110,000 - 10,000 = 100,000 sf.
   const { m, plates, floors } = run(base({ mechanical: [{ afterFloor: 5, ftf: 16 }] }));
   eq(m.floorCount, 11, "floors");
   near(m.totalHeight, 116, 1e-9, "height");
   near(m.gfa, 110000, 1e-9, "gfa");
   near(m.mechanicalArea, 10000, 1e-9, "mech area");
-  near(m.netArea, 80000, 1e-9, "net");
+  near(m.netArea, 100000, 1e-9, "net before core");
   eq([plates[5].n, plates[5].zone, plates[5].program, plates[5].z], [6, "mechanical", "mechanical", 50], "mech plate");
   eq(plates[6].z, 66, "floor 7 sits on the 16 ft mechanical floor");
   eq(floors.length, buildFloorList(base({ mechanical: [{ afterFloor: 5, ftf: 16 }] })).length, "buildFloorList agrees");
 });
 
-test("12. core larger than plate -> core-outside warning", () => {
-  // Fixed core 120 x 50 on a 100 x 100 plate: 20 x 50 = 1,000 sf outside on every floor.
-  const r = run(base({ core: { mode: "fixed", w: 120, d: 50 } }));
-  const w = r.warnings.find((x) => x.code === "core-outside");
-  ok(w, "warning present");
-  eq(w.floors, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], "floors");
-  ok(w.message.includes("Floors 1–10"), w.message);
-  near(r.plates[0].coreArea, 5000, 1e-6, "core area counted inside the plate only (100 x 50)");
-  // Fixed core 60 x 60 fits a 100 x 100 plate but not the 50 x 50 plate above a 25 ft setback at floor 6.
-  const r2 = run(base({ core: { mode: "fixed", w: 60, d: 60 }, setbacks: [{ floor: 6, distance: 25, sides: [] }] }));
-  eq(r2.warnings.find((x) => x.code === "core-outside").floors, [6, 7, 8, 9, 10], "setback floors");
-  // 20% core never warns
-  ok(!run(base()).warnings.some((x) => x.code === "core-outside"), "no warning for 20%");
+test("12. no core: coreRect null, coreArea 0, no core-outside warning, a stray core key is ignored", () => {
+  const r = run(base());
+  ok(r.plates.every((p) => p.coreRect === null && p.coreArea === 0), "every plate: coreRect null, coreArea 0");
+  eq(r.m.coreArea, 0, "metrics coreArea");
+  // An old state with a core (even one far too big) changes nothing and raises no warning.
+  const r2 = run(base({ core: { mode: "fixed", w: 120, d: 50 } }));
+  ok(!r2.warnings.some((x) => x.code === "core-outside"), "no core-outside warning");
+  ok(r2.plates.every((p) => p.coreRect === null && p.coreArea === 0), "stray core key ignored");
+  near(r2.m.netArea, r.m.netArea, 1e-9, "net unchanged");
+  ok(!("efficiencyAvg" in r.m) && !("efficiency" in r.m), "no efficiency metric");
 });
 
 test("13. podium 4 floors 220x170 + tower -> GFA and site coverage", () => {
@@ -214,18 +210,14 @@ test("13. podium 4 floors 220x170 + tower -> GFA and site coverage", () => {
 });
 
 test("14. unit estimate math for residential", () => {
-  // 10 floors x 10,000 sf, core 20% = 2,000 sf -> net 8,000 sf per floor, 80,000 sf total.
-  // Units = 80,000 x 0.85 / 850 = 80.  (state.programs empty -> plan section 6 defaults)
+  // 10 floors x 10,000 sf, no core -> net (before core) 10,000 sf per floor, 100,000 sf total.
+  // Units = 100,000 x 0.85 / 850 = 100.  (state.programs empty -> plan section 6 defaults)
   const r = run(base());
-  near(r.m.byProgram.residential.net, 80000, 1e-9, "net");
-  near(r.m.byProgram.residential.units, 80, 1e-9, "units");
-  // Shell stores unitFactor as percent (85) -> same 80. Factor 100% and size 1,000 -> 80,000 / 1,000 = 80.
-  near(run(base({ programs: { residential: { ftf: 10, unitSize: 850, unitFactor: 85 } } })).m.byProgram.residential.units, 80, 1e-9, "percent");
-  near(run(base({ programs: { residential: { ftf: 10, unitSize: 1000, unitFactor: 100 } } })).m.byProgram.residential.units, 80, 1e-9, "100%");
-  // Efficiency = (10,000 - 2,000) / 10,000 = 0.8 on every floor and on average.
-  near(r.m.efficiencyAvg, 0.8, 1e-9, "eff avg");
-  eq(r.m.efficiency.length, 10, "eff per floor");
-  near(r.m.efficiency[3].efficiency, 0.8, 1e-9, "eff floor 4");
+  near(r.m.byProgram.residential.net, 100000, 1e-9, "net");
+  near(r.m.byProgram.residential.units, 100, 1e-9, "units");
+  // Shell stores unitFactor as percent (85) -> same 80. Factor 100% and size 1,000 -> 100,000 / 1,000 = 100.
+  near(run(base({ programs: { residential: { ftf: 10, unitSize: 850, unitFactor: 85 } } })).m.byProgram.residential.units, 100, 1e-9, "percent");
+  near(run(base({ programs: { residential: { ftf: 10, unitSize: 1000, unitFactor: 100 } } })).m.byProgram.residential.units, 100, 1e-9, "100%");
   // Office has no unit size -> units null.
   eq(run(base({ segments: [seg({ program: "office" })] })).m.byProgram.office.units, null, "office");
 });

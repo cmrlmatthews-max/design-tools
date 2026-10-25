@@ -134,7 +134,7 @@ const ProjectUI = (() => {
     // The drawn plate's core goes too: the massing core (if any) governs.
     if (next.source !== 'project') {
       if (next.corridor) { next.corridor.kind = 'auto'; next.corridor.spine = null; }
-      if (next.core) next.core.rect = null;
+      if (next.core) next.core = { mode: 'auto', rect: null };     // a project core is made by the fill (rework plan 4.2)
       // The mode follows the massing program the first time a project is taken (a hotel tower fills with keys).
       const want = massingMode();
       if (want) next.mode = want;

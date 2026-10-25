@@ -37,7 +37,8 @@ export function defaultState() {
     },
     extWall: 1.0,
 
-    core: { rect: [-15, 2.835, 15, 32.5] },
+    // Core mode (rework plan 4.2): "auto" | "manual" | "none". 8.1 has an explicit core rectangle, so it is manual.
+    core: { mode: 'manual', rect: [-15, 2.835, 15, 32.5] },
     stairs: {
       mode: 'auto',
       size: [11, 22],
@@ -77,6 +78,11 @@ export function defaultState() {
     locks: [],
     placement: null,
 
+    // Rework plan 5: unit depth cap in ft (null = off). Per group: levels.groups[gid].maxDepth wins.
+    fill: { maxDepth: null },
+    // Rework plan 6: the advisor's target area depth in ft (null = mode default: multifamily 30, hotel 26).
+    targetDepth: null,
+
     view: {
       style: 'model',
       labels: true, walls: true, bays: true,
@@ -101,7 +107,7 @@ function hotelBar(s) {
   s.mode = 'hotel';
   s.plate.w = 240;
   s.plate.d = 60;
-  s.core.rect = null;
+  s.core = { mode: 'auto', rect: null };
   s.corridor.kind = 'auto';
   s.corridor.width = 6.0;
   s.accessible.perFloor = 1;
@@ -117,7 +123,7 @@ function lPlate(s) {
     segments: 64,
     points: [[0, 0], [200, 0], [200, 60], [60, 60], [60, 140], [0, 140]],
   };
-  s.core.rect = null;
+  s.core = { mode: 'auto', rect: null };
   s.corridor.kind = 'auto';
   s.elevators.count = 0;
 }
@@ -135,7 +141,7 @@ function uPlate(s) {
       [140, 60], [60, 60], [60, 140], [0, 140],
     ],
   };
-  s.core.rect = null;
+  s.core = { mode: 'auto', rect: null };
   s.corridor.kind = 'auto';
   s.corridor.spine = [
     [[30, 30], [170, 30]],
@@ -150,7 +156,7 @@ function uPlate(s) {
 function pointTower(s) {
   s.plate.w = 100;
   s.plate.d = 100;
-  s.core.rect = [-15, -15, 15, 15];
+  s.core = { mode: 'manual', rect: [-15, -15, 15, 15] };   // the explicit 30 x 30 core of 8.5 stays manual
   s.corridor.kind = 'point';
 }
 
@@ -169,7 +175,7 @@ function courtyardO(s) {
     [[92.5, 77.5], [-92.5, 77.5]],
     [[-92.5, 77.5], [-92.5, -77.5]],
   ];
-  s.core.rect = [95.335, -15, 125, 15];
+  s.core = { mode: 'manual', rect: [95.335, -15, 125, 15] };
   s.stairs.mode = 'manual';
   s.stairs.items = [
     { id: 'S1', rect: [-5.5, -88.5, 5.5, -66.5] },

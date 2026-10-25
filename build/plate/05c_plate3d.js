@@ -84,6 +84,26 @@ const Plate3D = (() => {
     return out;
   }
 
+  /** The length of a ring along its longest edge (the run length of an unfilled run), ft. */
+  function ringLong(ring) {
+    let best = null;
+    for (let i = 0; i < ring.length; i++) {
+      const a = ring[i], b = ring[(i + 1) % ring.length], L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (L > 1e-6 && (!best || L > best.L)) best = { L, t: [(b[0] - a[0]) / L, (b[1] - a[1]) / L] };
+    }
+    if (!best) return 0;
+    let lo = Infinity, hi = -Infinity;
+    for (const p of ring) { const q = p[0] * best.t[0] + p[1] * best.t[1]; if (q < lo) lo = q; if (q > hi) hi = q; }
+    return hi - lo;
+  }
+  const ringMinSide = (ring) => {
+    const xs = ring.map((p) => p[0]), ys = ring.map((p) => p[1]);
+    return Math.min(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+  };
+  /** The short word on a support block or a core room (rework plan 7.1). */
+  const KIND_LABELS = { pocket: 'Pocket', trim: 'Storage', leftover: 'Leftover', stair: 'Stair', elevator: 'Elev', 'service-elevator': 'Svc', trash: 'Trash', electrical: 'Elec', shaft: 'Shaft', linen: 'Linen', ice: 'Ice', data: 'Data', storage: 'Storage' };
+  const kindLabel = (k) => KIND_LABELS[k] || (k ? k.charAt(0).toUpperCase() + k.slice(1) : '');
+
   /** Stair treads across the long side of the ring's bounding box. */
   function treads(ring, tread = 1.0) {
     const xs = ring.map((p) => p[0]), ys = ring.map((p) => p[1]);
@@ -156,7 +176,7 @@ const Plate3D = (() => {
     if (L.core) addBlock(L.core, CONFIG.coreColor, slab);
     for (const s of L.stairs) addBlock(s.outer, CONFIG.stairColor, slab);
     for (const e of L.elevators) addBlock(e.outer, CONFIG.elevColor, slab);
-    for (const b of L.support) addBlock(b.outer, b.kind === 'pocket' || b.kind === 'remainder' ? CONFIG.pocketColor : CONFIG.supportColor, slab * 0.8);
+    for (const b of L.support) addBlock(b.outer, b.kind === 'remainder' ? CONFIG.remainderColor : b.kind === 'pocket' || b.kind === 'leftover' || b.kind === 'trim' ? CONFIG.pocketColor : CONFIG.supportColor, slab * (b.kind === 'remainder' ? 0.3 : 0.8));
     const bm = mergedMesh(blockGeos); if (bm) { bm.userData.blocks = true; model.push(bm); }
 
     // units
@@ -177,15 +197,26 @@ const Plate3D = (() => {
     if (state.view.walls) for (const ln of L.wallLines || []) lineSeg(walls, ln[0], ln[1], top + 0.02);
     for (const p of polyRings(L.plate)) { ringSegs(det, p.outer, top); for (const h2 of p.holes || []) ringSegs(det, h2, top); }
     for (const p of polyRings(L.corridor)) { ringSegs(det, p.outer, top); for (const h2 of p.holes || []) ringSegs(det, h2, top); }
-    const blockRings = [L.core, ...L.stairs.map((s) => s.outer), ...L.elevators.map((e) => e.outer), ...L.support.map((b) => b.outer)].filter((r) => r && r.length >= 3);
+    const blockRings = [L.core, ...L.stairs.map((s) => s.outer), ...L.elevators.map((e) => e.outer), ...L.support.filter((b) => b.kind !== 'remainder').map((b) => b.outer)].filter((r) => r && r.length >= 3);
     for (const r of blockRings) ringSegs(det, r, top);
+    // core rooms: each one a separate rectangle with a thin line (rework plan 7.1)
+    const roomLines = [];
+    for (const r of L.coreRooms || []) if (r.outer && r.outer.length >= 3) ringSegs(roomLines, r.outer, top + 0.015);
+    // an unfilled run: no hatch, a dashed dark outline
+    const gaps = [];
+    for (const b of L.support) if (b.kind === 'remainder') ringSegs(gaps, b.outer, top + 0.02);
+    // large units (area above the type's range on a deep run): a thin orange outline
+    const big = [];
+    for (const u of L.units) if (u.areaHigh) ringSegs(big, u.outer, top + 0.03);
     const hat = [], tr = [], xs = [];
-    for (const b of L.support) for (const [a, c] of hatch(b.outer)) lineSeg(hat, a, c, top + 0.01);
+    for (const b of L.support) if (b.kind !== 'remainder') for (const [a, c] of hatch(b.outer, 4.8, 0.8)) lineSeg(hat, a, c, top + 0.01);
     for (const s of L.stairs) for (const [a, c] of treads(s.outer)) lineSeg(tr, a, c, top + 0.01);
     for (const e of L.elevators) for (const [a, c] of cross(e.outer)) lineSeg(xs, a, c, top + 0.01);
     const L1 = [fat(det, lineHex, 1.2, { order: 5, opacity: 0.8 }), fat(outl, lineHex, 1, { order: 5, opacity: 0.55 }), fat(dem, lineHex, 1.6, { order: 6 }),
       fat(walls, lineHex, 1, { order: 6, dashed: true, dash: 1.5, gap: 1, opacity: 0.8 }), fat(hat, lineHex, 0.8, { order: 5, opacity: 0.4 }),
-      fat(tr, lineHex, 0.8, { order: 5, opacity: 0.5 }), fat(xs, lineHex, 1, { order: 5, opacity: 0.7 })];
+      fat(tr, lineHex, 0.8, { order: 5, opacity: 0.5 }), fat(xs, lineHex, 1, { order: 5, opacity: 0.7 }),
+      fat(roomLines, lineHex, 0.8, { order: 5, opacity: 0.65 }), fat(gaps, lineHex, 1.4, { order: 6, dashed: true, dash: 2.4, gap: 1.6, opacity: 0.9 }),
+      fat(big, CONFIG.areaHighColor, 1.8, { order: 7 })];
     for (const o of L1) if (o) { o.userData.level = L.index; overlay.push(o); }
 
     if (!L.editing && stack) return;
@@ -214,7 +245,7 @@ const Plate3D = (() => {
     if (state.view.labels) {
       for (const u of L.units) {
         const p = u.label || ringCentroidXY(u.outer);
-        add(`${u.typeName}\n${Math.round(u.area).toLocaleString('en-US')} sf`, p[0], p[1], { height: 2.5 * unit, color: u.flagged ? CONFIG.flagColor : '#1d2733' }, `u-${u.id}`);
+        add(`${u.typeName}${u.areaHigh ? ' · large' : ''}\n${Math.round(u.area).toLocaleString('en-US')} sf`, p[0], p[1], { height: 2.5 * unit, color: u.flagged ? CONFIG.flagColor : u.areaHigh ? '#a85600' : '#1d2733' }, `u-${u.id}`);
       }
     }
     for (const u of L.units) {
@@ -223,11 +254,20 @@ const Plate3D = (() => {
       add('A', p[0], p[1] - 7 * unit, { height: 3 * unit, color: CONFIG.accentColor }, `a-${u.id}`);
     }
     for (const b of L.support) {
-      if (b.kind === 'pocket' || b.kind === 'remainder') continue;
       const p = ringCentroidXY(b.outer);
-      add(b.kind.charAt(0).toUpperCase() + b.kind.slice(1), p[0], p[1], { height: 1.9 * unit, color: '#4a535c' }, `b-${b.id}`);
+      if (b.kind === 'remainder') {
+        add(`Unfilled · ${Units.formatFeetInches(ringLong(b.outer))}`, p[0], p[1], { height: 2 * unit, color: '#33404b' }, `b-${b.id}`);
+        continue;
+      }
+      if (Math.abs(ringArea(b.outer)) < 20) continue;               // too small for a word
+      add(kindLabel(b.kind), p[0], p[1], { height: 1.9 * unit, color: '#4a535c' }, `b-${b.id}`);
     }
-    for (const e of L.elevators.slice(0, 1)) { const p = ringCentroidXY(e.outer); void p; }
+    // the rooms of an auto core: a short word in each, sized to the room
+    for (const r of L.coreRooms || []) {
+      if (!r.outer || r.outer.length < 3) continue;
+      const p = ringCentroidXY(r.outer), side = ringMinSide(r.outer);
+      add(kindLabel(r.kind), p[0], p[1], { height: clamp(side * 0.3, 1.2, 2.6 * unit), color: '#3b454f' }, `r-${r.id}`);
+    }
   }
 
   /** The viewer's mapper (the plan is drawn at its own elevation; no vertical exaggeration). */
@@ -329,5 +369,5 @@ const Plate3D = (() => {
     return out;
   }
 
-  return { build, contextObjects, massingObjects, editingAtZ, mapper, fat, hatch, treads };
+  return { build, contextObjects, massingObjects, editingAtZ, mapper, fat, hatch, treads, ringLong, kindLabel };
 })();

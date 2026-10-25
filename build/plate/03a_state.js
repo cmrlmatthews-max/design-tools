@@ -15,6 +15,8 @@ const MODES = ['multifamily', 'hotel'];
 const MODE_LABELS = { multifamily: 'Multifamily', hotel: 'Hotel' };
 const SHAPES = ['rect', 'L', 'U', 'O', 'circle', 'polygon'];
 const SHAPE_LABELS = { rect: 'Rectangle', L: 'L', U: 'U', O: 'Courtyard (O)', circle: 'Circle', polygon: 'Drawn polygon' };
+const CORE_MODES = ['auto', 'manual', 'none'];
+const CORE_MODE_LABELS = { auto: 'Auto', manual: 'Manual', none: 'None' };
 const CORRIDOR_KINDS = ['auto', 'bar', 'single', 'point'];
 const CORRIDOR_LABELS = { auto: 'Automatic', bar: 'Bar', single: 'Single-loaded', point: 'Point (ring)' };
 const SIDES = ['north', 'east', 'south', 'west'];
@@ -48,6 +50,7 @@ const cleanId = (raw, prefix, i, taken) => {
 /** Fill every missing field from the defaults so older or partial states (presets, imports) are complete. */
 function fillDefaults(src) {
   const s = isObj(src) ? deepClone(src) : {};
+  if (isObj(s.core)) s.core = CoreMod.normalizeCore(s.core);        // rework plan 4.2: a rect with no mode is manual, no rect and no mode is auto
   const base = defaultState();
   const merge = (t, d) => {
     for (const k of Object.keys(d)) {
@@ -79,6 +82,8 @@ function fillDefaults(src) {
   for (const k of Object.keys(lv.groups)) {
     const g = isObj(lv.groups[k]) ? lv.groups[k] : {};
     lv.groups[k] = { filled: g.filled !== false, locks: cleanLocks(g.locks) };
+    const gd = cleanDepth(g.maxDepth);
+    if (gd !== null) lv.groups[k].maxDepth = gd;
   }
 
   // corridor
@@ -93,13 +98,17 @@ function fillDefaults(src) {
 
   // core, stairs, elevators, support
   s.core.rect = cleanRect(s.core.rect);
+  if (!['auto', 'manual', 'none'].includes(s.core.mode)) s.core.mode = s.core.rect ? 'manual' : 'auto';
+  if (s.core.mode === 'manual' && !s.core.rect) s.core.mode = 'auto';
+  s.fill = { maxDepth: cleanDepth(isObj(s.fill) ? s.fill.maxDepth : null) };
+  s.targetDepth = typeof s.targetDepth === 'number' && isFinite(s.targetDepth) && s.targetDepth > 0 ? clamp(s.targetDepth, 10, 100) : null;
   const st = s.stairs;
   if (!STAIR_MODES.includes(st.mode)) st.mode = 'auto';
   st.size = [clamp(num(st.size && st.size[0], 11), 4, 60), clamp(num(st.size && st.size[1], 22), 4, 80)];
   const tk = new Set();
   st.items = (Array.isArray(st.items) ? st.items : []).filter(isObj).slice(0, CONFIG.limits.maxStairs).map((it, i) => ({ id: cleanId(it.id, 'S', i, tk), rect: cleanRect(it.rect) })).filter((it) => it.rect);
   const el = s.elevators;
-  el.count = el.count === null || el.count === undefined ? null : Math.round(clamp(num(el.count, 2), 0, 8));
+  el.count = el.count === null || el.count === undefined ? null : Math.round(clamp(num(el.count, 2), 0, 20));
   el.size = [clamp(num(el.size && el.size[0], 8), 3, 30), clamp(num(el.size && el.size[1], 10), 3, 30)];
   el.service = el.service === null || el.service === undefined ? null : Math.round(clamp(num(el.service, 0), 0, 4));
   const ts = new Set();
@@ -166,6 +175,9 @@ function fillDefaults(src) {
   s.name = String(s.name || 'Option A').slice(0, 60);
   return s;
 }
+
+/** A unit depth cap in ft (rework plan 5): a number from 10 to 100, else null (off). */
+function cleanDepth(v) { return typeof v === 'number' && isFinite(v) && v > 0 ? clamp(v, 10, 100) : null; }
 
 /** Locks: [{ id, outer: Ring, type }]. */
 function cleanLocks(arr) {

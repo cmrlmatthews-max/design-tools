@@ -173,6 +173,34 @@ const UI = (() => {
     ];
   }
   const defaultCorridorWidth = () => (isHotel() ? 6 : 5.67);
+  /** A whole-number field that is blank for automatic: the placeholder shows the automatic value (rework plan 7.2). */
+  function blankAutoField({ label, path, id, max, autoText }) {
+    const input = h('input', { class: 'numfield', type: 'text', id, inputmode: 'numeric', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', 'aria-label': label });
+    const hint = h('p', { class: 'help', id: `${id}Hint` });
+    const apply = () => {
+      input.dataset.dirty = '';
+      const t = input.value.trim();
+      if (t === '') Store.set(path, null, { live: false });
+      else { const n = Math.round(Number(t)); if (isFinite(n)) Store.set(path, clamp(n, 0, max), { live: false }); }
+      refresh();
+    };
+    function refresh() {
+      const v = get(path);
+      const auto = autoText();
+      input.placeholder = auto;
+      if (!(document.activeElement === input && input.dataset.dirty === '1')) input.value = v === null || v === undefined ? '' : String(v);
+      hint.textContent = v === null || v === undefined ? `Blank means automatic. ${auto}.` : `Typed value. Clear the field for automatic. ${auto}.`;
+    }
+    input.addEventListener('input', () => { input.dataset.dirty = '1'; });
+    input.addEventListener('change', apply);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); });
+    return Controls.when(() => { refresh(); return true; }, [h('div', { class: 'ctl compact' }, h('label', { class: 'ctl-label', for: id }, label), input), hint]);
+  }
+  /** The passenger elevator count: blank = automatic, and the automatic value comes from the core program of the fill. */
+  const elevatorCountField = () => blankAutoField({
+    label: 'Passenger elevators', path: 'elevators.count', id: 'elevCountField', max: 20,
+    autoText: () => { const c = D().hud.core; return c && c.autoCabs !== null && c.autoCabs !== undefined ? `Auto: ${c.autoCabs}` : 'Auto: 2'; },
+  });
 
   /* ==========================================================================
      Plate tab
@@ -250,9 +278,43 @@ const UI = (() => {
         lenS('Corridor wall thickness', 'corridor.wall', 0, 2, { step: 0.05, hardMax: 3, format: (v) => `${(Math.round(v * 100) / 100)} ft`, parse: Units.parseNumber }),
         Controls.when(() => kind() === 'single', [choice('Units on the', 'corridor.side', SIDES.map((k) => [k, k.charAt(0).toUpperCase() + k.slice(1)]))]),
         lenS('Exterior wall thickness', 'extWall', 0, 2, { step: 0.05, hardMax: 6, format: (v) => `${(Math.round(v * 100) / 100)} ft`, parse: Units.parseNumber }),
+        ...depthCapControls(),
         caution(CONFIG.widthCaution),
       ]),
     };
+  }
+
+  /* ---- unit depth cap (rework plan 5 and 7.2): the selected group for a project, the whole plate for a drawn plate ---- */
+  const CAP_MIN = 24, CAP_MAX = 40, CAP_DEFAULT = 30;
+  const capGroupId = () => { const d = D(); return get('source') === 'project' && d.group ? d.group.id : null; };
+  const capPath = () => (capGroupId() ? `levels.groups.${capGroupId()}.maxDepth` : 'fill.maxDepth');
+  function capNow() {
+    const v = get(capPath());
+    if (typeof v === 'number' && v > 0) return v;
+    const gid = capGroupId();
+    if (gid) { const f = get('fill.maxDepth'); return typeof f === 'number' && f > 0 ? f : null; }       // a group with no cap of its own follows the global one
+    return null;
+  }
+  /** Writes the cap (null = off). A project group that has no entry yet gets a whole entry, so the fill still sees its locks and its filled flag. */
+  function capSet(v, live = false) {
+    const gid = capGroupId();
+    if (gid) {
+      const g = get(`levels.groups.${gid}`);
+      if (!g) { Store.set(`levels.groups.${gid}`, { filled: true, locks: [], maxDepth: v }, { live }); return; }
+    }
+    Store.set(capPath(), v, { live });
+  }
+  function depthCapControls() {
+    const on = () => capNow() !== null;
+    return [
+      Controls.label('Unit depth cap'),
+      choiceB('Unit depth cap', { get: () => (on() ? 'on' : 'off'), set: (k) => capSet(k === 'off' ? null : CAP_DEFAULT) }, [['off', 'Off'], ['on', 'On']], { id: 'depthCapMode' }),
+      Controls.when(on, [Controls.slider({
+        label: 'Cap depth', bind: { get: () => capNow() || CAP_DEFAULT, set: (v, live) => capSet(clamp(Math.round(v), CAP_MIN, CAP_MAX), live), commit: () => Store.commit() },
+        min: CAP_MIN, max: CAP_MAX, step: 1, hardMin: CAP_MIN, hardMax: CAP_MAX, format: FT, parse: Units.parseLength, inputMode: 'text',
+      })]),
+      h('p', { class: 'help', id: 'depthCapNote' }),
+    ];
   }
 
   function buildBlocks() {
@@ -284,14 +346,14 @@ const UI = (() => {
     return {
       children: els([
         Controls.label('Core'),
-        Controls.when(() => get('source') === 'project', [Controls.help('The core comes from the massing level.')]),
-        Controls.when(() => get('source') !== 'project', [
-          choiceB('Core block', { get: () => (coreOn() ? 'on' : 'off'), set: (k) => Store.set('core.rect', k === 'off' ? null : [-15, -15, 15, 15], { live: false }) }, [['on', 'Rectangle'], ['off', 'None']], { id: 'coreChips' }),
-          Controls.when(coreOn, [
-            Controls.group(els([coreField('West', 0), coreField('South', 1)])),
-            Controls.group(els([coreField('East', 2), coreField('North', 3)])),
-          ]),
+        choiceB('Core', { get: () => get('core.mode'), set: (k) => Select.setCoreMode(k) }, CORE_MODES.map((m) => [m, CORE_MODE_LABELS[m]]), { id: 'coreModeChips' }),
+        h('p', { class: 'help', id: 'coreNote' }),
+        Controls.when(() => get('core.mode') === 'manual', [
+          Controls.group(els([coreField('West', 0), coreField('South', 1)])),
+          Controls.group(els([coreField('East', 2), coreField('North', 3)])),
         ]),
+        Controls.when(() => get('core.mode') !== 'auto' || !!get('core.rect'), [h('div', { class: 'add-row' }, Controls.button('Reset core to auto', () => Select.resetCore(), 'outline sm'))]),
+        Controls.help('Auto makes the core for a point plate: stairs at the ends, elevators and service rooms in between. Drag the core in the plan to set it by hand.'),
         Controls.label('Stairs'),
         choice('Stairs', 'stairs.mode', STAIR_MODES.map((k) => [k, { auto: 'Automatic', seeds: 'From the massing', manual: 'Manual' }[k]]), { id: 'stairMode' }),
         Controls.group(els([lenF('Stair width', 'stairs.size.0', { hardMin: 4, hardMax: 60 }), lenF('Stair length', 'stairs.size.1', { hardMin: 4, hardMax: 80 })])),
@@ -300,7 +362,7 @@ const UI = (() => {
           h('div', { class: 'add-row' }, Controls.button('Add stair', () => { if (Render.ready()) Select.startDraw('rect', { target: { type: 'stair' }, label: 'a stair' }); }, 'outline sm')),
         ]),
         Controls.label('Elevators'),
-        ...autoNumber('Passenger elevators', 'elevators.count', () => 2, 0, 8, 1, (v) => String(Math.round(v)), { id: 'elevCountMode', integer: true, hardMax: 8 }),
+        elevatorCountField(),
         ...autoNumber('Service elevators', 'elevators.service', () => 1, 0, 4, 1, (v) => String(Math.round(v)), { id: 'elevServiceMode', integer: true, hardMax: 4 }),
         Controls.group(els([lenF('Cab width', 'elevators.size.0', { hardMin: 3, hardMax: 30 }), lenF('Cab depth', 'elevators.size.1', { hardMin: 3, hardMax: 30 })])),
         Controls.label('Support blocks'),
@@ -371,8 +433,10 @@ const UI = (() => {
         h('p', { class: 'help', id: 'lockNote' }),
         h('div', { class: 'add-row' },
           Controls.button('Re-fill', () => Select.refill(), 'solid sm'),
-          Controls.button('Unlock all', () => { if (!Select.unlockAll()) Toast.show('No units are locked.', 'warn'); }, 'outline sm')),
-        Controls.help('Re-fill recomputes every unlocked unit from the mix. A locked unit keeps its outline and its type. Dragging a bay line, or changing the type of a unit, locks the units it touches.'),
+          Controls.button('Unlock all', () => { if (!Select.unlockAll()) Toast.show('No units are locked.', 'warn'); }, 'outline sm'),
+          Controls.button('Draw unit', () => { if (Render.ready()) Select.startDraw('unit', { label: 'a unit' }); }, 'outline sm')),
+        Controls.help('Re-fill recomputes every unlocked unit from the mix. A locked unit keeps its outline and its type. Dragging a bay line, changing the type of a unit, splitting, merging or drawing a unit locks the units it touches.'),
+        Controls.help('Draw unit: tap two cut lines on one run. The unit fills the band between them. To fill an unfilled run, tap it in the plan.'),
       ]),
     };
   }
@@ -398,6 +462,41 @@ const UI = (() => {
      Checks tab
      ========================================================================== */
   function buildChecksList() { return { children: [h('ul', { class: 'warns', id: 'checksWarnings' })] }; }
+  /** The Efficiency card (rework plan 7.3): the advisor list, the target depth and the caution. */
+  function buildEfficiency() {
+    const def = () => (isHotel() ? 26 : 30);
+    return {
+      children: els([
+        h('p', { class: 'help', id: 'advNote' }),
+        h('ul', { class: 'warns adv-list', id: 'advList' }),
+        blankAutoDecimal({ label: 'Target unit depth (ft)', path: 'targetDepth', id: 'targetDepthField', min: 10, max: 100, autoText: () => `Auto: ${def()} ft` }),
+        caution(AdvisorMod.ADVISOR_CAUTION),
+        caution(CoreMod.CORE_CAUTION),
+      ]),
+    };
+  }
+  /** A number field in feet that is blank for the default (null in the state). */
+  function blankAutoDecimal({ label, path, id, min, max, autoText }) {
+    const input = h('input', { class: 'numfield', type: 'text', id, inputmode: 'decimal', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', 'aria-label': label });
+    const hint = h('p', { class: 'help', id: `${id}Hint` });
+    const apply = () => {
+      input.dataset.dirty = '';
+      const t = input.value.trim();
+      if (t === '') Store.set(path, null, { live: false });
+      else { const n = Units.parseLength(t); if (isFinite(n)) Store.set(path, clamp(n, min, max), { live: false }); }
+      refresh();
+    };
+    function refresh() {
+      const v = get(path);
+      input.placeholder = autoText();
+      if (!(document.activeElement === input && input.dataset.dirty === '1')) input.value = typeof v === 'number' ? FT(v) : '';
+      hint.textContent = typeof v === 'number' ? `Typed value. Clear the field for the default. ${autoText()}.` : `Blank means the default. ${autoText()}.`;
+    }
+    input.addEventListener('input', () => { input.dataset.dirty = '1'; });
+    input.addEventListener('change', apply);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); });
+    return Controls.when(() => { refresh(); return true; }, [h('div', { class: 'ctl compact' }, h('label', { class: 'ctl-label', for: id }, label), input), hint]);
+  }
   function buildNumbers() { return { children: [h('dl', { class: 'kv', id: 'numbersTable' }), caution(CONFIG.testFitCaution), caution(CONFIG.distanceCaution)] }; }
   function buildMixTable() { return { children: [h('table', { class: 'tier-table', id: 'mixTable' }), h('p', { class: 'help', id: 'mixNote' })] }; }
 
@@ -442,6 +541,7 @@ const UI = (() => {
     { id: 'mix', tab: 'units', title: 'Unit mix', open: false, build: buildMix },
     { id: 'locks', tab: 'units', title: 'Locks and re-fill', open: false, build: buildLocks },
     { id: 'accessible', tab: 'units', title: 'Accessible', build: buildAccessible },
+    { id: 'efficiency', tab: 'checks', title: 'Efficiency', open: false, build: buildEfficiency },
     { id: 'checkslist', tab: 'checks', title: 'Warnings', open: false, build: buildChecksList },
     { id: 'numbers', tab: 'checks', title: 'Numbers', open: false, build: buildNumbers },
     { id: 'mixtable', tab: 'checks', title: 'Mix against target', open: false, build: buildMixTable },
@@ -599,11 +699,13 @@ const UI = (() => {
           <span class="m"><span class="k">Efficiency</span><span class="v" id="mEff">-</span></span>
         </span>
       </button>
+      <button class="hud-advice" id="hudAdvice" type="button" hidden title="Open the Efficiency card in Checks"><span class="hud-advice-text" id="hudAdviceText"></span></button>
       <div class="notice" id="staleNote" hidden role="status"><span id="staleText">The massing changed after this fill.</span> <button class="btn outline sm" type="button" id="staleRefill">Re-fill</button></div>
       <div class="hud-body" id="hudBody">
         <dl class="metrics compact">
           <div class="m"><dt>GSF</dt><dd id="mGsf">-</dd></div>
           <div class="m"><dt>Average unit</dt><dd id="mAvg">-</dd></div>
+          <div class="m" id="mRangeRow" hidden><dt>Units in range</dt><dd id="mRange">-</dd></div>
           <div class="m"><dt>Corridor</dt><dd id="mCor">-</dd></div>
           <div class="m"><dt>Stair door path</dt><dd id="mPath">-</dd></div>
           <div class="m"><dt>Dead ends</dt><dd id="mDead">-</dd></div>
@@ -617,10 +719,14 @@ const UI = (() => {
         <div class="warn-block" id="warnBlock" data-n="0">
           <div class="label">Warnings <span class="count" id="warnCount">0</span></div>
           <ul class="warns" id="warnList"></ul>
+          <button class="btn outline sm warn-all" id="warnAll" type="button" hidden>See all in Checks</button>
         </div>
       </div>`;
     $('hudToggle').addEventListener('click', () => setHudOpen(hud.dataset.collapsed === 'true'));
     $('staleRefill').addEventListener('click', () => Select.refill());
+    const toChecks = (section) => { setTab('checks'); openSection(section); raiseSheet(); };
+    $('warnAll').addEventListener('click', () => toChecks('checkslist'));
+    $('hudAdvice').addEventListener('click', () => toChecks('efficiency'));
     Render.setInsetProvider(() => {
       if (Render.comparing()) return { right: 0 };
       const vw = $('viewport').clientWidth, w = hud.offsetWidth + 24;
@@ -639,17 +745,27 @@ const UI = (() => {
     list.textContent = '';
     for (const [k, v, cls] of rows) list.append(h('dt', null, k), h('dd', cls ? { class: cls } : null, v));
   }
+  const HUD_WARNINGS = 3;
   const warnItem = (w) => h('li', { class: `warn-${w.level}`, 'data-warn': w.id || '' }, w.text);
   const opt = (v, f) => (v === null || v === undefined ? 'none' : f(v));
-  function mixTable(table, rows, types) {
+  /**
+   * The mix table (HUD and Checks). A type with a target of 0 and none placed is not shown. A type that dropped out at this depth
+   * shows "does not fit at this depth" in place of the numbers. The color chips sit in one column.
+   */
+  function mixTable(table, rows, types, dropped = []) {
     if (!table) return;
     table.textContent = '';
     const nameOf = (id) => { const t = types.find((x) => x.id === id); return t ? t.name : id; };
     const colorOf = (id) => { const t = types.find((x) => x.id === id); return t ? t.color : '#9aa3ad'; };
+    const ids = [...rows.map((r) => r.type), ...types.map((t) => t.id).filter((id) => !rows.some((r) => r.type === id))];
     table.append(h('thead', null, h('tr', null, h('th', null, 'Type'), h('th', null, 'Placed'), h('th', null, 'Target'), h('th', null, 'Avg area'))));
     const body = h('tbody');
-    for (const r of rows) {
-      body.append(h('tr', { 'data-type': r.type }, h('td', null, h('span', { class: 'sw', style: `background:${colorOf(r.type)}` }), nameOf(r.type)), h('td', null, String(r.count)), h('td', { class: Math.abs(r.diff) > 1 ? 'bad' : '' }, r.target === undefined ? '-' : String(r.target)), h('td', null, r.avgArea ? SF(r.avgArea) : '-')));
+    for (const id of ids) {
+      const r = rows.find((x) => x.type === id) || { type: id, count: 0, target: 0, diff: 0, avgArea: 0 };
+      const cell = h('td', { class: 'type-cell' }, h('span', { class: 'type-wrap' }, h('span', { class: 'sw', style: `background:${colorOf(id)}` }), h('span', { class: 'type-name' }, nameOf(id))));
+      if (dropped.includes(id)) { body.append(h('tr', { 'data-type': id, class: 'dropped' }, cell, h('td', { class: 'none', colspan: '3' }, 'does not fit at this depth'))); continue; }
+      if (!r.count && !r.target) continue;
+      body.append(h('tr', { 'data-type': id }, cell, h('td', null, String(r.count)), h('td', { class: Math.abs(r.diff) > 1 ? 'bad' : '' }, r.target === undefined ? '-' : String(r.target)), h('td', null, r.avgArea ? SF(r.avgArea) : '-')));
     }
     table.append(body);
   }
@@ -671,21 +787,26 @@ const UI = (() => {
     $('mHotelRow').hidden = !hotel;
     if (hotel && m.hotel) setText('mReach', m.hotel.reachable !== undefined ? `${m.hotel.reachable} of ${m.units} keys within ${FT(Store.get('housekeepingReach'))}` : 'reported');
     const types = (get(`mix.${hotel ? 'hotel' : 'multifamily'}`) || []);
-    mixTable($('hudMixTable'), m.mix, types);
-    mixTable($('mixTable'), m.mix, types);
-    $('hudMix').hidden = !m.mix.length;
+    mixTable($('hudMixTable'), m.mix, types, m.dropped || []);
+    mixTable($('mixTable'), m.mix, types, m.dropped || []);
+    $('hudMix').hidden = !m.mix.length && !(m.dropped || []).length;
+    $('mRangeRow').hidden = m.inRange === null || m.inRange === undefined;
+    if (!$('mRangeRow').hidden) setText('mRange', `${Units.formatInt(m.inRange)} of ${Units.formatInt(m.units)}${m.areaHigh ? ` · ${m.areaHigh} large` : ''}`);
     $('hudBuilding').hidden = !(m.building && m.building.floors > 1);
     if (m.building) kvRows($('hudBuildingList'), [
       ['Floors', Units.formatInt(m.building.floors)], [hotel ? 'Keys' : 'Units', Units.formatInt(m.building.units)], ['NRSF', SF(m.building.nrsf)], ['GSF', SF(m.building.gsf)], ['Efficiency', pct1(m.building.efficiency)],
+      ...(m.building.inRange === null || m.building.inRange === undefined ? [] : [['Units in range', `${Units.formatInt(m.building.inRange)} of ${Units.formatInt(m.building.units)}`]]),
     ]);
 
+    // One list for the badge, the HUD and the Checks tab: d.warnings (the checks() output). The HUD shows the first three.
     const list = $('warnList');
     list.textContent = '';
     if (!d.warnings.length) list.append(h('li', { class: 'none' }, 'No warnings'));
-    for (const w of d.warnings) list.append(warnItem(w));
-    const nw = d.warnings.filter((w) => w.level !== 'info').length;
-    $('warnCount').textContent = String(d.warnings.length);
-    $('warnBlock').dataset.n = String(d.warnings.length);
+    for (const w of d.warnings.slice(0, HUD_WARNINGS)) list.append(warnItem(w));
+    const nw = d.warnings.length;
+    $('warnAll').hidden = nw === 0;
+    $('warnCount').textContent = String(nw);
+    $('warnBlock').dataset.n = String(nw);
     $('hudBadge').dataset.n = String(nw);
     $('hudBadge').textContent = `${nw} ${nw === 1 ? 'warning' : 'warnings'}`;
     $('staleNote').hidden = !d.stale;
@@ -693,6 +814,30 @@ const UI = (() => {
     updateNotes(d);
     updateGroups(d);
     updateLegend(d);
+    updateAdvice();
+  }
+
+  /** The advisor list on the Efficiency card and the one line in the HUD Plate panel (rework plan 7.3 items 4 and 5). */
+  function updateAdvice() {
+    const a = Advice.get(), list = a.list;
+    const box = $('advList');
+    const note = $('advNote');
+    if (note) note.textContent = a.error ? 'The advisor could not run for these settings.' : a.fresh ? '' : 'The advisor is checking the plate.';
+    if (box) {
+      box.textContent = '';
+      if (!list.length) box.append(h('li', { class: 'none' }, a.fresh ? 'No advice. The plate has no efficiency problem that the advisor can name.' : '...'));
+      for (const it of list) {
+        const li = h('li', { class: `warn-${it.severity === 'info' ? 'info' : 'warn'} adv-item`, 'data-adv': it.code }, h('span', null, it.message));
+        if (it.code === 'core-oversize') li.append(h('button', { class: 'btn outline sm', type: 'button', onclick: () => Select.resetCore() }, 'Reset core to auto'));
+        box.append(li);
+      }
+    }
+    const ha = $('hudAdvice');
+    if (ha) {
+      ha.hidden = !list.length;
+      setText('hudAdviceText', list.length ? list[0].message : '');
+      ha.classList.toggle('stale', !a.fresh);
+    }
   }
 
   /** The small readouts inside the panel sections. */
@@ -708,6 +853,20 @@ const UI = (() => {
     const pn = $('polyNote');
     if (pn) pn.textContent = st.plate.points.length >= 3 ? `${st.plate.points.length} points, ${SF(Math.abs(ringArea(st.plate.points)))}.` : 'No outline yet. Draw one.';
     updateMixNote();
+    const cn = $('coreNote');
+    if (cn) {
+      const L = d.editing, mode = st.core.mode, c = m.core;
+      let text = '';
+      if (mode === 'none') text = 'No core. The fill makes none.';
+      else if (L && L.core && L.core.length) {
+        const r = ringRect(L.core), area = Math.abs(ringArea(L.core));
+        const el = c && c.cabs !== null && c.cabs !== undefined ? ` ${c.cabs} passenger elevator${c.cabs === 1 ? '' : 's'}${c.service ? ` and ${c.service} service` : ''}.` : '';
+        text = `${mode === 'auto' ? 'Auto' : 'Manual'} core: ${FT(r[2] - r[0])} by ${FT(r[3] - r[1])}, ${SF(area)}.${mode === 'auto' ? el : ''}`;
+      } else text = mode === 'auto' ? 'Auto: this plate has no core block. A bar plate puts the elevators beside the corridor. A point plate gets a core.' : 'Manual: draw the core in the plan.';
+      cn.textContent = text;
+    }
+    const dn = $('depthCapNote');
+    if (dn) { const on = capNow() !== null; dn.textContent = `${on ? 'Units stop at the cap depth. The strip between the cap and the corridor becomes storage.' : 'Off: units run the full depth.'} ${capGroupId() ? 'The cap applies to the selected level group.' : 'The cap applies to the whole plate.'}`; }
     const ln = $('lockNote');
     if (ln) { const n = Select.locks().length; ln.textContent = n ? `${n} locked unit${n === 1 ? '' : 's'} in this ${st.source === 'project' ? 'group' : 'plate'}.` : 'No locked units.'; }
     const an = $('accNote');
@@ -739,6 +898,9 @@ const UI = (() => {
       for (const t of get(`mix.${isHotel() ? 'hotel' : 'multifamily'}`) || []) rows.push([t.color, t.name, `type-${t.id}`]);
     }
     rows.push([CONFIG.corridorColor, 'Corridor', 'role-corridor'], [CONFIG.coreColor, 'Core, stairs, elevators', 'role-core'], [CONFIG.supportColor, 'Support', 'role-support']);
+    const L = Derived.get().editing;
+    if (L && L.support.some((b) => b.kind === 'remainder')) rows.push([CONFIG.remainderColor, 'Unfilled run (tap to fill)', 'role-remainder']);
+    if (L && L.units.some((u) => u.areaHigh)) rows.push([CONFIG.areaHighColor, 'Large unit', 'role-large']);
     const key = JSON.stringify([rows, v.style]);
     box.hidden = false;
     if (box.dataset.key === key) return;
@@ -831,6 +993,8 @@ const UI = (() => {
     Store.subscribe(() => { Controls.refreshAll(); updateLegend(); });
     Controls.refreshAll();
     Render.onRebuild(updateHud);
+    Advice.onChange(updateAdvice);
+    Advice.start();
     // A viewport that is not WebGL-capable still gets numbers.
     updateHud(Derived.get());
   }

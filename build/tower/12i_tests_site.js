@@ -239,6 +239,29 @@ async function runSiteLayerTests() {
       return eq([labels, a, b, hidden, fill], [['Solid', 'Glass', 'Wireframe'], [true, 'true'], ['glass', 'true', 'false'], true, ['solid', 'glass', 'solid']]);
     });
 
+    await t('7n. New design inside a site project starts at the site center, on the ground there (not at elevation 0), with the site neighbors as context', async () => {
+      await openSite();
+      Store.set('placement', { x: 0, y: 0, rotation: 0, baseZ: 0 }, { live: false });
+      await Options.newDesign({ confirm: false });
+      await wait(300);
+      const info = ProjectUI.siteInfo(), p = Store.raw().placement;
+      const ground = ProjectUI.groundAt(info.center[0], info.center[1]);
+      const under = ProjectUI.groundUnderFootprint ? ProjectUI.groundUnderFootprint() : null;
+      const expZ = under != null ? under : Math.round(ground * 10) / 10;
+      const ctx = Store.raw().context;
+      return eq([Math.abs(p.x - info.center[0]) < 0.01, Math.abs(p.y - info.center[1]) < 0.01, Math.abs(p.baseZ - expZ) < 0.11, ground > 1, !!ctx.fromSite],
+        [true, true, true, true, true]) || `placement ${JSON.stringify(p)}, ground ${ground}, under ${under}`;
+    });
+
+    await t('7p. a preset loaded inside a site project also starts at the site center, on the ground there', async () => {
+      await openSite();
+      Store.set('placement', { x: 0, y: 0, rotation: 0, baseZ: 0 }, { live: false });
+      Options.loadPreset(CONFIG.presets[CONFIG.presets.length - 1].id);
+      await wait(300);
+      const info = ProjectUI.siteInfo(), p = Store.raw().placement;
+      return eq([Math.abs(p.x - info.center[0]) < 0.01, Math.abs(p.y - info.center[1]) < 0.01, p.baseZ > 999], [true, true, true]) || `placement ${JSON.stringify(p)}`;
+    });
+
     await t('7. closing the project removes the layer; the slab and shadow plane come back', async () => {
       if (!live) return true;
       ProjectUI.close();

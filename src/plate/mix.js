@@ -70,14 +70,18 @@ export const ACCESSIBLE_DEFAULTS = {
  * Plan 3.6 items 1 and 2: the usable width range of every type at an area depth.
  * Multifamily: lo = max(widthMin, areaMin ÷ d), hi = min(widthMax, areaMax ÷ d), w = clamp(targetArea ÷ d, lo, hi).
  * Hotel: lo = widthMin, hi = widthMax, w = target (clamped); the depth is not used.
- * → { types: [{ id, name, color, w, lo, hi, bays, share }], dropped: [{ id, name, lo, hi }] }
- *   `share` is renormalized over the kept types. A type with lo > hi drops out.
+ * Deep-run rule (rework plan section 3, multifamily): when lo > hi because the run is too deep
+ * (areaMax ÷ d < widthMin), the type stays with lo = widthMin, hi = widthMax, w = clamp(targetArea ÷ d, lo, hi)
+ * and areaOff: "deep". When lo > hi because the run is too shallow (areaMin ÷ d > widthMax), the type drops.
+ * → { types: [{ id, name, color, w, lo, hi, bays, share, areaOff? }], dropped: [{ id, name, lo, hi }],
+ *     deep: [{ id, name, lo, hi, areaLo, areaHi, areaMin, areaMax, depth }] }   areaLo = widthMin × d, areaHi = widthMax × d
+ *   `share` is renormalized over the kept types (deep types included).
  */
 export function effectiveTypes(types, depth, mode = "multifamily") {
   need(Array.isArray(types), "effectiveTypes", "types");
   const hotel = mode === "hotel";
   if (!hotel) need(isNum(depth) && depth > 0, "effectiveTypes", "depth");
-  const kept = [], dropped = [];
+  const kept = [], dropped = [], deep = [];
   for (const t of types) {
     need(t && t.id !== undefined, "effectiveTypes", "a type id");
     need(isNum(t.widthMin) && isNum(t.widthMax) && t.widthMin > 0, "effectiveTypes", `the widths of type "${t.id}"`);
@@ -91,18 +95,28 @@ export function effectiveTypes(types, depth, mode = "multifamily") {
       target = isNum(t.targetArea) ? t.targetArea / depth : (lo + hi) / 2;
     }
     const base = { id: t.id, ...(t.name !== undefined ? { name: t.name } : {}) };
-    if (lo > hi + EPS) { dropped.push({ ...base, lo, hi }); continue; }
+    let areaOff = null;
+    if (lo > hi + EPS) {
+      // rework plan section 3: a run too deep for the area range keeps the type at its width range (flagged);
+      // a run too shallow drops it
+      const deepCause = !hotel && isNum(t.areaMax) && t.areaMax / depth < t.widthMin - EPS && t.widthMin <= t.widthMax;
+      if (!deepCause) { dropped.push({ ...base, lo, hi }); continue; }
+      lo = t.widthMin; hi = t.widthMax; areaOff = "deep";
+      deep.push({ ...base, lo, hi, areaLo: t.widthMin * depth, areaHi: t.widthMax * depth,
+        ...(isNum(t.areaMin) ? { areaMin: t.areaMin } : {}), areaMax: t.areaMax, depth });
+    }
     if (lo > hi) lo = hi;
     kept.push({
       ...base, ...(t.color !== undefined ? { color: t.color } : {}),
       w: clamp(target, lo, hi), lo, hi,
       bays: isNum(t.bays) && t.bays >= 1 ? Math.round(t.bays) : 1,
       share: isNum(t.share) && t.share > 0 ? t.share : 0,
+      ...(areaOff ? { areaOff } : {}),
     });
   }
   const sum = kept.reduce((s, t) => s + t.share, 0);
   for (const t of kept) t.share = sum > EPS ? t.share / sum : 1 / kept.length;
-  return { types: kept, dropped };
+  return { types: kept, dropped, deep };
 }
 
 /* ----------------------------------------------------------- weightedWidth */

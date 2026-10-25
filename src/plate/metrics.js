@@ -45,8 +45,9 @@
      on the corridor boundary (the unit centroid when none does). A key counts
      when its graph distance from the linen closet is at most housekeepingReach.
    - Area closure: GSF − (NRSF + clear corridor + core + stairs + elevators + support)
-     with overlaps removed, against extWall × (Σ run lengths + 2 × the wrap leg
-     of every corner). `area-closure` warns beyond ±1 sf.
+     with overlaps removed, against extWall × (Σ run lengths + the two wrap legs
+     of every corner). A run with `slots: 0` (unfilled) is left out: its remainder runs to the plate edge.
+     `area-closure` warns beyond ±1 sf.
    - Stale massing: needs built.massingUpdatedAt (used by the fill) and
      built.currentMassingUpdatedAt (the project now); checks() also takes the current time as a third
      argument { massingUpdatedAt }.
@@ -231,7 +232,11 @@ function buildGraph(spine, queries) {
     }
   });
   const nodeOf = new Map();
-  for (const [key, pr] of proj) nodeOf.set(key, node(pr.pt));
+  // the node of a query: the same rounded t as the edge cuts, so the two always meet in one node
+  for (const [key, pr] of proj) {
+    const s = segs[pr.seg], tt = Math.round(pr.t * 1e7) / 1e7;
+    nodeOf.set(key, node([s[0][0] + (s[1][0] - s[0][0]) * tt, s[0][1] + (s[1][1] - s[0][1]) * tt]));
+  }
   const ends = nodes.map((_, i) => i).filter((i) => adj[i].length === 1);
   function dist(from) {
     const d = new Array(nodes.length).fill(Infinity), done = new Array(nodes.length).fill(false);
@@ -274,7 +279,7 @@ function corridorNumbers(state, fill, width, hotel) {
   const spine = Array.isArray(fill.spine) ? fill.spine : [];
   const queries = [];
   stairs.forEach((s) => { if (isPair(s.door)) queries.push({ key: `s:${s.id}`, p: s.door }); });
-  const closets = hotel ? (fill.support || []).filter((b) => b && b.kind === "linen" && ringOf(b.outer)) : [];
+  const closets = hotel ? [...(fill.support || []), ...(Array.isArray(fill.coreRooms) ? fill.coreRooms : [])].filter((b) => b && b.kind === "linen" && ringOf(b.outer)) : [];
   closets.forEach((b, i) => queries.push({ key: `c:${i}`, p: centroid(ringOf(b.outer)) }));
   const units = Array.isArray(fill.units) ? fill.units : [];
   const doors = hotel && closets.length ? units.map((u) => doorOf(u, corridor)) : [];
@@ -341,6 +346,37 @@ const mixTypes = (state) => {
 const clearWidth = (state) => (state.corridor && isNum(state.corridor.width) ? state.corridor.width : state.mode === "hotel" ? 6.0 : 5.67);
 
 const round2 = (v) => Math.round(v * 100) / 100;
+
+/** The share-weighted target area of the multifamily mix (types with share > 0); hotel: null. */
+function targetAvgOf(state) {
+  if (state.mode === "hotel") return null;
+  let s = 0, a = 0;
+  for (const t of mixTypes(state)) if (isNum(t.share) && t.share > 0 && isNum(t.targetArea)) { s += t.share; a += t.share * t.targetArea; }
+  return s > 0 ? r1(a / s) : null;
+}
+
+/**
+ * Units against their type's area range (rework review): a unit is area-high when the fill flagged it or its area is
+ * above areaMax (+0.5 sf); in range when it is not area-high and its area is at least areaMin (−0.5 sf). Wrap corners
+ * carry the corner type, so they test against it. A type with no area range (hotel keys, accessible keys) is in range.
+ * → { units, inRange, areaHighCount, avgArea, targetAvgArea }
+ */
+export function unitsInRange(state, units) {
+  need(state && typeof state === "object", "unitsInRange", "state");
+  const list = Array.isArray(units) ? units : [];
+  const rows = new Map(mixTypes(state).map((t) => [t.id, t]));
+  let inRange = 0, high = 0, sum = 0;
+  for (const u of list) {
+    const a = unitArea(u);
+    sum += a;
+    const t = rows.get(u.type);
+    const hasRange = t && isNum(t.areaMax) && state.mode !== "hotel";
+    const isHigh = !!u.areaHigh || (hasRange && a > t.areaMax + 0.5);
+    if (isHigh) { high++; continue; }
+    if (!hasRange || !isNum(t.areaMin) || a >= t.areaMin - 0.5) inRange++;
+  }
+  return { units: list.length, inRange, areaHighCount: high, avgArea: list.length ? r1(sum / list.length) : 0, targetAvgArea: targetAvgOf(state) };
+}
 
 /** The depth that carries the most run length, and every depth in use (rounded to 0.01 ft). */
 function runDepths(runs) {
@@ -425,6 +461,26 @@ function cornerSquares(plate, blocks) {
   return n;
 }
 
+/** Length of the edges of leftover and remainder pieces that lie on the area line (fill.inset rings). */
+function leftoverContact(fill) {
+  const rings = [];
+  for (const pc of Array.isArray(fill.inset) ? fill.inset : []) { if (pc && pc.outer) rings.push(pc.outer); for (const h of (pc && pc.holes) || []) rings.push(h); }
+  if (!rings.length) return 0;
+  let total = 0;
+  for (const b of fill.support || []) {
+    if (!b || (b.kind !== "leftover" && b.kind !== "remainder")) continue;
+    const r = ringOf(b.outer);
+    if (!r) continue;
+    for (let i = 0; i < r.length; i++) {
+      const a = r[i], c = r[(i + 1) % r.length], L = Math.hypot(c[0] - a[0], c[1] - a[1]);
+      if (L < 0.01) continue;
+      const on = rings.some((q) => q.some((p, k) => { const e = q[(k + 1) % q.length]; return projectOnSegment(a, p, e).dist < 0.005 && projectOnSegment(c, p, e).dist < 0.005; }));
+      if (on) total += L;
+    }
+  }
+  return total;
+}
+
 /** Plan 3.12 "Area closure". */
 function closureRows(state, fill, nrsf, gsf) {
   const corridor = Array.isArray(fill.corridor) ? fill.corridor : [];
@@ -447,14 +503,20 @@ function closureRows(state, fill, nrsf, gsf) {
   const supportSf = take((fill.support || []).map((s) => ringOf(s && s.outer)));
   const strip = gsf - (nrsf + corridorSf + coreSf + stairsSf + elevSf + supportSf);
   const ext = isNum(state.extWall) ? state.extWall : 1.0;
-  const runs = Array.isArray(fill.runs) ? fill.runs : [];
-  const legs = Array.isArray(fill.corners) ? fill.corners.reduce((s, c) => s + 2 * (isNum(c.e) ? c.e : 0), 0) : 0;
+  // a run the fill left unfilled (slots: 0) is a remainder out to the plate edge: its exterior strip is inside it
+  const runs = (Array.isArray(fill.runs) ? fill.runs : []).filter((r) => r.slots !== 0);
+  // a wrap corner covers legs[0] + legs[1] of area line (2 × e when the legs are equal; a deep corner can differ)
+  const legs = Array.isArray(fill.corners) ? fill.corners.reduce((s, c) => s + (Array.isArray(c.legs) && c.legs.length === 2 && c.legs.every(isNum) ? c.legs[0] + c.legs[1] : 2 * (isNum(c.e) ? c.e : 0)), 0) : 0;
   // Corner squares: the strip along the runs and legs is measured on the area line, so each plate corner that no block
   // covers adds one ext × ext square (convex corner) or takes one away (reflex corner). A point tower has four convex ones.
   const blocks = [core, ...stairsOf(fill).map((s) => ringOf(s.outer)), ...elevatorsOf(fill).map((s) => ringOf(s.outer)),
     ...(fill.support || []).map((s) => ringOf(s && s.outer))].filter((r) => r && r.length >= 3);
   const cornerSq = runs.length ? cornerSquares(fill.plate, blocks) : 0;
-  const expected = ext * (runs.reduce((s, r) => s + (isNum(r.length) ? r.length : 0), 0) + legs) + ext * ext * cornerSq;
+  // leftover pieces that stop at the area line (a hotel corner with no wrap unit) leave the strip along them open too
+  const contact = runs.length ? leftoverContact(fill) : 0;
+  // locked units sit on reserved stretches (no run): their exterior strip is still the allowance
+  const lockLen = (Array.isArray(fill.units) ? fill.units : []).reduce((s, u) => s + (u && u.locked && isNum(u.facadeLen) ? u.facadeLen : 0), 0);
+  const expected = ext * (runs.reduce((s, r) => s + (isNum(r.length) ? r.length : 0), 0) + legs + contact + lockLen) + ext * ext * cornerSq;
   return {
     gsf: r1(gsf), nrsf: r1(nrsf), corridor: r1(corridorSf), core: r1(coreSf), stairs: r1(stairsSf), elevators: r1(elevSf), support: r1(supportSf),
     strip: r1(strip), expected: r1(expected), diff: r1(strip - expected), ok: runs.length === 0 || Math.abs(strip - expected) <= 1,
@@ -480,10 +542,14 @@ function levelRow(state, group, fill, hotel) {
   if (t.counts) {
     const scored = hotel ? units.filter((u) => !u.accessible) : units;
     const s = scoreMix(scored, t.counts, types.filter((ty) => ty.id in t.counts));
-    mix = { targets: t.counts, byType: s.byType, misses: s.misses };
+    // average unit area per type on this level (the page mix table shows it)
+    const sum = {}, n = {};
+    for (const u of units) { sum[u.type] = (sum[u.type] || 0) + unitArea(u); n[u.type] = (n[u.type] || 0) + 1; }
+    mix = { targets: t.counts, byType: s.byType.map((r) => ({ ...r, avgArea: n[r.type] ? r1(sum[r.type] / n[r.type]) : 0 })), misses: s.misses };
   }
   const support = supportRows(fill);
   const closure = closureRows(state, fill, nrsfExact, gsfExact);
+  const rng = unitsInRange(state, units);
   const stairsArr = stairsOf(fill);
   return {
     group: group.id,
@@ -491,6 +557,7 @@ function levelRow(state, group, fill, hotel) {
     byType, mix,
     nrsf, gsf, efficiency: gsf > 0 ? r4(nrsfExact / gsfExact) : 0,
     avgUnitArea: units.length ? r1(nrsfExact / units.length) : 0,
+    inRange: rng.inRange, areaHighCount: rng.areaHighCount, avgArea: rng.avgArea, targetAvgArea: rng.targetAvgArea,
     corners: units.filter((u) => u.corner).length,
     exposures,
     accessible: units.filter((u) => u.accessible).length,
@@ -530,6 +597,7 @@ const add = (obj, key, n) => { obj[key] = (obj[key] || 0) + n; };
  *   mode, caution, floors,
  *   groups: [{ id, label, first, levels, floors, row }],
  *   levels: [{ index, ...row }]           one row per level of every group
+ *   (level rows and building also carry inRange, areaHighCount, avgArea, targetAvgArea: see unitsInRange)
  *   building: { units, keys, bays, nrsf, gsf, efficiency, avgUnitArea, corners, exposures, corridorFt,
  *               byType, mix: [{ type, count, share, target, diff, avgArea }], accessible, support },
  *   buildWarnings, massing: { usedAt, currentAt }, warnings }
@@ -542,7 +610,7 @@ export function computeMetrics(state, built) {
   const groups = [], levels = [], buildWarnings = [];
   for (const w of Array.isArray(built.warnings) ? built.warnings : []) buildWarnings.push({ ...w });
 
-  const total = { units: 0, bays: 0, nrsf: 0, gsf: 0, corners: 0, corridorFt: 0, accessible: 0, exposures: { N: 0, E: 0, S: 0, W: 0 }, byType: {}, areaByType: {}, targets: {}, support: 0, floors: 0 };
+  const total = { units: 0, bays: 0, inRange: 0, areaHigh: 0, nrsf: 0, gsf: 0, corners: 0, corridorFt: 0, accessible: 0, exposures: { N: 0, E: 0, S: 0, W: 0 }, byType: {}, areaByType: {}, targets: {}, support: 0, floors: 0 };
   for (const g of built.groups) {
     if (!g || !g.fill) continue;
     const idx = levelIndices(g.levels);
@@ -554,6 +622,7 @@ export function computeMetrics(state, built) {
 
     total.floors += floors;
     total.units += row.units * floors; total.bays += row.bays * floors;
+    total.inRange += row.inRange * floors; total.areaHigh += row.areaHighCount * floors;
     total.nrsf += row.nrsf * floors; total.gsf += row.gsf * floors;
     total.corners += row.corners * floors; total.accessible += row.accessible * floors;
     total.corridorFt += (row.corridor.lengthFt || 0) * floors;
@@ -587,6 +656,7 @@ export function computeMetrics(state, built) {
       units: total.units, keys: total.units, bays: total.bays,
       nrsf: r1(total.nrsf), gsf: r1(total.gsf), efficiency: total.gsf > 0 ? r4(total.nrsf / total.gsf) : 0,
       avgUnitArea: total.units ? r1(total.nrsf / total.units) : 0,
+      inRange: total.inRange, areaHighCount: total.areaHigh, avgArea: total.units ? r1(total.nrsf / total.units) : 0, targetAvgArea: targetAvgOf(state),
       corners: total.corners, exposures: total.exposures, corridorFt: r1(total.corridorFt),
       byType: total.byType, mix: mixRows, accessible, supportSf: r1(total.support),
     },
@@ -613,8 +683,9 @@ function later(current, used) {
 
 /**
  * Plan 3.12 "Flags". → Warning[] { code, severity, where, message }:
- * the build and fill warnings (core-blocks-corridor and the rest), type-does-not-fit, run-too-short,
- * mix-miss, area-closure and stale-massing. The optional third argument { massingUpdatedAt } is the
+ * the build and fill warnings (core-blocks-corridor, type-area-high and the rest), type-does-not-fit, run-too-short,
+ * mix-miss, area-closure and stale-massing. De-duplicated by code + where (rework plan 7.3): the page badge count
+ * is the length of this list. The optional third argument { massingUpdatedAt } is the
  * massing time now, for stale-massing when the metrics do not carry it.
  */
 export function checks(state, metrics, ctx = {}) {
@@ -654,5 +725,18 @@ export function checks(state, metrics, ctx = {}) {
   const used = metrics.massing ? metrics.massing.usedAt : null;
   const current = ctx && ctx.massingUpdatedAt !== undefined ? ctx.massingUpdatedAt : metrics.massing ? metrics.massing.currentAt : null;
   if (later(current, used)) out.push(warn("stale-massing", "The massing changed after this fill. Re-fill to follow the new plates.", { usedAt: used, currentAt: current }));
-  return out;
+  // rework plan 7.3: one list, de-duplicated by code + where (the first one stays); the page badge counts this list
+  const seenKey = new Set();
+  return out.filter((w) => {
+    const k = `${w.code}|${stableJson(w.where)}`;
+    if (seenKey.has(k)) return false;
+    seenKey.add(k);
+    return true;
+  });
+}
+
+function stableJson(v) {
+  if (v === null || typeof v !== "object") return JSON.stringify(v === undefined ? null : v);
+  if (Array.isArray(v)) return `[${v.map(stableJson).join(",")}]`;
+  return `{${Object.keys(v).sort().filter((k) => v[k] !== undefined).map((k) => `${JSON.stringify(k)}:${stableJson(v[k])}`).join(",")}}`;
 }

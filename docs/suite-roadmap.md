@@ -18,16 +18,17 @@ This file is the one place that lists every tool in the suite, who builds it, an
 | `site` | Site Model | `site/` | Version 1 live. Remove existing buildings in review | Home |
 | `tower` | Tower Generator | `tower/` | Version 1.2 built, in review (project file, Sun Study) | Home |
 | `sun` | Sun Study (inside the Tower Generator) | `tower/` | Version 1 built, in review | Home |
-| `plate` | Plate Planner | `plate/` | Version 1 built, in review | Home |
+| `plate` | Plate Planner | `plate/` | Version 1 built; rework (auto core, advisor, editing tools) October 24, 2026, in review | Home |
 | — | Project file (`src/shared/project.js`), Workspace page, Site Model handoff | `index.html`, `src/shared/`, `site/` | Version 1 live | Home |
 | `midrise` | Mid-Rise Generator | `midrise/` | Version 1 live | Home |
 | `parking` | Parking Deck Generator | `parking/` | Version 1 live | Home |
 | `facade` | Facade Studio | `facade/` | Version 1 live | Home |
 | `grading` | Grading Sketch | `grading/` | Version 1 live | Home |
+| `viewer` | Model Viewer | `viewer/` | Built, in review | Home |
 | `view` | View Study | `view/` | Later | — |
 | `egress` | Egress Sketch | `egress/` | Later | — |
 | — | Yield Study | — | Skipped for now | — |
-| — | Model Explorer | — | Skipped for now | — |
+| — | Model Explorer | — | Skipped for now. Became the Model Viewer (October 25, 2026) | — |
 
 Branch `site-base-style` (October 23, 2026): in progress, not merged. It adds the base elevation that follows the ground, the site style (Solid, Glass, Wireframe), the AI-ready image with the site and the Hero render prompt, and collapsed panel sections.
 
@@ -45,7 +46,7 @@ Branch `site-base-style` (October 23, 2026): in progress, not merged. It adds th
 
 ## 4. Pipeline order
 
-Site → Massing (Tower or Mid-Rise) → Plates → Parking → Facade → Sun → Grading → Egress.
+Site → Massing (Tower or Mid-Rise) → Plates → Parking → Facade → Sun → Grading → Model Viewer (every section in one model). Later: Egress Sketch.
 
 Each tool reads the sections before it and writes only its own section. The Workspace page (the menu page) shows the project and the tools in this order.
 
@@ -65,7 +66,7 @@ Caution: the work session cannot push to GitHub. It works on a download. Merge b
 | Document | Content |
 |---|---|
 | `docs/project-file-spec.md` | The shared project file and `project.js` contract |
-| `docs/plate-planner-notes.md`, `docs/plate-planner-technical-plan.md` | Plate Planner |
+| `docs/plate-planner-notes.md`, `docs/plate-planner-technical-plan.md`, `docs/plate-planner-rework-plan.md` | Plate Planner |
 | `docs/mid-rise-generator-concept.md`, `docs/mid-rise-generator-technical-plan.md` | Mid-Rise Generator |
 | `docs/parking-deck-concept.md`, `docs/parking-deck-technical-plan.md` | Parking Deck Generator |
 | `docs/tower-generator-concept.md`, `docs/tower-generator-technical-plan.md`, `docs/v1.1-spec.md` | Tower Generator |

@@ -10,7 +10,7 @@
 
    Clipper: globalThis.ClipperLib, integers at SCALE = 1000 (0.001 ft). Clipper
    is only used where it is needed (non-convex offsets, carves, non-convex
-   half-plane clips, unclear core checks). Rotations, translations, scaling and
+   half-plane clips). Rotations, translations, scaling and
    convex clips are done in floating point, so simple cases are exact.
 
    ---- Rule choices where the plan leaves room (documented on purpose) -------
@@ -44,7 +44,7 @@
    MECHANICAL FLOORS
    - A mechanical floor copies the plate of the floor below it BEFORE that
      floor's carves and cuts, then gets the carves and cuts whose range holds
-     the mechanical floor's own number. It uses the core of the segment below.
+     the mechanical floor's own number.
    CARVES (applied to every zone in the floor range, after translation)
    - corner: w x d rectangle at the NE/NW/SE/SW corner of the floor's own
      bounding box, world frame (after rotation and translation).
@@ -66,16 +66,10 @@
      (before carves and cuts), so the plane does not follow taper or twist.
      The effective angle from vertical is atan(depth / (z_end - z_start)).
    CORE
-   - One core per tower segment: a rectangle centred on the area centroid of
-     the segment's first plate (before carves/cuts), rotated with that plate
-     (segment.rotation + twist at t = 0). It never tapers, twists or leans.
-     If the core does not fit at the centroid (L, U, concave custom shapes),
-     it moves to the nearest point of a 25 x 25 grid over the plate bounds
-     where it fits; if none fits it stays at the centroid.
-   - percent mode: area = percent of that first plate area, proportions of
-     the plate's local bounding box. Any other mode: core.w x core.d.
-   - coreArea = area of core inside the plate. "core-outside" warning when the
-     core minus the plate is more than 1 sf. Podium plates have no core.
+   - The Tower Generator makes no core (October 24, 2026). The Plate Planner sets
+     the core and the efficiency. Every plate still carries coreRect: null and
+     coreArea: 0 so readers of those fields do not break. A saved `core` key in
+     an old state is ignored here (the page's store drops it).
    CROWN
    - Sits on the highest non-void plate; base elevation = top of all floors.
    - flat: 4 ft parapet ring, 1 ft thick. Adds no height.  none: nothing.
@@ -87,12 +81,9 @@
    - screen: top plate minus a 1 ft inward offset, extruded to crown.height.
    - Non-flat crowns add crown.height to total height. Crowns add no GFA.
    METRICS
-   - netArea = sum over non-mechanical plates of (area - coreArea)
-             = GFA - coreArea (non-mechanical floors) - mechanicalArea.
-     The core inside a mechanical floor is part of that floor's area, so it is
-     not subtracted twice.
-   - efficiencyAvg is area weighted over tower plates:
-     sum(area - core) / sum(area).
+   - netArea = GFA - mechanicalArea (sum of the area of non-mechanical plates).
+     It is "before core": no core is taken out. coreArea is always 0. There is
+     no efficiency metric; the Plate Planner computes it.
    - unitFactor may be a fraction (0.85) or a percent (85); values > 1 are
      read as percent.
    ========================================================================== */
@@ -103,7 +94,6 @@ const MAX_FLOORS = 400;           // same cap as the shell's CONFIG.limits.maxFl
 const MAX_DIM = 5000;             // ft, cap on any plan dimension
 const AREA_EPS = 1e-6;            // sf, a plate below this is empty
 const MIN_RING_AREA = 1e-4;       // sf, Clipper output rings below this are dropped
-const CORE_TOL = 1;               // sf, core outside the plate above this is a warning
 const PARAPET_HEIGHT = 4;         // ft
 const RING_THICKNESS = 1;         // ft, parapet and screen ring thickness
 const CORNER_SEGMENTS = 8;        // per rounded corner
@@ -614,49 +604,13 @@ function normCuts(list, lastN, floorByN) {
   }).filter((c) => c.s <= c.e && c.depth > 0);
 }
 
-/* ---------------------------------------------------------------- core */
+/* ---------------------------------------------------------------- segment helpers */
 
-function rectQuad(cx, cy, w, d, theta) {
-  const c = Math.cos(theta), s = Math.sin(theta), x = w / 2, y = d / 2;
-  const pts = [[-x, -y], [x, -y], [x, y], [-x, y]];
-  if (theta === 0) return pts.map((p) => [p[0] + cx, p[1] + cy]);
-  return pts.map((p) => [cx + p[0] * c - p[1] * s, cy + p[0] * s + p[1] * c]);
-}
-
-function pointInMP(mp, x, y) {
-  let inside = false;
-  const test = (ring) => {
-    for (let i = 0, n = ring.length, j = n - 1; i < n; j = i++) {
-      const a = ring[i], b = ring[j];
-      if ((a[1] > y) !== (b[1] > y) && x < ((b[0] - a[0]) * (y - a[1])) / (b[1] - a[1]) + a[0]) inside = !inside;
-    }
-  };
-  for (const p of mp) { test(p.outer); for (const h of p.holes || []) test(h); }
-  return inside;
-}
 function orient(a, b, c) { return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]); }
 function segCross(a, b, c, d) {
   const o1 = orient(a, b, c), o2 = orient(a, b, d), o3 = orient(c, d, a), o4 = orient(c, d, b);
   return ((o1 > 0 && o2 < 0) || (o1 < 0 && o2 > 0)) && ((o3 > 0 && o4 < 0) || (o3 < 0 && o4 > 0));
 }
-/** True only when the convex quad is certainly inside the plate (strict tests, no Clipper). */
-function quadInsideFast(q, mp) {
-  for (const p of q) if (!pointInMP(mp, p[0], p[1])) return false;
-  const rings = [];
-  for (const p of mp) { rings.push(p.outer); for (const h of p.holes || []) rings.push(h); }
-  for (const r of rings) {
-    for (let i = 0, n = r.length; i < n; i++) {
-      const a = r[i], b = r[(i + 1) % n];
-      // vertex inside or on the quad → not certain
-      let inQ = true;
-      for (let k = 0; k < 4; k++) if (orient(q[k], q[(k + 1) % 4], a) < -1e-9) { inQ = false; break; }
-      if (inQ) return false;
-      for (let k = 0; k < 4; k++) if (segCross(a, b, q[k], q[(k + 1) % 4])) return false;
-    }
-  }
-  return true;
-}
-
 /* ---------------------------------------------------------------- crown */
 
 function triangulate(poly) {
@@ -837,7 +791,6 @@ function prepSegment(seg, segN) {
     ox: num(seg && seg.offset && seg.offset.x, 0), oy: num(seg && seg.offset && seg.offset.y, 0),
     lx: num(seg && seg.lean && seg.lean.x, 0), ly: num(seg && seg.lean && seg.lean.y, 0),
     cache: new Map(),
-    core: undefined,     // set from the first plate of the segment
   };
 }
 
@@ -886,42 +839,6 @@ function towerPre(sc, f, setbacks) {
   return { mp, local, theta, tx, ty, cause: null };
 }
 
-function makeCore(state, sc, pre) {
-  const core = state.core || {};
-  const mode = String(core.mode || "percent").toLowerCase();
-  const b = mpBounds(pre.local);
-  const W = b.maxX - b.minX, D = b.maxY - b.minY;
-  let cw0, cd0;
-  if (mode === "percent") {
-    const A = (clamp(num(core.percent, 0), 0, 100) / 100) * multiPolyArea(pre.mp);
-    if (!(A > 0) || !(W > 0) || !(D > 0)) return null;
-    cw0 = Math.sqrt((A * W) / D); cd0 = Math.sqrt((A * D) / W);
-  } else {
-    cw0 = Math.max(0, num(core.w, 0)); cd0 = Math.max(0, num(core.d, 0));
-    if (!(cw0 > 0 && cd0 > 0)) return null;
-  }
-  // Work in the local frame (after taper and setbacks, before rotation and translation).
-  let [cx, cy] = mpCentroid(pre.local);
-  if (!quadInsideFast(rectQuad(cx, cy, cw0, cd0, 0), pre.local)) {
-    // L, U and other concave plates: the centroid can sit outside the material. Use the
-    // grid point nearest the centroid where the whole core fits (25 x 25 over the bounds).
-    const G = 24, cands = [];
-    for (let i = 0; i <= G; i++) for (let j = 0; j <= G; j++) {
-      const x = b.minX + (W * i) / G, y = b.minY + (D * j) / G;
-      cands.push([x, y, (x - cx) ** 2 + (y - cy) ** 2]);
-    }
-    cands.sort((p, q) => p[2] - q[2]);
-    for (const [x, y] of cands) {
-      if (quadInsideFast(rectQuad(x, y, cw0, cd0, 0), pre.local)) { cx = x; cy = y; break; }
-    }
-  }
-  const c = Math.cos(pre.theta), s = Math.sin(pre.theta);
-  const quad = rectQuad(cx, cy, cw0, cd0, 0).map((q) => (pre.theta === 0
-    ? [q[0] + pre.tx, q[1] + pre.ty]
-    : [q[0] * c - q[1] * s + pre.tx, q[0] * s + q[1] * c + pre.ty]));
-  return { quad, area: cw0 * cd0 };
-}
-
 /**
  * Build every floor plate, the crown solids and the geometry warnings.
  * → { plates: Plate[], solids: Solid[], warnings: Warning[], floors }
@@ -948,26 +865,22 @@ export function buildPlates(state, { quality = "full" } = {}) {
 
   const plates = [];
   const empty = { shape: [], taper: [], setbacks: [], carves: [], cuts: [] };
-  const coreOut = [];
-  let below = null;   // { mp (pre-carve), core, segmentIndex } of the floor below
+  let below = null;   // { mp (pre-carve), cause } of the floor below
 
   for (const f of floors) {
-    let pre, core = null, cause = null;
+    let pre, cause = null;
     if (f.zone === "podium") {
       pre = cloneMP(podiumMP);
       if (!pre.length) cause = "shape";
     } else if (f.zone === "mechanical") {
       pre = below ? cloneMP(below.mp) : [];
-      core = below ? below.core : null;
       if (!pre.length) cause = below && below.cause ? below.cause : "shape";
     } else {
       const sc = segs[f.segmentIndex];
       const r = towerPre(sc, f, setbacks);
       pre = r.mp; cause = r.cause;
-      if (pre.length && sc.core === undefined) sc.core = makeCore(state, sc, r);
-      core = sc.core || null;
     }
-    below = { mp: pre, core, cause };
+    below = { mp: pre, cause };
     if (!pre.length) { empty[cause || "shape"].push(f.n); continue; }
 
     // 5. carves
@@ -1012,23 +925,11 @@ export function buildPlates(state, { quality = "full" } = {}) {
     }
 
     const area = isVoid ? 0 : multiPolyArea(mp);
-    // core
-    let coreArea = 0;
-    const coreRect = f.zone === "podium" || !core ? null : core.quad.map((q) => [q[0], q[1]]);
-    if (coreRect && !isVoid) {
-      if (quadInsideFast(core.quad, mp)) {
-        coreArea = core.area;
-      } else {
-        const inside = multiPolyArea(boolOp(mp, [core.quad], "int"));
-        const outside = core.area - inside;
-        if (outside > CORE_TOL) { coreOut.push(f.n); coreArea = Math.min(inside, area); }
-        else coreArea = Math.min(core.area, area);
-      }
-    }
     plates.push({
       n: f.n, zone: f.zone, program: f.program, segmentIndex: f.segmentIndex,
       t: f.t, z: f.z, ftf: f.ftf,
-      polygons: mp, area, coreArea, coreRect,
+      polygons: mp, area,
+      coreRect: null, coreArea: 0,      // the core moved to the Plate Planner; the fields stay for readers
       outsideEnvelopeArea: 0,
       void: isVoid,
     });
@@ -1042,9 +943,6 @@ export function buildPlates(state, { quality = "full" } = {}) {
     const verb = list.length === 1 ? "has" : "have";
     const msg = k === "shape" ? `${groupFloors(list)} ${verb} no area: ${why[k]}.` : `${groupFloors(list)} ${verb} no area after ${why[k]}.`;
     warnings.push(warn("plate-empty", list, msg));
-  }
-  if (coreOut.length) {
-    warnings.push(warn("core-outside", coreOut, `${groupFloors(coreOut)}: the core does not fit inside the plate.`));
   }
 
   // crown
@@ -1079,33 +977,31 @@ export function computeMetrics(state, plates) {
   state = state || {};
   plates = plates || [];
   const progs = programsOf(state);
-  let gfa = 0, top = 0, coreArea = 0, mechanicalArea = 0, netArea = 0, floorCount = 0, voidFloors = 0;
-  let towerArea = 0, towerNet = 0;
+  let gfa = 0, top = 0, mechanicalArea = 0, netArea = 0, floorCount = 0, voidFloors = 0;
+  let towerArea = 0;
   const byZone = { podium: 0, tower: 0, mechanical: 0, crown: 0 };
   const towerAreas = [];
-  const efficiency = [];
   const byProgram = {};
   let floor1Area = 0;
 
   for (const p of plates) {
     top = Math.max(top, p.z + p.ftf);
     if (p.void || !(p.area > 0)) { voidFloors += p.void ? 1 : 0; continue; }
-    const area = p.area, core = Math.min(num(p.coreArea, 0), area);
+    const area = p.area;
     gfa += area;
     floorCount += 1;
     byZone[p.zone] = (byZone[p.zone] || 0) + 1;
     if (p.n === 1) floor1Area = area;
-    efficiency.push({ n: p.n, zone: p.zone, efficiency: (area - core) / area });
     const key = p.program || p.zone;
-    const bp = byProgram[key] || (byProgram[key] = { floors: 0, gross: 0, core: 0, net: 0 });
+    const bp = byProgram[key] || (byProgram[key] = { floors: 0, gross: 0, net: 0 });
     bp.floors += 1; bp.gross += area;
     if (p.zone === "mechanical") {
       mechanicalArea += area;
     } else {
-      coreArea += core; netArea += area - core;
-      bp.core += core; bp.net += area - core;
+      netArea += area;
+      bp.net += area;
     }
-    if (p.zone === "tower") { towerAreas.push(area); towerArea += area; towerNet += area - core; }
+    if (p.zone === "tower") { towerAreas.push(area); towerArea += area; }
   }
   for (const [k, bp] of Object.entries(byProgram)) {
     const pr = progs[k] || {};
@@ -1142,11 +1038,9 @@ export function computeMetrics(state, plates) {
     far,
     floor1Area,
     siteCoverage: siteArea > 0 ? floor1Area / siteArea : 0,
-    coreArea,
+    coreArea: 0,            // the core moved to the Plate Planner
     mechanicalArea,
-    netArea,
-    efficiency,
-    efficiencyAvg: towerArea > 0 ? towerNet / towerArea : 0,
+    netArea,                // GFA - mechanicalArea, before core
     byProgram,
     target: { gfa: check(num(t.gfa, 0), gfa), far: check(num(t.far, 0), far) },
   };

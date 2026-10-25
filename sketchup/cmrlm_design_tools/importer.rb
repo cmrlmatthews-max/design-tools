@@ -154,7 +154,7 @@ module CMRLM
         errors = []
         err = lambda { |path, msg| errors << "#{path}: #{msg}" if errors.length < 200 }
 
-        err.call('source', 'must be "tower", "site", "midrise", "parking", "facade", "grading", or "plate"') unless %w[tower site midrise parking facade grading plate].include?(doc['source'])
+        err.call('source', 'must be "tower", "site", "midrise", "parking", "facade", "grading", "plate", or "viewer"') unless %w[tower site midrise parking facade grading plate viewer].include?(doc['source'])
         err.call('zShift', 'must be a number') unless num?(doc['zShift'])
 
         tag_names = {}

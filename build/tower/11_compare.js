@@ -11,7 +11,7 @@ const Compare = (() => {
   const $ = (id) => document.getElementById(id);
   let active = false, chosen = [], entries = [], version = 0, refreshTimer = null, ro = null;
 
-  const RULE = 'Bold marks the best value in a row. Higher is better for GFA, FAR, units and keys, and efficiency. Parking spaces are counted apart and never added to units. Other rows are not ranked.';
+  const RULE = 'Bold marks the best value in a row. Higher is better for GFA, FAR, and units and keys. Parking spaces are counted apart and never added to units. Other rows are not ranked.';
   const totalUnits = (m) => { const ub = unitBreakdown(m); return ub.hasTotal ? ub.total : null; };      // residential units + hotel keys
   const parkingSpaces = (m) => { const ub = unitBreakdown(m); return ub.spaces.length ? ub.spaces.reduce((a, r) => a + r.count, 0) : null; };
   const ROWS = [
@@ -19,12 +19,11 @@ const Compare = (() => {
     { label: 'FAR', get: (e) => (e.d.metrics.hasSite === false ? null : e.d.metrics.far), fmt: (v) => Units.formatRatio(v, 2), higher: true },
     { label: 'Units + keys (estimate)', get: (e) => totalUnits(e.d.metrics), fmt: Units.formatInt, higher: true },
     { label: 'Parking spaces (estimate)', get: (e) => parkingSpaces(e.d.metrics), fmt: Units.formatInt },
-    { label: 'Efficiency (avg)', get: (e) => e.d.metrics.efficiencyAvg, fmt: (v) => `${(v * 100).toFixed(1)}%`, higher: true },
     { label: 'Floors', get: (e) => e.d.metrics.floorCount, fmt: Units.formatInt },
     { label: 'Total height', get: (e) => e.d.metrics.totalHeight, fmt: Units.formatFeetInches },
     { label: 'Site coverage', get: (e) => (e.d.metrics.hasSite === false ? null : e.d.metrics.siteCoverage), fmt: (v) => `${(v * 100).toFixed(1)}%` },
     { label: 'Tower plate (avg)', get: (e) => e.d.metrics.plateAvg, fmt: Units.formatArea },
-    { label: 'Net area', get: (e) => e.d.metrics.netArea, fmt: Units.formatArea },
+    { label: 'Net area (before core)', get: (e) => e.d.metrics.netArea, fmt: Units.formatArea },
     { label: 'Warnings', get: (e) => e.d.warnings.length, fmt: Units.formatInt },
   ];
 

@@ -31,6 +31,8 @@ MODS = {
     'mix': ('MixMod', 'plate/mix.js'),
     'levels': ('LevelsMod', 'plate/levels.js'),
     'corridor': ('CorridorMod', 'plate/corridor.js'),
+    'core': ('CoreMod', 'plate/core.js'),
+    'advisor': ('AdvisorMod', 'plate/advisor.js'),
     'fill': ('FillMod', 'plate/fill.js'),
     'pmetrics': ('PlateMetricsMod', 'plate/metrics.js'),
     'pderived': ('PlateDerivedMod', 'plate/derived.js'),
@@ -82,7 +84,8 @@ def wrap(key):
 
     def imp(m):
         target = os.path.normpath(os.path.join(os.path.dirname(rel), m.group(2))).replace(os.sep, '/')
-        return f'const {{{m.group(1)}}} = {MODS[BY_PATH[target]][0]};'
+        names = re.sub(r'\b([\w$]+)\s+as\s+([\w$]+)\b', r'\1: \2', m.group(1))      # `a as b` becomes the destructuring `a: b`
+        return f'const {{{names}}} = {MODS[BY_PATH[target]][0]};'
 
     def imp_ns(m):
         target = os.path.normpath(os.path.join(os.path.dirname(rel), m.group(2))).replace(os.sep, '/')
@@ -181,6 +184,7 @@ PARTS = [
     '12d_tests_project.js',
     '12e_tests_site.js',
     '12f_tests_massing.js',
+    '12g_tests_rework.js',    # split, merge, fill a remainder, draw a unit, depth cap, core reset, one warnings list (rework plan 8.2)
     '12l_tests_sections.js',  # collapsed sections and the prompt panel (site base style plan, section 4)
     os.path.join(SHARED, '08z_topbar.js'),           # TopBar: Collapse all and the Site / Building zoom buttons (shared page part)
     '13_start.js',
