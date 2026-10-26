@@ -47,6 +47,9 @@ const cleanId = (raw, prefix, i, taken) => {
   return id;
 };
 
+/** Seed points of the leftovers made open stretches: [[x, y]], at most 64. */
+const cleanSeeds = (list) => (Array.isArray(list) ? list : []).filter((p) => Array.isArray(p) && p.length >= 2 && [p[0], p[1]].every((v) => typeof v === 'number' && isFinite(v))).slice(0, 64).map((p) => [p[0], p[1]]);
+
 /** Fill every missing field from the defaults so older or partial states (presets, imports) are complete. */
 function fillDefaults(src) {
   const s = DrawMod.migrateUnits(isObj(src) ? src : {});       // draw plan 2.1: locks become units; a state with none is blank
@@ -82,6 +85,8 @@ function fillDefaults(src) {
   for (const k of Object.keys(lv.groups)) {
     const g = isObj(lv.groups[k]) ? lv.groups[k] : {};
     lv.groups[k] = { filled: g.filled !== false, units: Array.isArray(g.units) ? g.units : [] };
+    const go = cleanSeeds(g.openLeftovers);
+    if (go.length) lv.groups[k].openLeftovers = go;
     const gd = cleanDepth(g.maxDepth);
     if (gd !== null) lv.groups[k].maxDepth = gd;
   }
@@ -159,6 +164,7 @@ function fillDefaults(src) {
 
   // drawn units (cleaned by DrawMod.migrateUnits above) and placement
   s.units = Array.isArray(s.units) ? s.units.slice(0, CONFIG.limits.maxUnits) : [];
+  s.openLeftovers = cleanSeeds(s.openLeftovers);         // leftover fix: seed points of the leftovers made open stretches
   delete s.locks;
   s.placement = isObj(s.placement) ? { x: num(s.placement.x, 0), y: num(s.placement.y, 0), rotation: num(s.placement.rotation, 0), baseZ: num(s.placement.baseZ, 0) } : null;
 

@@ -7479,6 +7479,11 @@ const FillMod = (() => {
      openArea    sf of unit zone that no unit and no support piece covers; open: that MultiPoly (not written to derived)
      cornerZones [{ id, ring, at, e, legs, outer, type }]: wrap corner zones with no unit; corners[] also carry ids
      zone        the unit zone (inset − corridor − blocks): the clip of a free unit
+     leftoverRuns [run + { stretch }]: the run of each leftover piece that is not open (id "LR<k>", leftover: true;
+                 leftoverRun: along the piece edge on the corridor, else its longest edge off the facade). A piece opens
+                 (its run joins runs, its free part is an open stretch, it is no longer support) when a point of
+                 opts.openLeftovers lies in it or a drawn unit covers more than 1 sf of it. Support "leftover" pieces
+                 name their run (`run`).
      allowance   sf of the exterior strip that no block takes (the metrics closure: GSF = NRSF + corridor + core + stairs
                  + elevators + support + open + allowance)
      counts      the level targets (plan 3.6) for the suggestions and the placed-against-target table
@@ -7513,7 +7518,11 @@ const FillMod = (() => {
    - Runs come from sight lines: every facade edge (area line, the plate inset by extWall) looks inward along its
      normal; where the first obstacle is a corridor face, that stretch is a band candidate. Consecutive stretches that
      see the same corridor face merge (a curved facade becomes one run). Candidates are taken in order of depth; a
-     candidate that overlaps a taken band by more than 1 sf drops (a U arm end looking down the arm).
+     candidate that overlaps a taken band by more than 1 sf keeps only the stretches of its face that the overlap does
+     not cover, each of 2 ft or more (trimBand; a U arm end looking down the arm keeps nothing). A candidate shorter than
+     2 ft (a facet grazing a corridor corner) is not taken. (Leftover fix, October 26, 2026: before, an overlapped
+     candidate dropped whole, and on a chamfered or rounded point plate the facade beyond the corridor became one
+     leftover of 2,000 sf or more.)
      The run axis is the corridor face; cut lines are perpendicular to it.
    - What the bands leave: a piece that touches two facade edges at a convex vertex is a corner zone (a wrap unit of
      cornerType; hotel: a remainder); a piece that touches no facade is a pocket; anything else is a remainder.
@@ -7783,14 +7792,72 @@ function facadeBands(rings, corridor, zone0, known = []) {
   const sorted = built.slice().sort((a, b) => (Math.abs(a.depth - b.depth) > 0.01 ? a.depth - b.depth : 0) || b.free - a.free || a.order - b.order);
   const taken = [];
   let takenMP = [];
-  for (const b of sorted) {
-    if (takenMP.length && mpArea(bool("int", b.band, takenMP)) > 1) continue;
-    taken.push(b);
-    takenMP = takenMP.length ? bool("union", [...takenMP, ...b.band], []) : b.band;
+  for (const b0 of sorted) {
+    if (b0.s1 < MIN_TRIM) continue;            // a sliver where a facet grazes a corridor corner: it stays leftover
+    let list = [b0];
+    if (takenMP.length) {
+      const ov = bool("int", b0.band, takenMP);
+      if (mpArea(ov) > 1) list = trimBand(b0, ov, takenMP, rings);
+    }
+    for (const b of list) {
+      taken.push(b);
+      takenMP = takenMP.length ? bool("union", [...takenMP, ...b.band], []) : b.band;
+    }
   }
-  taken.sort((a, b) => a.order - b.order);
+  taken.sort((a, b) => a.order - b.order || a.from - b.from);
   taken.forEach((b, i) => { b.id = i; });
   return taken;
+}
+
+/**
+ * A candidate that overlaps bands taken before it keeps the stretches of its corridor face that the overlap does not
+ * cover (leftover fix, October 26, 2026). Before, the whole candidate dropped: on a chamfered or rounded point plate the
+ * facets beside a corridor corner see two corridor faces, the side band takes the corner, and the band of the long
+ * facade beyond the corridor (2,000 sf and more) became one leftover piece. Each stretch of MIN_TRIM ft or more becomes
+ * a band with its own frame origin (s = 0 at the stretch start), its facade chain and its ring parts clipped to the
+ * stretch. A U arm end (looking down an arm the side bands fill) keeps nothing: its whole face is covered.
+ */
+const MIN_TRIM = 2;               // ft: a shorter stretch of a trimmed candidate stays a leftover piece
+function trimBand(b, ov, takenMP, rings) {
+  const cuts = [];
+  for (const pc of ov) if (Math.abs(ringArea(pc.outer)) > 0.25) cuts.push(projRange(b.fr, pc.outer));
+  const free = minusIntervals([0, b.s1], mergeIntervals(cuts.map(([lo, hi]) => [Math.max(0, lo), Math.min(b.s1, hi)])));
+  const R = rings[b.ring];
+  const out = [];
+  for (const [x, y] of free) {
+    if (y - x < MIN_TRIM) continue;
+    let band = bool("int", b.band, strip(b.fr, x, y));
+    band = bool("diff", band, takenMP).filter((pc) => Math.abs(ringArea(pc.outer)) > 0.25);
+    const area = mpArea(band);
+    if (area < 0.5) continue;
+    const o = at(b.fr, x, 0);
+    const fr = { o, u: b.fr.u, n: b.fr.n };
+    const sOf = (p) => dot(sub(p, b.fr.o), b.fr.u);
+    // the ring parts of the stretch: s is linear along each part
+    const parts = [];
+    for (const part of b.parts) {
+      const E = R.edges[part.k];
+      const s0 = sOf([E.a[0] + E.u[0] * part.a, E.a[1] + E.u[1] * part.a]), s1 = sOf([E.a[0] + E.u[0] * part.b, E.a[1] + E.u[1] * part.b]);
+      if (Math.abs(s1 - s0) < 1e-9) { if (s0 >= x - 1e-6 && s0 <= y + 1e-6) parts.push({ ...part }); continue; }
+      const pAt = (s) => part.a + ((s - s0) * (part.b - part.a)) / (s1 - s0);
+      let pa = pAt(x), pb = pAt(y);
+      if (pa > pb) [pa, pb] = [pb, pa];
+      pa = Math.max(part.a, pa); pb = Math.min(part.b, pb);
+      if (pb - pa > 1e-6) parts.push({ k: part.k, a: pa, b: pb });
+    }
+    if (!parts.length) continue;
+    const chain = [];
+    for (const part of parts) {
+      const E = R.edges[part.k];
+      const pa = [E.a[0] + E.u[0] * part.a, E.a[1] + E.u[1] * part.a], pb = [E.a[0] + E.u[0] * part.b, E.a[1] + E.u[1] * part.b];
+      if (!chain.length || Math.hypot(chain[chain.length - 1][0] - pa[0], chain[chain.length - 1][1] - pa[1]) > 1e-6) chain.push(pa);
+      chain.push(pb);
+    }
+    const maxT = Math.max(...chain.map((p) => dot(sub(p, o), b.fr.n)));
+    out.push({ order: b.order, ring: b.ring, parts, fr, s1: y - x, band, area, depth: area / (y - x), maxT,
+      from: R.edges[parts[0].k].s0 + parts[0].a, facePts: chain, free: y - x, face: b.face, trimmed: true });
+  }
+  return out;
 }
 
 /* ======================================================================= leftovers: corners, pockets */
@@ -8642,6 +8709,42 @@ function facadeSpan(ring, rings) {
   return { ri: best.ri, from, to: from + (P - gap) };
 }
 
+/**
+ * The run of a leftover piece (leftover fix): its base is the piece edge with the most clear-corridor contact (the unit
+ * doors), else its longest edge off the facade. The run axis runs along that edge, the normal into the piece, and the
+ * band is the piece. id "LR<k+1>", edge "L<k+1>" (the runKey of its units), bandId 1000 + k. → run | null (no base edge
+ * of 2 ft or more, or a run shorter than MIN_TRIM).
+ */
+function leftoverRun(pc, k, clear, rings) {
+  let ring = pc.outer.map((p) => [p[0], p[1]]);
+  if (ringArea(ring) < 0) ring = ring.reverse();
+  const corEdges = [];
+  for (const r of ringsOf(clear)) for (let i = 0; i < r.length; i++) corEdges.push([r[i], r[(i + 1) % r.length]]);
+  const onSet = (a, b, set) => { const m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; return set.some(([p, q]) => segDist(a, p, q) < 0.02 && segDist(b, p, q) < 0.02 && segDist(m, p, q) < 0.02); };
+  const facadeEdges = rings.flatMap((R) => R.edges.map((e) => [e.a, e.b]));
+  let best = null;
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i], b = ring[(i + 1) % ring.length], L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (L < 2) continue;
+    const score = onSet(a, b, corEdges) ? 2 : onSet(a, b, facadeEdges) ? 0 : 1;
+    if (!best || score > best.score || (score === best.score && L > best.L + 1e-9)) best = { a, b, L, score };
+  }
+  if (!best || best.score === 0) return null;
+  const u = dirOf(best.a, best.b), n = [-u[1], u[0]];          // counter-clockwise ring: the piece lies left of its edges
+  let lo = Infinity, hi = -Infinity, maxT = 0;
+  for (const p of ring) { const s = dot(sub(p, best.a), u), t = dot(sub(p, best.a), n); lo = Math.min(lo, s); hi = Math.max(hi, s); maxT = Math.max(maxT, t); }
+  const len = hi - lo;
+  if (len < MIN_TRIM) return null;
+  const o = [best.a[0] + u[0] * lo, best.a[1] + u[1] * lo];
+  const area = Math.abs(ringArea(ring)) - (pc.holes || []).reduce((s2, h) => s2 + Math.abs(ringArea(h)), 0);
+  const fr = { o, u, n };
+  // the ring parameter of the facade nearest the run ends (the runKey and the run order of the page)
+  let R = rings[0], from = 0, to = 0;
+  if (R) { from = ringParam(R, at(fr, 0, maxT)); to = ringParam(R, at(fr, len, maxT)); }
+  return { id: `LR${k + 1}`, ring: R ? R.id : 0, ringIndex: 0, edge: `L${k + 1}`, bandId: 1000 + k, fr, a: 0, b: len, length: len, depth: area / len,
+    band: [{ outer: ring, holes: pc.holes || [] }], from, to, start: o, end: at(fr, len, 0), maxT, leftover: true };
+}
+
 /** Feet and inches: 13.667 → 13'-8". */
 function fmtFtIn(v) {
   const inch = Math.round(Math.max(0, v) * 12);
@@ -8656,10 +8759,11 @@ function fmtFtIn(v) {
  * → LevelLayout = the LevelFill keys (plate, corridor, core, stairs, elevators, support, units, runs, corners, counts, placed,
  *   dropped, depth, graph, warnings …) plus { layout: true, free, openArea, open, cornerZones, zone, allowance }.
  */
-function layoutLevel(level, state, { units = null, core: coreCtx = null, maxDepth = null, rotation = null, accessible = null } = {}) {
+function layoutLevel(level, state, { units = null, core: coreCtx = null, maxDepth = null, rotation = null, accessible = null, openLeftovers = null } = {}) {
   const F = levelFrame(level, state, { locks: [], rotation, core: coreCtx, maxDepth, manualRooms: true }, "layoutLevel");
   const { plate, mode, hotel, rot, warnings, where, kind, spine, width, auto, core, clear, stairs, support, elevators, boh, blocks, base, rc, cap, manual } = F;
-  const { runs, corners, pockets, rings, bands } = rc;
+  const { runs: runs0, corners, pockets, rings, bands: bands0 } = rc;
+  let runs = runs0, bands = bands0;
   const ext = F.ext;
   const types = mixTypes(state);
   const cornerId = (state.mix && state.mix.cornerType) || "2br";
@@ -8667,8 +8771,8 @@ function layoutLevel(level, state, { units = null, core: coreCtx = null, maxDept
   const list = (Array.isArray(units) ? units : []).filter((u) => u && isRing(u.outer));
 
   // targets: the suggestions and the placed-against-target table (the fill rule of plan 3.6)
-  const runLen = runs.reduce((s, r) => s + r.length, 0);
-  const depth = runLen > 0 ? runs.reduce((s, r) => s + r.length * r.depth, 0) / runLen : 0;
+  const runLen = runs0.reduce((s, r) => s + r.length, 0);
+  const depth = runLen > 0 ? runs0.reduce((s, r) => s + r.length * r.depth, 0) / runLen : 0;
   const eff = depth > 0 || hotel ? effectiveTypes(types, depth > 0 ? depth : 1, mode) : { types: [], dropped: [] };
   for (const d of eff.dropped) warnings.push(warn("type-does-not-fit", `${d.name || d.id} does not fit this depth (${r1(depth)} ft). Its width range ${r1(d.lo)} to ${r1(d.hi)} ft is empty. Suggestions do not use it.`, { ...where, type: d.id, lo: d.lo, hi: d.hi }, "info"));
   const accW = hotel ? (state.mix && Array.isArray(state.mix.accessibleWidth) && isNum(state.mix.accessibleWidth[2]) ? state.mix.accessibleWidth[2] : 15.5) : 0;
@@ -8703,6 +8807,26 @@ function layoutLevel(level, state, { units = null, core: coreCtx = null, maxDept
       warnings.push(warn("unit-clipped", `A block or another unit cuts unit ${u.id}. Its area is now ${fmtSf(absArea(outer))} sf.`, { ...where, unit: u.id }, "info"));
     }
     placedUnits.push({ src: u, outer: rr3(outer), bb: bboxOf(polyOf(outer)), clipped, a0 });
+  }
+
+  // leftover runs (leftover fix, October 26, 2026): every leftover piece of the band partition has a run along its
+  // corridor side (leftoverRun). A piece is open (its run joins `runs`, the rest of it is an open stretch) when a seed
+  // point of opts.openLeftovers lies in it ("Make open stretch") or a drawn unit covers more than 1 sf of it (a paint,
+  // a ghost or a free unit drawn there). The other pieces stay support "leftover" and offer their run in leftoverRuns.
+  const seeds = (Array.isArray(openLeftovers) ? openLeftovers : []).filter(isPt);
+  const pieceRuns = rc.remainders.map((r, k) => {
+    const pc = { outer: r.outer, holes: r.holes || [] };
+    const run = leftoverRun(pc, k, clear, rings);
+    if (!run) return { k, pc, run: null, opened: false };
+    const pbb = bboxOf([pc]);
+    const opened = seeds.some((p) => inMP(p, [pc])) ||
+      placedUnits.some((q) => bboxHit(pbb, q.bb) && mpArea(bool("int", [pc], polyOf(q.outer))) > 1);
+    return { k, pc, run, opened };
+  });
+  const openedRuns = pieceRuns.filter((x) => x.opened).map((x) => x.run);
+  if (openedRuns.length) {
+    runs = [...runs0, ...openedRuns];
+    bands = [...bands0, ...openedRuns.map((r) => ({ id: r.bandId, band: r.band, fr: r.fr, s1: r.length, depth: r.depth, maxT: r.maxT, leftover: true }))];
   }
 
   // derived fields of every unit (the fill shape: area, exposures, corner, bay, ring, demising, door)
@@ -8820,7 +8944,7 @@ function layoutLevel(level, state, { units = null, core: coreCtx = null, maxDept
   };
   const pockets2 = pockets.flatMap((p) => lessUnits({ outer: p.outer, holes: p.holes || [] }));
   const trims2 = (rc.trims || []).flatMap((p) => lessUnits({ outer: p.outer, holes: p.holes || [] }));
-  const left2 = rc.remainders.flatMap((r) => lessUnits({ outer: r.outer, holes: r.holes || [] }).map((q) => ({ outer: q.outer, holes: q.holes, why: r.why })));
+  const left2 = rc.remainders.flatMap((r, k) => (pieceRuns[k].opened ? [] : lessUnits({ outer: r.outer, holes: r.holes || [] }).map((q) => ({ outer: q.outer, holes: q.holes, why: r.why, piece: pieceRuns[k].run ? k : null }))));
   const extraRem = [];
   const fixed = [...unitMP, ...pockets2, ...trims2, ...left2.map((r) => ({ outer: r.outer, holes: r.holes || [] }))];
   let taken = fixed.length ? bool("union", fixed, []) : [];
@@ -8835,7 +8959,7 @@ function layoutLevel(level, state, { units = null, core: coreCtx = null, maxDept
   const support_ = [
     ...support, ...boh,
     ...pockets2.map((p, k) => ({ id: `P${k + 1}`, kind: "pocket", outer: rr3(p.outer) })),
-    ...[...left2, ...extraRem].map((p) => ({ id: `L${++nl}`, kind: "leftover", outer: rr3(p.outer), why: p.why })),
+    ...[...left2, ...extraRem].map((p) => ({ id: `L${++nl}`, kind: "leftover", outer: rr3(p.outer), why: p.why, ...(isNum(p.piece) ? { run: pieceRuns[p.piece].run.id } : {}) })),
     ...trims2.map((p, k) => ({ id: `T${k + 1}`, kind: "trim", outer: rr3(p.outer), why: "depth-cap" })),
   ];
 
@@ -8877,17 +9001,24 @@ function layoutLevel(level, state, { units = null, core: coreCtx = null, maxDept
     reach = { from: [r3(from[0]), r3(from[1])], maxFt, keys: rr.count, of: out.length };
   }
   const rmp = (mp) => asMP(mp).map((pc) => ({ outer: rr3(pc.outer), holes: pc.holes.map(rr3) }));
+  const runOut = (r) => {
+    const s = at(r.fr, r.a, 0), e = at(r.fr, r.b, 0);
+    return { id: r.id, ring: r.ring, edge: r.edge, from: r3(r.from), to: r3(r.to), length: Math.round(r.length * 1000) / 1000, depth: Math.round(r.depth * 1000) / 1000,
+      start: [r3(s[0]), r3(s[1])], end: [r3(e[0]), r3(e[1])], u: r.fr.u.slice(), n: r.fr.n.slice(), band: rmp(r.band), bandId: r.bandId, ...endsOf(r),
+      ...(r.capped ? { capped: true } : {}), ...(r.leftover ? { leftover: true } : {}) };
+  };
+  // the runs of the leftover pieces that are not open: the page paints and suggests on them; the first unit opens the piece
+  const leftoverRuns = pieceRuns.filter((x) => x.run && !x.opened).map((x) => {
+    const r = runOut(x.run);
+    return { ...r, stretch: { id: `${r.id}:1`, runId: r.id, a: 0, b: r.length, length: r.length, depth: r.depth, start: r.start, end: r.end } };
+  });
   return {
     layout: true,
     index: level.index, kind, width, spine, plate, inset: rmp(base.inset),
     corridor, corridorClear: clear, core: core ? rr3(core) : null,
     coreMode: auto ? "auto" : core ? "manual" : "none", coreRooms, coreFits, coreProgram: auto ? auto.program : manual ? manual.program : null, maxDepth: cap,
     stairs, elevators, support: support_, units: out,
-    runs: runs.map((r) => {
-      const s = at(r.fr, r.a, 0), e = at(r.fr, r.b, 0);
-      return { id: r.id, ring: r.ring, edge: r.edge, from: r3(r.from), to: r3(r.to), length: Math.round(r.length * 1000) / 1000, depth: Math.round(r.depth * 1000) / 1000,
-        start: [r3(s[0]), r3(s[1])], end: [r3(e[0]), r3(e[1])], u: r.fr.u.slice(), n: r.fr.n.slice(), band: rmp(r.band), bandId: r.bandId, ...endsOf(r), ...(r.capped ? { capped: true } : {}) };
-    }),
+    runs: runs.map(runOut), leftoverRuns,
     corners: corners.map((c, i) => ({ id: cid(i), ring: rings[c.ring].id, at: c.at, e: c.e, legs: c.legs, eTarget: c.eTarget, type: cornerId, outer: rr3(c.outer), ...(c.absorbed ? { absorbed: true } : {}) })),
     cornerZones, free, openArea: r1(openArea), open: rmp(open), zone: rmp(zoneHard), allowance: r1(allowance),
     counts, placed: placedCount, dropped: eff.dropped.map((d) => ({ id: d.id, lo: d.lo, hi: d.hi })), deep: [],
@@ -9007,7 +9138,8 @@ function buildPlates(state, { project = null } = {}) {
       acc = () => ({ typeA: per });
     }
   }
-  const out = filled.map((g) => ({ g, fill: layoutLevel(levelOf(g), st, { units: unitsFor(g), accessible: acc(g), rotation, core: coreFor(), maxDepth: capOf(g) }) }));
+  const openFor = (g) => (src === "project" ? groupState(g).openLeftovers : st.openLeftovers);
+  const out = filled.map((g) => ({ g, fill: layoutLevel(levelOf(g), st, { units: unitsFor(g), accessible: acc(g), rotation, core: coreFor(), maxDepth: capOf(g), openLeftovers: openFor(g) }) }));
   return B.finish(out);
 }
 
@@ -9035,7 +9167,9 @@ const SuggestMod = (() => {
      automatic fill, so a blank run gives the units of the reference fill.
    - Hotel accessible keys are not suggested; the architect draws them (type "accessible").
    - A ghost has the type of the fill. Its match is the draw plan 3.3 match for that type ("large" on a deep run).
-   - A stretch that fits no set of units gives units: [] and the note. Otherwise the note is null.
+   - A stretch that no set of units fills exactly takes the units of the longest shorter length that a set fills (0.25 ft
+     steps, up to 40 ft shorter), from its start; the note names the open rest. A stretch that fits no set at all gives
+     units: [] and the too-short note. Otherwise the note is null.
    Pure and deterministic: no DOM, no hidden state, inputs are never mutated.
    ========================================================================== */
 
@@ -9078,8 +9212,29 @@ function suggestRun(layout, state, freeStretch, { counters = null } = {}) {
   const counts = layout.counts && typeof layout.counts === "object" ? layout.counts : {};
   const tooShort = { units: [], note: `This stretch (${fmtFtIn(length)}) is too short for any type. Extend a neighbor or leave it open.` };
   if (!(length > 0)) return tooShort;
-  const [res] = fillRuns([{ id: "S", length, depth }], types, counts, { mode, placed });
-  if (!res || res.short || !res.units.length) return tooShort;
+  const cache = new Map();
+  let [res] = fillRuns([{ id: "S", length, depth }], types, counts, { mode, placed, cache });
+  // leftover fix: no set of units fills the stretch exactly (a hotel stretch of 66 ft: 4 keys reach 60, 5 keys need
+  // 67.5). The longest shorter length that a set fills takes the units, from the stretch start; the rest stays open.
+  let used = length;
+  if (!res || res.short || !res.units.length) {
+    res = null;
+    for (let cut = 0.25; cut <= Math.min(length - 1, 40) + 1e-9; cut += 0.25) {
+      const [r] = fillRuns([{ id: "S", length: length - cut, depth }], types, counts, { mode, placed, cache });
+      if (r && !r.short && r.units.length) { res = r; used = length - cut; break; }
+    }
+    // the feasible lengths are intervals: find the top of this one between used and used + 0.25 (to 0.001 ft)
+    if (res) {
+      let lo = used, hi = Math.min(length, used + 0.25);
+      for (let i = 0; i < 9 && hi - lo > 0.001; i++) {
+        const m = (lo + hi) / 2;
+        const [r] = fillRuns([{ id: "S", length: m, depth }], types, counts, { mode, placed, cache });
+        if (r && !r.short && r.units.length) { lo = m; res = r; } else hi = m;
+      }
+      used = lo;
+    }
+  }
+  if (!res) return tooShort;
   const fr = { o: run.start, u: run.u, n: run.n };
   const band = asMP(run.band);
   const runKey = `${run.ring}:${run.edge}:${r1(run.from)}`;
@@ -9095,7 +9250,8 @@ function suggestRun(layout, state, freeStretch, { counters = null } = {}) {
     const match = matchFor(area, byId.get(u.type) || null, depth, { width, mode });
     units.push({ type: u.type, outer, area, width, match, mode: "run", runKey, runId: run.id, a: r3(s0), b: r3(s1) });
   }
-  return { units, note: null };
+  const note = used < length - 1e-6 ? `The units take ${fmtFtIn(used)} of this ${fmtFtIn(length)} stretch. ${fmtFtIn(length - used)} stays open: widen a unit or leave it.` : null;
+  return { units, note };
 }
 
 /** The wrap unit of one corner zone (draw plan 2.3): the corner type on the zone (legs from the plan 3.5 formula). */
@@ -10428,7 +10584,27 @@ const TEST_CASES = [
   },
 ];
 
-return { TEST_CASES };
+/**
+ * The leftover fixture (Cade's hotel tower, October 26, 2026): a 140 ft square turned 45 degrees (half diagonal 99 ft),
+ * its north and south corners rounded (radius 50 ft, `segs` segments per 90 degree arc), its east and west corners cut
+ * flat at x = ±77 (flat sides 44 ft long), then the whole plate turned `rot` degrees counter-clockwise about the origin.
+ * About 154 × 156 ft. With the auto core (hotel: about 62 × 33 ft) and its point corridor, the facade north and south of
+ * the corridor lies 34 to 55 ft beyond the corridor face. → Ring (counter-clockwise, 0.001 ft)
+ */
+function hotelTowerPlate(rot = 0, { segs = 10 } = {}) {
+  const h = 99, r = 50, dc = r * Math.SQRT2;
+  const pts = [];
+  const arc = (cy, a0) => { for (let i = 0; i <= segs; i++) { const t = ((a0 - 45 + (90 * i) / segs) * Math.PI) / 180; pts.push([r * Math.cos(t), cy + r * Math.sin(t)]); } };
+  arc(-h + dc, -90);                                   // south
+  pts.push([77, -(h - 77)], [77, h - 77]);             // east flat side
+  arc(h - dc, 90);                                     // north
+  pts.push([-77, h - 77], [-77, -(h - 77)]);           // west flat side
+  const c = Math.cos((rot * Math.PI) / 180), s = Math.sin((rot * Math.PI) / 180);
+  const q = (v) => Math.round(v * 1000) / 1000 + 0;
+  return pts.map(([x, y]) => [q(x * c - y * s), q(x * s + y * c)]);
+}
+
+return { TEST_CASES, hotelTowerPlate };
 })();
 
 
@@ -10597,6 +10773,9 @@ const cleanId = (raw, prefix, i, taken) => {
   return id;
 };
 
+/** Seed points of the leftovers made open stretches: [[x, y]], at most 64. */
+const cleanSeeds = (list) => (Array.isArray(list) ? list : []).filter((p) => Array.isArray(p) && p.length >= 2 && [p[0], p[1]].every((v) => typeof v === 'number' && isFinite(v))).slice(0, 64).map((p) => [p[0], p[1]]);
+
 /** Fill every missing field from the defaults so older or partial states (presets, imports) are complete. */
 function fillDefaults(src) {
   const s = DrawMod.migrateUnits(isObj(src) ? src : {});       // draw plan 2.1: locks become units; a state with none is blank
@@ -10632,6 +10811,8 @@ function fillDefaults(src) {
   for (const k of Object.keys(lv.groups)) {
     const g = isObj(lv.groups[k]) ? lv.groups[k] : {};
     lv.groups[k] = { filled: g.filled !== false, units: Array.isArray(g.units) ? g.units : [] };
+    const go = cleanSeeds(g.openLeftovers);
+    if (go.length) lv.groups[k].openLeftovers = go;
     const gd = cleanDepth(g.maxDepth);
     if (gd !== null) lv.groups[k].maxDepth = gd;
   }
@@ -10709,6 +10890,7 @@ function fillDefaults(src) {
 
   // drawn units (cleaned by DrawMod.migrateUnits above) and placement
   s.units = Array.isArray(s.units) ? s.units.slice(0, CONFIG.limits.maxUnits) : [];
+  s.openLeftovers = cleanSeeds(s.openLeftovers);         // leftover fix: seed points of the leftovers made open stretches
   delete s.locks;
   s.placement = isObj(s.placement) ? { x: num(s.placement.x, 0), y: num(s.placement.y, 0), rotation: num(s.placement.rotation, 0), baseZ: num(s.placement.baseZ, 0) } : null;
 
@@ -12913,7 +13095,17 @@ const Select = (() => {
   const unitVec = (a, b) => { const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; return [(b[0] - a[0]) / L, (b[1] - a[1]) / L]; };
   const extent = (ring, v) => { let lo = Infinity, hi = -Infinity; for (const p of ring) { const q = dot(p, v); if (q < lo) lo = q; if (q > hi) hi = q; } return [lo, hi]; };
   const inMP = (mp, x, y) => (mp || []).some((pc) => pointInRing(x, y, pc.outer) && !(pc.holes || []).some((h2) => pointInRing(x, y, h2)));
-  const runById = (id) => { const lay = layout(); return lay ? (lay.runs || []).find((r) => r.id === id) || null : null; };
+  const runById = (id) => { const lay = layout(); return lay ? (lay.runs || []).find((r) => r.id === id) || (lay.leftoverRuns || []).find((r) => r.id === id) || null : null; };
+  /** The layout with the runs of the leftover pieces as runs, each with one open stretch (leftover fix): the paint and the
+   *  suggestions treat a leftover as an open stretch; the first unit drawn there opens the piece (fill.js layoutLevel). */
+  function layoutPlus() {
+    const lay = layout();
+    if (!lay || !(lay.leftoverRuns || []).length) return lay;
+    return { ...lay, runs: [...lay.runs, ...lay.leftoverRuns], free: [...lay.free, ...lay.leftoverRuns.map((r) => r.stretch)] };
+  }
+  /** A leftover support piece of the layout (it names its run; the derived support does not carry it). */
+  const leftoverOf = (id) => { const lay = layout(); const b = lay ? (lay.support || []).find((x) => x.id === id && x.kind === 'leftover') : null; return b && b.run ? b : null; };
+  const leftoverRunOf = (b) => { const lay = layout(); return b && lay ? (lay.leftoverRuns || []).find((r) => r.id === b.run) || null : null; };
   const runS = (run, p) => dot(sub(p, run.start), run.u);
   const runPoint = (run, s, t = 0) => [run.start[0] + run.u[0] * s + run.n[0] * t, run.start[1] + run.u[1] * s + run.n[1] * t];
   /** The size of a unit: width along its run (or its longer side) and depth across it. */
@@ -13082,7 +13274,7 @@ const Select = (() => {
   /* ---- finding what is under a point ------------------------------------------------------------------------------ */
   const isUserSupport = (id) => (Store.raw().support || []).some((b) => b.id === id);
   /** The empty corner zone or the open stretch under a plan point: { kind: 'corner', zone } | { kind: 'run', run, s, stretch } | null. */
-  function openAt(p) {
+  function openAt(p, { leftovers = false } = {}) {
     const lay = layout();
     if (!lay) return null;
     for (const z of lay.cornerZones || []) if (pointInRing(p[0], p[1], z.outer)) return { kind: 'corner', zone: z };
@@ -13091,6 +13283,14 @@ const Select = (() => {
       const s = runS(r, p);
       const st = (lay.free || []).find((f) => f.runId === r.id && s >= f.a - 0.01 && s <= f.b + 0.01);
       if (st) return { kind: 'run', run: r, s, stretch: st };
+    }
+    // a leftover piece (Paint only): its run, as one open stretch
+    if (leftovers) {
+      for (const r of lay.leftoverRuns || []) {
+        if (!inMP(r.band, p[0], p[1])) continue;
+        const b = (lay.support || []).find((x) => x.kind === 'leftover' && x.run === r.id) || null;
+        return { kind: 'run', run: r, s: runS(r, p), stretch: r.stretch, leftover: b ? b.id : null };
+      }
     }
     return null;
   }
@@ -13244,7 +13444,7 @@ const Select = (() => {
     const lay = layout();
     if (!lay || !paint) return null;
     if (paint.kind === 'corner') return DrawMod.cornerUnit(lay, Store.raw(), paint.zoneId);
-    return DrawMod.paintUnit(lay, Store.raw(), paint.runId, paint.s0, s1, { snap: snapOn(alt) });
+    return DrawMod.paintUnit(layoutPlus(), Store.raw(), paint.runId, paint.s0, s1, { snap: snapOn(alt) });
   }
   function renderPaint(res, cx, cy) {
     if (!previewGroup) return;
@@ -13263,7 +13463,7 @@ const Select = (() => {
   function startPaint(target, e, p) {
     const base = { pointerId: e.pointerId, x: e.clientX, y: e.clientY, moved: false, target };
     if (target.kind === 'corner') paint = { ...base, kind: 'corner', zoneId: target.zone.id };
-    else paint = { ...base, kind: 'run', runId: target.run.id, s0: target.s, stretchId: target.stretch.id };
+    else paint = { ...base, kind: 'run', runId: target.run.id, s0: target.s, stretchId: target.stretch.id, leftover: target.leftover || null };
     try { Render.canvas().setPointerCapture(e.pointerId); } catch (err) { /* synthetic events have no capture */ }
     Render.setOrbitEnabled(false);
     syncHint();
@@ -13290,7 +13490,7 @@ const Select = (() => {
   }
   /** Logical paint (the pointer path ends here): a unit on `runId` from s0 to s1 (ft from the run start). */
   function paintOnRun(runId, s0, s1, { snap = true } = {}) {
-    const lay = layout();
+    const lay = layoutPlus();
     if (!lay) return { unit: null, refused: 'no-layout', message: 'The plate has no layout.' };
     const res = DrawMod.paintUnit(lay, Store.raw(), runId, s0, s1, { snap });
     if (!res.unit) { Toast.show(res.message || 'The unit did not fit there.', 'warn', 4000); return res; }
@@ -13314,6 +13514,7 @@ const Select = (() => {
     endPaint();
     if (!moved || !res) {                                                 // a tap: select the open stretch or the corner zone
       if (pn.kind === 'corner') setSel({ kind: 'corner', id: pn.zoneId });
+      else if (pn.leftover) setSel({ kind: 'support', id: pn.leftover });
       else { const f = freeById(pn.stretchId); if (f) setSel({ kind: 'free', id: f.id, runId: f.runId, mid: (f.a + f.b) / 2 }); }
       return true;
     }
@@ -13356,10 +13557,15 @@ const Select = (() => {
         const z = zoneById(sel.id);
         if (!z) return { ok: false, count: 0, note: 'Select a corner zone first.' };
         list = [SuggestMod.suggestCorner(lay, Store.raw(), z)];
+      } else if (sel.kind === 'support' && leftoverOf(sel.id)) {
+        const r = leftoverRunOf(leftoverOf(sel.id));
+        if (!r) return { ok: false, count: 0, note: 'This leftover has no side to place units along.' };
+        const res = SuggestMod.suggestRun(layoutPlus(), Store.raw(), r.stretch, {});
+        list = res.units; note = res.note;
       } else return { ok: false, count: 0, note: 'Select an open stretch or a corner zone first.' };
     } catch (e) { console.error(e); return { ok: false, count: 0, note: 'The tool could not make a suggestion here.' }; }
     ghosts = { forKind: sel.kind, forId: sel.id, list: list.map((g, i) => ({ ...g, gid: `g${i + 1}` })), note };
-    if (note) Toast.show(note, 'warn', 6000);
+    if (note) Toast.show(note, list.length ? '' : 'warn', 6000);
     renderGhosts();
     renderCard();
     return { ok: !!list.length, count: list.length, note };
@@ -13591,6 +13797,43 @@ const Select = (() => {
     if (s.stairs.mode === 'manual') return s.stairs.items.map((b) => ({ id: b.id, rect: b.rect.slice() }));
     const L = editing();
     return L ? L.stairs.map((b) => ({ id: b.id, rect: ringRect(b.outer).map(rnd3) })) : [];
+  }
+
+  /* ---- leftovers (leftover fix): Fill with units, Make open stretch ---------------------------------------------------- */
+  const openPath = () => {
+    const s = Store.raw(), L = editing();
+    if (s.source === 'project') return L && L.groupId ? `levels.groups.${L.groupId}.openLeftovers` : null;
+    return 'openLeftovers';
+  };
+  /** A point inside a ring: its centroid, else the middle of the run base moved a little into the piece. */
+  function insidePoint(b, run) {
+    const c = ringCentroidXY(b.outer);
+    if (pointInRing(c[0], c[1], b.outer)) return c;
+    for (const f of [0.5, 0.25, 0.75]) for (const t of [0.5, 1, 2, 4]) { const p = runPoint(run, run.length * f, Math.min(t, run.depth / 2)); if (pointInRing(p[0], p[1], b.outer)) return p; }
+    return c;
+  }
+  /** Make open stretch: the leftover becomes an open stretch (a seed point in openLeftovers; one undo step) and is selected. */
+  function openLeftover(id = sel && sel.kind === 'support' ? sel.id : null) {
+    const b = leftoverOf(id), run = leftoverRunOf(b), p = openPath();
+    if (!b || !run || !p) { Toast.show('This leftover has no side to place units along. Draw a unit in it with Rectangle or Polygon.', 'warn', 5000); return { ok: false }; }
+    const seed = insidePoint(b, run).map(rnd3);
+    const s = Store.raw(), L = editing();
+    internal++;
+    try {
+      if (s.source === 'project' && !(s.levels.groups && s.levels.groups[L.groupId])) Store.set(`levels.groups.${L.groupId}`, { filled: true, units: [], openLeftovers: [seed] }, { live: false });
+      else { const cur = Store.get(p); Store.set(p, [...(Array.isArray(cur) ? cur : []), seed], { live: false }); }
+    } finally { internal--; }
+    const lay = layout();
+    const f = lay ? (lay.free || []).find((x) => x.runId === run.id) : null;
+    if (f) setSel({ kind: 'free', id: f.id, runId: f.runId, mid: (f.a + f.b) / 2 });
+    else clear();
+    return { ok: !!f, runId: run.id, stretch: f ? f.id : null };
+  }
+  /** Fill with units: the suggestion on the leftover's run (ghosts; Accept all makes the units and opens the piece). */
+  function fillLeftover(id = sel && sel.kind === 'support' ? sel.id : null) {
+    if (!leftoverOf(id)) return { ok: false, count: 0, note: 'Select a leftover first.' };
+    if (!(sel && sel.kind === 'support' && sel.id === id)) setSel({ kind: 'support', id });
+    return suggest();
   }
 
   /* ---- editing blocks and the core ------------------------------------------------------------------------------------- */
@@ -13933,7 +14176,7 @@ const Select = (() => {
       }
       if (tool === 'paint') {
         const p = planAt(e.clientX, e.clientY);
-        const target = p && !ghostAt(p) ? openAt(p) : null;
+        const target = p && !ghostAt(p) ? openAt(p, { leftovers: true }) : null;
         if (target) { grab(e); startPaint(target, e, p); return; }
       }
     }
@@ -14001,7 +14244,7 @@ const Select = (() => {
     } else if (!draw && !r && e.pointerType === 'mouse' && tool === 'paint' && !drag && !paint) {
       const p = planAt(e.clientX, e.clientY);
       const c = Render.canvas();
-      if (c) c.classList.toggle('can-paint', !!(p && openAt(p) && !ghostAt(p)));
+      if (c) c.classList.toggle('can-paint', !!(p && openAt(p, { leftovers: true }) && !ghostAt(p)));
     }
   }
   function endDrag(e) {
@@ -14048,7 +14291,7 @@ const Select = (() => {
     if (p && ghosts) { const g = ghostAt(p); if (g) { acceptGhosts(g.gid); return { kind: 'ghost', id: g.gid }; } }
     const hit = pickAt(cx, cy);
     setSel(hit);
-    if (hit && tool === 'suggest' && (hit.kind === 'free' || hit.kind === 'corner')) suggest();
+    if (hit && tool === 'suggest' && (hit.kind === 'free' || hit.kind === 'corner' || (hit.kind === 'support' && leftoverOf(hit.id)))) suggest();
     return hit;
   }
 
@@ -14175,6 +14418,21 @@ const Select = (() => {
       }
       if (sel.kind === 'stair' && Store.raw().stairs.mode !== 'manual') info.rows.push(['Mode', 'Moving it switches the stairs to Manual']);
       if (sel.kind === 'support' && !isUserSupport(sel.id)) info.rows.push(['Source', 'from the plate']);
+      const lo = sel.kind === 'support' ? leftoverOf(sel.id) : null;
+      if (lo) {
+        const run = leftoverRunOf(lo);
+        if (run) info.rows.push(['Side', `${fmt(run.length)} along its long side, ${fmt(run.depth)} deep on average`]);
+        if (ghosts && ghosts.forId === sel.id && ghosts.forKind === 'support') {
+          info.rows.push(['Suggestion', ghosts.list.length ? ghosts.list.map((g) => `${typeName(g.type)} ${Math.round(g.area).toLocaleString('en-US')} sf`).join(', ') : (ghosts.note || 'No unit fits this leftover.')]);
+          if (ghosts.list.length) cardRefs.actions.append(btn('Accept all', 'accept-all', () => acceptGhosts(), { solid: true }));
+          cardRefs.actions.append(btn('Dismiss', 'dismiss', () => dismissGhosts()));
+        } else {
+          info.rows.push(['Next', 'Fill with units, or make it an open stretch and draw units in it. Paint, Rectangle and Polygon also draw in a leftover.']);
+          cardRefs.actions.append(
+            btn('Fill with units', 'fill-leftover', () => fillLeftover(), { solid: true, disabled: !run, title: 'Show a layout of units for this leftover' }),
+            btn('Make open stretch', 'open-leftover', () => openLeftover(), { disabled: !run, title: 'Make this leftover an open stretch to draw units in' }));
+        }
+      }
       if ((sel.kind === 'support' && isUserSupport(sel.id)) || (sel.kind === 'stair' && Store.raw().stairs.mode === 'manual')) {
         cardRefs.actions.append(btn('Delete', 'delete', () => deleteBlock(sel), { danger: true }));
       }
@@ -14258,8 +14516,8 @@ const Select = (() => {
     addBlock, deleteBlock, setBlockRect, rectOf, setCoreMode, resetCore, setElevators, resizeCore, coreRectFor,
     // paint, free units, suggestions, clear
     paintOnRun, paintCorner, commitFree, suggest, acceptGhosts, dismissGhosts, ghosts: () => (ghosts ? { forKind: ghosts.forKind, forId: ghosts.forId, note: ghosts.note, list: ghosts.list.map((g) => ({ gid: g.gid, type: g.type, area: g.area, match: g.match, outer: g.outer })) } : null),
-    clearLevel, clearLevelNow, openAt,
-    layoutInfo: () => { const lay = layout(); return lay ? { runs: lay.runs.map((r) => ({ id: r.id, length: r.length, depth: r.depth, start: r.start, end: r.end, u: r.u, n: r.n, startCorner: r.startCorner || null, endCorner: r.endCorner || null })), free: lay.free.map((f) => ({ ...f })), cornerZones: lay.cornerZones.map((z) => ({ id: z.id, outer: z.outer })), openArea: lay.openArea, units: lay.units.length } : null; },
+    clearLevel, clearLevelNow, openAt, openLeftover, fillLeftover,
+    layoutInfo: () => { const lay = layout(); return lay ? { runs: lay.runs.map((r) => ({ id: r.id, length: r.length, depth: r.depth, start: r.start, end: r.end, u: r.u, n: r.n, startCorner: r.startCorner || null, endCorner: r.endCorner || null })), free: lay.free.map((f) => ({ ...f })), cornerZones: lay.cornerZones.map((z) => ({ id: z.id, outer: z.outer })), openArea: lay.openArea, units: lay.units.length, leftoverRuns: (lay.leftoverRuns || []).map((r) => ({ id: r.id, length: r.length, depth: r.depth, start: r.start, end: r.end, u: r.u, n: r.n })) } : null; },
     runPoint: (runId, s, t = 0) => { const r = runById(runId); return r ? runPoint(r, s, t) : null; },
     // units
     selectUnit: (k) => { const u = unitAt(k); return setSel({ kind: 'unit', id: String(k), k, uid: u ? u.uid : null }); },
@@ -15848,6 +16106,7 @@ const Help = (() => {
     ['Draw units', [
       'Paint is the default tool. Press on an open stretch along a facade and drag. The unit fills the band along the run. The label shows the area and the type match, for example "812 sf, 1BR, in range". Release to make the unit. Tap an open stretch to select it.',
       'Suggest: select an open stretch or an empty corner zone, then tap Suggest. Ghost units show a layout in dashed type colors. Tap a ghost to accept it. Tap Accept all to accept every ghost. Tap Dismiss or press Esc to remove them.',
+      'Leftover: a piece of the plate that no run reaches. Select it and tap Fill with units for a layout of ghost units, or Make open stretch to draw units in it. Paint, Rectangle and Polygon also draw in a leftover. The first unit makes the rest of it an open stretch.',
       'Rectangle and Polygon draw a free unit. The tool cuts the shape to the unit zone. A shape under 50 sf makes no unit. Rectangle: press, drag and release, or tap two corners. Polygon: tap the points, then tap the first point or press Enter.',
       'Select: tap a unit. The card shows the type chips, the area, the match, Split, Merge and Delete. Drag the dot on a bay line to move it along the run. The two units keep their sum. The two widths show beside the line.',
       'Unit outlines show the match. A normal outline is in range. An orange outline is a large unit. A blue outline is a small unit. An open stretch is a very light band. An empty corner zone is a faint dashed outline.',
@@ -19050,6 +19309,156 @@ runAllTests = ((base) => async function runAllWithTopBar() {
   r.passed += g.length - bad.length;
   r.failed.push(...bad);
   console.log(`[tests] topbar ${g.length - bad.length}/${g.length} passed`, bad.length ? JSON.stringify(bad) : '');
+  return r;
+})(runAllTests);
+
+/* ==========================================================================
+   TESTS: leftovers (the leftover fix, October 26, 2026)
+   Cade's hotel tower: a rounded and chamfered square plate around a large auto core with a point corridor. The fill now
+   gives runs north and south of the corridor (before: two leftovers of about 2,000 sf or more under the facade). A leftover
+   that stays offers "Fill with units" (the suggestion on its run) and "Make open stretch" in its card, and Paint and
+   Rectangle draw in it. LeftoverFixture opens the fixture as a project (in-memory storage) for these tests and for the
+   screenshots: three levels of the src/plate/testcases.js hotelTowerPlate, turned `rot` degrees, program hotel.
+   runAllTests is extended at the end of this file.
+   ========================================================================== */
+const LeftoverFixture = (() => {
+  const level = (index, rot) => ({ index, name: `Level ${index}`, zone: 'tower', z: (index - 1) * 11, ftf: 11, program: 'hotel', plates: [{ outer: TestCasesMod.hotelTowerPlate(rot), holes: [] }], core: null, spines: [], seeds: [] });
+  const massing = (rot) => ({ tool: 'tower', schema: 1, placement: { x: 0, y: 0, rotation: 0, baseZ: 0 }, state: {}, derived: { levels: [1, 2, 3].map((i) => level(i, rot)) } });
+  /** Opens the fixture project in Hotel mode. → the project doc */
+  function open({ rot = 12, name = 'Hotel tower fixture' } = {}) {
+    const mem = ProjectFixture.memory();
+    ProjectUI.reset();
+    ProjectUI.configure({ storage: mem, navigate: () => {}, updateUrl: () => {} });
+    let doc = ProjectMod.newProject({ name });
+    doc = ProjectMod.writeSection(doc, 'massing', massing(rot));
+    ProjectMod.saveProject(mem, doc);
+    ProjectUI.openDoc(doc);
+    Store.set('mode', 'hotel', { live: false });
+    return doc;
+  }
+  function close() { ProjectUI.close(); ProjectUI.restoreDefaults(); ProjectUI.reset(); }
+  return { open, close, massing };
+})();
+
+async function runLeftoverTests() {
+  const { eq, make, $, frames, snap } = TestHelp;
+  const { results, t } = make();
+  const savedState = Store.snapshot(), savedTab = UI.activeTab();
+  Options.holdAutosave(true);
+  const L = () => Derived.get().editing;
+  const lay = () => Derived.get().group.fill;
+  const gid = () => Derived.get().group.id;
+  const leftovers = () => lay().support.filter((b) => b.kind === 'leftover');
+  const leftoverSf = () => leftovers().reduce((s, b) => s + Math.abs(ringArea(b.outer)), 0);
+  const biggest = () => leftovers().filter((b) => b.run).sort((a, b) => Math.abs(ringArea(b.outer)) - Math.abs(ringArea(a.outer)))[0];
+  const units = () => Store.get(`levels.groups.${gid()}.units`) || [];
+  const cardBtn = (action) => document.querySelector(`#selection-card [data-action="${action}"]`);
+  const canvasEv = (type, x, y, id = 7) => Render.canvas().dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: id, pointerType: 'mouse', button: 0, buttons: type === 'pointerup' ? 0 : 1, clientX: x, clientY: y }));
+  const fresh = async () => {
+    Select.clear(); Select.setTool('select');
+    Store.replace(fillDefaults(defaultState()));
+    LeftoverFixture.open({ rot: 12 });
+    const g = Store.get(`levels.groups.${gid()}`);
+    if (g && ((g.units || []).length || (g.openLeftovers || []).length)) Store.set(`levels.groups.${gid()}`, { filled: true, units: [] }, { live: false });
+    if (Render.ready()) Render.setView('plan', false);
+    await frames(2);
+  };
+  try {
+    await t('leftover fix: the hotel tower turned 12 degrees fills north and south: 6 runs, leftovers under 1,500 sf, Suggest on the north run gives 5 keys', async () => {
+      await fresh();
+      const f = lay();
+      const north = f.runs.filter((r) => Math.abs(r.length - 74) < 0.05);
+      const st = north.length ? f.free.find((x) => x.runId === north[0].id) : null;
+      if (st) Select.select({ kind: 'free', id: st.id, runId: st.runId, mid: (st.a + st.b) / 2 });
+      const g = st ? Select.suggest() : { count: 0 };
+      Select.dismissGhosts();
+      return eq([Store.get('source'), Store.get('mode'), f.runs.length, north.length, leftoverSf() < 1500, g.count], ['project', 'hotel', 6, 2, true, 5]);
+    });
+    await t('leftover fix: a selected leftover shows "Fill with units" and "Make open stretch" in its card', async () => {
+      await fresh();
+      const b = biggest();
+      Select.select({ kind: 'support', id: b.id });
+      await frames(1);
+      const title = $('itemTitle') ? $('itemTitle').textContent : '';
+      return eq([/^Leftover block L\d+$/.test(title), !!cardBtn('fill-leftover'), !!cardBtn('open-leftover'), cardBtn('fill-leftover') && cardBtn('fill-leftover').textContent, cardBtn('open-leftover') && cardBtn('open-leftover').textContent],
+        [true, true, true, 'Fill with units', 'Make open stretch']);
+    });
+    await t('leftover fix: "Make open stretch" turns the leftover into an open stretch (selected), saves a seed in the group, one undo step', async () => {
+      await fresh();
+      const b = biggest(), n0 = leftovers().length, before = snap();
+      Select.select({ kind: 'support', id: b.id });
+      cardBtn('open-leftover').click();
+      await frames(1);
+      const s = Select.get();
+      const seeds = Store.get(`levels.groups.${gid()}.openLeftovers`) || [];
+      const ok = [s && s.kind, s && s.runId === b.run, seeds.length, leftovers().length, lay().free.some((f) => f.runId === b.run)];
+      Store.undo();
+      const back = snap() === before;
+      return eq([ok, back, leftovers().length], [['free', true, 1, n0 - 1, true], true, n0]);
+    });
+    await t('leftover fix: "Fill with units" shows ghost keys on the leftover; Accept all draws them and the leftover opens', async () => {
+      await fresh();
+      const b = biggest(), n0 = leftovers().length;
+      Select.select({ kind: 'support', id: b.id });
+      cardBtn('fill-leftover').click();
+      await frames(1);
+      const g = Select.ghosts();
+      const shown = !!g && g.forKind === 'support' && g.list.length >= 1 && !!cardBtn('accept-all');
+      cardBtn('accept-all').click();
+      await frames(1);
+      return eq([shown, units().length, leftovers().length, Select.get() && Select.get().kind], [true, g.list.length, n0 - 1, 'unit']);
+    });
+    if (Render.ready()) {
+      await t('leftover fix: Paint by pointer, starting inside a leftover, draws a key on its run', async () => {
+        await fresh();
+        Select.setTool('paint');
+        const b = biggest(), run = Select.layoutInfo().leftoverRuns.find((r) => r.id === b.run);
+        const tIn = Math.min(2, run.depth / 3);
+        const p0 = Select.runPoint(run.id, Math.min(1.5, run.length * 0.1), tIn), p1 = Select.runPoint(run.id, Math.min(run.length - 0.5, 15), tIn);
+        const a = Select.screenOf(p0[0], p0[1]), c = Select.screenOf(p1[0], p1[1]);
+        canvasEv('pointerdown', a.x, a.y);
+        for (let i = 1; i <= 6; i++) canvasEv('pointermove', a.x + ((c.x - a.x) * i) / 6, a.y + ((c.y - a.y) * i) / 6);
+        canvasEv('pointerup', c.x, c.y);
+        await frames(1);
+        const u = L().units[0];
+        return eq([units().length, !!u && u.runId === b.run, !!u && u.mode === 'run'], [1, true, true]);
+      });
+      await t('leftover fix: a Rectangle dragged inside a leftover draws a free unit there', async () => {
+        await fresh();
+        const b = biggest(), n0 = leftovers().length;
+        const c = ringCentroidXY(b.outer);
+        Select.setTool('rect');
+        const a = Select.screenOf(c[0] - 6, c[1] - 6), z = Select.screenOf(c[0] + 6, c[1] + 6);
+        canvasEv('pointerdown', a.x, a.y, 8);
+        canvasEv('pointermove', (a.x + z.x) / 2, (a.y + z.y) / 2, 8);
+        canvasEv('pointermove', z.x, z.y, 8);
+        canvasEv('pointerup', z.x, z.y, 8);
+        await frames(1);
+        const u = L().units[0];
+        Select.setTool('select');
+        return eq([units().length, !!u && pointInRing(c[0], c[1], u.outer), leftovers().length], [1, true, n0 - 1]);
+      });
+    }
+  } finally {
+    Select.clear();
+    Select.setTool('paint');
+    try { LeftoverFixture.close(); } catch (e) { /* not open */ }
+    Store.replace(savedState); UI.setTab(savedTab);
+    Options.holdAutosave(false);
+    UI.updateHud(Derived.get());
+  }
+  TestHelp.merged('leftover', results);
+  return results;
+}
+
+runAllTests = ((base) => async function runAllWithLeftover() {
+  const r = await base();
+  const g = await runLeftoverTests();
+  const bad = g.filter((x) => !x.ok);
+  r.results.push(...g);
+  r.total += g.length;
+  r.passed += g.length - bad.length;
+  r.failed.push(...bad);
   return r;
 })(runAllTests);
 

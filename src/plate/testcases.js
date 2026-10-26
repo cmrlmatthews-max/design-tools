@@ -138,3 +138,23 @@ export const TEST_CASES = [
     },
   },
 ];
+
+/**
+ * The leftover fixture (Cade's hotel tower, October 26, 2026): a 140 ft square turned 45 degrees (half diagonal 99 ft),
+ * its north and south corners rounded (radius 50 ft, `segs` segments per 90 degree arc), its east and west corners cut
+ * flat at x = ±77 (flat sides 44 ft long), then the whole plate turned `rot` degrees counter-clockwise about the origin.
+ * About 154 × 156 ft. With the auto core (hotel: about 62 × 33 ft) and its point corridor, the facade north and south of
+ * the corridor lies 34 to 55 ft beyond the corridor face. → Ring (counter-clockwise, 0.001 ft)
+ */
+export function hotelTowerPlate(rot = 0, { segs = 10 } = {}) {
+  const h = 99, r = 50, dc = r * Math.SQRT2;
+  const pts = [];
+  const arc = (cy, a0) => { for (let i = 0; i <= segs; i++) { const t = ((a0 - 45 + (90 * i) / segs) * Math.PI) / 180; pts.push([r * Math.cos(t), cy + r * Math.sin(t)]); } };
+  arc(-h + dc, -90);                                   // south
+  pts.push([77, -(h - 77)], [77, h - 77]);             // east flat side
+  arc(h - dc, 90);                                     // north
+  pts.push([-77, h - 77], [-77, -(h - 77)]);           // west flat side
+  const c = Math.cos((rot * Math.PI) / 180), s = Math.sin((rot * Math.PI) / 180);
+  const q = (v) => Math.round(v * 1000) / 1000 + 0;
+  return pts.map(([x, y]) => [q(x * c - y * s), q(x * s + y * c)]);
+}

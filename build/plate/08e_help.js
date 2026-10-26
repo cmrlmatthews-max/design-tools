@@ -23,6 +23,7 @@ const Help = (() => {
     ['Draw units', [
       'Paint is the default tool. Press on an open stretch along a facade and drag. The unit fills the band along the run. The label shows the area and the type match, for example "812 sf, 1BR, in range". Release to make the unit. Tap an open stretch to select it.',
       'Suggest: select an open stretch or an empty corner zone, then tap Suggest. Ghost units show a layout in dashed type colors. Tap a ghost to accept it. Tap Accept all to accept every ghost. Tap Dismiss or press Esc to remove them.',
+      'Leftover: a piece of the plate that no run reaches. Select it and tap Fill with units for a layout of ghost units, or Make open stretch to draw units in it. Paint, Rectangle and Polygon also draw in a leftover. The first unit makes the rest of it an open stretch.',
       'Rectangle and Polygon draw a free unit. The tool cuts the shape to the unit zone. A shape under 50 sf makes no unit. Rectangle: press, drag and release, or tap two corners. Polygon: tap the points, then tap the first point or press Enter.',
       'Select: tap a unit. The card shows the type chips, the area, the match, Split, Merge and Delete. Drag the dot on a bay line to move it along the run. The two units keep their sum. The two widths show beside the line.',
       'Unit outlines show the match. A normal outline is in range. An orange outline is a large unit. A blue outline is a small unit. An open stretch is a very light band. An empty corner zone is a faint dashed outline.',
