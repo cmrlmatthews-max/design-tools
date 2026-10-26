@@ -13119,7 +13119,7 @@ const Select = (() => {
     const cv = document.createElement('canvas'); cv.width = cv.height = 64;
     const c = cv.getContext('2d');
     c.beginPath(); c.arc(32, 32, 28, 0, Math.PI * 2); c.fillStyle = '#ffffff'; c.fill();
-    c.lineWidth = 7; c.strokeStyle = '#23508f'; c.stroke();
+    c.lineWidth = 10; c.strokeStyle = '#23508f'; c.stroke();
     const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace;
     return t;
   }
@@ -13206,10 +13206,10 @@ const Select = (() => {
       if (a) group.add(a); if (b) group.add(b);
     }
     handles = visibleBays().map((e) => ({ e, w: planToWorld(e.mid[0], e.mid[1], z) }));
-    const bd = dots(handles.map((hh) => hh.w), COARSE ? 24 : 13);       // 44 pt touch handle on a touch screen
+    const bd = dots(handles.map((hh) => hh.w), COARSE ? 14 : 10);       // small drawn dot; the touch hit target stays 28 px (44 pt), so the dot never hides the plan
     if (bd) group.add(bd);
     cornerHandles = coreHandles().map((c, i) => ({ i, c, w: planToWorld(c[0], c[1], z) }));
-    const cd = dots(cornerHandles.map((hh) => hh.w), COARSE ? 24 : 13);
+    const cd = dots(cornerHandles.map((hh) => hh.w), COARSE ? 14 : 10);
     if (cd) group.add(cd);
     renderGhosts();
     Render.requestRender();
