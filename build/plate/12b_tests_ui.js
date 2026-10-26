@@ -156,11 +156,12 @@ async function runUiTests() {
     }
 
     /* ---- menus ---- */
-    await t('the Export menu lists Image, Rooms, DXF, SketchUp, Notes, JSON and both Send items', () => {
+    await t('the Export menu lists Image, Rooms, DXF, SketchUp, Notes, JSON and the Send to Parking Deck item, and no Facade Studio item', () => {
       $('btnExport').click();
       const ids = [...document.querySelectorAll('#exportMenu [id]')].map((b) => b.id);
+      const menuText = document.querySelector('#exportMenu').textContent;
       Pop.close();
-      return eq(['miImage', 'miRooms', 'miDxf', 'miSketchup', 'miNotes', 'miExportJson', 'miImportJson', 'miSendParking', 'miSendFacade'].filter((i) => !ids.includes(i)), []);
+      return eq(['miImage', 'miRooms', 'miDxf', 'miSketchup', 'miNotes', 'miExportJson', 'miImportJson', 'miSendParking'].filter((i) => !ids.includes(i)), []) && eq(ids.filter((i) => /facade/i.test(i)), []) && eq(/facade/i.test(menuText), false);
     });
     await t('the Export menu has no item of another tool (Revit, AI prompts, AI-ready image)', () => {
       $('btnExport').click();

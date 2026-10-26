@@ -15616,8 +15616,7 @@ const UI = (() => {
         item('miExportJson', 'Export JSON', 'Download all saved options', () => Options.exportJson()),
         item('miImportJson', 'Import JSON', 'Add the options from a file', () => $('importFile').click()),
         h('div', { class: 'pop-sep' }), h('div', { class: 'label pop-label' }, 'Send the project to'),
-        item('miSendParking', 'Parking Deck', 'Save the project, then open the Parking Deck on it', () => ProjectUI.send('parking')),
-        item('miSendFacade', 'Facade Studio', 'Save the project, then open the Facade Studio on it', () => ProjectUI.send('facade')));
+        item('miSendParking', 'Parking Deck', 'Save the project, then open the Parking Deck on it', () => ProjectUI.send('parking')));
     };
     const overlay = () => {
       el.textContent = '';
@@ -16150,13 +16149,13 @@ const Help = (() => {
       'Buildings removed in the Site Model do not show here. This tool does not drag. Move the building in the Tower Generator or the Mid-Rise Generator.',
     ]],
     ['Projects', [
-      'A project holds the site, the massing and the work of other tools in one file. The Plate Planner reads the massing levels and writes a plates section with the units, so the Parking Deck and the Facade Studio can read it.',
+      'A project holds the site, the massing and the work of other tools in one file. The Plate Planner reads the massing levels and writes a plates section with the units, so the Parking Deck can read it.',
       'The page saves by itself a second after each change. Each level group keeps its own drawn units. If the massing changes, check the units against the new plate.',
     ]],
     ['Files', [
       'Option menu > Save keeps the design in this browser. Export > Export JSON downloads all saved options. Import JSON adds them back.',
       'Export > Rooms is a CSV of every unit. DXF has the plate, units, corridor, core and support on layers. SketchUp opens with the CMRLM extension. Notes is a plain-text summary with the cautions. Image saves a picture of the view.',
-      'Send to Parking Deck and Send to Facade Studio save the project and open that tool on it.',
+      'Send to Parking Deck saves the project and opens that tool on it.',
     ]],
   ];
   function toggle() {
@@ -16729,7 +16728,7 @@ const ProjectUI = (() => {
     return true;
   }
 
-  const SEND_TO = ['parking', 'facade'];
+  const SEND_TO = ['parking'];
   /** Send to another tool: save the project, then open ../<tool>/?project=<id>. With no project open, one is made first. */
   async function send(toolId) {
     Pop.close();
@@ -17498,11 +17497,12 @@ async function runUiTests() {
     }
 
     /* ---- menus ---- */
-    await t('the Export menu lists Image, Rooms, DXF, SketchUp, Notes, JSON and both Send items', () => {
+    await t('the Export menu lists Image, Rooms, DXF, SketchUp, Notes, JSON and the Send to Parking Deck item, and no Facade Studio item', () => {
       $('btnExport').click();
       const ids = [...document.querySelectorAll('#exportMenu [id]')].map((b) => b.id);
+      const menuText = document.querySelector('#exportMenu').textContent;
       Pop.close();
-      return eq(['miImage', 'miRooms', 'miDxf', 'miSketchup', 'miNotes', 'miExportJson', 'miImportJson', 'miSendParking', 'miSendFacade'].filter((i) => !ids.includes(i)), []);
+      return eq(['miImage', 'miRooms', 'miDxf', 'miSketchup', 'miNotes', 'miExportJson', 'miImportJson', 'miSendParking'].filter((i) => !ids.includes(i)), []) && eq(ids.filter((i) => /facade/i.test(i)), []) && eq(/facade/i.test(menuText), false);
     });
     await t('the Export menu has no item of another tool (Revit, AI prompts, AI-ready image)', () => {
       $('btnExport').click();
@@ -17749,7 +17749,7 @@ async function runSelectTests() {
    TESTS: the project file  (plan sections 7 and 9.2)
    A hand-built Mid-Rise massing: two bars, five levels with the same plate, placed at x 40, y 60. Open it, fill it (one group of five
    floors), write the plates section (1 s debounce, visibilitychange, pagehide), keep every other section, a newer massing shows the stale
-   notice, a newer schema is read only, and the Send items open ../parking/?project=<id> and ../facade/?project=<id>.
+   notice, a newer schema is read only, and the Send item opens ../parking/?project=<id>.
    The fixture lives in an in-memory storage, so a ?test visit never touches the saved projects.
    runAllTests (below) runs every test file and merges the results.
    ========================================================================== */
@@ -17841,16 +17841,16 @@ async function runProjectTests() {
       UI.updateHud(Derived.get());
       return eq([Derived.get().stale, !!$('staleNote'), !!$('staleRefill'), Derived.get().warnings.some((w) => w.id === 'stale-massing')], [false, false, false, false]);
     });
-    await t('Send to Parking Deck and Send to Facade Studio save the project and open ../parking/ and ../facade/ with ?project=<id>', async () => {
+    await t('Send to Parking Deck saves the project and opens ../parking/ with ?project=<id>; the menu has no Facade Studio item', async () => {
       const id = ProjectUI.doc().id;
       went = [];
       $('btnExport').click();
       const p = $('miSendParking'); if (p) p.click();
       $('btnExport').click();
-      const f = $('miSendFacade'); if (f) f.click();
+      const noFacade = !$('miSendFacade') && !/facade/i.test(document.querySelector('#exportMenu').textContent);
       await wait(50);
       Pop.close();
-      return eq([went, !!p && !!f, !!stored(id).sections.plates], [[`../parking/?project=${id}`, `../facade/?project=${id}`], true, true]);
+      return eq([went, !!p, noFacade, !!stored(id).sections.plates], [[`../parking/?project=${id}`], true, true, true]);
     });
     await t('a project saved by a newer tool is read only: opened, not written', async () => {
       let doc = ProjectFixture.project({ name: 'Newer' });

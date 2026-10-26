@@ -3356,7 +3356,8 @@ const ViewerScene = (() => {
    viewer/scene.js — Model Viewer: every section of a project as items in the PROJECT frame
    (docs/model-viewer-technical-plan.md sections 2 and 3).
 
-   layersFrom(doc, opts)        → { site, massing, units, cores, parking, facade, grading, sun }, each { ok, items, bounds, ... }
+   layersFrom(doc, opts)        → { site, massing, units, cores, parking, grading, sun }, each { ok, items, bounds, ... }
+                                (the hidden facade layer comes only with opts.includeHidden)
    levelsIndex(doc)             → [{ key, z, name, ftf, sources }] sorted by z (the level cut list)
    cutAt(layers, z)             → a new layers object: no solid above z, the cut level marked (item.cut = true)
    colorKey(item, mode)         → a palette key; colorOf(key) → "#rrggbb"
@@ -3376,7 +3377,9 @@ const ViewerScene = (() => {
 const { getSection, transformRing } = ProjectMod;
 const { siteBounds } = SiteLayerMod;
 
-const LAYER_IDS = ["site", "massing", "units", "cores", "parking", "facade", "grading", "sun"];
+/** Layers that are hidden from the viewer (Facade Studio hidden October 26, 2026). The parsing code stays; layersFrom adds a hidden layer only with opts.includeHidden. */
+const HIDDEN_LAYERS = new Set(["facade"]);
+const LAYER_IDS = ["site", "massing", "units", "cores", "parking", "grading", "sun"];
 const LAYER_LABELS = { site: "Site", massing: "Massing", units: "Units", cores: "Cores and corridors", parking: "Parking", facade: "Facade", grading: "Grading", sun: "Sun" };
 /** The tool that owns the data of each layer: the "Edit in" link opens ../<tool>/?project=<id>. */
 const LAYER_TOOLS = { site: "site", massing: "tower", units: "plate", cores: "plate", parking: "parking", facade: "facade", grading: "grading", sun: "tower" };
@@ -3743,7 +3746,7 @@ function sunLayer(doc) {
 }
 
 /**
- * Every layer in the project frame. opts.onWarn(message) runs once per section that has a newer schema.
+ * Every layer in the project frame. opts.includeHidden adds the hidden layers (facade). opts.onWarn(message) runs once per section that has a newer schema.
  */
 function layersFrom(doc, opts) {
   const o = isObj(opts) ? opts : {};
@@ -3757,13 +3760,14 @@ function layersFrom(doc, opts) {
     try { return fn(); } catch (e) { return fallback; }
   };
   const uc = guard("plates", () => unitsAndCores(doc), { units: empty(), cores: empty() });
+  const hidden = o.includeHidden ? { facade: guard("facade", () => facadeLayer(doc), empty({ skipped: 0 })) } : {};
   return {
+    ...hidden,
     site: guard("site", () => siteLayer(doc), empty({ ground: null })),
     massing: guard("massing", () => massingLayer(doc), empty()),
     units: uc.units,
     cores: uc.cores,
     parking: guard("parking", () => parkingLayer(doc), empty()),
-    facade: guard("facade", () => facadeLayer(doc), empty({ skipped: 0 })),
     grading: guard("grading", () => gradingLayer(doc), empty({ ground: null })),
     sun: guard("sun", () => sunLayer(doc), { ok: false, items: [], bounds: null, dates: [], byDate: {} }),
   };
@@ -3873,7 +3877,7 @@ function colorKey(item, mode) {
   return `layer:${it.layer || "massing"}`;
 }
 
-return { LAYER_IDS, LAYER_LABELS, LAYER_TOOLS, TOOL_NAMES, DEFAULT_ON, DEFAULT_FTF, SLAB, BAND, WALL_T, cleanRing, ringArea, sunSamples, layersFrom, levelsIndex, cutAt, PROGRAM_COLORS, UNIT_COLORS, colorOf, colorKey };
+return { HIDDEN_LAYERS, LAYER_IDS, LAYER_LABELS, LAYER_TOOLS, TOOL_NAMES, DEFAULT_ON, DEFAULT_FTF, SLAB, BAND, WALL_T, cleanRing, ringArea, sunSamples, layersFrom, levelsIndex, cutAt, PROGRAM_COLORS, UNIT_COLORS, colorOf, colorKey };
 })();
 
 /* ---- src/viewer/summary.js ---- */
@@ -3903,8 +3907,10 @@ function ringArea(r) {
   return Math.abs(a / 2);
 }
 
-/** The summary rows of a project, in pipeline order. An empty project gives the project row only. */
-function summary(doc) {
+/** The summary rows of a project, in pipeline order. An empty project gives the project row only.
+ *  The Facade Studio is hidden (October 26, 2026): its rows come only with opts.includeHidden. */
+function summary(doc, opts) {
+  const includeHidden = !!(opts && opts.includeHidden);
   const rows = [];
   const row = (id, group, label, value, text) => { if (value === null || value === undefined || (typeof value === "number" && !Number.isFinite(value))) return; rows.push({ id, group, label, value, text: text === undefined ? String(value) : text }); };
   const num = (id, group, label, v, d = 0, unit = "") => { if (fin(v)) row(id, group, label, v, `${grouped(v, d)}${unit}`); };
@@ -3966,7 +3972,7 @@ function summary(doc) {
     row("parking.levels", "Parking", "Parking levels", fin(m.levels) ? m.levels : levels.length);
   }
 
-  const fac = dv(doc, "facade");
+  const fac = includeHidden ? dv(doc, "facade") : null;
   if (fac) {
     const m = mt(fac), faces = Array.isArray(fac.faces) ? fac.faces : [];
     if (fin(m.wwr)) row("facade.wwr", "Facade", "Window-to-wall ratio", m.wwr, `${grouped(m.wwr * 100, 0)} percent`);
@@ -3989,7 +3995,8 @@ function summary(doc) {
 const ms = (t) => { const v = typeof t === "string" ? Date.parse(t) : NaN; return Number.isFinite(v) ? v : null; };
 
 /** Sections that look older than the massing they were made from. [{ section, message }] */
-function staleFlags(doc) {
+function staleFlags(doc, opts) {
+  const includeHidden = !!(opts && opts.includeHidden);
   const out = [];
   const mass = getSection(doc, "massing");
   if (!mass || !dv(doc, "massing")) return out;
@@ -4004,6 +4011,7 @@ function staleFlags(doc) {
     if (gone) out.push({ section: "plates", message: `The plates have ${gone} level${gone === 1 ? "" : "s"} that the massing no longer has.` });
   }
   for (const [key, text] of [["parking", "The parking deck"], ["facade", "The facade"]]) {
+    if (key === "facade" && !includeHidden) continue;
     const s = getSection(doc, key);
     if (!s || !dv(doc, key)) continue;
     const at = ms(s.updatedAt);
@@ -4022,7 +4030,7 @@ const ViewerSketchup = (() => {
 
    viewerToSketchup(doc, layersOn, meta) → a document made with makeDoc, source "viewer".
      doc       the project document (every section is read through scene.js; nothing is written)
-     layersOn  { site, massing, units, cores, parking, facade, grading: true | false }; missing keys use DEFAULT_ON
+     layersOn  { site, massing, units, cores, parking, grading: true | false }; missing keys use DEFAULT_ON
      meta      optional { createdAt, name }
 
    Structure: root group (the project name) > one group per layer that is on and has items:
@@ -4031,7 +4039,6 @@ const ViewerSketchup = (() => {
      Units     one group per level, one solid per unit (tag = the type name)
      Cores     one group per level, one solid per core piece, stair, elevator or corridor
      Parking   one group per level: the slab solid, the cores, the stalls as one lines node, the ramps as one lines node
-     Facade    one solid per face band (tag = the system)
      Grading   the proposed ground as a soft mesh and one solid per wall piece
    zShift brings the lowest drawn z to 0. Units: feet, project frame (x east, y north).
    Pure: no DOM, no input mutation.
@@ -4136,11 +4143,6 @@ function viewerToSketchup(doc, layersOn, meta) {
       return out;
     });
     if (kids.length) groups.push({ type: "group", name: LAYER_LABELS.parking, children: kids });
-  }
-  if (on("facade") && L.facade.items.length) {
-    const kids = [];
-    for (const it of L.facade.items) { const s = solidOf(it, `Facade ${it.system}`, colorOf(colorKey(it, "program"))); if (s) { kids.push(s); track(s.z0); } }
-    if (kids.length) groups.push({ type: "group", name: LAYER_LABELS.facade, children: kids });
   }
   if (on("grading") && L.grading.items.length) {
     const kids = [];
@@ -4279,8 +4281,8 @@ const Pop = (() => {
    Nothing here writes the project. The document is only read.
    ========================================================================== */
 const { LAYER_IDS, LAYER_LABELS, LAYER_TOOLS, TOOL_NAMES, DEFAULT_ON, layersFrom, levelsIndex, cutAt, sunSamples, colorKey, colorOf, PROGRAM_COLORS, UNIT_COLORS } = ViewerScene;
-const BUILD_LAYERS = ['massing', 'units', 'cores', 'parking', 'facade', 'grading'];   // the layers that draw solids above the ground
-const TOGGLE_LAYERS = ['site', 'massing', 'units', 'cores', 'parking', 'facade', 'grading'];
+const BUILD_LAYERS = ['massing', 'units', 'cores', 'parking', 'grading'];   // the layers that draw solids above the ground
+const TOGGLE_LAYERS = ['site', 'massing', 'units', 'cores', 'parking', 'grading'];
 
 const State = (() => {
   const s = {
@@ -4450,7 +4452,7 @@ function planMatrix(elev = 0) {
 /** What color an item draws in, and what the legend says. One place, used by the scene, the legend and the tests. */
 const Paint = (() => {
   const css = (name, fb) => { let v = ''; try { v = getComputedStyle(document.documentElement).getPropertyValue(name).trim(); } catch (e) { v = ''; } return v || fb; };
-  const HERO_LAYERS = new Set(['massing', 'units', 'cores', 'facade']);
+  const HERO_LAYERS = new Set(['massing', 'units', 'cores']);
   /** The palette key an item draws with, or null when it draws in a plain color. */
   function keyOf(item, opts = {}) {
     if (opts.aiReady) return null;
@@ -4469,14 +4471,13 @@ const Paint = (() => {
     if (k) return colorOf(k);
     return item.kind === 'stall' ? '#c3c8cd' : css('--scene-model', CONFIG.modelColor);
   }
-  const KEY_LABELS = { 'layer:site': 'Site', 'layer:massing': 'Massing', 'layer:units': 'Units', 'layer:cores': 'Cores and corridors', 'layer:parking': 'Parking', 'layer:facade': 'Facade', 'layer:grading': 'Grading' };
+  const KEY_LABELS = { 'layer:site': 'Site', 'layer:massing': 'Massing', 'layer:units': 'Units', 'layer:cores': 'Cores and corridors', 'layer:parking': 'Parking', 'layer:grading': 'Grading' };
   const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
   function labelOf(key) {
     if (KEY_LABELS[key]) return KEY_LABELS[key];
     const i = key.indexOf(':'), kind = key.slice(0, i), name = key.slice(i + 1);
     if (kind === 'program') return cap(name);
     if (kind === 'unit') return name;
-    if (kind === 'facade') return `Facade, ${name}`;
     if (kind === 'stall') return `Stall, ${name}`;
     return cap(name);
   }
@@ -5895,7 +5896,7 @@ const Prompts = (() => {
    ========================================================================== */
 const UI = (() => {
   const TABS = [{ id: 'layers', title: 'Layers' }, { id: 'levels', title: 'Levels' }, { id: 'view', title: 'View' }, { id: 'summary', title: 'Summary' }];
-  const NOUNS = { site: 'neighbor buildings', massing: 'level slabs', units: 'units', cores: 'core and corridor pieces', parking: 'parking pieces', facade: 'face bands', grading: 'ground and wall pieces' };
+  const NOUNS = { site: 'neighbor buildings', massing: 'level slabs', units: 'units', cores: 'core and corridor pieces', parking: 'parking pieces', grading: 'ground and wall pieces' };
   const sheetQuery = window.matchMedia('(max-width: 899px), (orientation: portrait)');
   let activeTab = TABS.some((t) => t.id === uiPrefs.tab) ? uiPrefs.tab : 'layers';
   const scrollPos = {};
@@ -6336,7 +6337,7 @@ const Help = (() => {
       'Export downloads the open project as a file.',
     ]],
     ['Layers', [
-      'Each layer is one section of the project: the site, the massing, the units, the cores and corridors, the parking, the facade, and the grading. A layer with no data shows No data and a link to the tool that makes it.',
+      'Each layer is one section of the project: the site, the massing, the units, the cores and corridors, the parking, and the grading. A layer with no data shows No data and a link to the tool that makes it.',
       'Where a Plate Planner section covers a group of levels, its units draw instead of the massing slab on those levels.',
     ]],
     ['Levels', [
@@ -6669,18 +6670,18 @@ async function runProjectTests() {
       return eq([$('mGfa').textContent, $('mUnits').textContent, $('mStalls').textContent, $('mEff').textContent.replace('%', ' percent'), $('mFar').textContent, $('hudBadge').textContent, m.warnings],
         [rows['massing.gfa'], rows['plates.units'], rows['parking.stalls'], rows['plates.efficiency'], rows['massing.far'], '0 warnings', 0]);
     });
-    await t('the fixture project has data for every layer', () => eq(['site', 'massing', 'units', 'cores', 'parking', 'facade', 'grading'].map((k) => Model.hasData(k)), [true, true, true, true, true, true, true]));
-    await t('the default layers draw: neighbors, massing slabs (podium only), 238 units, cores, parking; facade and grading are off', async () => {
+    await t('the fixture project has data for every layer, and the hidden facade layer is not read (the fixture still holds a facade section)', () => eq([['site', 'massing', 'units', 'cores', 'parking', 'grading'].map((k) => Model.hasData(k)), Model.hasData('facade'), !!ProjectMod.getSection(doc, 'facade')], [[true, true, true, true, true, true], false, true]));
+    await t('the default layers draw: neighbors, massing slabs (podium only), 238 units, cores, parking; grading is off', async () => {
       await frames(3);
       const d = drawn(), by = d.byLayer;
       return eq([by.site, by.units, !!by.massing, !!by.cores, !!by.parking, by.facade || 0, by.grading || 0], [2, 238, true, true, true, 0, 0]);
     });
-    await t('every layer on: facade bands and the grading walls draw, and the site ground comes from the grading when it is on', async () => {
+    await t('every layer on: the grading walls draw, no facade bands draw, and the site ground comes from the grading when it is on', async () => {
       for (const k of TOGGLE_LAYERS) State.setLayer(k, true);
       await frames(4);
       const by = drawn().byLayer;
       const info = Render.info();
-      return eq([by.facade, by.grading > 5, by.units, info.site && info.site.ground, by.parking], [L().facade.items.length, true, 238, true, L().parking.items.length]);
+      return eq([by.facade || 0, by.grading > 5, by.units, info.site && info.site.ground, by.parking], [0, true, 238, true, L().parking.items.length]);
     });
     await t('the stall count on screen is the parking metrics stalls', () => eq(Render.itemsDrawn().filter((x) => x.startsWith('stall:')).length, ProjectMod.getSection(doc, 'parking').derived.metrics.stalls));
     await t('the model is centered and on the ground: the scene origin is the site middle at the lowest ground', () => {
@@ -6692,8 +6693,12 @@ async function runProjectTests() {
       const on = [...document.querySelectorAll('#tabpanel-layers .toggle-row')].map((b) => b.getAttribute('aria-checked'));
       return eq([rows, on, document.querySelector('[data-layer="units"] .lr-count').textContent], [TOGGLE_LAYERS, TOGGLE_LAYERS.map(() => 'true'), '238 units']);
     });
+    await t('the Facade Studio is hidden: no Facade layer row, no Facade text, no link to ../facade/, no facade rows in the summary', () => {
+      const panel = $('tabpanel-layers');
+      return eq([!!panel.querySelector('[data-layer="facade"]'), /facade/i.test(panel.textContent), !!document.querySelector('a[href*="facade/"]'), Model.rows().some((r) => /^facade\./.test(r.id) || r.group === 'Facade'), TOGGLE_LAYERS.includes('facade'), Object.keys(Model.layers()).includes('facade')], [false, false, false, false, false, false]);
+    });
     await t('Edit in links point to ../<tool>/?project=<id>', () => {
-      const want = { site: 'site', massing: 'tower', units: 'plate', cores: 'plate', parking: 'parking', facade: 'facade', grading: 'grading' };
+      const want = { site: 'site', massing: 'tower', units: 'plate', cores: 'plate', parking: 'parking', grading: 'grading' };
       const got = {};
       document.querySelectorAll('#tabpanel-layers a.edit-link').forEach((a) => { got[a.dataset.layer] = a.getAttribute('href'); });
       const exp = {};
@@ -6835,15 +6840,13 @@ async function runProjectTests() {
       const card = UI.cardInfo();
       return eq([card.visible, /Kind|Type/.test(card.text), card.edit], [true, true, `../parking/?project=${id}`]);
     });
-    await t('the card for a facade face and a grading wall shows their numbers and links', async () => {
-      const face = L().facade.items[0], wall = L().grading.items.find((i) => i.kind === 'wall');
+    await t('the card for a grading wall shows its numbers and links', async () => {
+      const wall = L().grading.items.find((i) => i.kind === 'wall');
       State.set('cutKey', null); await frames(2);
-      UI.select(face);
-      const a = UI.cardInfo();
       UI.select(wall);
       const b = UI.cardInfo();
       UI.select(null);
-      return eq([face.data.rows.filter((r) => r[1] !== '').every((r) => a.text.includes(r[0])), a.edit, wall.data.rows.filter((r) => r[1] !== '').every((r) => b.text.includes(r[0])), b.edit], [true, `../facade/?project=${id}`, true, `../grading/?project=${id}`]);
+      return eq([wall.data.rows.filter((r) => r[1] !== '').every((r) => b.text.includes(r[0])), b.edit], [true, `../grading/?project=${id}`]);
     });
     await t('Cut at this level on the card sets the cut', async () => {
       const u = L().units.items.find((i) => i.level === 15);

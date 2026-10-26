@@ -622,8 +622,7 @@ const UI = (() => {
         item('miExportJson', 'Export JSON', 'Download all saved options', () => Options.exportJson()),
         item('miImportJson', 'Import JSON', 'Add the options from a file', () => $('importFile').click()),
         h('div', { class: 'pop-sep' }), h('div', { class: 'label pop-label' }, 'Send the project to'),
-        item('miSendParking', 'Parking Deck', 'Save the project, then open the Parking Deck on it', () => ProjectUI.send('parking')),
-        item('miSendFacade', 'Facade Studio', 'Save the project, then open the Facade Studio on it', () => ProjectUI.send('facade')));
+        item('miSendParking', 'Parking Deck', 'Save the project, then open the Parking Deck on it', () => ProjectUI.send('parking')));
     };
     const overlay = () => {
       el.textContent = '';

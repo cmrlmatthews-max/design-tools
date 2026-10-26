@@ -3,7 +3,7 @@
 
    viewerToSketchup(doc, layersOn, meta) → a document made with makeDoc, source "viewer".
      doc       the project document (every section is read through scene.js; nothing is written)
-     layersOn  { site, massing, units, cores, parking, facade, grading: true | false }; missing keys use DEFAULT_ON
+     layersOn  { site, massing, units, cores, parking, grading: true | false }; missing keys use DEFAULT_ON
      meta      optional { createdAt, name }
 
    Structure: root group (the project name) > one group per layer that is on and has items:
@@ -12,7 +12,6 @@
      Units     one group per level, one solid per unit (tag = the type name)
      Cores     one group per level, one solid per core piece, stair, elevator or corridor
      Parking   one group per level: the slab solid, the cores, the stalls as one lines node, the ramps as one lines node
-     Facade    one solid per face band (tag = the system)
      Grading   the proposed ground as a soft mesh and one solid per wall piece
    zShift brings the lowest drawn z to 0. Units: feet, project frame (x east, y north).
    Pure: no DOM, no input mutation.
@@ -117,11 +116,6 @@ export function viewerToSketchup(doc, layersOn, meta) {
       return out;
     });
     if (kids.length) groups.push({ type: "group", name: LAYER_LABELS.parking, children: kids });
-  }
-  if (on("facade") && L.facade.items.length) {
-    const kids = [];
-    for (const it of L.facade.items) { const s = solidOf(it, `Facade ${it.system}`, colorOf(colorKey(it, "program"))); if (s) { kids.push(s); track(s.z0); } }
-    if (kids.length) groups.push({ type: "group", name: LAYER_LABELS.facade, children: kids });
   }
   if (on("grading") && L.grading.items.length) {
     const kids = [];

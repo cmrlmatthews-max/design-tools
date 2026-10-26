@@ -5,8 +5,8 @@
    Nothing here writes the project. The document is only read.
    ========================================================================== */
 const { LAYER_IDS, LAYER_LABELS, LAYER_TOOLS, TOOL_NAMES, DEFAULT_ON, layersFrom, levelsIndex, cutAt, sunSamples, colorKey, colorOf, PROGRAM_COLORS, UNIT_COLORS } = ViewerScene;
-const BUILD_LAYERS = ['massing', 'units', 'cores', 'parking', 'facade', 'grading'];   // the layers that draw solids above the ground
-const TOGGLE_LAYERS = ['site', 'massing', 'units', 'cores', 'parking', 'facade', 'grading'];
+const BUILD_LAYERS = ['massing', 'units', 'cores', 'parking', 'grading'];   // the layers that draw solids above the ground
+const TOGGLE_LAYERS = ['site', 'massing', 'units', 'cores', 'parking', 'grading'];
 
 const State = (() => {
   const s = {

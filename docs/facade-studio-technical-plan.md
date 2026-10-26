@@ -1,5 +1,7 @@
 # Facade Studio — Technical Plan
 
+> **Note, October 26, 2026: the Facade Studio is hidden.** Cade decided that facades vary too much to model well with the current tools. The Workspace page, the Send menus of the other tools, and the Model Viewer no longer show or link to it. This plan, `facade/`, `build/facade/`, `src/facade/`, `test/facade.*`, and the saved `facade` section in project files stay as they are. The Model Viewer keeps its facade reader dormant (`HIDDEN_LAYERS`, `includeHidden`).
+
 Version 0.1 · October 21, 2026 · Owner: Cade (CMRLM) · Author: Opus (orchestrator)
 Source: `facade-studio-concept.md` v0.1 with the decisions in its section 12, including decisions 14 to 18 that Cade accepted on October 21, 2026.
 

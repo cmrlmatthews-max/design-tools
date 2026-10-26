@@ -5,7 +5,7 @@
    ========================================================================== */
 const UI = (() => {
   const TABS = [{ id: 'layers', title: 'Layers' }, { id: 'levels', title: 'Levels' }, { id: 'view', title: 'View' }, { id: 'summary', title: 'Summary' }];
-  const NOUNS = { site: 'neighbor buildings', massing: 'level slabs', units: 'units', cores: 'core and corridor pieces', parking: 'parking pieces', facade: 'face bands', grading: 'ground and wall pieces' };
+  const NOUNS = { site: 'neighbor buildings', massing: 'level slabs', units: 'units', cores: 'core and corridor pieces', parking: 'parking pieces', grading: 'ground and wall pieces' };
   const sheetQuery = window.matchMedia('(max-width: 899px), (orientation: portrait)');
   let activeTab = TABS.some((t) => t.id === uiPrefs.tab) ? uiPrefs.tab : 'layers';
   const scrollPos = {};

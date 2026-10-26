@@ -13951,7 +13951,7 @@ async function runUiTests() {
       click($('btnExport'));
       const ids = [...document.querySelectorAll('#exportMenu .pop-item')].map((b) => b.id);
       Pop.close();
-      return eq(ids, ['miImage', 'miAiReady', 'miAiPrompts', 'miOverlay', 'miSketchup', 'miRevit', 'miDxf', 'miNotes', 'miExportJson', 'miImportJson']);
+      return eq([ids, ids.some((i) => /facade/i.test(i))], [['miImage', 'miAiReady', 'miAiPrompts', 'miOverlay', 'miSketchup', 'miRevit', 'miDxf', 'miNotes', 'miExportJson', 'miImportJson'], false]);
     });
     await t('the Image overlay sub-view lists the four choices', () => {
       click($('btnExport')); click($('miOverlay'));

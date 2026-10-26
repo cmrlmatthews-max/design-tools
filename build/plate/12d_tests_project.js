@@ -2,7 +2,7 @@
    TESTS: the project file  (plan sections 7 and 9.2)
    A hand-built Mid-Rise massing: two bars, five levels with the same plate, placed at x 40, y 60. Open it, fill it (one group of five
    floors), write the plates section (1 s debounce, visibilitychange, pagehide), keep every other section, a newer massing shows the stale
-   notice, a newer schema is read only, and the Send items open ../parking/?project=<id> and ../facade/?project=<id>.
+   notice, a newer schema is read only, and the Send item opens ../parking/?project=<id>.
    The fixture lives in an in-memory storage, so a ?test visit never touches the saved projects.
    runAllTests (below) runs every test file and merges the results.
    ========================================================================== */
@@ -94,16 +94,16 @@ async function runProjectTests() {
       UI.updateHud(Derived.get());
       return eq([Derived.get().stale, !!$('staleNote'), !!$('staleRefill'), Derived.get().warnings.some((w) => w.id === 'stale-massing')], [false, false, false, false]);
     });
-    await t('Send to Parking Deck and Send to Facade Studio save the project and open ../parking/ and ../facade/ with ?project=<id>', async () => {
+    await t('Send to Parking Deck saves the project and opens ../parking/ with ?project=<id>; the menu has no Facade Studio item', async () => {
       const id = ProjectUI.doc().id;
       went = [];
       $('btnExport').click();
       const p = $('miSendParking'); if (p) p.click();
       $('btnExport').click();
-      const f = $('miSendFacade'); if (f) f.click();
+      const noFacade = !$('miSendFacade') && !/facade/i.test(document.querySelector('#exportMenu').textContent);
       await wait(50);
       Pop.close();
-      return eq([went, !!p && !!f, !!stored(id).sections.plates], [[`../parking/?project=${id}`, `../facade/?project=${id}`], true, true]);
+      return eq([went, !!p, noFacade, !!stored(id).sections.plates], [[`../parking/?project=${id}`], true, true, true]);
     });
     await t('a project saved by a newer tool is read only: opened, not written', async () => {
       let doc = ProjectFixture.project({ name: 'Newer' });

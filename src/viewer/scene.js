@@ -2,7 +2,8 @@
    viewer/scene.js — Model Viewer: every section of a project as items in the PROJECT frame
    (docs/model-viewer-technical-plan.md sections 2 and 3).
 
-   layersFrom(doc, opts)        → { site, massing, units, cores, parking, facade, grading, sun }, each { ok, items, bounds, ... }
+   layersFrom(doc, opts)        → { site, massing, units, cores, parking, grading, sun }, each { ok, items, bounds, ... }
+                                (the hidden facade layer comes only with opts.includeHidden)
    levelsIndex(doc)             → [{ key, z, name, ftf, sources }] sorted by z (the level cut list)
    cutAt(layers, z)             → a new layers object: no solid above z, the cut level marked (item.cut = true)
    colorKey(item, mode)         → a palette key; colorOf(key) → "#rrggbb"
@@ -22,7 +23,9 @@
 import { getSection, transformRing } from "../shared/project.js";
 import { siteBounds } from "../shared/sitelayer.js";
 
-export const LAYER_IDS = ["site", "massing", "units", "cores", "parking", "facade", "grading", "sun"];
+/** Layers that are hidden from the viewer (Facade Studio hidden October 26, 2026). The parsing code stays; layersFrom adds a hidden layer only with opts.includeHidden. */
+export const HIDDEN_LAYERS = new Set(["facade"]);
+export const LAYER_IDS = ["site", "massing", "units", "cores", "parking", "grading", "sun"];
 export const LAYER_LABELS = { site: "Site", massing: "Massing", units: "Units", cores: "Cores and corridors", parking: "Parking", facade: "Facade", grading: "Grading", sun: "Sun" };
 /** The tool that owns the data of each layer: the "Edit in" link opens ../<tool>/?project=<id>. */
 export const LAYER_TOOLS = { site: "site", massing: "tower", units: "plate", cores: "plate", parking: "parking", facade: "facade", grading: "grading", sun: "tower" };
@@ -389,7 +392,7 @@ function sunLayer(doc) {
 }
 
 /**
- * Every layer in the project frame. opts.onWarn(message) runs once per section that has a newer schema.
+ * Every layer in the project frame. opts.includeHidden adds the hidden layers (facade). opts.onWarn(message) runs once per section that has a newer schema.
  */
 export function layersFrom(doc, opts) {
   const o = isObj(opts) ? opts : {};
@@ -403,13 +406,14 @@ export function layersFrom(doc, opts) {
     try { return fn(); } catch (e) { return fallback; }
   };
   const uc = guard("plates", () => unitsAndCores(doc), { units: empty(), cores: empty() });
+  const hidden = o.includeHidden ? { facade: guard("facade", () => facadeLayer(doc), empty({ skipped: 0 })) } : {};
   return {
+    ...hidden,
     site: guard("site", () => siteLayer(doc), empty({ ground: null })),
     massing: guard("massing", () => massingLayer(doc), empty()),
     units: uc.units,
     cores: uc.cores,
     parking: guard("parking", () => parkingLayer(doc), empty()),
-    facade: guard("facade", () => facadeLayer(doc), empty({ skipped: 0 })),
     grading: guard("grading", () => gradingLayer(doc), empty({ ground: null })),
     sun: guard("sun", () => sunLayer(doc), { ok: false, items: [], bounds: null, dates: [], byDate: {} }),
   };

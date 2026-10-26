@@ -14265,7 +14265,6 @@ const UI = (() => {
         item('miExportJson', 'Export JSON', 'Download all saved options', () => Options.exportJson()),
         item('miImportJson', 'Import JSON', 'Add the options from a file', () => $('importFile').click()),
         h('div', { class: 'pop-sep' }), h('div', { class: 'label pop-label' }, 'Send to'),
-        item('miSendFacade', 'Send to Facade Studio', 'Save the project and open the Facade Studio', () => ProjectUI.send('facade')),
         item('miSendGrading', 'Send to Grading Sketch', 'Save the project and open the Grading Sketch', () => ProjectUI.send('grading')));
     };
     const overlay = () => {
@@ -15254,7 +15253,6 @@ const Help = (() => {
       'A project opens with the site in Glass. A pinned project opens with the site in Solid.',
       'Pin placement, in the top bar, locks the deck and sets the site style to Solid. Unpin frees the deck and sets the site style to Glass.',
       'A pinned deck does not move by drag or by the rotation handle. Typed values still work.',
-      'Send to Facade Studio is planned and not available yet.',
     ]],
     ['Site', [
       'The Site toggle in the View tab shows the project site from the Site Model. It shows the real ground, roads and water. The Site Model makes no trees yet.',
@@ -15902,10 +15900,10 @@ const ProjectUI = (() => {
     return true;
   }
 
-  /** Send to Facade Studio: save the project, then open ../facade/?project=<id>. With no project open, one is made first. */
+  /** Send to Grading Sketch: save the project, then open ../grading/?project=<id>. With no project open, one is made first. */
   async function send(toolId) {
     Pop.close();
-    if (toolId !== 'facade' && toolId !== 'grading') return false;
+    if (toolId !== 'grading') return false;
     if (!project.doc && !create(defaultName(), { quiet: true })) return false;
     if (project.readOnly) { noticeOnce('readonly', READ_ONLY_TEXT); return false; }
     project.dirty = true;
@@ -16709,12 +16707,13 @@ async function runUiTests() {
       const ids = ['btnOption', 'btnProject', 'btnSnap', 'btnExport', 'btnHelp'];
       return eq([ids.every((i) => !!$(i)), $('tbHistory').querySelectorAll('button').length, $('styleToggle').querySelectorAll('button').length], [true, 2, 2]);
     });
-    await t('the Export menu lists Image, AI-ready image, AI Prompts, SketchUp, DXF, Stall list, JSON and Send to Facade Studio', async () => {
+    await t('the Export menu lists Image, AI-ready image, AI Prompts, SketchUp, DXF, Stall list, JSON and Send to Grading Sketch, and no Facade Studio item', async () => {
       click($('btnExport')); await frames(2);
-      const ids = ['miImage', 'miAiReady', 'miAiPrompts', 'miOverlay', 'miSketchup', 'miDxf', 'miCsv', 'miExportJson', 'miImportJson', 'miSendFacade', 'miSendGrading'];
+      const ids = ['miImage', 'miAiReady', 'miAiPrompts', 'miOverlay', 'miSketchup', 'miDxf', 'miCsv', 'miExportJson', 'miImportJson', 'miSendGrading'];
       const have = ids.map((i) => !!$(i));
-      const send = $('miSendFacade');
-      const out = [have.every(Boolean), !!send && !send.disabled, send ? /Facade Studio/.test(send.textContent) : false];
+      const send = $('miSendGrading');
+      const menu = document.querySelector('#exportMenu');
+      const out = [have.every(Boolean), !!send && !send.disabled, !$('miSendFacade') && !/facade/i.test(menu ? menu.textContent : '')];
       Pop.close();
       return eq(out, [true, true, true]);
     });
@@ -17173,12 +17172,12 @@ async function runProjectTests() {
       ProjectUI.close();
       return eq([out, $('projPill').hidden], [[true, true], true]);
     });
-    await t('Send to Facade Studio is enabled in the menu of an open project', async () => {
+    await t('Send to Grading Sketch is enabled in the menu of an open project, and there is no Facade Studio item', async () => {
       open({}, 'Send');
       $('btnExport').dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await TestHelp.frames(2);
-      const b = $('miSendFacade');
-      const out = [!!b && !b.disabled, b ? /Facade Studio/.test(b.textContent) : false];
+      const b = $('miSendGrading');
+      const out = [!!b && !b.disabled, b ? /Grading Sketch/.test(b.textContent) && !$('miSendFacade') : false];
       Pop.close();
       ProjectUI.close();
       return eq(out, [true, true]);

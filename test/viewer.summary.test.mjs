@@ -42,12 +42,13 @@ t("V6 plates made from an older massing name plates", () => {
   ok(flags.some((f) => f.section === "plates" && /older massing/.test(f.message)), JSON.stringify(flags));
   eq(SU.staleFlags(docPlates), []);
 });
-t("V6 a plates section with no stamp falls back to its updatedAt; parking and facade older than the massing may be out of date", () => {
+t("V6 a plates section with no stamp falls back to its updatedAt; parking older than the massing may be out of date; the hidden facade is flagged only on request", () => {
   const d = JSON.parse(JSON.stringify(docFull));
   d.sections.plates.derived.massingUpdatedAt = null;
   d.sections.massing.updatedAt = "2026-10-26T00:00:00.000Z";
   const flags = SU.staleFlags(d);
-  eq(flags.map((f) => f.section).sort(), ["facade", "parking", "plates"]);
+  eq(flags.map((f) => f.section).sort(), ["parking", "plates"]);
+  eq(SU.staleFlags(d, { includeHidden: true }).map((f) => f.section).sort(), ["facade", "parking", "plates"]);
   ok(flags.every((f) => /[a-z]/.test(f.message) && !/compliant/i.test(f.message)));
 });
 t("V6 a plate level the massing no longer has is flagged", () => {
@@ -59,6 +60,8 @@ t("V6 a plate level the massing no longer has is flagged", () => {
 console.log("V7 summary");
 t("V7 the numbers equal each section's derived.metrics", () => {
   const rows = SU.summary(docFull), by = Object.fromEntries(rows.map((r) => [r.id, r]));
+  ok(!rows.some((r) => /^facade\./.test(r.id) || r.group === "Facade"), "no facade rows in the table");
+  const hid = Object.fromEntries(SU.summary(docFull, { includeHidden: true }).map((r) => [r.id, r]));
   const m = (k) => sec(docFull, k).derived.metrics;
   eq(by["massing.gfa"].value, m("massing").gfa); eq(by["massing.floors"].value, m("massing").floors); eq(by["massing.height"].value, m("massing").height);
   eq(by["massing.far"].value, m("massing").far); eq(by["massing.coverage"].value, m("massing").siteCoverage);
@@ -66,15 +69,15 @@ t("V7 the numbers equal each section's derived.metrics", () => {
   for (const t of sec(docFull, "plates").derived.mix) eq(by[`plates.mix.${t.type}`].value, t.count);
   eq(by["parking.stalls"].value, m("parking").stalls); eq(by["parking.sfPerStall"].value, m("parking").sfPerStall); eq(by["parking.levels"].value, m("parking").levels);
   for (const k of Object.keys(m("parking").byKind)) eq(by[`parking.kind.${k}`].value, m("parking").byKind[k]);
-  eq(by["facade.wwr"].value, m("facade").wwr); eq(by["facade.balconies"].value, m("facade").balconyCount);
-  for (const k of ["N", "E", "S", "W"]) eq(by[`facade.wwr.${k}`].value, m("facade").wwrByOrientation[k]);
+  eq(hid["facade.wwr"].value, m("facade").wwr); eq(hid["facade.balconies"].value, m("facade").balconyCount);   // the dormant facade reader
+  for (const k of ["N", "E", "S", "W"]) eq(hid[`facade.wwr.${k}`].value, m("facade").wwrByOrientation[k]);
   eq(by["grading.cut"].value, m("grading").cutCy); eq(by["grading.fill"].value, m("grading").fillCy); eq(by["grading.net"].value, m("grading").netCy);
   eq(by["site.area"].value, 1000000); eq(by["site.buildings"].value, 2);
   for (const r of rows) { ok(typeof r.text === "string" && r.text.length > 0); ok(!/NaN|undefined/.test(r.text), r.text); }
 });
 t("V7 the table keeps the order of the pipeline and a missing section gives no rows", () => {
   const groups = [...new Set(SU.summary(docFull).map((r) => r.group))];
-  eq(groups, ["Project", "Site", "Massing", "Plates", "Parking", "Facade", "Grading"]);
+  eq(groups, ["Project", "Site", "Massing", "Plates", "Parking", "Grading"]);
   eq([...new Set(SU.summary(docMass).map((r) => r.group))], ["Project", "Site", "Massing"]);
 });
 t("V7 a massing without a site shows No site for FAR and coverage, not zero", () => {
