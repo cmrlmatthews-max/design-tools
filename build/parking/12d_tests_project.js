@@ -153,12 +153,12 @@ async function runProjectTests() {
       ProjectUI.close();
       return eq([out, $('projPill').hidden], [[true, true], true]);
     });
-    await t('Send to Facade Studio is enabled in the menu of an open project', async () => {
+    await t('Send to Grading Sketch is enabled in the menu of an open project, and there is no Facade Studio item', async () => {
       open({}, 'Send');
       $('btnExport').dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await TestHelp.frames(2);
-      const b = $('miSendFacade');
-      const out = [!!b && !b.disabled, b ? /Facade Studio/.test(b.textContent) : false];
+      const b = $('miSendGrading');
+      const out = [!!b && !b.disabled, b ? /Grading Sketch/.test(b.textContent) && !$('miSendFacade') : false];
       Pop.close();
       ProjectUI.close();
       return eq(out, [true, true]);

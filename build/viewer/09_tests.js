@@ -136,18 +136,18 @@ async function runProjectTests() {
       return eq([$('mGfa').textContent, $('mUnits').textContent, $('mStalls').textContent, $('mEff').textContent.replace('%', ' percent'), $('mFar').textContent, $('hudBadge').textContent, m.warnings],
         [rows['massing.gfa'], rows['plates.units'], rows['parking.stalls'], rows['plates.efficiency'], rows['massing.far'], '0 warnings', 0]);
     });
-    await t('the fixture project has data for every layer', () => eq(['site', 'massing', 'units', 'cores', 'parking', 'facade', 'grading'].map((k) => Model.hasData(k)), [true, true, true, true, true, true, true]));
-    await t('the default layers draw: neighbors, massing slabs (podium only), 238 units, cores, parking; facade and grading are off', async () => {
+    await t('the fixture project has data for every layer, and the hidden facade layer is not read (the fixture still holds a facade section)', () => eq([['site', 'massing', 'units', 'cores', 'parking', 'grading'].map((k) => Model.hasData(k)), Model.hasData('facade'), !!ProjectMod.getSection(doc, 'facade')], [[true, true, true, true, true, true], false, true]));
+    await t('the default layers draw: neighbors, massing slabs (podium only), 238 units, cores, parking; grading is off', async () => {
       await frames(3);
       const d = drawn(), by = d.byLayer;
       return eq([by.site, by.units, !!by.massing, !!by.cores, !!by.parking, by.facade || 0, by.grading || 0], [2, 238, true, true, true, 0, 0]);
     });
-    await t('every layer on: facade bands and the grading walls draw, and the site ground comes from the grading when it is on', async () => {
+    await t('every layer on: the grading walls draw, no facade bands draw, and the site ground comes from the grading when it is on', async () => {
       for (const k of TOGGLE_LAYERS) State.setLayer(k, true);
       await frames(4);
       const by = drawn().byLayer;
       const info = Render.info();
-      return eq([by.facade, by.grading > 5, by.units, info.site && info.site.ground, by.parking], [L().facade.items.length, true, 238, true, L().parking.items.length]);
+      return eq([by.facade || 0, by.grading > 5, by.units, info.site && info.site.ground, by.parking], [0, true, 238, true, L().parking.items.length]);
     });
     await t('the stall count on screen is the parking metrics stalls', () => eq(Render.itemsDrawn().filter((x) => x.startsWith('stall:')).length, ProjectMod.getSection(doc, 'parking').derived.metrics.stalls));
     await t('the model is centered and on the ground: the scene origin is the site middle at the lowest ground', () => {
@@ -159,8 +159,12 @@ async function runProjectTests() {
       const on = [...document.querySelectorAll('#tabpanel-layers .toggle-row')].map((b) => b.getAttribute('aria-checked'));
       return eq([rows, on, document.querySelector('[data-layer="units"] .lr-count').textContent], [TOGGLE_LAYERS, TOGGLE_LAYERS.map(() => 'true'), '238 units']);
     });
+    await t('the Facade Studio is hidden: no Facade layer row, no Facade text, no link to ../facade/, no facade rows in the summary', () => {
+      const panel = $('tabpanel-layers');
+      return eq([!!panel.querySelector('[data-layer="facade"]'), /facade/i.test(panel.textContent), !!document.querySelector('a[href*="facade/"]'), Model.rows().some((r) => /^facade\./.test(r.id) || r.group === 'Facade'), TOGGLE_LAYERS.includes('facade'), Object.keys(Model.layers()).includes('facade')], [false, false, false, false, false, false]);
+    });
     await t('Edit in links point to ../<tool>/?project=<id>', () => {
-      const want = { site: 'site', massing: 'tower', units: 'plate', cores: 'plate', parking: 'parking', facade: 'facade', grading: 'grading' };
+      const want = { site: 'site', massing: 'tower', units: 'plate', cores: 'plate', parking: 'parking', grading: 'grading' };
       const got = {};
       document.querySelectorAll('#tabpanel-layers a.edit-link').forEach((a) => { got[a.dataset.layer] = a.getAttribute('href'); });
       const exp = {};
@@ -302,15 +306,13 @@ async function runProjectTests() {
       const card = UI.cardInfo();
       return eq([card.visible, /Kind|Type/.test(card.text), card.edit], [true, true, `../parking/?project=${id}`]);
     });
-    await t('the card for a facade face and a grading wall shows their numbers and links', async () => {
-      const face = L().facade.items[0], wall = L().grading.items.find((i) => i.kind === 'wall');
+    await t('the card for a grading wall shows its numbers and links', async () => {
+      const wall = L().grading.items.find((i) => i.kind === 'wall');
       State.set('cutKey', null); await frames(2);
-      UI.select(face);
-      const a = UI.cardInfo();
       UI.select(wall);
       const b = UI.cardInfo();
       UI.select(null);
-      return eq([face.data.rows.filter((r) => r[1] !== '').every((r) => a.text.includes(r[0])), a.edit, wall.data.rows.filter((r) => r[1] !== '').every((r) => b.text.includes(r[0])), b.edit], [true, `../facade/?project=${id}`, true, `../grading/?project=${id}`]);
+      return eq([wall.data.rows.filter((r) => r[1] !== '').every((r) => b.text.includes(r[0])), b.edit], [true, `../grading/?project=${id}`]);
     });
     await t('Cut at this level on the card sets the cut', async () => {
       const u = L().units.items.find((i) => i.level === 15);

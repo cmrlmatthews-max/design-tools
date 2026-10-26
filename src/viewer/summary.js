@@ -23,8 +23,10 @@ function ringArea(r) {
   return Math.abs(a / 2);
 }
 
-/** The summary rows of a project, in pipeline order. An empty project gives the project row only. */
-export function summary(doc) {
+/** The summary rows of a project, in pipeline order. An empty project gives the project row only.
+ *  The Facade Studio is hidden (October 26, 2026): its rows come only with opts.includeHidden. */
+export function summary(doc, opts) {
+  const includeHidden = !!(opts && opts.includeHidden);
   const rows = [];
   const row = (id, group, label, value, text) => { if (value === null || value === undefined || (typeof value === "number" && !Number.isFinite(value))) return; rows.push({ id, group, label, value, text: text === undefined ? String(value) : text }); };
   const num = (id, group, label, v, d = 0, unit = "") => { if (fin(v)) row(id, group, label, v, `${grouped(v, d)}${unit}`); };
@@ -86,7 +88,7 @@ export function summary(doc) {
     row("parking.levels", "Parking", "Parking levels", fin(m.levels) ? m.levels : levels.length);
   }
 
-  const fac = dv(doc, "facade");
+  const fac = includeHidden ? dv(doc, "facade") : null;
   if (fac) {
     const m = mt(fac), faces = Array.isArray(fac.faces) ? fac.faces : [];
     if (fin(m.wwr)) row("facade.wwr", "Facade", "Window-to-wall ratio", m.wwr, `${grouped(m.wwr * 100, 0)} percent`);
@@ -109,7 +111,8 @@ export function summary(doc) {
 const ms = (t) => { const v = typeof t === "string" ? Date.parse(t) : NaN; return Number.isFinite(v) ? v : null; };
 
 /** Sections that look older than the massing they were made from. [{ section, message }] */
-export function staleFlags(doc) {
+export function staleFlags(doc, opts) {
+  const includeHidden = !!(opts && opts.includeHidden);
   const out = [];
   const mass = getSection(doc, "massing");
   if (!mass || !dv(doc, "massing")) return out;
@@ -124,6 +127,7 @@ export function staleFlags(doc) {
     if (gone) out.push({ section: "plates", message: `The plates have ${gone} level${gone === 1 ? "" : "s"} that the massing no longer has.` });
   }
   for (const [key, text] of [["parking", "The parking deck"], ["facade", "The facade"]]) {
+    if (key === "facade" && !includeHidden) continue;
     const s = getSection(doc, key);
     if (!s || !dv(doc, key)) continue;
     const at = ms(s.updatedAt);

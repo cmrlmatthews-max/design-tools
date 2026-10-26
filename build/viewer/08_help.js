@@ -14,7 +14,7 @@ const Help = (() => {
       'Export downloads the open project as a file.',
     ]],
     ['Layers', [
-      'Each layer is one section of the project: the site, the massing, the units, the cores and corridors, the parking, the facade, and the grading. A layer with no data shows No data and a link to the tool that makes it.',
+      'Each layer is one section of the project: the site, the massing, the units, the cores and corridors, the parking, and the grading. A layer with no data shows No data and a link to the tool that makes it.',
       'Where a Plate Planner section covers a group of levels, its units draw instead of the massing slab on those levels.',
     ]],
     ['Levels', [

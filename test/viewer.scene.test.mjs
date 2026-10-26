@@ -197,9 +197,18 @@ t("V4 an unknown stall kind and a bad ramp are handled, a bad stall ring is skip
   ok(/^#[0-9a-f]{6}$/i.test(S.colorOf("stall:mystery")));
 });
 
-console.log("facade, grading, sun");
-t("facade: a band on the edge of each face with an edge, from levelFrom to the top of levelTo, outside the face", () => {
+// The Facade Studio is hidden (October 26, 2026). The facade reader stays and runs only with { includeHidden: true }.
+const HID = { includeHidden: true };
+console.log("facade (hidden), grading, sun");
+t("hidden facade: the viewer shows no facade layer by default", () => {
   const L = S.layersFrom(docFull);
+  ok(!("facade" in L), "layersFrom adds no facade layer");
+  ok(!S.LAYER_IDS.includes("facade"), "LAYER_IDS has no facade");
+  ok(S.HIDDEN_LAYERS.has("facade"));
+  ok(Object.keys(L).every((k) => k !== "facade"));
+});
+t("facade (dormant reader): a band on the edge of each face with an edge, from levelFrom to the top of levelTo, outside the face", () => {
+  const L = S.layersFrom(docFull, HID);
   const faces = facadeFaces(docFull);
   eq(L.facade.items.length, faces.filter((f) => f.edge).length);
   const f = faces[0], item = L.facade.items.find((i) => i.id === `facade:${f.id}`), pl = sec(docFull, "facade").placement;
@@ -209,10 +218,10 @@ t("facade: a band on the edge of each face with an edge, from levelFrom to the t
   eq(item.system, f.system);
 });
 function facadeFaces(doc) { return sec(doc, "facade").derived.faces; }
-t("facade: a face without an edge is skipped and counted", () => {
+t("facade (dormant reader): a face without an edge is skipped and counted", () => {
   const d = JSON.parse(JSON.stringify(docFull));
   delete d.sections.facade.derived.faces[0].edge;
-  const L = S.layersFrom(d);
+  const L = S.layersFrom(d, HID);
   eq(L.facade.items.length, facadeFaces(docFull).filter((f) => f.edge).length - 1);
   eq(L.facade.skipped, 1);
 });
@@ -249,7 +258,7 @@ t("V5 levelsIndex lists massing, plates and parking levels sorted by z; plate le
   near(l12.z, massing.placement.baseZ + massing.derived.levels.find((l) => l.index === 12).z);
 });
 t("V5 a cut at a plate level: nothing above it, the cut level keeps its units, the cut level is marked", () => {
-  const L = S.layersFrom(docFull), idx = S.levelsIndex(docFull);
+  const L = S.layersFrom(docFull, HID), idx = S.levelsIndex(docFull);
   const lv = idx.find((l) => l.name === "Floor 12");
   const before = JSON.stringify(L);
   const C = S.cutAt(L, lv.z);
@@ -281,7 +290,7 @@ t("V5 a cut at the lowest level keeps the ground floor and the parking level bel
 
 console.log("colors");
 t("colorKey: program, unit type and source modes", () => {
-  const L = S.layersFrom(docFull);
+  const L = S.layersFrom(docFull, HID);
   const u = L.units.items[0], m = L.massing.items[0], c = L.cores.items[0], f = L.facade.items[0];
   eq(S.colorKey(u, "program"), `program:${u.program}`);
   eq(S.colorKey(u, "unitType"), `unit:${u.type}`);

@@ -153,12 +153,13 @@ async function runUiTests() {
       const ids = ['btnOption', 'btnProject', 'btnSnap', 'btnExport', 'btnHelp'];
       return eq([ids.every((i) => !!$(i)), $('tbHistory').querySelectorAll('button').length, $('styleToggle').querySelectorAll('button').length], [true, 2, 2]);
     });
-    await t('the Export menu lists Image, AI-ready image, AI Prompts, SketchUp, DXF, Stall list, JSON and Send to Facade Studio', async () => {
+    await t('the Export menu lists Image, AI-ready image, AI Prompts, SketchUp, DXF, Stall list, JSON and Send to Grading Sketch, and no Facade Studio item', async () => {
       click($('btnExport')); await frames(2);
-      const ids = ['miImage', 'miAiReady', 'miAiPrompts', 'miOverlay', 'miSketchup', 'miDxf', 'miCsv', 'miExportJson', 'miImportJson', 'miSendFacade', 'miSendGrading'];
+      const ids = ['miImage', 'miAiReady', 'miAiPrompts', 'miOverlay', 'miSketchup', 'miDxf', 'miCsv', 'miExportJson', 'miImportJson', 'miSendGrading'];
       const have = ids.map((i) => !!$(i));
-      const send = $('miSendFacade');
-      const out = [have.every(Boolean), !!send && !send.disabled, send ? /Facade Studio/.test(send.textContent) : false];
+      const send = $('miSendGrading');
+      const menu = document.querySelector('#exportMenu');
+      const out = [have.every(Boolean), !!send && !send.disabled, !$('miSendFacade') && !/facade/i.test(menu ? menu.textContent : '')];
       Pop.close();
       return eq(out, [true, true, true]);
     });

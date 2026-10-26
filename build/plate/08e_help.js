@@ -67,13 +67,13 @@ const Help = (() => {
       'Buildings removed in the Site Model do not show here. This tool does not drag. Move the building in the Tower Generator or the Mid-Rise Generator.',
     ]],
     ['Projects', [
-      'A project holds the site, the massing and the work of other tools in one file. The Plate Planner reads the massing levels and writes a plates section with the units, so the Parking Deck and the Facade Studio can read it.',
+      'A project holds the site, the massing and the work of other tools in one file. The Plate Planner reads the massing levels and writes a plates section with the units, so the Parking Deck can read it.',
       'The page saves by itself a second after each change. Each level group keeps its own drawn units. If the massing changes, check the units against the new plate.',
     ]],
     ['Files', [
       'Option menu > Save keeps the design in this browser. Export > Export JSON downloads all saved options. Import JSON adds them back.',
       'Export > Rooms is a CSV of every unit. DXF has the plate, units, corridor, core and support on layers. SketchUp opens with the CMRLM extension. Notes is a plain-text summary with the cautions. Image saves a picture of the view.',
-      'Send to Parking Deck and Send to Facade Studio save the project and open that tool on it.',
+      'Send to Parking Deck saves the project and opens that tool on it.',
     ]],
   ];
   function toggle() {

@@ -516,14 +516,16 @@ async function runProjectTests() {
       const sec = document.querySelector('#tabpanel-site [data-section="project"]');
       return eq([back.frame.kind, back.name, ProjectMod.getSection(back, 'massing').tool, Store.get('placement'), urls.at(-1) === doc.id, sec && sec.hidden, ProjectUI.hasSite()], ['local', 'Local one', 'tower', { x: 0, y: 0, rotation: 0, baseZ: 0, baseMode: 'follow' }, true, false, false]);
     });
-    await t('the Export menu has the three Send items, enabled', async () => {
+    await t('the Export menu has the two Send items, enabled, and no Facade Studio item (the Facade Studio is hidden)', async () => {
       $('btnExport').click();
       await wait(60);
-      const ids = ['miSendPlate', 'miSendFacade', 'miSendGrading'];
+      const ids = ['miSendPlate', 'miSendGrading'];
       const found = ids.map((id) => { const el = $(id); return el ? !el.disabled : null; });
       const text = ids.map((id) => ($(id) ? $(id).textContent : ''));
+      const menu = document.querySelector('#exportMenu');
+      const noFacade = !$('miSendFacade') && !/facade/i.test(menu ? menu.textContent : '') && !(menu && menu.querySelector('[id*="acade"]'));
       Pop.close();
-      return eq([found, /Plate Planner/.test(text[0]), /Facade Studio/.test(text[1]), /Grading Sketch/.test(text[2])], [[true, true, true], true, true, true]);
+      return eq([found, /Plate Planner/.test(text[0]), /Grading Sketch/.test(text[1]), noFacade], [[true, true], true, true, true]);
     });
     await t('Send to Plate Planner saves the project, logs the send, and opens ../plate/?project=<id>', async () => {
       navs.length = 0;
@@ -532,26 +534,26 @@ async function runProjectTests() {
       const back = stored(id);
       return eq([url, navs, back.log.at(-1).action, back.log.at(-1).note], [`../plate/?project=${encodeURIComponent(id)}`, [`../plate/?project=${encodeURIComponent(id)}`], 'send', 'tower → plate']);
     });
-    await t('Send to Facade Studio opens ../facade/?project=<id>; Send to Grading Sketch opens ../grading/?project=<id>', async () => {
+    await t('Send to Grading Sketch opens ../grading/?project=<id>; Send to the hidden Facade Studio is refused', async () => {
       navs.length = 0;
       const id = ProjectUI.doc().id;
-      await ProjectUI.send('facade');
+      const refused = await ProjectUI.send('facade');
       await ProjectUI.send('grading');
       const log = stored(id).log.filter((l) => l.action === 'send').map((l) => l.note);
-      return eq([navs, log.slice(-2)], [[`../facade/?project=${encodeURIComponent(id)}`, `../grading/?project=${encodeURIComponent(id)}`], ['tower → facade', 'tower → grading']]);
+      return eq([refused, navs, log.slice(-1)], [false, [`../grading/?project=${encodeURIComponent(id)}`], ['tower → grading']]);
     });
     await t('Send with no project open makes one first; an unknown tool is refused', async () => {
       ProjectUI.close();
       fresh();
       navs.length = 0;
       const bad = await ProjectUI.send('nope');
-      const url = await ProjectUI.send('facade');
+      const url = await ProjectUI.send('grading');
       const id = ProjectUI.doc() && ProjectUI.doc().id;
-      return eq([bad, !!id, url === `../facade/?project=${encodeURIComponent(id)}`, navs.length, ProjectMod.getSection(stored(id), 'massing').tool], [false, true, true, 1, 'tower']);
+      return eq([bad, !!id, url === `../grading/?project=${encodeURIComponent(id)}`, navs.length, ProjectMod.getSection(stored(id), 'massing').tool], [false, true, true, 1, 'tower']);
     });
     await t('Send writes the sun section too when the Sun Study is on', async () => {
       Store.set('sun.mode', 'study', { live: false });
-      await ProjectUI.send('facade');
+      await ProjectUI.send('grading');
       const sec = ProjectMod.getSection(stored(ProjectUI.doc().id), 'sun');
       return eq([sec && sec.tool, sec && sec.derived.samples.length > 8], ['tower', true]);
     });

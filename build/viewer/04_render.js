@@ -20,7 +20,7 @@ function planMatrix(elev = 0) {
 /** What color an item draws in, and what the legend says. One place, used by the scene, the legend and the tests. */
 const Paint = (() => {
   const css = (name, fb) => { let v = ''; try { v = getComputedStyle(document.documentElement).getPropertyValue(name).trim(); } catch (e) { v = ''; } return v || fb; };
-  const HERO_LAYERS = new Set(['massing', 'units', 'cores', 'facade']);
+  const HERO_LAYERS = new Set(['massing', 'units', 'cores']);
   /** The palette key an item draws with, or null when it draws in a plain color. */
   function keyOf(item, opts = {}) {
     if (opts.aiReady) return null;
@@ -39,14 +39,13 @@ const Paint = (() => {
     if (k) return colorOf(k);
     return item.kind === 'stall' ? '#c3c8cd' : css('--scene-model', CONFIG.modelColor);
   }
-  const KEY_LABELS = { 'layer:site': 'Site', 'layer:massing': 'Massing', 'layer:units': 'Units', 'layer:cores': 'Cores and corridors', 'layer:parking': 'Parking', 'layer:facade': 'Facade', 'layer:grading': 'Grading' };
+  const KEY_LABELS = { 'layer:site': 'Site', 'layer:massing': 'Massing', 'layer:units': 'Units', 'layer:cores': 'Cores and corridors', 'layer:parking': 'Parking', 'layer:grading': 'Grading' };
   const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
   function labelOf(key) {
     if (KEY_LABELS[key]) return KEY_LABELS[key];
     const i = key.indexOf(':'), kind = key.slice(0, i), name = key.slice(i + 1);
     if (kind === 'program') return cap(name);
     if (kind === 'unit') return name;
-    if (kind === 'facade') return `Facade, ${name}`;
     if (kind === 'stall') return `Stall, ${name}`;
     return cap(name);
   }

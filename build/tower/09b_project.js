@@ -22,7 +22,7 @@ const ProjectUI = (() => {
   const NO_STORAGE_TEXT = 'Saving is unavailable in this browser, so the project is kept only until you close this page.';
   const MAX_CONTEXT = 300;
   const TOOL_NAMES = { midrise: 'Mid-Rise', tower: 'Tower', plate: 'Plate Planner', parking: 'Parking Deck', facade: 'Facade Studio', grading: 'Grading Sketch' };
-  const SEND_TOOLS = ['plate', 'parking', 'facade', 'grading'];
+  const SEND_TOOLS = ['plate', 'parking', 'grading'];
   const project = {
     doc: null, timer: 0, dirty: false, readOnly: false, loading: false, noted: {},
     replaceNeeded: false, replaceTool: null, confirmed: false, asking: false, renamed: null,

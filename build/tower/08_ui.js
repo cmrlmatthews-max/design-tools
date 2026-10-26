@@ -704,7 +704,6 @@ const UI = (() => {
           item('miShadowSheet', 'Shadow study sheet', 'Three dates by three times in one picture', () => { SunStudy.make({ deliver: true }).catch((e) => { console.error(e); Toast.show(e && e.message ? e.message : 'The sheet could not be made.', 'bad', 6000); }); }),
           h('div', { class: 'pop-sep' }), h('div', { class: 'label pop-label' }, 'Send to'),
           item('miSendPlate', 'Send to Plate Planner', 'Save the project and open the Plate Planner', () => ProjectUI.send('plate')),
-          item('miSendFacade', 'Send to Facade Studio', 'Save the project and open the Facade Studio', () => ProjectUI.send('facade')),
           item('miSendGrading', 'Send to Grading Sketch', 'Save the project and open the Grading Sketch', () => ProjectUI.send('grading')));
         return;
       }
@@ -719,7 +718,6 @@ const UI = (() => {
         item('miImportJson', 'Import JSON', 'Add the options from a file', () => $('importFile').click()),
         h('div', { class: 'pop-sep' }), h('div', { class: 'label pop-label' }, 'Send to'),
         item('miSendPlate', 'Send to Plate Planner', 'Save the project and open the Plate Planner', () => ProjectUI.send('plate')),
-        item('miSendFacade', 'Send to Facade Studio', 'Save the project and open the Facade Studio', () => ProjectUI.send('facade')),
         item('miSendGrading', 'Send to Grading Sketch', 'Save the project and open the Grading Sketch', () => ProjectUI.send('grading')));
     };
     const overlay = () => {

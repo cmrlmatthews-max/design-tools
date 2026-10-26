@@ -28,7 +28,8 @@ t("V8 one group per layer that is on (and has items)", () => {
   const d = SK.viewerToSketchup(doc, null, META);
   eq(names(d), ["Site", "Massing", "Units", "Cores and corridors", "Parking"]);
   const all = SK.viewerToSketchup(doc, { site: true, massing: true, units: true, cores: true, parking: true, facade: true, grading: true }, META);
-  eq(names(all).length, 7);
+  eq(names(all).length, 6);
+  ok(!names(all).includes("Facade"), "the hidden facade layer is not exported even when asked for");
   ok(SF.validateDoc(all).ok === true, JSON.stringify(SF.validateDoc(all).errors));
   const one = SK.viewerToSketchup(doc, { site: false, massing: false, units: true, cores: false, parking: false, facade: false, grading: false }, META);
   eq(names(one), ["Units"]);

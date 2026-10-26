@@ -315,7 +315,7 @@ const ProjectUI = (() => {
     return true;
   }
 
-  const SEND_TO = ['parking', 'facade'];
+  const SEND_TO = ['parking'];
   /** Send to another tool: save the project, then open ../<tool>/?project=<id>. With no project open, one is made first. */
   async function send(toolId) {
     Pop.close();

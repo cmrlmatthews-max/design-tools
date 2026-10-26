@@ -22,7 +22,7 @@ This file is the one place that lists every tool in the suite, who builds it, an
 | — | Project file (`src/shared/project.js`), Workspace page, Site Model handoff | `index.html`, `src/shared/`, `site/` | Version 1 live | Home |
 | `midrise` | Mid-Rise Generator | `midrise/` | Version 1 live | Home |
 | `parking` | Parking Deck Generator | `parking/` | Version 1 live | Home |
-| `facade` | Facade Studio | `facade/` | Version 1 live | Home |
+| `facade` | Facade Studio | `facade/` | Hidden, October 26, 2026: facades vary too much to model well with the current tools. The code, the tests, and the saved `facade` section stay. The Workspace page, the Send menus, and the Model Viewer do not show it. | Home |
 | `grading` | Grading Sketch | `grading/` | Version 1 live | Home |
 | `viewer` | Model Viewer | `viewer/` | Built, in review | Home |
 | `view` | View Study | `view/` | Later | — |
@@ -46,7 +46,7 @@ Branch `site-base-style` (October 23, 2026): in progress, not merged. It adds th
 
 ## 4. Pipeline order
 
-Site → Massing (Tower or Mid-Rise) → Plates → Parking → Facade → Sun → Grading → Model Viewer (every section in one model). Later: Egress Sketch.
+Site → Massing (Tower or Mid-Rise) → Plates → Parking → Sun → Grading → Model Viewer (every section in one model). Later: Egress Sketch. Hidden: Facade Studio (October 26, 2026; facades vary too much to model well with the current tools).
 
 Each tool reads the sections before it and writes only its own section. The Workspace page (the menu page) shows the project and the tools in this order.
 

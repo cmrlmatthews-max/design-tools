@@ -34,7 +34,7 @@ const Help = (() => {
       'A project opens with the site in Glass. A pinned project opens with the site in Solid.',
       'Pin placement, in the top bar, locks the building and sets the site style to Solid. Unpin frees the building and sets the site style to Glass.',
       'A pinned building does not move by drag or by the rotation handle. Typed values still work.',
-      'The project saves by itself a second after each change. Export > Send to Plate Planner, Parking Deck, Facade Studio, or Grading Sketch saves it and opens that tool.',
+      'The project saves by itself a second after each change. Export > Send to Plate Planner, Parking Deck, or Grading Sketch saves it and opens that tool.',
     ]],
     ['Files', [
       'Option menu > Save keeps the design in this browser. Export > Export JSON downloads all saved options. Import JSON adds them back.',

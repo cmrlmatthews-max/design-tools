@@ -21,7 +21,7 @@ The tools run in this pipeline order. The Workspace page (section 9) shows them 
 | 2 | `midrise` | Mid-Rise Generator | `massing` | Next build |
 | 3 | `plate` | Plate Planner | `plates` | Work Claude |
 | 4 | `parking` | Parking Deck | `parking` | Planned |
-| 5 | `facade` | Facade Studio | `facade` | Planned |
+| 5 | `facade` | Facade Studio | `facade` | Hidden, October 26, 2026 (facades vary too much to model well with the current tools). The `facade` section stays valid, and readers keep it. |
 | 6 | `tower` | Sun Study (inside the Tower Generator) | `sun` | Work Claude |
 | 7 | `grading` | Grading Sketch | `grading` | Later |
 | 8 | `viewer` | Model Viewer | none (reads every section) | Built |
@@ -249,6 +249,8 @@ Optional keys (added with the Parking Deck Generator, October 21, 2026):
 
 ### 6.5 `facade.derived` (writer: Facade Studio)
 
+**Hidden, October 26, 2026.** The Facade Studio is hidden (facades vary too much to model well with the current tools). The `facade` section stays valid. Project files keep it, and every reader keeps it. The Workspace page and the Model Viewer do not show or count it.
+
 ```jsonc
 {
   "faces": [ { "id": "F3", "levelFrom": 3, "levelTo": 24, "orientation": "S", "system": "window-wall", "area": 18200, "glazing": 7100, "wwr": 0.39, "balconies": 44 } ],
@@ -333,7 +335,7 @@ All tools live on one origin (`https://<user>.github.io/design-tools/`), so they
 `index.html` becomes the Workspace. Same look as today: same tokens, same type, CMRLM mark.
 
 - Top: project list (name, updated, size), New project, Import, Delete (with a confirm). Selecting a project makes it the open project (`cmrlm.project.last`).
-- Below: one card per tool in pipeline order: Site Model, Massing (Tower Generator or Mid-Rise Generator, two buttons), Plate Planner, Parking Deck, Facade Studio, Sun Study, Grading Sketch, Model Viewer. The Egress Sketch is listed under Later and has no card yet. A planned tool shows "Planned" and no button.
+- Below: one card per tool in pipeline order: Site Model, Massing (Tower Generator or Mid-Rise Generator, two buttons), Plate Planner, Parking Deck, Sun Study, Grading Sketch, Model Viewer. The Egress Sketch and the hidden Facade Studio are listed under Later and have no card. The "N of M with data" count and the Model Viewer status do not count the `facade` section. A planned tool shows "Planned" and no button.
 - Each card shows the section status for the open project: "Empty", "Has data · <updatedAt>", or "Newer version" (schema newer than the tool on this page). The card opens the tool with `?project=<id>`.
 - With no project open, the cards open the tools plain, as today.
 - The page reads project.js directly as an ES module (it has no build step).
@@ -408,7 +410,7 @@ Tower Generator (done October 22, 2026 by the home session; see `docs/tower-proj
 
 1. Add `src/tower/derived.js` with `towerDerived(state, built)` → `massing.derived` (section 6.2). Test it against the presets: GFA from `derived.levels` equals `computeMetrics(...).gfa` within 0.1 sf.
 2. Accept `?project=`; autosave the `massing` section; Project menu in the top bar.
-3. Export menu: "Send to Plate Planner", "Send to Facade Studio", and "Send to Grading Sketch" (`sendTo(storage, doc, "grading", "tower")`). "Send to Facade Studio" (`sendTo(storage, doc, "facade", "tower")`). The Facade Studio reads tower faces from `massing.derived.levels`; until item 1 exists it shows a note and uses its standalone massing.
+3. Export menu: "Send to Plate Planner" and "Send to Grading Sketch" (`sendTo(storage, doc, "grading", "tower")`). The "Send to Facade Studio" item is hidden (October 26, 2026). The Facade Studio reads tower faces from `massing.derived.levels`; until item 1 exists it shows a note and uses its standalone massing.
 4. Site context: when the project has a site, offer "Context from site" in the Site tab. It calls `siteContextFor(doc, placement, radius)` and replaces `state.context.blocks` with the returned `blocks`. Keep the manual blocks when the user says no.
 5. Sun Study: build on `src/shared/solar.js` (section 6.6). Write the `sun` section with `tool: "tower"`. Set `view.sun` from the chosen date and time.
 6. Placement: when the project has a site, show the placement (x, y, rotation, baseZ) in the Site tab, with a "Center on site" button that sets x and y to the site center and baseZ to the ground there.

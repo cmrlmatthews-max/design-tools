@@ -166,12 +166,14 @@ async function runUiTests() {
       Store.set('view.snap', { on: true, grid: 5 }, { live: false });
       return eq([off, grid], [false, 10]);
     });
-    await t('Export menu: Image, AI-ready image, AI Prompts, SketchUp, Export JSON, Import JSON, Send to Plate Planner, Send to Parking Deck, Send to Facade Studio', () => {
+    await t('Export menu: Image, AI-ready image, AI Prompts, SketchUp, Export JSON, Import JSON, Send to Plate Planner, Send to Parking Deck, Send to Grading Sketch, and no Facade Studio item', () => {
       click($('btnExport'));
       const got = ids(document.querySelectorAll('#exportMenu .pop-item'));
+      const menu = document.querySelector('#exportMenu');
+      const menuText = menu ? menu.textContent : '(no menu)';
       Pop.close();
-      const want = ['miImage', 'miAiReady', 'miAiPrompts', 'miOverlay', 'miSketchup', 'miExportJson', 'miImportJson', 'miSendPlate', 'miSendParking', 'miSendFacade', 'miSendGrading'];
-      return eq(got, want);
+      const want = ['miImage', 'miAiReady', 'miAiPrompts', 'miOverlay', 'miSketchup', 'miExportJson', 'miImportJson', 'miSendPlate', 'miSendParking', 'miSendGrading'];
+      return eq([got, !/facade/i.test(menuText) && menuText !== '(no menu)'], [want, true]);
     });
     await t('Export > Image overlay shows the choices and goes back', () => {
       click($('btnExport'));

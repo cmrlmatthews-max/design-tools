@@ -34,7 +34,6 @@ const Help = (() => {
       'A project opens with the site in Glass. A pinned project opens with the site in Solid.',
       'Pin placement, in the top bar, locks the deck and sets the site style to Solid. Unpin frees the deck and sets the site style to Glass.',
       'A pinned deck does not move by drag or by the rotation handle. Typed values still work.',
-      'Send to Facade Studio is planned and not available yet.',
     ]],
     ['Site', [
       'The Site toggle in the View tab shows the project site from the Site Model. It shows the real ground, roads and water. The Site Model makes no trees yet.',
