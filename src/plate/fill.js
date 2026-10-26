@@ -27,6 +27,11 @@
      openArea    sf of unit zone that no unit and no support piece covers; open: that MultiPoly (not written to derived)
      cornerZones [{ id, ring, at, e, legs, outer, type }]: wrap corner zones with no unit; corners[] also carry ids
      zone        the unit zone (inset − corridor − blocks): the clip of a free unit
+     leftoverRuns [run + { stretch }]: the run of each leftover piece that is not open (id "LR<k>", leftover: true;
+                 leftoverRun: along the piece edge on the corridor, else its longest edge off the facade). A piece opens
+                 (its run joins runs, its free part is an open stretch, it is no longer support) when a point of
+                 opts.openLeftovers lies in it or a drawn unit covers more than 1 sf of it. Support "leftover" pieces
+                 name their run (`run`).
      allowance   sf of the exterior strip that no block takes (the metrics closure: GSF = NRSF + corridor + core + stairs
                  + elevators + support + open + allowance)
      counts      the level targets (plan 3.6) for the suggestions and the placed-against-target table
@@ -61,7 +66,11 @@
    - Runs come from sight lines: every facade edge (area line, the plate inset by extWall) looks inward along its
      normal; where the first obstacle is a corridor face, that stretch is a band candidate. Consecutive stretches that
      see the same corridor face merge (a curved facade becomes one run). Candidates are taken in order of depth; a
-     candidate that overlaps a taken band by more than 1 sf drops (a U arm end looking down the arm).
+     candidate that overlaps a taken band by more than 1 sf keeps only the stretches of its face that the overlap does
+     not cover, each of 2 ft or more (trimBand; a U arm end looking down the arm keeps nothing). A candidate shorter than
+     2 ft (a facet grazing a corridor corner) is not taken. (Leftover fix, October 26, 2026: before, an overlapped
+     candidate dropped whole, and on a chamfered or rounded point plate the facade beyond the corridor became one
+     leftover of 2,000 sf or more.)
      The run axis is the corridor face; cut lines are perpendicular to it.
    - What the bands leave: a piece that touches two facade edges at a convex vertex is a corner zone (a wrap unit of
      cornerType; hotel: a remainder); a piece that touches no facade is a pocket; anything else is a remainder.
@@ -331,14 +340,72 @@ function facadeBands(rings, corridor, zone0, known = []) {
   const sorted = built.slice().sort((a, b) => (Math.abs(a.depth - b.depth) > 0.01 ? a.depth - b.depth : 0) || b.free - a.free || a.order - b.order);
   const taken = [];
   let takenMP = [];
-  for (const b of sorted) {
-    if (takenMP.length && mpArea(bool("int", b.band, takenMP)) > 1) continue;
-    taken.push(b);
-    takenMP = takenMP.length ? bool("union", [...takenMP, ...b.band], []) : b.band;
+  for (const b0 of sorted) {
+    if (b0.s1 < MIN_TRIM) continue;            // a sliver where a facet grazes a corridor corner: it stays leftover
+    let list = [b0];
+    if (takenMP.length) {
+      const ov = bool("int", b0.band, takenMP);
+      if (mpArea(ov) > 1) list = trimBand(b0, ov, takenMP, rings);
+    }
+    for (const b of list) {
+      taken.push(b);
+      takenMP = takenMP.length ? bool("union", [...takenMP, ...b.band], []) : b.band;
+    }
   }
-  taken.sort((a, b) => a.order - b.order);
+  taken.sort((a, b) => a.order - b.order || a.from - b.from);
   taken.forEach((b, i) => { b.id = i; });
   return taken;
+}
+
+/**
+ * A candidate that overlaps bands taken before it keeps the stretches of its corridor face that the overlap does not
+ * cover (leftover fix, October 26, 2026). Before, the whole candidate dropped: on a chamfered or rounded point plate the
+ * facets beside a corridor corner see two corridor faces, the side band takes the corner, and the band of the long
+ * facade beyond the corridor (2,000 sf and more) became one leftover piece. Each stretch of MIN_TRIM ft or more becomes
+ * a band with its own frame origin (s = 0 at the stretch start), its facade chain and its ring parts clipped to the
+ * stretch. A U arm end (looking down an arm the side bands fill) keeps nothing: its whole face is covered.
+ */
+const MIN_TRIM = 2;               // ft: a shorter stretch of a trimmed candidate stays a leftover piece
+function trimBand(b, ov, takenMP, rings) {
+  const cuts = [];
+  for (const pc of ov) if (Math.abs(ringArea(pc.outer)) > 0.25) cuts.push(projRange(b.fr, pc.outer));
+  const free = minusIntervals([0, b.s1], mergeIntervals(cuts.map(([lo, hi]) => [Math.max(0, lo), Math.min(b.s1, hi)])));
+  const R = rings[b.ring];
+  const out = [];
+  for (const [x, y] of free) {
+    if (y - x < MIN_TRIM) continue;
+    let band = bool("int", b.band, strip(b.fr, x, y));
+    band = bool("diff", band, takenMP).filter((pc) => Math.abs(ringArea(pc.outer)) > 0.25);
+    const area = mpArea(band);
+    if (area < 0.5) continue;
+    const o = at(b.fr, x, 0);
+    const fr = { o, u: b.fr.u, n: b.fr.n };
+    const sOf = (p) => dot(sub(p, b.fr.o), b.fr.u);
+    // the ring parts of the stretch: s is linear along each part
+    const parts = [];
+    for (const part of b.parts) {
+      const E = R.edges[part.k];
+      const s0 = sOf([E.a[0] + E.u[0] * part.a, E.a[1] + E.u[1] * part.a]), s1 = sOf([E.a[0] + E.u[0] * part.b, E.a[1] + E.u[1] * part.b]);
+      if (Math.abs(s1 - s0) < 1e-9) { if (s0 >= x - 1e-6 && s0 <= y + 1e-6) parts.push({ ...part }); continue; }
+      const pAt = (s) => part.a + ((s - s0) * (part.b - part.a)) / (s1 - s0);
+      let pa = pAt(x), pb = pAt(y);
+      if (pa > pb) [pa, pb] = [pb, pa];
+      pa = Math.max(part.a, pa); pb = Math.min(part.b, pb);
+      if (pb - pa > 1e-6) parts.push({ k: part.k, a: pa, b: pb });
+    }
+    if (!parts.length) continue;
+    const chain = [];
+    for (const part of parts) {
+      const E = R.edges[part.k];
+      const pa = [E.a[0] + E.u[0] * part.a, E.a[1] + E.u[1] * part.a], pb = [E.a[0] + E.u[0] * part.b, E.a[1] + E.u[1] * part.b];
+      if (!chain.length || Math.hypot(chain[chain.length - 1][0] - pa[0], chain[chain.length - 1][1] - pa[1]) > 1e-6) chain.push(pa);
+      chain.push(pb);
+    }
+    const maxT = Math.max(...chain.map((p) => dot(sub(p, o), b.fr.n)));
+    out.push({ order: b.order, ring: b.ring, parts, fr, s1: y - x, band, area, depth: area / (y - x), maxT,
+      from: R.edges[parts[0].k].s0 + parts[0].a, facePts: chain, free: y - x, face: b.face, trimmed: true });
+  }
+  return out;
 }
 
 /* ======================================================================= leftovers: corners, pockets */
@@ -1190,6 +1257,42 @@ function facadeSpan(ring, rings) {
   return { ri: best.ri, from, to: from + (P - gap) };
 }
 
+/**
+ * The run of a leftover piece (leftover fix): its base is the piece edge with the most clear-corridor contact (the unit
+ * doors), else its longest edge off the facade. The run axis runs along that edge, the normal into the piece, and the
+ * band is the piece. id "LR<k+1>", edge "L<k+1>" (the runKey of its units), bandId 1000 + k. → run | null (no base edge
+ * of 2 ft or more, or a run shorter than MIN_TRIM).
+ */
+function leftoverRun(pc, k, clear, rings) {
+  let ring = pc.outer.map((p) => [p[0], p[1]]);
+  if (ringArea(ring) < 0) ring = ring.reverse();
+  const corEdges = [];
+  for (const r of ringsOf(clear)) for (let i = 0; i < r.length; i++) corEdges.push([r[i], r[(i + 1) % r.length]]);
+  const onSet = (a, b, set) => { const m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; return set.some(([p, q]) => segDist(a, p, q) < 0.02 && segDist(b, p, q) < 0.02 && segDist(m, p, q) < 0.02); };
+  const facadeEdges = rings.flatMap((R) => R.edges.map((e) => [e.a, e.b]));
+  let best = null;
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i], b = ring[(i + 1) % ring.length], L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (L < 2) continue;
+    const score = onSet(a, b, corEdges) ? 2 : onSet(a, b, facadeEdges) ? 0 : 1;
+    if (!best || score > best.score || (score === best.score && L > best.L + 1e-9)) best = { a, b, L, score };
+  }
+  if (!best || best.score === 0) return null;
+  const u = dirOf(best.a, best.b), n = [-u[1], u[0]];          // counter-clockwise ring: the piece lies left of its edges
+  let lo = Infinity, hi = -Infinity, maxT = 0;
+  for (const p of ring) { const s = dot(sub(p, best.a), u), t = dot(sub(p, best.a), n); lo = Math.min(lo, s); hi = Math.max(hi, s); maxT = Math.max(maxT, t); }
+  const len = hi - lo;
+  if (len < MIN_TRIM) return null;
+  const o = [best.a[0] + u[0] * lo, best.a[1] + u[1] * lo];
+  const area = Math.abs(ringArea(ring)) - (pc.holes || []).reduce((s2, h) => s2 + Math.abs(ringArea(h)), 0);
+  const fr = { o, u, n };
+  // the ring parameter of the facade nearest the run ends (the runKey and the run order of the page)
+  let R = rings[0], from = 0, to = 0;
+  if (R) { from = ringParam(R, at(fr, 0, maxT)); to = ringParam(R, at(fr, len, maxT)); }
+  return { id: `LR${k + 1}`, ring: R ? R.id : 0, ringIndex: 0, edge: `L${k + 1}`, bandId: 1000 + k, fr, a: 0, b: len, length: len, depth: area / len,
+    band: [{ outer: ring, holes: pc.holes || [] }], from, to, start: o, end: at(fr, len, 0), maxT, leftover: true };
+}
+
 /** Feet and inches: 13.667 → 13'-8". */
 export function fmtFtIn(v) {
   const inch = Math.round(Math.max(0, v) * 12);
@@ -1204,10 +1307,11 @@ export function fmtFtIn(v) {
  * → LevelLayout = the LevelFill keys (plate, corridor, core, stairs, elevators, support, units, runs, corners, counts, placed,
  *   dropped, depth, graph, warnings …) plus { layout: true, free, openArea, open, cornerZones, zone, allowance }.
  */
-export function layoutLevel(level, state, { units = null, core: coreCtx = null, maxDepth = null, rotation = null, accessible = null } = {}) {
+export function layoutLevel(level, state, { units = null, core: coreCtx = null, maxDepth = null, rotation = null, accessible = null, openLeftovers = null } = {}) {
   const F = levelFrame(level, state, { locks: [], rotation, core: coreCtx, maxDepth, manualRooms: true }, "layoutLevel");
   const { plate, mode, hotel, rot, warnings, where, kind, spine, width, auto, core, clear, stairs, support, elevators, boh, blocks, base, rc, cap, manual } = F;
-  const { runs, corners, pockets, rings, bands } = rc;
+  const { runs: runs0, corners, pockets, rings, bands: bands0 } = rc;
+  let runs = runs0, bands = bands0;
   const ext = F.ext;
   const types = mixTypes(state);
   const cornerId = (state.mix && state.mix.cornerType) || "2br";
@@ -1215,8 +1319,8 @@ export function layoutLevel(level, state, { units = null, core: coreCtx = null, 
   const list = (Array.isArray(units) ? units : []).filter((u) => u && isRing(u.outer));
 
   // targets: the suggestions and the placed-against-target table (the fill rule of plan 3.6)
-  const runLen = runs.reduce((s, r) => s + r.length, 0);
-  const depth = runLen > 0 ? runs.reduce((s, r) => s + r.length * r.depth, 0) / runLen : 0;
+  const runLen = runs0.reduce((s, r) => s + r.length, 0);
+  const depth = runLen > 0 ? runs0.reduce((s, r) => s + r.length * r.depth, 0) / runLen : 0;
   const eff = depth > 0 || hotel ? effectiveTypes(types, depth > 0 ? depth : 1, mode) : { types: [], dropped: [] };
   for (const d of eff.dropped) warnings.push(warn("type-does-not-fit", `${d.name || d.id} does not fit this depth (${r1(depth)} ft). Its width range ${r1(d.lo)} to ${r1(d.hi)} ft is empty. Suggestions do not use it.`, { ...where, type: d.id, lo: d.lo, hi: d.hi }, "info"));
   const accW = hotel ? (state.mix && Array.isArray(state.mix.accessibleWidth) && isNum(state.mix.accessibleWidth[2]) ? state.mix.accessibleWidth[2] : 15.5) : 0;
@@ -1251,6 +1355,26 @@ export function layoutLevel(level, state, { units = null, core: coreCtx = null, 
       warnings.push(warn("unit-clipped", `A block or another unit cuts unit ${u.id}. Its area is now ${fmtSf(absArea(outer))} sf.`, { ...where, unit: u.id }, "info"));
     }
     placedUnits.push({ src: u, outer: rr3(outer), bb: bboxOf(polyOf(outer)), clipped, a0 });
+  }
+
+  // leftover runs (leftover fix, October 26, 2026): every leftover piece of the band partition has a run along its
+  // corridor side (leftoverRun). A piece is open (its run joins `runs`, the rest of it is an open stretch) when a seed
+  // point of opts.openLeftovers lies in it ("Make open stretch") or a drawn unit covers more than 1 sf of it (a paint,
+  // a ghost or a free unit drawn there). The other pieces stay support "leftover" and offer their run in leftoverRuns.
+  const seeds = (Array.isArray(openLeftovers) ? openLeftovers : []).filter(isPt);
+  const pieceRuns = rc.remainders.map((r, k) => {
+    const pc = { outer: r.outer, holes: r.holes || [] };
+    const run = leftoverRun(pc, k, clear, rings);
+    if (!run) return { k, pc, run: null, opened: false };
+    const pbb = bboxOf([pc]);
+    const opened = seeds.some((p) => inMP(p, [pc])) ||
+      placedUnits.some((q) => bboxHit(pbb, q.bb) && mpArea(bool("int", [pc], polyOf(q.outer))) > 1);
+    return { k, pc, run, opened };
+  });
+  const openedRuns = pieceRuns.filter((x) => x.opened).map((x) => x.run);
+  if (openedRuns.length) {
+    runs = [...runs0, ...openedRuns];
+    bands = [...bands0, ...openedRuns.map((r) => ({ id: r.bandId, band: r.band, fr: r.fr, s1: r.length, depth: r.depth, maxT: r.maxT, leftover: true }))];
   }
 
   // derived fields of every unit (the fill shape: area, exposures, corner, bay, ring, demising, door)
@@ -1368,7 +1492,7 @@ export function layoutLevel(level, state, { units = null, core: coreCtx = null, 
   };
   const pockets2 = pockets.flatMap((p) => lessUnits({ outer: p.outer, holes: p.holes || [] }));
   const trims2 = (rc.trims || []).flatMap((p) => lessUnits({ outer: p.outer, holes: p.holes || [] }));
-  const left2 = rc.remainders.flatMap((r) => lessUnits({ outer: r.outer, holes: r.holes || [] }).map((q) => ({ outer: q.outer, holes: q.holes, why: r.why })));
+  const left2 = rc.remainders.flatMap((r, k) => (pieceRuns[k].opened ? [] : lessUnits({ outer: r.outer, holes: r.holes || [] }).map((q) => ({ outer: q.outer, holes: q.holes, why: r.why, piece: pieceRuns[k].run ? k : null }))));
   const extraRem = [];
   const fixed = [...unitMP, ...pockets2, ...trims2, ...left2.map((r) => ({ outer: r.outer, holes: r.holes || [] }))];
   let taken = fixed.length ? bool("union", fixed, []) : [];
@@ -1383,7 +1507,7 @@ export function layoutLevel(level, state, { units = null, core: coreCtx = null, 
   const support_ = [
     ...support, ...boh,
     ...pockets2.map((p, k) => ({ id: `P${k + 1}`, kind: "pocket", outer: rr3(p.outer) })),
-    ...[...left2, ...extraRem].map((p) => ({ id: `L${++nl}`, kind: "leftover", outer: rr3(p.outer), why: p.why })),
+    ...[...left2, ...extraRem].map((p) => ({ id: `L${++nl}`, kind: "leftover", outer: rr3(p.outer), why: p.why, ...(isNum(p.piece) ? { run: pieceRuns[p.piece].run.id } : {}) })),
     ...trims2.map((p, k) => ({ id: `T${k + 1}`, kind: "trim", outer: rr3(p.outer), why: "depth-cap" })),
   ];
 
@@ -1425,17 +1549,24 @@ export function layoutLevel(level, state, { units = null, core: coreCtx = null, 
     reach = { from: [r3(from[0]), r3(from[1])], maxFt, keys: rr.count, of: out.length };
   }
   const rmp = (mp) => asMP(mp).map((pc) => ({ outer: rr3(pc.outer), holes: pc.holes.map(rr3) }));
+  const runOut = (r) => {
+    const s = at(r.fr, r.a, 0), e = at(r.fr, r.b, 0);
+    return { id: r.id, ring: r.ring, edge: r.edge, from: r3(r.from), to: r3(r.to), length: Math.round(r.length * 1000) / 1000, depth: Math.round(r.depth * 1000) / 1000,
+      start: [r3(s[0]), r3(s[1])], end: [r3(e[0]), r3(e[1])], u: r.fr.u.slice(), n: r.fr.n.slice(), band: rmp(r.band), bandId: r.bandId, ...endsOf(r),
+      ...(r.capped ? { capped: true } : {}), ...(r.leftover ? { leftover: true } : {}) };
+  };
+  // the runs of the leftover pieces that are not open: the page paints and suggests on them; the first unit opens the piece
+  const leftoverRuns = pieceRuns.filter((x) => x.run && !x.opened).map((x) => {
+    const r = runOut(x.run);
+    return { ...r, stretch: { id: `${r.id}:1`, runId: r.id, a: 0, b: r.length, length: r.length, depth: r.depth, start: r.start, end: r.end } };
+  });
   return {
     layout: true,
     index: level.index, kind, width, spine, plate, inset: rmp(base.inset),
     corridor, corridorClear: clear, core: core ? rr3(core) : null,
     coreMode: auto ? "auto" : core ? "manual" : "none", coreRooms, coreFits, coreProgram: auto ? auto.program : manual ? manual.program : null, maxDepth: cap,
     stairs, elevators, support: support_, units: out,
-    runs: runs.map((r) => {
-      const s = at(r.fr, r.a, 0), e = at(r.fr, r.b, 0);
-      return { id: r.id, ring: r.ring, edge: r.edge, from: r3(r.from), to: r3(r.to), length: Math.round(r.length * 1000) / 1000, depth: Math.round(r.depth * 1000) / 1000,
-        start: [r3(s[0]), r3(s[1])], end: [r3(e[0]), r3(e[1])], u: r.fr.u.slice(), n: r.fr.n.slice(), band: rmp(r.band), bandId: r.bandId, ...endsOf(r), ...(r.capped ? { capped: true } : {}) };
-    }),
+    runs: runs.map(runOut), leftoverRuns,
     corners: corners.map((c, i) => ({ id: cid(i), ring: rings[c.ring].id, at: c.at, e: c.e, legs: c.legs, eTarget: c.eTarget, type: cornerId, outer: rr3(c.outer), ...(c.absorbed ? { absorbed: true } : {}) })),
     cornerZones, free, openArea: r1(openArea), open: rmp(open), zone: rmp(zoneHard), allowance: r1(allowance),
     counts, placed: placedCount, dropped: eff.dropped.map((d) => ({ id: d.id, lo: d.lo, hi: d.hi })), deep: [],
@@ -1555,6 +1686,7 @@ export function buildPlates(state, { project = null } = {}) {
       acc = () => ({ typeA: per });
     }
   }
-  const out = filled.map((g) => ({ g, fill: layoutLevel(levelOf(g), st, { units: unitsFor(g), accessible: acc(g), rotation, core: coreFor(), maxDepth: capOf(g) }) }));
+  const openFor = (g) => (src === "project" ? groupState(g).openLeftovers : st.openLeftovers);
+  const out = filled.map((g) => ({ g, fill: layoutLevel(levelOf(g), st, { units: unitsFor(g), accessible: acc(g), rotation, core: coreFor(), maxDepth: capOf(g), openLeftovers: openFor(g) }) }));
   return B.finish(out);
 }

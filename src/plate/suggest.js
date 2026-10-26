@@ -17,7 +17,9 @@
      automatic fill, so a blank run gives the units of the reference fill.
    - Hotel accessible keys are not suggested; the architect draws them (type "accessible").
    - A ghost has the type of the fill. Its match is the draw plan 3.3 match for that type ("large" on a deep run).
-   - A stretch that fits no set of units gives units: [] and the note. Otherwise the note is null.
+   - A stretch that no set of units fills exactly takes the units of the longest shorter length that a set fills (0.25 ft
+     steps, up to 40 ft shorter), from its start; the note names the open rest. A stretch that fits no set at all gives
+     units: [] and the too-short note. Otherwise the note is null.
    Pure and deterministic: no DOM, no hidden state, inputs are never mutated.
    ========================================================================== */
 
@@ -60,8 +62,29 @@ export function suggestRun(layout, state, freeStretch, { counters = null } = {})
   const counts = layout.counts && typeof layout.counts === "object" ? layout.counts : {};
   const tooShort = { units: [], note: `This stretch (${fmtFtIn(length)}) is too short for any type. Extend a neighbor or leave it open.` };
   if (!(length > 0)) return tooShort;
-  const [res] = fillRuns([{ id: "S", length, depth }], types, counts, { mode, placed });
-  if (!res || res.short || !res.units.length) return tooShort;
+  const cache = new Map();
+  let [res] = fillRuns([{ id: "S", length, depth }], types, counts, { mode, placed, cache });
+  // leftover fix: no set of units fills the stretch exactly (a hotel stretch of 66 ft: 4 keys reach 60, 5 keys need
+  // 67.5). The longest shorter length that a set fills takes the units, from the stretch start; the rest stays open.
+  let used = length;
+  if (!res || res.short || !res.units.length) {
+    res = null;
+    for (let cut = 0.25; cut <= Math.min(length - 1, 40) + 1e-9; cut += 0.25) {
+      const [r] = fillRuns([{ id: "S", length: length - cut, depth }], types, counts, { mode, placed, cache });
+      if (r && !r.short && r.units.length) { res = r; used = length - cut; break; }
+    }
+    // the feasible lengths are intervals: find the top of this one between used and used + 0.25 (to 0.001 ft)
+    if (res) {
+      let lo = used, hi = Math.min(length, used + 0.25);
+      for (let i = 0; i < 9 && hi - lo > 0.001; i++) {
+        const m = (lo + hi) / 2;
+        const [r] = fillRuns([{ id: "S", length: m, depth }], types, counts, { mode, placed, cache });
+        if (r && !r.short && r.units.length) { lo = m; res = r; } else hi = m;
+      }
+      used = lo;
+    }
+  }
+  if (!res) return tooShort;
   const fr = { o: run.start, u: run.u, n: run.n };
   const band = asMP(run.band);
   const runKey = `${run.ring}:${run.edge}:${r1(run.from)}`;
@@ -77,7 +100,8 @@ export function suggestRun(layout, state, freeStretch, { counters = null } = {})
     const match = matchFor(area, byId.get(u.type) || null, depth, { width, mode });
     units.push({ type: u.type, outer, area, width, match, mode: "run", runKey, runId: run.id, a: r3(s0), b: r3(s1) });
   }
-  return { units, note: null };
+  const note = used < length - 1e-6 ? `The units take ${fmtFtIn(used)} of this ${fmtFtIn(length)} stretch. ${fmtFtIn(length - used)} stays open: widen a unit or leave it.` : null;
+  return { units, note };
 }
 
 /** The wrap unit of one corner zone (draw plan 2.3): the corner type on the zone (legs from the plan 3.5 formula). */
