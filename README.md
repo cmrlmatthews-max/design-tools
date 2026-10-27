@@ -6,7 +6,7 @@ A small toolkit of browser-based design tools for early-stage architectural work
 
 | Tool | Path | Status |
 |---|---|---|
-| Design App | `app/index.html` | Phase 0 built: one 3D view of every project section, dark app look, dock and panels. Tools join in Phase 1. |
+| Design App | `app/index.html` | Version 1: Site Model, Tower Generator (with the AI prompt library), Parking Deck, and Grading Sketch in one 3D view with a dark app look, a tool dock, and collapsible panels. The Plate Planner shows as a view-only layer. Open it from the Workspace page. |
 | Menu page | `index.html` | Links to each tool |
 | Tower Generator | `tower/index.html` | Version 1.2: site layer with drag placement and pin placement, base follows the ground, site style, zoom Site and Building, collapse all; project file (massing and sun sections, Send to Plate Planner, Grading Sketch, context from site, placement), Sun Study mode with sun tools only (real sun by date and time, play, shadow study sheet, sun hours on the ground); from 1.1: click-to-select, 3D handles with snapping, copy segment, form controls, site envelope, live metrics, presets, saved options, compare view, screenshots, AI prompt library |
 | Site Model | `site/index.html` | Version 1: type an address, see a 3D site from public map data (USGS ground, Overture buildings, roads, water), remove existing buildings, download Revit CSV, DXF, SketchUp, and notes |

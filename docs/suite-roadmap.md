@@ -15,7 +15,7 @@ This file is the one place that lists every tool in the suite, who builds it, an
 
 | Id | Tool | Folder | Status | Built by |
 |---|---|---|---|---|
-| `app` | Design App (unified shell) | `app/` | Phase 0 built October 27, 2026. Phase 1 (Site, Tower, Parking, Grading ports) in progress. Plan: `docs/shell-plan.md` | Home |
+| `app` | Design App (unified shell) | `app/` | Phase 0 and Phase 1 built October 27, 2026: Site, Tower (with AI prompts), Parking, Grading in one 3D view; Plate Planner as a view-only layer. Opus review done, fixes in. Next: Cade's Mac and iPad test. Plan: `docs/shell-plan.md` | Home |
 | `site` | Site Model | `site/` | Version 1 live. Remove existing buildings in review | Home |
 | `tower` | Tower Generator | `tower/` | Version 1.2 built, in review (project file, Sun Study) | Home |
 | `sun` | Sun Study (inside the Tower Generator) | `tower/` | Version 1 built, in review | Home |
