@@ -60,8 +60,22 @@ const shown = () => {
 };
 
 /* ---------- layers ---------- */
-const placementKey = () => { const p = T.project.placement(); return `${p.x},${p.y},${p.rotation},${p.baseZ}`; };
-const shiftKey = (lctx) => { const s = lctx.shift || { x: 0, y: 0, z: 0 }; return `${s.x},${s.y},${s.z}`; };
+/* The geometry is built in the tower's local frame, so a placement or scene-shift change only moves the group:
+   def.always re-places the built group (ctx.frame.placeGroup) and asks for a render, with no rebuild. */
+const placeKey = (lctx) => {
+  const p = T.project.placement(), s = (lctx && lctx.shift) || { x: 0, y: 0, z: 0 };
+  return `${p.x},${p.y},${p.rotation},${p.baseZ}|${s.x},${s.y},${s.z}`;
+};
+function placeBuilt(id, lctx) {
+  const obj = T.ctx.layers.get(id);
+  if (!obj) return;
+  const k = placeKey(lctx);
+  if (obj.userData.placedKey === k) return;
+  obj.userData.placedKey = k;
+  T.ctx.frame.placeGroup(obj, T.project.placement());
+  try { T.ctx.scene.requestRender(); } catch (e) { /* the next sync draws it */ }
+}
+const placeNew = (group, lctx) => { group.userData.placedKey = placeKey(lctx); T.ctx.frame.placeGroup(group, T.project.placement()); return group; };
 const itemFor = (it) => T.select.cardItem(it);
 
 function modelDef() {
@@ -72,15 +86,16 @@ function modelDef() {
       if (!shown()) return 'off';
       const s = T.store.raw();
       const d = T.derived.display(isDraft());
-      return [d.key, lctx.style, s.view.colorBy, s.view.floorLines, JSON.stringify(s.programs), JSON.stringify(s.site), placementKey(), shiftKey(lctx)].join('|');
+      return [d.key, lctx.style, s.view.colorBy, s.view.floorLines, JSON.stringify(s.programs), JSON.stringify(s.site), T.flags.active ? 'on' : 'idle'].join('|');
     },
     build(lctx) {
       if (!shown()) return null;
       const s = T.store.raw();
-      const group = buildModelGroup(s, { disp: T.derived.display(isDraft()), style: lctx.style, itemFor });
-      T.ctx.frame.placeGroup(group, T.project.placement());
-      return group;
+      // the blue site outline belongs to the active tool only
+      const group = buildModelGroup(s, { disp: T.derived.display(isDraft()), style: lctx.style, itemFor, showSite: T.flags.active });
+      return placeNew(group, lctx);
     },
+    always(lctx) { placeBuilt('tower-model', lctx); },
     aiReady: aiReadyModel,
   };
 }
@@ -93,6 +108,11 @@ function syncModelLayer() {
   offModel = T.ctx.layers.register(modelDef());
 }
 
+/** The model (site outline) and the envelope depend on whether the tower is active: rebuild them on activate and deactivate. */
+function invalidateLayers() {
+  for (const id of ['tower-model', 'tower-envelope']) { try { T.ctx.layers.invalidate(id); } catch (e) { /* the key still changes */ } }
+}
+
 function towerLayers(ctx) {
   return [
     {
@@ -101,37 +121,35 @@ function towerLayers(ctx) {
         if (!shown()) return 'off';
         const s = T.store.raw();
         const skip = T.project.hasSite() && ctx.layers.isOn('site-neighbors');
-        return [s.context.show ? 1 : 0, JSON.stringify(s.context.blocks), skip ? 1 : 0, lctx.style, placementKey(), shiftKey(lctx)].join('|');
+        return [s.context.show ? 1 : 0, JSON.stringify(s.context.blocks), skip ? 1 : 0, lctx.style].join('|');
       },
       build(lctx) {
         if (!shown()) return null;
         const s = T.store.raw();
         if (!s.context.show || !(s.context.blocks || []).length) return null;
         const skip = T.project.hasSite() && ctx.layers.isOn('site-neighbors');
-        const group = buildContextGroup(s, { style: lctx.style, skipSite: skip, itemFor });
-        ctx.frame.placeGroup(group, T.project.placement());
-        return group;
+        return placeNew(buildContextGroup(s, { style: lctx.style, skipSite: skip, itemFor }), lctx);
       },
+      always(lctx) { placeBuilt('tower-context', lctx); },
       aiReady: aiReadyContext,
     },
     {
       id: 'tower-envelope', label: 'Zoning envelope', order: 22, defaultOn: true,
-      key(lctx) {
-        if (!shown()) return 'off';
+      key() {
+        if (!shown() || !T.flags.active) return 'inactive';      // the envelope shows only while the tower is the active tool
         const s = T.store.raw();
         const d = T.derived.get();
-        return [s.view.envelope ? 1 : 0, JSON.stringify(s.site), d.bounds.model.height, placementKey(), shiftKey(lctx)].join('|');
+        return [s.view.envelope ? 1 : 0, JSON.stringify(s.site), d.bounds.model.height].join('|');
       },
-      build() {
-        if (!shown()) return null;
+      build(lctx) {
+        if (!shown() || !T.flags.active) return null;
         const s = T.store.raw();
         if (!s.view.envelope || s.site.shape === 'none') return null;
         const wire = T.derived.get().wire;
         if (!wire || !wire.length) return null;
-        const group = buildEnvelopeGroup(s, wire);
-        ctx.frame.placeGroup(group, T.project.placement());
-        return group;
+        return placeNew(buildEnvelopeGroup(s, wire), lctx);
       },
+      always(lctx) { placeBuilt('tower-envelope', lctx); },
       aiReady: aiReadyEnvelope,
     },
   ];
@@ -329,6 +347,7 @@ export default {
     saved = { sun: ctx.scene.sun(), shadows: ctx.scene.shadows ? ctx.scene.shadows() : false };
     applySun();
     syncModelLayer();
+    invalidateLayers();
     makeGizmo();
     T.select.enable();
     T.panels.refresh();
@@ -344,6 +363,7 @@ export default {
     T.project.flush();
     if (saved) { ctx.scene.setSun({ az: saved.sun.az, alt: saved.sun.alt }); ctx.scene.setShadows(saved.shadows); saved = null; }
     syncModelLayer();
+    invalidateLayers();
     T.gizmoSync();
     ctx.layers.sync(ctx);
   },

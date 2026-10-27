@@ -24,7 +24,10 @@ export function createPanels(T) {
   const els = (list) => list.map((c) => c.el || c);
   const sections = {};                            // id -> section controller (to open one from the selection)
   const lists = {};                               // id -> row list controller
-  const swatchSyncs = [];
+  // Sync closures of the panels now on screen, per panel. A panel build replaces its own list, so rebuilds do not pile up.
+  const syncGroups = {};
+  let swatchSyncs = [];
+  const allSyncs = () => Object.values(syncGroups).flat();
 
   /* ---- control shortcuts ---- */
   const lenS = (label, path, min, max, extra = {}) => C.slider({
@@ -96,6 +99,7 @@ export function createPanels(T) {
   }
 
   /* ==================================================================== FORM */
+  let offOption = null;
   function optionSection() {
     const name = C.text({ label: 'Option name', bind: { get: () => get('name') || '', set: (v) => T.options.rename(v), commit: () => {} }, maxLength: 60 });
     const menuBtn = h('button', { class: 'btn outline sm', type: 'button', id: 'tower-optionMenu', 'aria-haspopup': 'true', onclick: (e) => Pop.open(e.currentTarget, T.options.menuItems()) }, 'Options and presets');
@@ -103,7 +107,9 @@ export function createPanels(T) {
     const dot = h('span', { class: 'help', id: 'tower-optionDirty', style: 'margin:0' });
     const sync = () => { dot.textContent = T.options.dirty() ? 'Unsaved changes.' : 'Saved.'; };
     swatchSyncs.push(sync); sync();
-    T.options.onChange(() => { if (dot.isConnected) { sync(); C.refreshAll(); } });
+    // one listener for the Option section: a rebuild replaces the last one
+    if (offOption) offOption();
+    offOption = T.options.onChange(() => { if (dot.isConnected) { sync(); C.refreshAll(); } });
     return section('option', 'Option', {
       children: [name.el, h('div', { class: 'btn-row' }, saveBtn, menuBtn), dot,
         h('p', { class: 'help' }, 'The working copy saves itself. Save keeps a named option you can open later.')],
@@ -507,17 +513,18 @@ export function createPanels(T) {
   }
 
   /* ================================================================== builders */
-  const host = (fn) => (body) => {
+  const host = (name, fn) => (body) => {
     body.classList.add('tower-panel');
+    swatchSyncs = syncGroups[name] = [];
     const parts = fn();
     parts.filter(Boolean).forEach((el) => body.append(el));
     C.refreshAll();
-    swatchSyncs.forEach((f) => { try { f(); } catch (e) { console.error(e); } });
+    allSyncs().forEach((f) => { try { f(); } catch (e) { console.error(e); } });
   };
-  const form = host(() => [optionSection(), podiumSection(), segmentsSection(), movesSection(), carvesSection(), crownSection()]);
-  const program = host(() => [programsSection(), targetsSection()]);
-  const site = host(() => [projectSection(), siteSection(), setbacksSection(), heightSection(), contextSection()]);
-  const view = host(() => [displaySection(), sceneSection(), sunSection(), snapSection()]);
+  const form = host('form', () => [optionSection(), podiumSection(), segmentsSection(), movesSection(), carvesSection(), crownSection()]);
+  const program = host('program', () => [programsSection(), targetsSection()]);
+  const site = host('site', () => [projectSection(), siteSection(), setbacksSection(), heightSection(), contextSection()]);
+  const view = host('view', () => [displaySection(), sceneSection(), sunSection(), snapSection()]);
 
   /** Switches to the section that holds an item, opens its row, and scrolls it into view. */
   const ITEM_MAP = { segment: ['segments', 'segments'], podium: ['podium'], crown: ['crown'], carve: ['carves', 'carves'], context: ['context', 'context'] };
@@ -537,9 +544,9 @@ export function createPanels(T) {
   }
   function refresh() {
     C.refreshAll();
-    swatchSyncs.forEach((f) => { try { f(); } catch (e) { console.error(e); } });
+    allSyncs().forEach((f) => { try { f(); } catch (e) { console.error(e); } });
   }
-  return { form, program, site, view, refresh, openItem, sections, lists, controls: C };
+  return { form, program, site, view, refresh, openItem, sections, lists, controls: C, syncCount: () => allSyncs().length };
 }
 
 export { unitBreakdown };

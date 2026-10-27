@@ -76,10 +76,10 @@ export function plateMaterialKey(plate, view, programs, style) {
 
 /**
  * Floors, crown and the tower's own site outline.
- * opts: { style: 'model'|'diagram', disp: { plates, solids, solidsOutside }, itemFor(item) -> card item }
+ * opts: { style: 'model'|'diagram', disp: { plates, solids, solidsOutside }, itemFor(item) -> card item, showSite (default true): draw the site outline }
  */
 export function buildModelGroup(state, opts) {
-  const { disp, style, itemFor } = opts;
+  const { disp, style, itemFor, showSite = true } = opts;
   const view = state.view, diagram = style === 'diagram';
   const gap = view.floorLines ? CONFIG.floorGap : 0;
   const group = new THREE.Group();
@@ -129,7 +129,7 @@ export function buildModelGroup(state, opts) {
     }
   }
   // The tower's own site outline (rectangle or polygon), just above the base.
-  const ring = sitePolygon(state);
+  const ring = showSite ? sitePolygon(state) : [];
   if (ring.length) {
     const pts = ring.map((q) => new THREE.Vector3(...planToWorld(q[0], q[1], 0.1)));
     const line = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts), lineMat('--scene-site', { color: css('--scene-site', '#6aa2ea') }));

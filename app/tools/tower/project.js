@@ -56,13 +56,17 @@ export function createProject(T) {
   }
   const hasSite = () => !!siteInfo();
 
-  /** Grading Sketch tier of this building: { ffe, id } or null (the lowest tier that came from the massing). */
+  /** Grading Sketch tier of this building: { ffe, id } or null (the lowest tier that came from the massing). Read from the project, so it does not need the Grading tool. */
   function gradingFfe() {
     const g = sec('grading');
     const list = g && isObj(g.derived) && Array.isArray(g.derived.ffe) ? g.derived.ffe : [];
     let best = null;
-    for (const t of list) if (isObj(t) && t.source === 'massing' && Number.isFinite(t.ffe) && (!best || t.ffe < best.ffe)) best = { ffe: t.ffe, id: t.id };
-    return best;
+    for (const t of list) {
+      if (!isObj(t) || t.source !== 'massing' || !Number.isFinite(t.ffe)) continue;
+      const tier = num(t.tier, 1);
+      if (!best || tier < best.tier || (tier === best.tier && t.ffe < best.ffe)) best = { ffe: t.ffe, id: t.id, tier };
+    }
+    return best ? { ffe: best.ffe, id: best.id } : null;
   }
 
   /* ---- ground under the footprint ---- */
@@ -82,10 +86,16 @@ export function createProject(T) {
   }
   const followsGround = () => hasDoc() && isObj(store.raw().placement) && baseMode() === 'follow';
 
-  /** Sets placement.baseZ to the lowest ground under the footprint (Follow ground). merge: no new undo step. Returns true when it changed. */
+  /** The base elevation Follow ground wants: the Grading Sketch FFE of this building, else the lowest ground under the footprint (the parking rule). */
+  function followTarget() {
+    const tier = gradingFfe();
+    return tier ? tier.ffe : groundUnderFootprint();
+  }
+
+  /** Sets placement.baseZ to the grading FFE, else the lowest ground under the footprint (Follow ground). merge: no new undo step. Returns true when it changed. */
   function followGround({ merge = false } = {}) {
     if (!followsGround() || store.gestureActive()) return false;
-    const z = groundUnderFootprint();
+    const z = followTarget();
     if (z == null || Math.abs(z - placement().baseZ) < 1e-9) return false;
     const was = flags.loading;
     flags.loading = true;
@@ -161,7 +171,8 @@ export function createProject(T) {
     if (!info) { st.placement = { ...ZERO(), baseMode: 'follow' }; if (st.context) st.context.fromSite = false; return st; }
     let z = null;
     try { z = ctx.ground.at(info.center[0], info.center[1]); } catch (e) { z = null; }
-    st.placement = { x: Math.round(info.center[0] * 100) / 100, y: Math.round(info.center[1] * 100) / 100, rotation: 0, baseZ: z == null ? 0 : Math.round(z * 10) / 10, baseMode: 'follow' };
+    const tier = gradingFfe();
+    st.placement = { x: Math.round(info.center[0] * 100) / 100, y: Math.round(info.center[1] * 100) / 100, rotation: 0, baseZ: tier ? tier.ffe : z == null ? 0 : Math.round(z * 10) / 10, baseMode: 'follow' };
     if (st.context) {
       const r = num(st.context.radius, CONFIG.contextRadius);
       const res = siteBlocks(st.placement, r, false, []);
@@ -204,7 +215,6 @@ export function createProject(T) {
   function sectionPatch() {
     const st = store.snapshot();
     st.sun.play = false;
-    try { st.view.style = ctx.scene.style(); } catch (e) { /* keep the saved style */ }
     const d = T.derived.get();
     const derived = towerDerived(st, d, d.metrics);
     const pl = { ...placement(), baseMode: baseMode() };

@@ -171,6 +171,6 @@ export function createOptions(T) {
 
   return {
     storage, save, duplicate, rename, remove, loadOption, loadPreset, newDesign, hasUnsavedChanges, menuItems, restore, watch, dispose,
-    link, dirty, current: () => currentId, list: () => storage.list(), hold: (v) => { held = !!v; }, onChange: (fn) => listeners.push(fn),
+    link, dirty, current: () => currentId, list: () => storage.list(), hold: (v) => { held = !!v; }, onChange: (fn) => { listeners.push(fn); return () => { const i = listeners.indexOf(fn); if (i >= 0) listeners.splice(i, 1); }; },
   };
 }
