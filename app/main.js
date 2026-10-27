@@ -248,7 +248,22 @@ bus.on('layers:change', () => { syncLayers(); shell.refresh(['layers']); });
 bus.on('frame:shift', () => syncLayers());
 bus.on('notice', ({ text, kind }) => Toast.show(text, { kind }));
 
+/* ---------- view insets: frame views in the area the panels leave free ---------- */
+function syncInsets() {
+  const view = $('view'), pan = $('panels');
+  if (!view || !pan) return;
+  const v = view.getBoundingClientRect(), p = pan.getBoundingClientRect();
+  const sheet = document.documentElement.dataset.layout === 'sheet';
+  const hidden = document.documentElement.dataset.panels === 'hidden';
+  const right = !sheet && !hidden ? Math.max(0, Math.min(v.right, p.right) - Math.max(v.left, p.left)) : 0;
+  const bottom = sheet && !hidden ? Math.max(0, v.bottom - p.top) : 0;
+  if (scene.setInsets) scene.setInsets({ right, bottom });
+}
+window.addEventListener('resize', () => { syncInsets(); scene.resize(); });
+window.addEventListener('panels:resize', () => { syncInsets(); scene.resize(); });
+
 /* ---------- start ---------- */
+syncInsets();
 refreshPanels();
 syncTopbar();
 if (project.doc()) onProjectOpen();
