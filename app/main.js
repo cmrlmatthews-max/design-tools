@@ -269,7 +269,8 @@ function syncLayers() { layers.sync(ctx); scene.requestRender(); }
 function framingBoxes() {
   scene.setFraming({
     site: () => layers.bounds ? layers.bounds(['site-ground', 'site-neighbors', 'site-roads']) : null,
-    building: () => layers.bounds ? layers.bounds(['massing', 'units', 'parking']) : null,
+    // derived twins and the live tool layers that replace them (layers.bounds skips replaced and hidden layers)
+    building: () => layers.bounds ? layers.bounds(['massing', 'tower-model', 'units', 'parking', 'parking-deck']) : null,
   });
 }
 framingBoxes();

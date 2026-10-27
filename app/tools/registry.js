@@ -6,9 +6,9 @@
    ========================================================================== */
 export const TOOLS = [
   { id: 'site', ready: true, label: 'Site Model', icon: 'site', order: 10, load: () => import('./site/index.js') },
-  { id: 'tower', ready: false, label: 'Tower Generator', icon: 'tower', order: 20, load: () => import('./tower/index.js') },
-  { id: 'parking', ready: false, label: 'Parking Deck', icon: 'parking', order: 30, load: () => import('./parking/index.js') },
-  { id: 'grading', ready: false, label: 'Grading Sketch', icon: 'grading', order: 40, load: () => import('./grading/index.js') },
+  { id: 'tower', ready: true, label: 'Tower Generator', icon: 'tower', order: 20, load: () => import('./tower/index.js') },
+  { id: 'parking', ready: true, label: 'Parking Deck', icon: 'parking', order: 30, load: () => import('./parking/index.js') },
+  { id: 'grading', ready: true, label: 'Grading Sketch', icon: 'grading', order: 40, load: () => import('./grading/index.js') },
   { id: 'plates', ready: true, label: 'Plate Planner', icon: 'plates', order: 90, viewOnly: true, load: () => import('./plates/index.js') },
 ];
 
