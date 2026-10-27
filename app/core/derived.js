@@ -174,7 +174,8 @@ export function derivedLayerDefs({ getDoc, ground, scene, siteStyle } = {}) {
   }
 
   /** A layer of solid items from layersFrom. */
-  function solidDef({ id, label, order, owner, layerIds, sections, defaultOn, extraKey, materialFor, keep }) {
+  const towerEditing = (ctx) => { try { return !!(ctx && typeof ctx.activeTool === 'function' && ctx.activeTool() === 'tower'); } catch (e) { return false; } };
+  function solidDef({ id, label, order, owner, layerIds, sections, defaultOn, extraKey, materialFor, keep, hideWhen }) {
     const def = {
       id, label, order, defaultOn,
       key(ctx) {
@@ -183,6 +184,7 @@ export function derivedLayerDefs({ getDoc, ground, scene, siteStyle } = {}) {
         return [doc ? doc.id : '-', ...sections.map((s) => stampOf(doc, s)), styleNow(ctx), cut, shiftKey(getShift()), ctx && ctx.aiReady ? 'ai' : '', extraKey ? extraKey(ctx) : ''].join('|');
       },
       build(ctx) {
+        if (hideWhen && hideWhen(ctx)) return null;
         const doc = docNow(ctx);
         const L = shown(doc, ctx && ctx.cut);
         if (!L) return null;
@@ -355,8 +357,9 @@ export function derivedLayerDefs({ getDoc, ground, scene, siteStyle } = {}) {
     // a wrap or podium deck takes the place of the massing levels it uses (core/cover.js)
     solidDef({ id: 'massing', label: 'Massing', order: 20, owner: massingOwner, layerIds: ['massing'], sections: ['massing', 'plates', 'parking'], defaultOn: DEFAULT_ON.massing !== false, extraKey: (ctx) => massingOwner(docNow(ctx)) + coverKey(docNow(ctx)),
       keep: (doc) => { const skip = coveredMassingIndices(doc); return skip.size ? (it) => !skip.has(it.level) : null; } }),
-    solidDef({ id: 'units', label: 'Units', order: 21, owner: 'plates', layerIds: ['units'], sections: ['plates', 'massing'], defaultOn: DEFAULT_ON.units !== false }),
-    solidDef({ id: 'cores', label: 'Cores and corridors', order: 22, owner: 'plates', layerIds: ['cores'], sections: ['plates', 'massing'], defaultOn: DEFAULT_ON.cores !== false }),
+    // units and cores hide while the Tower is the active tool: they are out of date during an edit (core/cover.js)
+    solidDef({ id: 'units', label: 'Units', order: 21, owner: 'plates', layerIds: ['units'], sections: ['plates', 'massing'], defaultOn: DEFAULT_ON.units !== false, hideWhen: towerEditing, extraKey: (ctx) => (towerEditing(ctx) ? 'edit' : '') }),
+    solidDef({ id: 'cores', label: 'Cores and corridors', order: 22, owner: 'plates', layerIds: ['cores'], sections: ['plates', 'massing'], defaultOn: DEFAULT_ON.cores !== false, hideWhen: towerEditing, extraKey: (ctx) => (towerEditing(ctx) ? 'edit' : '') }),
     solidDef({ id: 'parking', label: 'Parking', order: 30, owner: 'parking', layerIds: ['parking'], sections: ['parking', 'massing'], defaultOn: DEFAULT_ON.parking !== false }),
     gradingDef,
   ];

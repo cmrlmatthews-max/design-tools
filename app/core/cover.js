@@ -45,3 +45,31 @@ export function coveredMassingIndices(doc) {
   for (const l of levels) if (l && covered(c, l.zone, Number(l.z))) out.add(l.index);
   return out;
 }
+
+/* ---------- floors the Plate Planner covers ---------- */
+/* The Plate Planner draws units and cores inside the massing walls. A massing solid on the same floor shares those wall
+   faces, and the two flicker (z-fighting). The Model Viewer skips the covered massing levels; the Tower live layer
+   does the same while the Tower is not the active tool. While the Tower is active, the shell hides the units instead
+   (they are out of date during an edit). */
+
+/** The z values (massing frame) of the massing levels that plates.derived covers. */
+export function platesCoverZs(doc) {
+  const plates = getSection(doc, 'plates');
+  const mass = getSection(doc, 'massing');
+  const pl = plates && plates.derived && Array.isArray(plates.derived.levels) ? plates.derived.levels : [];
+  const ml = mass && mass.derived && Array.isArray(mass.derived.levels) ? mass.derived.levels : [];
+  if (!pl.length || !ml.length) return [];
+  const idx = new Set(pl.map((l) => l && l.index).filter(Number.isFinite));
+  return ml.filter((l) => l && idx.has(l.index) && Number.isFinite(Number(l.z))).map((l) => Number(l.z));
+}
+
+/** True when a massing floor at z (massing frame) is covered by the Plate Planner. */
+export function platesCovered(zs, z) {
+  return Array.isArray(zs) && Number.isFinite(z) && zs.some((d) => Math.abs(d - z) < TOL);
+}
+
+/** A short key for layer caches (plates coverage). */
+export function platesCoverKey(doc) {
+  const zs = platesCoverZs(doc);
+  return zs.length ? zs.map((z) => Math.round(z * 10)).join(',') : 'none';
+}

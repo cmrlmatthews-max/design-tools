@@ -103,6 +103,7 @@ async function activate(id) {
   refreshPanels();
   syncTopbar();
   bus.emit('tool:active', { id: active, prev });
+  syncLayers();   // some layers depend on the active tool (units hide while the Tower is active)
 }
 
 /* ---------- panels ---------- */
