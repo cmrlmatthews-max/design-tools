@@ -78,6 +78,7 @@ export function createProjectStore({
 
   let doc = null;
   let pending = new Map();             // key -> merged patch not saved yet
+  let meta = null;                     // { frame, name } not saved yet (setMeta)
   let timer = null;
   const blocked = new Set();           // keys that threw readOnly on write
   const told = new Set();              // notice texts already shown
@@ -153,6 +154,7 @@ export function createProjectStore({
   function show(next, { url = true } = {}) {
     doc = next;
     pending = new Map();
+    meta = null;
     blocked.clear();
     clearT(timer); timer = null;
     if (doc) setLast(doc.id);
@@ -247,12 +249,34 @@ export function createProjectStore({
    * other section keeps its stored copy. Sections that changed in storage are announced (source 'storage').
    * Returns { ok, skipped?, merged? }.
    */
+  /**
+   * Changes the project frame and/or name (the Site Model sets the frame, spec section 4). Saved by the next flush,
+   * on top of the stored copy, like a section write. Emits project:change with no section keys.
+   */
+  function setMeta({ frame, name } = {}) {
+    const base = ensure();
+    if (!base) return null;
+    const m = meta || {};
+    if (isObj(frame)) m.frame = { ...(m.frame || {}), ...frame };
+    if (typeof name === 'string' && name.trim()) m.name = name.trim().slice(0, 80);
+    meta = m;
+    doc = applyMeta(doc, meta);
+    schedule();
+    if (bus) bus.emit('project:change', { doc, keys: [], source: 'local', tool: null });
+    return doc;
+  }
+
+  function applyMeta(d, m) {
+    if (!d || !m) return d;
+    return { ...d, frame: m.frame ? { ...(d.frame || {}), ...m.frame } : d.frame, name: m.name || d.name };
+  }
+
   function flush() {
     clearT(timer);
     timer = null;
-    if (!doc || !pending.size) return { ok: true, skipped: true };
+    if (!doc || (!pending.size && !meta)) return { ok: true, skipped: true };
     const stored = load(doc.id);
-    let next = stored || doc;
+    let next = applyMeta(stored || doc, meta);
     const before = doc;
     for (const [key, patch] of pending) {
       const s = getSection(next, key);
@@ -266,12 +290,13 @@ export function createProjectStore({
         pending.delete(key);
       }
     }
-    if (!pending.size) return { ok: false };
+    if (!pending.size && !meta) return { ok: false };
     const written = [...pending.keys()];
     const ok = save(next);
     if (!ok) return { ok: false };
     doc = next;
     pending = new Map();
+    meta = null;
     // sections another page saved meanwhile now show here
     const changed = changedKeys(before, next).filter((k) => !written.includes(k));
     emitChange(changed, 'storage', storedTool);
@@ -382,7 +407,7 @@ export function createProjectStore({
   }
 
   return {
-    doc: current, id, list, open, create, close, ensure, section, write, flush, reload,
+    doc: current, id, list, open, create, close, ensure, section, write, setMeta, flush, reload,
     importFile, exportCurrent, isReadOnly,
     // tests and teardown
     pending: () => [...pending.keys()],

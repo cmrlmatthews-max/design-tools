@@ -5,7 +5,7 @@
    Order = pipeline order: Site, Tower, Parking, Grading. Plates is view only (no dock icon).
    ========================================================================== */
 export const TOOLS = [
-  { id: 'site', ready: false, label: 'Site Model', icon: 'site', order: 10, load: () => import('./site/index.js') },
+  { id: 'site', ready: true, label: 'Site Model', icon: 'site', order: 10, load: () => import('./site/index.js') },
   { id: 'tower', ready: false, label: 'Tower Generator', icon: 'tower', order: 20, load: () => import('./tower/index.js') },
   { id: 'parking', ready: false, label: 'Parking Deck', icon: 'parking', order: 30, load: () => import('./parking/index.js') },
   { id: 'grading', ready: false, label: 'Grading Sketch', icon: 'grading', order: 40, load: () => import('./grading/index.js') },
