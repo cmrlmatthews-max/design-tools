@@ -68,6 +68,8 @@ Caution: freeze from October 27, 2026 until the unified shell reaches parity (`d
 | Document | Content |
 |---|---|
 | `docs/project-file-spec.md` | The shared project file and `project.js` contract |
+| `docs/shell-plan.md` | The unified shell (one page, one 3D scene): decisions, contract, phases |
+| `docs/ipad-drawing-ideas.md` | Ideas for direct drawing with the Apple Pencil |
 | `docs/plate-planner-notes.md`, `docs/plate-planner-technical-plan.md`, `docs/plate-planner-rework-plan.md` | Plate Planner |
 | `docs/mid-rise-generator-concept.md`, `docs/mid-rise-generator-technical-plan.md` | Mid-Rise Generator |
 | `docs/parking-deck-concept.md`, `docs/parking-deck-technical-plan.md` | Parking Deck Generator |
