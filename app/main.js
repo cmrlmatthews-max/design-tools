@@ -142,7 +142,20 @@ const panelsBtn = h('button', { class: 'btn icon', type: 'button', title: 'Show 
 panelsBtn.innerHTML = ICONS.panels;
 
 tb.left.append(h('a', { class: 'mark', href: '../', title: 'Workspace' }, 'CMRLM'), projBtn, undoBtn, redoBtn);
-tb.center.append(h('div', { class: 'seg views' }, ...viewBtns), h('div', { class: 'seg' }, zoomSite, zoomBldg), h('div', { class: 'seg' }, styleBtn));
+const viewCompact = h('button', { class: 'btn view-compact', type: 'button', title: 'View', onclick: (e) => openViewMenu(e.currentTarget) }, 'Axon');
+tb.center.append(h('div', { class: 'seg views' }, ...viewBtns), h('div', { class: 'seg' }, zoomSite, zoomBldg), h('div', { class: 'seg' }, styleBtn), viewCompact);
+
+// Narrow screens (the bottom-sheet layout): one View menu replaces the three button groups.
+function openViewMenu(anchor) {
+  Pop.open(anchor, [
+    ...VIEWS.map(([id, label, key]) => ({ label, hint: key, checked: currentView === id, action: () => setView(id) })),
+    { sep: true },
+    { label: 'Zoom to the site', action: () => scene.frameSite() },
+    { label: 'Zoom to the building', action: () => scene.frameBuilding() },
+    { sep: true },
+    { label: 'Diagram style', checked: scene.style() === 'diagram', action: () => toggleStyle() },
+  ]);
+}
 tb.right.append(exportBtn, panelsBtn);
 
 let currentView = 'axon';
@@ -161,6 +174,7 @@ function syncTopbar() {
   undoBtn.disabled = !(s && s.canUndo());
   redoBtn.disabled = !(s && s.canRedo());
   viewBtns.forEach((b) => b.classList.toggle('on', b.dataset.view === currentView));
+  viewCompact.textContent = (VIEWS.find((v) => v[0] === currentView) || VIEWS[0])[1];
   styleBtn.classList.toggle('on', scene.style() === 'diagram');
 }
 

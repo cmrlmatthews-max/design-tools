@@ -576,3 +576,8 @@ textarea.points {
 .modal-title { margin: 0 0 6px; font-size: 15px; font-weight: 600; letter-spacing: -.005em; }
 .modal-body { margin: 0 0 16px; font-size: 13.5px; color: var(--ink-2); line-height: 1.45; }
 .modal-actions, .pop-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* ---------- narrow top bar: one View menu replaces the view, zoom and style groups (main.js) ---------- */
+.view-compact { display: none; }
+html[data-layout="sheet"] #tbCenter .seg { display: none; }
+html[data-layout="sheet"] .view-compact { display: inline-flex; }

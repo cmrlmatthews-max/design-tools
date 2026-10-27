@@ -22,7 +22,10 @@ export function createShellPanels(ctx, { loaded, activeId }) {
     if (!doc) return [];
     let rows = [];
     try { rows = summary(doc) || []; } catch (e) { rows = []; }
-    const pick = rows.filter((r) => SUMMARY_IDS.some((k) => String(r.id).toLowerCase().includes(k)));
+    let pick = rows.filter((r) => SUMMARY_IDS.some((k) => String(r.id).toLowerCase().includes(k)));
+    // Counted units (Plate Planner) replace the massing estimate.
+    const counted = pick.some((r) => r.label === 'Units');
+    if (counted) pick = pick.filter((r) => !/estimate/i.test(r.label));
     return (pick.length ? pick : rows).slice(0, 8).map((r) => ({ label: r.label, value: r.text, group: r.group }));
   }
 

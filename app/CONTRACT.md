@@ -242,3 +242,19 @@ export default {
 };
 ```
 `ctx` (built in `main.js`): `{ THREE, bus, scene, layers, ground, input, keys, project, ui: { h, ICONS, Toast, Pop, Controls, confirmDialog }, frame, capture, store(initial) -> createStore, activate(toolId), select(item|null), refreshPanels(), refreshHud() }`.
+
+## 15. Additions made by the Phase 0 builders (all additive)
+
+Read the module source for details. The main ones a tool port uses:
+
+- **scene**: `setInsets({ right, bottom })`, `frameSite({ animate })`, `frameBuilding({ animate })`, `onView(fn)`, `view()`, `renderNow()`, `refreshColors()`, `ok` (false without WebGL). `fitBox` and `setFraming` accept a world `Box3` or a scene-plan box `{ minX, maxX, minY, maxY, minZ, maxZ }`. A mesh with `userData.kind === 'site-ground'` or `userData.isGround` counts as ground for the slab, grid, and figure.
+- **frame**: `worldToPlan(vec3)`.
+- **input**: `start(handler, ev)` for a DOM grip in `#handles`; `hitPx('handle' | 'vertex')`; `active()`, `cancel()`; a handler may set `pointerTypes: [...]`; `up()` may return `'tap'`.
+- **placement**: `set(p, { live })` gets live writes, then one `{ live: false }`; a cancel ends with `{ live: false, cancel: true }` and the start placement. With a tool store: `store.set('placement', p, { live: true }); if (!live) store.commit();` = one undo step. Also `pinned()`, `setPinned(on)`, and pure `movedPlacement`, `turnedPlacement`, `lowestGround`.
+- **layers**: `bounds(ids)`, `get(id)`, `def.always(ctx, { on, replaced })` runs on every sync. `key(ctx)` and `build(ctx)` get the caller ctx plus `{ doc, style, cut, shift, aiReady, layers }`. `pick()` returns `{ layerId, owner, item, point, world }`; `userData.pick(faceIndex, hit)`; a mesh without `userData.pick` blocks the pick unless `userData.occludes === false`. Layer on/off state is kept in `cmrlm.app.layers`.
+- **ground**: bus event `ground:change { owner, on }`. The derived grading layer uses owner `'grading:derived'`. The live Grading tool calls `setOverride(fn, 'grading')`.
+- **ui-kit**: also exports `Units` (same functions as the Tower) and `icon(name)`; more ICONS (chevron, plus, minus, trash, sun, home, info). `Pop.open(anchor, items, { align, onClose })`. `Controls`: `bindStore(store, path)`, `mapBind`, `bindObject`, `slider`, `number`, `toggle`, `select`, `segmented`, `chips`, `color`, `text`, `points`, `when`, `list`, `section`, `group`, `help`, `label`, `button`, `row`, `refreshAll`, `scoped`, `create()` (a refresh registry for one tool). A bind is `{ get(), set(v, live), commit() }`; a widget returns `{ el, refresh }`.
+- **panels**: `setTitle(id, title)`, `open(id)`, `snap(name)`, `isHidden()`, `ids()`. Layout state is on `<html>`: `data-layout` (`column` or `sheet`), `data-panels`, `data-sheet`.
+- **keys**: a handler that returns `false` passes the key on.
+- **project-store**: events carry `tool`; options `win`, `timers`, `autoStart`; `pending()`, `dispose()`.
+- **store**: `set(path, v, { merge })`, `replace(s, { resetHistory })`, `version()`, `gestureActive()`, `historyDepth()`.
