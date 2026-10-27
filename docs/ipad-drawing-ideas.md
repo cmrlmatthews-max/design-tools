@@ -78,9 +78,10 @@ This list collects features that use direct drawing on the iPad with an Apple Pe
 ## 4. Limits and open points
 
 - Web pages cannot read the Apple Pencil double-tap or squeeze gestures. A tool change needs an on-screen button. Confidence: high.
-- Pencil hover (iPad Pro with M2 or later) shows in Safari as pointer move events before contact. Use it for a snap preview. Confidence: medium; test on Cade's iPad before design work depends on it.
+- Cade's iPad: an iPad Pro bought in 2025 (M4 or M5 generation). These models support Apple Pencil Pro and Pencil hover. Hover shows in Safari as pointer move events before contact. Use it for a snap preview and a cursor. Confidence: medium; test on Cade's iPad before design work depends on it.
+- Apple Pencil Pro squeeze and barrel roll do not reach web pages. Confidence: high.
 - Pressure and tilt are available (`pressure`, `tiltX`, `tiltY`). They have no clear use in these tools yet. Do not build features on them now.
-- Which iPad and Pencil model Cade uses decides whether hover is available. Open point.
+- Open point: confirm which Pencil Cade uses. Hover works with Apple Pencil Pro on these models. Hover with Apple Pencil (USB-C) is not confirmed here. Apple Pencil 2 does not pair with these models.
 
 ## 5. Suggested order
 
