@@ -1,0 +1,37 @@
+/* Grading Sketch: the few classes the shell does not have. Every class starts with grading-. */
+
+/* the outline of the selected item and the drawing preview (SVG in #handles) */
+.grading-halo { stroke: var(--panel, #171b1f); stroke-width: 5.5; opacity: .85; }
+.grading-line { stroke: var(--accent, #6aa2ea); stroke-width: 3; }
+.grading-preview { stroke: var(--accent, #6aa2ea); stroke-width: 3; stroke-dasharray: 7 5; }
+
+/* handles: a square at each vertex, a smaller dot at each edge midpoint (the shell's .hdl look) */
+.grading-layer .hdl { pointer-events: none; }
+.grading-layer .grading-m { width: 10px; height: 10px; margin: -5px 0 0 -5px; opacity: .8; background: var(--accent-soft, rgba(106, 162, 234, .3)); }
+.grading-layer .grading-m::before { display: none; }
+.grading-layer .grading-d { background: var(--accent, #6aa2ea); }
+
+/* the draw bar: Finish and Cancel, top center of the view */
+.grading-drawbar {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 4;
+  display: flex; align-items: center; gap: 8px; max-width: calc(100% - 24px); padding: 6px 8px 6px 12px;
+  background: var(--hud-bg, rgba(23, 27, 31, .94)); border: 1px solid var(--line-2, rgba(255, 255, 255, .22)); border-radius: 10px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .4); font-size: 12.5px; color: var(--ink, #e7eaee); pointer-events: auto;
+}
+.grading-drawbar[hidden] { display: none; }
+.grading-draw-text { flex: 1 1 auto; min-width: 0; }
+.grading-drawbar .btn { min-height: 32px; padding: 0 10px; font-size: 12.5px; flex: 0 0 auto; }
+@media (pointer: coarse) { .grading-drawbar .btn { min-height: var(--hit, 44px); } }
+canvas.grading-drawing { cursor: crosshair; }
+
+/* panels */
+.grading-draw-list > .ctl > .add-row { display: none; }
+.grading-caution { color: var(--ink-3); font-style: italic; }
+.grading-table { width: 100%; border-collapse: collapse; font-size: 12px; margin: 4px 0; }
+.grading-table th, .grading-table td { padding: 3px 4px; text-align: right; border-bottom: 1px solid var(--line, rgba(255, 255, 255, .12)); font-variant-numeric: tabular-nums; }
+.grading-table th:first-child, .grading-table thead th { text-align: left; font-weight: 500; color: var(--ink-2); }
+.grading-table td.none { text-align: left; color: var(--ink-3); }
+.grading-lg-row { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 2px 0; }
+.grading-sw { width: 18px; height: 12px; border-radius: 3px; border: 1px solid var(--line-2, rgba(255, 255, 255, .25)); flex: 0 0 auto; }
+.grading-auto { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 4px 0; font-size: 12.5px; }
+.grading-grow { flex: 1 1 auto; min-width: 0; }

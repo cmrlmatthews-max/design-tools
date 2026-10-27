@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en" data-layout="column" data-panels="shown" data-sheet="half">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#101316">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Design Tools">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="CMRLM design tools: site, tower, parking, and grading in one 3D view.">
+<title>CMRLM Design Tools</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23101316'/%3E%3Cpath d='M16 6l9 5v10l-9 5-9-5V11z M16 6v10 M7 11l9 5 9-5' fill='none' stroke='%236aa2ea' stroke-width='1.8' stroke-linejoin='round'/%3E%3C/svg%3E">
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+<script src="https://cdn.jsdelivr.net/npm/clipper-lib@6.4.2/clipper.js"></script>
+<link rel="stylesheet" href="./shell.css">
+</head>
+<body>
+<header id="topbar" class="topbar">
+  <div id="tbLeft" class="tb-slot tb-left"></div>
+  <div id="tbCenter" class="tb-slot tb-center"></div>
+  <div id="tbRight" class="tb-slot tb-right"></div>
+</header>
+
+<nav id="dock" class="dock" aria-label="Tools"></nav>
+
+<main id="stage" class="stage" aria-label="3D view">
+  <div id="view" class="view"></div>
+  <div id="handles" class="handles" aria-hidden="true"></div>
+  <aside id="card" class="card" aria-label="Selection" aria-live="polite" hidden></aside>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+</main>
+
+<aside id="panels" class="panels" aria-label="Panels"></aside>
+
+<noscript><p class="noscript">This app needs JavaScript.</p></noscript>
+<script type="module" src="./main.js"></script>
+</body>
+</html>

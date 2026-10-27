@@ -15,6 +15,7 @@ This file is the one place that lists every tool in the suite, who builds it, an
 
 | Id | Tool | Folder | Status | Built by |
 |---|---|---|---|---|
+| `app` | Design App (unified shell) | `app/` | Phase 0 and Phase 1 built October 27, 2026: Site, Tower (with AI prompts), Parking, Grading in one 3D view; Plate Planner as a view-only layer. Opus review done, fixes in. Next: Cade's Mac and iPad test. Plan: `docs/shell-plan.md` | Home |
 | `site` | Site Model | `site/` | Version 1 live. Remove existing buildings in review | Home |
 | `tower` | Tower Generator | `tower/` | Version 1.2 built, in review (project file, Sun Study) | Home |
 | `sun` | Sun Study (inside the Tower Generator) | `tower/` | Version 1 built, in review | Home |
@@ -24,7 +25,7 @@ This file is the one place that lists every tool in the suite, who builds it, an
 | `parking` | Parking Deck Generator | `parking/` | Version 1 live | Home |
 | `facade` | Facade Studio | `facade/` | Hidden, October 26, 2026: facades vary too much to model well with the current tools. The code, the tests, and the saved `facade` section stay. The Workspace page, the Send menus, and the Model Viewer do not show it. | Home |
 | `grading` | Grading Sketch | `grading/` | Version 1 live | Home |
-| `viewer` | Model Viewer | `viewer/` | Built, in review | Home |
+| `viewer` | Model Viewer | `viewer/` | Built. Retires when the Design App reaches parity (`docs/shell-plan.md`) | Home |
 | `view` | View Study | `view/` | Later | — |
 | `egress` | Egress Sketch | `egress/` | Later | — |
 | — | Yield Study | — | Skipped for now | — |
@@ -54,6 +55,8 @@ Each tool reads the sections before it and writes only its own section. The Work
 
 Caution: the work session cannot push to GitHub. It works on a download. Merge by hand, one tool folder at a time.
 
+Caution: freeze from October 27, 2026 until the unified shell reaches parity (`docs/shell-plan.md`). The work session does not edit `site/`, `tower/`, `parking/`, `grading/`, `viewer/`, `build/`, or `src/` during this freeze. The Plate Planner (`plate/`) stays a separate tool and is outside the freeze only for work that does not change the `plate` section shape.
+
 1. The home session pushes one branch per tool and opens a pull request. Cade merges it.
 2. The work session downloads `main` after each merge, before it starts new work.
 3. The work session keeps its changes inside the folders of the tool it builds. (The home session built the Plate Planner and the Sun Study in October 2026, so those folders now belong to the home session.)
@@ -66,6 +69,8 @@ Caution: the work session cannot push to GitHub. It works on a download. Merge b
 | Document | Content |
 |---|---|
 | `docs/project-file-spec.md` | The shared project file and `project.js` contract |
+| `docs/shell-plan.md` | The unified shell (one page, one 3D scene): decisions, contract, phases |
+| `docs/ipad-drawing-ideas.md` | Ideas for direct drawing with the Apple Pencil |
 | `docs/plate-planner-notes.md`, `docs/plate-planner-technical-plan.md`, `docs/plate-planner-rework-plan.md` | Plate Planner |
 | `docs/mid-rise-generator-concept.md`, `docs/mid-rise-generator-technical-plan.md` | Mid-Rise Generator |
 | `docs/parking-deck-concept.md`, `docs/parking-deck-technical-plan.md` | Parking Deck Generator |

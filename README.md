@@ -6,6 +6,7 @@ A small toolkit of browser-based design tools for early-stage architectural work
 
 | Tool | Path | Status |
 |---|---|---|
+| Design App | `app/index.html` | Version 1: Site Model, Tower Generator (with the AI prompt library), Parking Deck, and Grading Sketch in one 3D view with a dark app look, a tool dock, and collapsible panels. The Plate Planner shows as a view-only layer. Open it from the Workspace page. |
 | Menu page | `index.html` | Links to each tool |
 | Tower Generator | `tower/index.html` | Version 1.2: site layer with drag placement and pin placement, base follows the ground, site style, zoom Site and Building, collapse all; project file (massing and sun sections, Send to Plate Planner, Grading Sketch, context from site, placement), Sun Study mode with sun tools only (real sun by date and time, play, shadow study sheet, sun hours on the ground); from 1.1: click-to-select, 3D handles with snapping, copy segment, form controls, site envelope, live metrics, presets, saved options, compare view, screenshots, AI prompt library |
 | Site Model | `site/index.html` | Version 1: type an address, see a 3D site from public map data (USGS ground, Overture buildings, roads, water), remove existing buildings, download Revit CSV, DXF, SketchUp, and notes |
@@ -18,7 +19,7 @@ A small toolkit of browser-based design tools for early-stage architectural work
 
 ## Suite
 
-The toolkit grows into a suite that shares one project file (`name.cmrlm.json`). Start with `docs/suite-roadmap.md` (tools, order, who builds what) and `docs/project-file-spec.md` (the shared file and `src/shared/project.js`). Planned next: View Study, Egress Sketch.
+The toolkit grows into a suite that shares one project file (`name.cmrlm.json`). Start with `docs/suite-roadmap.md` (tools, order, who builds what) and `docs/project-file-spec.md` (the shared file and `src/shared/project.js`).
 
 ## SketchUp
 
@@ -28,6 +29,7 @@ Both tools export a `.sketchup.json` file. Install the extension `dist/cmrlm-des
 
 | Folder | Contents |
 |---|---|
+| `app/` | The Design App. Native ES modules, no build step. See `docs/shell-plan.md` and `app/CONTRACT.md`. |
 | `tower/` | The finished tool. Do not edit `index.html` by hand. |
 | `site/` | The Site Model tool. Do not edit `index.html` by hand. |
 | `plate/` | The Plate Planner. Do not edit `index.html` by hand. Rebuild with `python3 build/plate/build.py` (or `npm run build:plate`). |
