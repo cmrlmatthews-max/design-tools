@@ -39,6 +39,7 @@ let mats = null, gizmo = null, handles = null;
 let quiet = 0;                        // > 0 while the tool sets its own state (no section write)
 let active = false;
 let readOnlyShown = false;
+let pendingWrite = false;             // a load moved the base to the grading FFE and the project has a saved section
 let tick = 0;                         // goes up when the layers must rebuild without a store change
 const offs = [];
 
@@ -107,7 +108,7 @@ function baseLineText() {
 function applySource(source, { quiet: q = false } = {}) {
   const src = T.readers.sources().find((x) => x.source === source);
   if (!src) {
-    if (!q) C.ui.Toast.show(source === 'wrap' ? 'The project has no deck levels. Send a design with a deck from the Mid-Rise Generator.' : 'The project has no podium levels. Send a design with a podium from the Mid-Rise Generator.', { kind: 'warn', ms: 6000 });
+    if (!q) C.ui.Toast.show(source === 'wrap' ? 'The massing has no deck levels.' : 'The massing has no podium levels.', { kind: 'warn', ms: 6000 });
     return false;
   }
   const next = deepClone(S());
@@ -239,11 +240,19 @@ function loadFromProject() {
   } finally { quiet--; }
   T.derived.reset();
   T.started = !!mine;
-  followGround({ merge: true, force: true });
+  const moved = followGround({ merge: true, force: true });
+  pendingWrite = !!(mine && moved);
   return !!mine;
 }
 
 function readOnly() { try { return !!(C.project.isReadOnly && C.project.isReadOnly(SECTION)); } catch (e) { return false; } }
+
+/** Writes once after a load that moved the base to the grading FFE, so the saved section matches the deck on screen. */
+function flushPendingWrite() {
+  if (!pendingWrite) return;
+  pendingWrite = false;
+  if (!quiet && !readOnly() && C.project.doc() && T.readers.sectionOf(SECTION)) writeSection();
+}
 
 /** The `parking` section patch for the design on screen (docs/project-file-spec.md section 6.4). */
 function sectionPatch() {
@@ -254,7 +263,19 @@ function sectionPatch() {
   if (pinned()) pl.pinned = true;
   return { tool: SECTION, schema: CONFIG.projectSchema, placement: pl, state: { ...st, placement: pl }, derived, note: st.name };
 }
-/** Writes the section. Safe to call often: the project store debounces the save. */
+/** JSON with sorted keys, so two equal values compare equal whatever their key order. */
+function stable(v) {
+  return JSON.stringify(v, (k, x) => (x && typeof x === 'object' && !Array.isArray(x)
+    ? Object.keys(x).sort().reduce((o, key) => { o[key] = x[key]; return o; }, {}) : x));
+}
+/** True when the saved section already holds this patch (tool, schema, placement, state, derived, note). */
+function sameAsSaved(patch) {
+  const cur = T.readers.sectionOf(SECTION);
+  if (!cur || cur.tool !== SECTION) return false;
+  const pick = (x) => ({ tool: x.tool, schema: x.schema, placement: x.placement, state: x.state, derived: x.derived, note: x.note });
+  return stable(pick(cur)) === stable(pick(patch));
+}
+/** Writes the section. Safe to call often: the project store debounces the save, and an unchanged section is not rewritten. */
 function writeSection() {
   if (quiet) return false;
   if (readOnly()) {
@@ -267,6 +288,7 @@ function writeSection() {
     C.ui.Toast.show(`The project could not be updated. ${e && e.message ? e.message : ''}`.trim(), { kind: 'error', ms: 8000 });
     return false;
   }
+  if (sameAsSaved(patch)) { T.started = true; return true; }
   try { C.project.write(SECTION, patch); } catch (e) {
     console.error(e);
     C.ui.Toast.show(`The project could not be updated. ${e && e.message ? e.message : ''}`.trim(), { kind: 'error', ms: 8000 });
@@ -369,9 +391,29 @@ function entryLaneRing(en) {
 /* ---------- layers ---------- */
 const proxyMat = new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide });
 
+/** The state without the placement and the name, which move the layers but never rebuild them. Cached per store version. */
+let drawKeyAt = -1, drawKeyVal = '';
+function drawStateKey() {
+  const v = T.store.version();
+  if (v !== drawKeyAt) {
+    const { placement, name, ...rest } = S();
+    drawKeyAt = v; drawKeyVal = JSON.stringify(rest);
+  }
+  return drawKeyVal;
+}
+/** A draft is drawn only while a gesture changes the geometry. A placement drag moves the group and keeps the full model. */
+let settledKey = '';
+function isDraft() {
+  if (!T.store.gestureActive()) { settledKey = drawStateKey(); return false; }
+  return drawStateKey() !== settledKey;
+}
 function layerKey(lctx, extra = '') {
   const sh = lctx.shift || { x: 0, y: 0, z: 0 };
-  return [lctx.doc ? lctx.doc.id : '-', T.store.version(), T.store.gestureActive() ? 'd' : 'f', lctx.style, `${sh.x},${sh.y},${sh.z}`, JSON.stringify(placementOf()), T.readers.dataKey(), tick, extra].join('|');
+  return [lctx.doc ? lctx.doc.id : '-', drawStateKey(), isDraft() ? 'd' : 'f', lctx.style, `${sh.x},${sh.y},${sh.z}`, T.readers.dataKey(), tick, extra].join('|');
+}
+/** A placement drag, or a new base elevation, moves the built group instead of rebuilding it. */
+function replace(id) {
+  return () => { const o = C && C.layers.get(id); if (o) C.frame.placeGroup(o, placementOf()); };
 }
 function newRoot(name, D0) {
   const layout = new THREE.Group();
@@ -428,7 +470,7 @@ function releaseMaterials(obj) {
 function buildDeck(lctx) {
   const s = S(), d = D();
   if (!d.ok || !d.levels.length) return null;
-  const draft = T.store.gestureActive();
+  const draft = isDraft();
   const { root, layout } = newRoot('parking-deck', d);
   for (const o of buildModel(d, s, T.derived.display(draft), mats, lctx.style)) layout.add(o);
   setPicks(layout);
@@ -440,7 +482,7 @@ function buildDeck(lctx) {
 function buildOverlayLayer(lctx) {
   const s = S(), d = D();
   if (!d.ok || !d.levels.length) return null;
-  const draft = T.store.gestureActive();
+  const draft = isDraft();
   const { root, layout } = newRoot('parking-overlay', d);
   const textOk = lctx.style === 'diagram' || C.scene.isPlan();
   for (const o of buildOverlay(d, s, T.derived.display(draft), mats)) {
@@ -508,14 +550,15 @@ function metricRows() {
   const d = D();
   if (!d.ok) return [];
   const m = d.hud, s = S();
-  const kinds = Object.entries(m.byKind || {}).filter(([, n]) => n > 0).map(([k, n]) => `${CONFIG.kindLabels[k] || k} ${Units.formatInt(n)}`).join(', ');
+  const kindRows = Object.entries(m.byKind || {}).filter(([, n]) => n > 0)
+    .map(([k, n]) => ({ label: `${CONFIG.kindLabels[k] || k} stalls`, value: Units.formatInt(n) }));
   const acc = m.accessible;
   const rows = [
-    { label: 'Stalls', value: Units.formatInt(m.stalls), hint: kinds },
+    { label: 'Stalls', value: Units.formatInt(m.stalls) },
+    ...kindRows,
     { label: 'Sf per stall', value: m.sfPerStall >= 100 ? Units.formatInt(Math.round(m.sfPerStall)) : Units.formatRatio(m.sfPerStall, 1), hint: 'Gross deck area divided by stalls' },
     { label: 'Levels', value: Units.formatInt(m.levels), hint: m.topOfDeck ? `${ft(m.topOfDeck)} high` : '' },
     { label: 'Max ramp slope', value: pct1(m.maxSlope), hint: s.ramp.type === 'none' ? 'No ramp' : RAMP_LABELS[s.ramp.type] },
-    { label: 'Stalls by kind', value: kinds || '-' },
     { label: 'Efficiency', value: pct1(m.efficiency), hint: 'Stall area share of the deck' },
     { label: 'Gross deck area', value: Units.formatArea(m.gross) },
     { label: 'Accessible', value: `${Units.formatInt(acc.provided)} of ${Units.formatInt(acc.required)}`, hint: `${acc.van} van` },
@@ -646,7 +689,7 @@ export default {
         followGround: () => followGround({ merge: true }),
       };
     } catch (e) { /* tests only */ }
-    if (!T.started && !readOnly() && C.project.doc()) writeSection();     // a project without a deck starts with this one
+    flushPendingWrite();
     syncLayers();
   },
 
@@ -677,11 +720,13 @@ export default {
       {
         id: 'parking-deck', label: 'Parking deck', order: 30, defaultOn: true, replaces: ['parking'],
         key: (l) => layerKey(l, `${S().view.level}|${S().view.overlay}`),
+        always: replace('parking-deck'),
         build: buildDeck, dispose: releaseMaterials, aiReady: aiReadyDeck,
       },
       {
         id: 'parking-overlay', label: 'Parking overlay', order: 30.2, defaultOn: true,
         key: (l) => layerKey(l, `${S().view.level}|${S().view.overlay}|${C.scene.isPlan()}`),
+        always: replace('parking-overlay'),
         build: buildOverlayLayer, dispose: releaseMaterials, aiReady: (obj, on) => { obj.visible = !on; },
       },
     ];
@@ -695,17 +740,15 @@ export default {
     if (evt.source === 'open') {
       readOnlyShown = false;
       loadFromProject();
-      if (!T.started && !readOnly() && C.project.doc()) writeSection();
+      flushPendingWrite();
     } else {
       const keys = evt.keys || [];
       if (keys.includes(SECTION) && evt.tool !== SECTION) {
         if (!T.store.gestureActive()) loadFromProject();
       } else if (keys.some((k) => k === 'massing' || k === 'plates' || k === 'site' || k === 'grading')) {
         T.derived.reset();
-        quiet++;
-        let moved = false;
-        try { moved = followGround({ merge: true }); } finally { quiet--; }
-        if (T.started || moved) writeSection();             // the derived block follows the massing and the plates
+        followGround({ merge: true, force: true });          // the deck follows a new grading FFE or ground
+        if (T.started) writeSection();                       // the derived block follows the massing and the plates; an unchanged section is skipped
       }
     }
     try { T.CT.refreshAll(); } catch (e) { console.error(e); }

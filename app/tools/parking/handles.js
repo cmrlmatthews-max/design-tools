@@ -235,7 +235,7 @@ export function createHandles(T) {
   function ensureEl(g) {
     let el = els[g.id];
     if (el) return el;
-    el = h('div', { class: `hdl ${g.kind === 'resize' ? 'vertex' : ''}`.trim(), role: 'button', tabindex: '0', 'data-handle': g.id, 'aria-label': HANDLE_TEXT[g.id] || g.id, title: HANDLE_TEXT[g.id] || g.id });
+    el = h('div', { class: 'hdl', role: 'button', tabindex: '0', 'data-handle': g.id, 'aria-label': HANDLE_TEXT[g.id] || g.id, title: HANDLE_TEXT[g.id] || g.id });
     el.addEventListener('pointerdown', (ev) => {
       if (ev.pointerType === 'mouse' && ev.button !== 0) return;
       ev.preventDefault(); ev.stopPropagation();
