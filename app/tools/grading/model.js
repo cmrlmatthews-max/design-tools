@@ -22,7 +22,7 @@ export const CONFIG = {
   diffEdges: [1, 2, 4, 8],
   fillColors: ['#cde2f5', '#9cc6ec', '#6199d6', '#3470b8', '#1c478a'],
   cutColors: ['#f7d3cb', '#eda697', '#dc7366', '#c1433a', '#8f2a24'],
-  noChangeColor: '#f3f3ef',
+  noChangeColor: '#4a5159',
   noChange: 0.05,
   classColors: { walk: '#2f9e5b', ramp: '#e0a21b', fail: '#d03a30' },
   classLabels: { walk: 'Walk', ramp: 'Ramp', fail: 'Over the ramp limit' },

@@ -21,7 +21,6 @@ import { routeProfile } from '../../../src/grading/routes.js';
 import { contours as contoursOf, zeroLine as zeroLineOf } from '../../../src/grading/contours.js';
 import { CONFIG, fmt, polyLength } from './model.js';
 
-const SKIRT = '#b9bfc6';
 const AI_GROUND = '#f6f6f3';
 const MIN_WALL_H = 0.1;
 const col = (hex) => new THREE.Color(hex);
@@ -42,6 +41,7 @@ export function diffColor(diff) {
  */
 export function buildLayer(D, state, o) {
   const sh = o.sh, diagram = o.style === 'diagram';
+  const light = !!o.light;           // a live drag: the ground and the features only, no contours and no label canvases
   const W = (x, y, e) => [x - sh.x, e - sh.z, -(y - sh.y)];
   const V = (x, y, e) => new THREE.Vector3(...W(x, y, e));
   const group = new THREE.Group();
@@ -89,7 +89,7 @@ export function buildLayer(D, state, o) {
   }
 
   /* ---- flat plan labels (canvas text on a plane laid on the plan) ---- */
-  function label(text, x, y, z, { height = 4.5, color = '#1d2733', halo = '#ffffff' } = {}) {
+  function label(text, x, y, z, { height = 4.5, color = '#eef1f4', halo = '#14181c' } = {}) {
     try {
       const rows = String(text).split('\n');
       const px = 48, pad = 12;
@@ -132,10 +132,17 @@ export function buildLayer(D, state, o) {
     const n = g.n, sp = g.spacing, pz = D.proposedZ;
     const fine = D.fine, blk = fine ? fine.block : null, nf = fine ? fine.n : 0;
     const nv = n * n + nf * nf;
+    // Model style shades the ground by elevation like the site ground (core/sitelayer3d.js): terrain-lo to terrain-hi over the relief.
+    const lo = o.cssColor('--scene-terrain-lo', '#3a4047'), hi = o.cssColor('--scene-terrain-hi', '#4a5159'), tc = new THREE.Color();
+    let zLo = Infinity, zHi = -Infinity;
+    const span = (arr) => { for (let k = 0; k < arr.length; k++) { const v = arr[k]; if (v < zLo) zLo = v; if (v > zHi) zHi = v; } };
+    span(pz); span(g.z); if (fine) span(fine.z);
+    const range = zHi - zLo, flat = !(range >= 0.5);
+    const shadeOf = (z) => (flat ? 0.5 : Math.min(1, Math.max(0, (z - zLo) / range)));
     const pos = new Float32Array(nv * 3), colr = new Float32Array(nv * 3);
     const put = (k, x, y, z, e) => {
       pos[3 * k] = x - sh.x; pos[3 * k + 1] = z - sh.z; pos[3 * k + 2] = -(y - sh.y);
-      const c = diagram ? diffColor(z - e) : modelC;
+      const c = diagram ? diffColor(z - e) : tc.copy(lo).lerp(hi, shadeOf(z));
       colr[3 * k] = c.r; colr[3 * k + 1] = c.g; colr[3 * k + 2] = c.b;
     };
     for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) put(j * n + i, g.x0 + i * sp, g.y0 + j * sp, pz[j * n + i], g.z[j * n + i]);
@@ -171,7 +178,7 @@ export function buildLayer(D, state, o) {
     let low = Infinity;
     for (let k = 0; k < pz.length; k++) low = Math.min(low, pz[k], g.z[k]);
     const floorY = (Number.isFinite(low) ? low : 0) - 4 - sh.z;
-    const sk = [], skc = [], sc = col(SKIRT);
+    const sk = [], skc = [], sc = o.cssColor('--scene-skirt', '#2a2f35');
     const top = (i, j) => pz[j * n + i] - sh.z;
     const quad = (x0, y0, t0, x1, y1, t1) => {
       const ax = x0 - sh.x, ay = -(y0 - sh.y), bx = x1 - sh.x, by = -(y1 - sh.y);
@@ -234,6 +241,7 @@ export function buildLayer(D, state, o) {
   }
   const safeContours = (grid, values, interval) => { try { return contoursOf(grid, values, interval, { majorEvery: 5 }); } catch (e) { return []; } };
   function contourObjects() {
+    if (light) return;
     const ci = state.view.contours;
     const n = g.n, sp = g.spacing;
     const gridLike = { spacing: sp, n, x0: g.x0, y0: g.y0 };
@@ -256,7 +264,7 @@ export function buildLayer(D, state, o) {
       }
       for (const { L } of [...best.values()].sort((a, c) => c.l - a.l).slice(0, 14)) {
         const mid = L.line[Math.floor(L.line.length / 2)];
-        labels.push({ text: Math.round(L.z).toLocaleString('en-US'), x: mid[0], y: mid[1], z: L.z, color: '#1d242b', height: 3.2, small: true });
+        labels.push({ text: Math.round(L.z).toLocaleString('en-US'), x: mid[0], y: mid[1], z: L.z, color: '#eef1f4', height: 3.2, small: true });
       }
     }
     if (ci.on && ci.existing) {
@@ -285,7 +293,7 @@ export function buildLayer(D, state, o) {
         try { zf = zeroLineOf(fineLike, fd); } catch (e) { zf = []; }
         for (const line of zf) addLine(line, false);
       }
-      const z = add(fat(pos, '#1d242b', 2, { order: 6 }));
+      const z = add(fat(pos, '#f2f4f6', 2, { order: 6 }));
       if (z) z.userData.zeroLine = true;
     }
   }
@@ -334,7 +342,7 @@ export function buildLayer(D, state, o) {
       const ring = t.pad && t.pad.length ? t.pad : t.outer;
       if (ring && ring.length >= 3) {
         const c = ring.reduce((a, p) => [a[0] + p[0] / ring.length, a[1] + p[1] / ring.length], [0, 0]);
-        labels.push({ text: `FFE ${fmt.elev(t.ffe)}`, x: c[0], y: c[1], z: t.ffe + (typed.has(t.building) ? CONFIG.buildingHeight : 0) + 0.5, color: '#16427a', height: 4.5 });
+        labels.push({ text: `FFE ${fmt.elev(t.ffe)}`, x: c[0], y: c[1], z: t.ffe + (typed.has(t.building) ? CONFIG.buildingHeight : 0) + 0.5, color: '#8fbaf0', height: 4.5 });
       }
       count++;
     }
@@ -403,7 +411,7 @@ export function buildLayer(D, state, o) {
       const ln = add(fat(pos, flagged ? CONFIG.wallFlagColor : '#2a3139', 2, { dashed: loose, dash: 3, gap: 2, order: 6 }));
       if (ln) ln.userData.wallTop = rec.id;
       const im = rec.profile.samples[rec.profile.iMax];
-      if (im && rec.heightMax >= 0.5) labels.push({ text: `${rec.heightMax.toFixed(1)} ft`, x: im.x, y: im.y, z: im.top, color: flagged ? '#b24a0a' : '#1d2733', height: 4.5 });
+      if (im && rec.heightMax >= 0.5) labels.push({ text: `${rec.heightMax.toFixed(1)} ft`, x: im.x, y: im.y, z: im.top, color: flagged ? '#f0924a' : '#eef1f4', height: 4.5 });
       count++;
     }
   }
@@ -433,12 +441,12 @@ export function buildLayer(D, state, o) {
         i = j;
       }
       for (const p of [S[0], S[S.length - 1]]) {
-        const dot = new THREE.Mesh(new THREE.SphereGeometry(1.1, 12, 8), new THREE.MeshStandardMaterial({ color: col('#1d2733'), roughness: 0.7 }));
+        const dot = new THREE.Mesh(new THREE.SphereGeometry(1.1, 12, 8), new THREE.MeshStandardMaterial({ color: col('#eef1f4'), roughness: 0.7 }));
         dot.position.copy(V(p.x, p.y, p.z + 0.7)); dot.renderOrder = 7; dot.userData.pick = () => item;
         add(dot);
       }
       const mid = S[Math.floor(S.length / 2)];
-      labels.push({ text: `${r.name}\n${(prof.maxSlope * 100).toFixed(1)}% max`, x: mid.x, y: mid.y, z: mid.z + 1.2, color: prof.kind === 'walk' ? '#1f7a44' : '#8a5a00', height: 4.5 });
+      labels.push({ text: `${r.name}\n${(prof.maxSlope * 100).toFixed(1)}% max`, x: mid.x, y: mid.y, z: mid.z + 1.2, color: prof.kind === 'walk' ? '#5fd08a' : '#e8b54a', height: 4.5 });
       count++;
     }
   }
@@ -481,7 +489,7 @@ export function buildLayer(D, state, o) {
   try { wallObjects(); } catch (e) { console.error(e); }
   try { routeObjects(); } catch (e) { console.error(e); }
   try { outlineObjects(); } catch (e) { console.error(e); }
-  for (const L of labels) add(label(L.text, L.x, L.y, L.z, { height: (L.height || 4.5) * labelUnit, color: L.color }));
+  if (!light) for (const L of labels) add(label(L.text, L.x, L.y, L.z, { height: (L.height || 4.5) * labelUnit, color: L.color }));
   group.userData.mats = mats;
   group.userData.count = Math.max(1, count);
   return group;

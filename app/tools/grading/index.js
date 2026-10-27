@@ -33,7 +33,7 @@ const OWNER = 'grading';
 
 let ctx = null, store = null, editor = null, panelsApi = null;
 let D = null, dKey = '', layerVer = 0, stamp = 0, overStamp = -1, overFn = null;
-let quiet = 0, uiRaf = 0, active = false, warnedReadOnly = false;
+let quiet = 0, uiRaf = 0, active = false, warnedReadOnly = false, overWanted = false;
 let offs = [];
 
 /* ---------------------------------------------------------------- state and derived */
@@ -114,12 +114,12 @@ function viewSize() {
 function layerDef() {
   return {
     id: LAYER_ID, label: 'Grading', owner: OWNER, order: 40, defaultOn: true, replaces: ['grading'],
-    key: (l) => `${layerVer}|${l.style}|${wantLabels(l.style) ? 1 : 0}|${l.shift.x},${l.shift.y},${l.shift.z}`,
+    key: (l) => `${layerVer}|${store.gestureActive() ? 'live' : 'full'}|${l.style}|${wantLabels(l.style) ? 1 : 0}|${l.shift.x},${l.shift.y},${l.shift.z}`,
     build: (l) => {
       if (!D || !D.ok) return null;
       const s = store.raw();
       const group = buildLayer(D, s, {
-        sh: l.shift, style: l.style, cssColor: css, res: viewSize(), labels: wantLabels(l.style),
+        sh: l.shift, style: l.style, cssColor: css, light: store.gestureActive(), res: viewSize(), labels: wantLabels(l.style),
         items: { ground: () => groundItem(D), of: (kind, id) => shellItem({ kind, id }, D, s) },
       });
       if (group) group.userData.gradingLive = true;
@@ -128,7 +128,7 @@ function layerDef() {
     count: (obj) => obj.userData.count || 1,
     dispose: (obj) => disposeExtras(obj),
     aiReady: (obj, on) => setAiReady(obj, on),
-    always: (l, { on, replaced }) => syncOverride(on && !replaced),
+    always: (l, { on, replaced }) => { overWanted = !!(on && !replaced); syncOverride(overWanted); },
   };
 }
 
@@ -151,6 +151,7 @@ function onStore(state, info) {
   compute(live ? 'draft' : 'full');
   layerVer++;
   if (live) { scheduleUi(); return; }
+  if (overWanted) syncOverride(true);            // the ground first: the tower reads it when the section is written
   if (!quiet) writeSection();
   try { ctx.layers.sync(ctx); } catch (e) { console.error(e); }
   if (uiRaf && typeof cancelAnimationFrame === 'function') { cancelAnimationFrame(uiRaf); uiRaf = 0; }
@@ -296,7 +297,7 @@ const tool = {
       { label: 'Net (fill minus cut)', value: net, hint: 'Positive means soil to bring in' },
       { label: 'Balance', value: `${(h.balance * 100).toFixed(0)}%`, hint: 'The smaller of cut and fill over the larger' },
       { label: 'Tallest wall', value: fmt.wall(h.wallMax), hint: h.wallCount ? `${h.wallCount} wall${h.wallCount === 1 ? '' : 's'}` : 'No walls' },
-      { label: 'Steepest route', value: h.routes.length ? pct1(h.steepestRoute) : 'no routes', hint: 'Running slope' },
+      { label: 'Steepest route', value: h.routes.length ? pct1(h.steepestRoute) : 'None', hint: 'Running slope' },
     ];
   },
 
@@ -321,6 +322,7 @@ const tool = {
     if (keys.some((k) => k === 'site' || k === 'massing' || k === 'parking')) {   // the data this design stands on changed
       compute('full');
       layerVer++;
+      if (overWanted) syncOverride(true);
       writeSection({ onlyIfExists: true });
       scheduleUi();
     }

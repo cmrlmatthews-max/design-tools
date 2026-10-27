@@ -145,7 +145,7 @@ export function createPanels(env) {
     };
     lists.building = mkList({
       bind: buildingsBind, addLabel: 'Add building', min: 1, reorder: true, openDefault: (i) => i === 0, empty: 'No buildings.',
-      title: (i, b) => `${b.name || b.id} · ${(b.tiers || []).length} tier${(b.tiers || []).length === 1 ? '' : 's'}${b.source === 'typed' ? '' : ` · ${b.source}`}`,
+      title: (i, b) => `${b.name || b.id} · ${(b.tiers || []).length} tier${(b.tiers || []).length === 1 ? '' : 's'}`,
       make: newBuilding,
       render: (i) => {
         const typed = () => bAt(i).source === 'typed';
