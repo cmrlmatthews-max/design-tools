@@ -57,6 +57,10 @@ export function createShellPanels(ctx, { loaded, activeId }) {
         h('span', { class: 'layer-text' }, h('span', { class: 'layer-label' }, l.label), h('span', { class: 'layer-sub' }, [TOOL_LABEL[ownerId(l.owner)], l.count ? `${l.count}` : ''].filter(Boolean).join(' · '))),
         sw));
     }
+    const style = h('select', { class: 'select', 'aria-label': 'Neighbor buildings' }, ...[['solid', 'Solid'], ['glass', 'Glass'], ['wireframe', 'Wireframe']].map(([v, t]) => h('option', { value: v }, t)));
+    style.value = ctx.siteStyle ? ctx.siteStyle() : 'solid';
+    style.addEventListener('change', () => ctx.setSiteStyle && ctx.setSiteStyle(style.value));
+    body.append(h('div', { class: 'field-row' }, h('span', { class: 'field-label' }, 'Neighbors'), style));
     const doc = ctx.project.doc();
     const levels = doc && ctx.layers.levels ? ctx.layers.levels(doc) : [];
     if (levels.length) {

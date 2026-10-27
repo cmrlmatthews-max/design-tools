@@ -39,6 +39,9 @@ const layerOffs = new Map();     // id -> [off fns]
 let active = null;               // active tool id or null
 let selection = null;            // { item, owner } or null
 
+const SITE_STYLE_KEY = 'cmrlm.app.siteStyle';
+let siteStyle = (() => { try { return localStorage.getItem(SITE_STYLE_KEY) || 'solid'; } catch (e) { return 'solid'; } })();
+
 const ctx = {
   THREE, bus, scene, layers, ground, input, keys, project, frame,
   ui: { h, ICONS, Toast, Pop, Controls, confirmDialog },
@@ -49,6 +52,13 @@ const ctx = {
   refreshPanels: () => refreshPanels(),
   refreshHud: () => shell.refresh(['metrics', 'warnings']),
   activeTool: () => active,
+  siteStyle: () => siteStyle,
+  setSiteStyle: (v) => {
+    if (!['solid', 'glass', 'wireframe'].includes(v) || v === siteStyle) return;
+    siteStyle = v;
+    try { localStorage.setItem(SITE_STYLE_KEY, v); } catch (e) { /* private mode: keep it for this visit */ }
+    syncLayers(); shell.refresh(['layers']);
+  },
   tool: (id) => loaded.get(id) || null,
 };
 
@@ -113,8 +123,33 @@ dock.setExtras([
 ]);
 
 /* ---------- selection card ---------- */
+const highlight = new THREE.Group();
+highlight.name = 'selection-highlight';
+scene.overlayRoot.add(highlight);
+
+/** Outline of a selected item that carries a plan ring (derived items): bottom and top loops plus corner lines. */
+function drawHighlight(item) {
+  highlight.children.slice().forEach((c) => { highlight.remove(c); if (c.geometry) c.geometry.dispose(); });
+  const ring = item && Array.isArray(item.outer) ? item.outer : null;
+  if (!ring || ring.length < 2) { scene.requestRender(); return; }
+  const z0 = Number.isFinite(item.z0) ? item.z0 : 0, z1 = Number.isFinite(item.z1) ? item.z1 : z0;
+  const pts = [];
+  const at = (p, z) => { const q = frame.toScene([p[0], p[1], z]); return frame.worldVec(q[0], q[1], q[2]); };
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i], b = ring[(i + 1) % ring.length];
+    pts.push(at(a, z0), at(b, z0));
+    if (z1 > z0 + 0.01) pts.push(at(a, z1), at(b, z1), at(a, z0), at(a, z1));
+  }
+  const color = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#6aa2ea';
+  const lines = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color, depthTest: false, transparent: true }));
+  lines.renderOrder = 10;
+  highlight.add(lines);
+  scene.requestRender();
+}
+
 function select(item, owner) {
   selection = item ? { item, owner: owner || item.owner || null } : null;
+  drawHighlight(selection ? selection.item : null);
   shell.renderCard(selection, { openTool: (id) => activate(id) });
   bus.emit('selection', { item: selection ? selection.item : null, owner: selection ? selection.owner : null });
 }
