@@ -16,11 +16,12 @@ Read `docs/shell-plan.md` first. This file fixes the exact module APIs inside `a
 
 ```js
 export const bus = { on(evt, fn) /* -> off() */, off(evt, fn), emit(evt, payload), once(evt, fn) };
+export function createBus()   // a separate bus (tests)
 ```
 Events used across the app:
 - `project:open` `{doc}` — a different project is now open (or null).
-- `project:change` `{doc, keys: [sectionKey...] , source: 'local'|'storage'}` — sections changed.
-- `section:<key>` `{doc, section, source}` — one section changed.
+- `project:change` `{doc, keys: [sectionKey...], source: 'local'|'storage', tool}` — sections changed. `tool` = the writer's tool id, or null.
+- `section:<key>` `{doc, section, source, tool}` — one section changed.
 - `tool:active` `{id, prev}`.
 - `layers:change` `{}` — a layer turned on or off, or was registered.
 - `style:change` `{style}` — `'model'|'diagram'`.
@@ -35,13 +36,14 @@ Port of `Store` in `build/tower/shell.html` (undo, redo, live gestures), as a fa
 export function createStore({ initial, limit = 50 }) -> {
   raw(),                       // current state object (do not mutate)
   get(path),                   // 'segments.0.floors' dot paths, numbers index arrays
-  set(path, value, { live = false } = {}), // live: no undo step yet (drag); next commit() or non-live set closes it
+  set(path, value, { live = false, merge = false } = {}), // live: no undo step yet (drag); merge: change the last step, no new one
   update(fn, { live } = {}),   // fn(draft) mutates a deep clone; one step
   commit(),                    // close a live gesture as one undo step
-  replace(state, { undoable = true } = {}),
+  replace(state, { undoable = true, resetHistory = false } = {}),
   undo(), redo(), canUndo(), canRedo(),
   subscribe(fn) /* -> off */,  // fn(state, { live, path })
   snapshot(),                  // deep clone
+  version(), gestureActive(), gesturePath(), historyDepth(),   // read-only helpers
 }
 ```
 
@@ -49,7 +51,7 @@ export function createStore({ initial, limit = 50 }) -> {
 
 One in-memory project for the page. Wraps `src/shared/project.js`.
 ```js
-export function createProjectStore({ storage = safeLocalStorage(), bus, debounceMs = 1000 }) -> {
+export function createProjectStore({ storage = safeLocalStorage(), bus, debounceMs = 1000, win, timers, autoStart = true }) -> {
   doc(),                 // current doc or null
   id(),
   list(),                // listProjects(storage)
@@ -64,7 +66,9 @@ export function createProjectStore({ storage = safeLocalStorage(), bus, debounce
   importFile(file),      // importProject; open it
   exportCurrent(),       // exportProject + download
   isReadOnly(key),       // true when the stored section schema is newer than the app knows (schema 1)
+  pending(), dispose(),
 }
+export function safeLocalStorage()
 ```
 Auto-wiring inside `createProjectStore`: `visibilitychange` (hidden: flush; visible: reload), `pagehide` (flush), `focus` (reload), `storage` event on `cmrlm.project.<id>` (reload). Startup: open `?project=<id>` from the URL, else `cmrlm.project.last`, else nothing.
 
@@ -161,6 +165,7 @@ export function createLayers({ scene, bus }) -> {
   // a pickable mesh carries userData.pick = (faceIndex) => item | null ; item = { id, title, rows: [[label, text]], owner, ... }
   levels(doc) -> [{ key, z, name }], setCut(key | null), cut(),
   setAiReady(on),
+  bounds(ids) -> THREE.Box3 | null,   // world box of the built, visible groups of these layer ids (Site and Building zoom)
 }
 export function buildMerged(items, { colorOf, edges = true }) -> THREE.Group   // one merged mesh per group, per-vertex color, userData.pick by vertex range (Model Viewer pattern)
 ```
@@ -232,6 +237,8 @@ export default {
   onProject(evt, ctx) {},                   // project:change from another tool or from storage
   exports(ctx) -> [{ id, label, run() }],
   card(item, ctx) -> [{ label, action }],   // extra buttons on the selection card
+  onTap(ev, ctx) -> bool,                   // optional: the active tool picks its own items first; true = handled
+  store,                                    // optional: the tool's createStore instance (top-bar Undo and Redo use it)
 };
 ```
 `ctx` (built in `main.js`): `{ THREE, bus, scene, layers, ground, input, keys, project, ui: { h, ICONS, Toast, Pop, Controls, confirmDialog }, frame, capture, store(initial) -> createStore, activate(toolId), select(item|null), refreshPanels(), refreshHud() }`.
