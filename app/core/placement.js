@@ -354,6 +354,8 @@ export function createPlacementGizmo({ scene, input, ground, get, set, bounds, p
 
   /* ---- input: a press on the building (canvas) and the rotation grip (DOM) ---- */
   const moveHandler = {
+    // A finger orbits (docs/shell-plan.md section 8). The mouse and the Pencil move the building; touch keeps the rotate grip.
+    pointerTypes: ['mouse', 'pen'],
     test(ev) {
       if (!active() || drag) return false;
       const ms = meshes();

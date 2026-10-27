@@ -108,6 +108,7 @@ async function activate(id) {
 /* ---------- panels ---------- */
 const shell = createShellPanels(ctx, { loaded: () => loaded, activeId: () => active });
 shell.setRefresher((id) => panels.refresh(id));
+ctx.panelsApi = panels;
 
 function refreshPanels() {
   const tool = active ? loaded.get(active) : null;
@@ -288,6 +289,8 @@ function onProjectOpen() {
 
 bus.on('project:open', onProjectOpen);
 bus.on('project:change', (evt) => {
+  // Layers first: the grading override (the proposed ground) must be current before a tool follows the ground.
+  syncLayers();
   loaded.forEach((t) => { if (t.onProject && t.id !== evt.tool) { try { t.onProject(evt, ctx); } catch (e) { console.error(e); } } });
   syncLayers();
   shell.refresh(['metrics', 'warnings', 'layers']);

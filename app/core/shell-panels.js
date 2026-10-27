@@ -96,6 +96,7 @@ export function createShellPanels(ctx, { loaded, activeId }) {
   const countLabel = (n) => (n ? ` (${n})` : '');
 
   function refresh(which) {
+    if (!which || which.includes('warnings')) { try { ctx.panelsApi && ctx.panelsApi.setTitle('shell-warnings', `Warnings${countLabel(warningRows().length)}`); } catch (e) { /* panel not shown */ } }
     const ids = { metrics: 'shell-metrics', layers: 'shell-layers', warnings: 'shell-warnings' };
     (which || Object.keys(ids)).forEach((k) => { try { refreshPanel(ids[k]); } catch (e) { /* panel not shown */ } });
   }
