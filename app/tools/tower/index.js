@@ -13,6 +13,7 @@
      prompts-ui.js  the AI prompt panel
    Live layers: 'tower-model' (replaces the derived 'massing' twin), 'tower-context', 'tower-envelope'.
    ========================================================================== */
+import { deckCover, coverKey } from '../../core/cover.js';
 import { createPlacementGizmo } from '../../core/placement.js';
 import { Units } from '../../core/ui-kit.js';
 import { toProject } from '../../../src/shared/project.js';
@@ -86,13 +87,13 @@ function modelDef() {
       if (!shown()) return 'off';
       const s = T.store.raw();
       const d = T.derived.display(isDraft());
-      return [d.key, lctx.style, s.view.colorBy, s.view.floorLines, JSON.stringify(s.programs), JSON.stringify(s.site), T.flags.active ? 'on' : 'idle'].join('|');
+      return [d.key, lctx.style, s.view.colorBy, s.view.floorLines, JSON.stringify(s.programs), JSON.stringify(s.site), T.flags.active ? 'on' : 'idle', coverKey(lctx.doc)].join('|');
     },
     build(lctx) {
       if (!shown()) return null;
       const s = T.store.raw();
       // the blue site outline belongs to the active tool only
-      const group = buildModelGroup(s, { disp: T.derived.display(isDraft()), style: lctx.style, itemFor, showSite: T.flags.active });
+      const group = buildModelGroup(s, { disp: T.derived.display(isDraft()), style: lctx.style, itemFor, showSite: T.flags.active, cover: deckCover(lctx.doc) });
       return placeNew(group, lctx);
     },
     always(lctx) { placeBuilt('tower-model', lctx); },

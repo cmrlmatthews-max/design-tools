@@ -258,3 +258,4 @@ Read the module source for details. The main ones a tool port uses:
 - **keys**: a handler that returns `false` passes the key on.
 - **project-store**: events carry `tool`; options `win`, `timers`, `autoStart`; `pending()`, `dispose()`.
 - **store**: `set(path, v, { merge })`, `replace(s, { resetHistory })`, `version()`, `gestureActive()`, `historyDepth()`.
+- **cover** (`app/core/cover.js`): a wrap or podium deck takes the place of the massing levels it uses. `deckCover(doc)`, `covered(cover, zone, z)`, `coverKey(doc)`, `coveredMassingIndices(doc)`. The Tower live layer and the derived massing layer skip covered levels.
