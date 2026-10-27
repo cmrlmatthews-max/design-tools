@@ -54,6 +54,8 @@ Each tool reads the sections before it and writes only its own section. The Work
 
 Caution: the work session cannot push to GitHub. It works on a download. Merge by hand, one tool folder at a time.
 
+Caution: freeze from October 27, 2026 until the unified shell reaches parity (`docs/shell-plan.md`). The work session does not edit `site/`, `tower/`, `parking/`, `grading/`, `viewer/`, `build/`, or `src/` during this freeze. The Plate Planner (`plate/`) stays a separate tool and is outside the freeze only for work that does not change the `plate` section shape.
+
 1. The home session pushes one branch per tool and opens a pull request. Cade merges it.
 2. The work session downloads `main` after each merge, before it starts new work.
 3. The work session keeps its changes inside the folders of the tool it builds. (The home session built the Plate Planner and the Sun Study in October 2026, so those folders now belong to the home session.)
