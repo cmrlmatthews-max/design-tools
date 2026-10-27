@@ -15,6 +15,7 @@ This file is the one place that lists every tool in the suite, who builds it, an
 
 | Id | Tool | Folder | Status | Built by |
 |---|---|---|---|---|
+| `app` | Design App (unified shell) | `app/` | Phase 0 built October 27, 2026. Phase 1 (Site, Tower, Parking, Grading ports) in progress. Plan: `docs/shell-plan.md` | Home |
 | `site` | Site Model | `site/` | Version 1 live. Remove existing buildings in review | Home |
 | `tower` | Tower Generator | `tower/` | Version 1.2 built, in review (project file, Sun Study) | Home |
 | `sun` | Sun Study (inside the Tower Generator) | `tower/` | Version 1 built, in review | Home |
@@ -24,7 +25,7 @@ This file is the one place that lists every tool in the suite, who builds it, an
 | `parking` | Parking Deck Generator | `parking/` | Version 1 live | Home |
 | `facade` | Facade Studio | `facade/` | Hidden, October 26, 2026: facades vary too much to model well with the current tools. The code, the tests, and the saved `facade` section stay. The Workspace page, the Send menus, and the Model Viewer do not show it. | Home |
 | `grading` | Grading Sketch | `grading/` | Version 1 live | Home |
-| `viewer` | Model Viewer | `viewer/` | Built, in review | Home |
+| `viewer` | Model Viewer | `viewer/` | Built. Retires when the Design App reaches parity (`docs/shell-plan.md`) | Home |
 | `view` | View Study | `view/` | Later | — |
 | `egress` | Egress Sketch | `egress/` | Later | — |
 | — | Yield Study | — | Skipped for now | — |
