@@ -23,6 +23,7 @@
    Colors: Model style draws plain solids; Diagram colors by program, units by unit type. The cut level draws in plan
    colors in both styles. AI-ready: massing, units and cores amber (#E0A458), the rest white.
    ========================================================================== */
+import { coverKey, coveredMassingIndices } from './cover.js';
 import * as THREE from 'three';
 import { getSection, toLocal } from '../../src/shared/project.js';
 import { layersFrom, cutAt, colorKey, colorOf, DEFAULT_ON } from '../../src/viewer/scene.js';
@@ -173,7 +174,7 @@ export function derivedLayerDefs({ getDoc, ground, scene, siteStyle } = {}) {
   }
 
   /** A layer of solid items from layersFrom. */
-  function solidDef({ id, label, order, owner, layerIds, sections, defaultOn, extraKey, materialFor }) {
+  function solidDef({ id, label, order, owner, layerIds, sections, defaultOn, extraKey, materialFor, keep }) {
     const def = {
       id, label, order, defaultOn,
       key(ctx) {
@@ -186,7 +187,8 @@ export function derivedLayerDefs({ getDoc, ground, scene, siteStyle } = {}) {
         const L = shown(doc, ctx && ctx.cut);
         if (!L) return null;
         const items = [];
-        for (const lid of layerIds) if (L[lid] && L[lid].ok) for (const it of L[lid].items) if (it.kind !== 'ground') items.push(it);
+        const keepIt = keep ? keep(doc) : null;
+        for (const lid of layerIds) if (L[lid] && L[lid].ok) for (const it of L[lid].items) if (it.kind !== 'ground' && (!keepIt || keepIt(it))) items.push(it);
         if (!items.length) return null;
         const own = typeof owner === 'function' ? owner(doc) : owner;
         const opts = { style: styleNow(ctx), aiReady: !!(ctx && ctx.aiReady), model: '#' + cssColor('--scene-model', '#efefec').getHexString(), context: '#' + cssColor('--scene-context', '#6f7882').getHexString() };
@@ -350,7 +352,9 @@ export function derivedLayerDefs({ getDoc, ground, scene, siteStyle } = {}) {
     solidDef({ id: 'site-neighbors', label: 'Neighbors', order: 11, owner: 'site', layerIds: ['site'], sections: ['site'], defaultOn: DEFAULT_ON.site !== false, extraKey: (ctx) => siteStyleNow(ctx), materialFor: neighborMaterial }),
     siteDef({ id: 'site-roads', label: 'Roads', order: 12, parts: ['roads', 'walks'] }),
     siteDef({ id: 'site-water', label: 'Water', order: 13, parts: ['water'] }),
-    solidDef({ id: 'massing', label: 'Massing', order: 20, owner: massingOwner, layerIds: ['massing'], sections: ['massing', 'plates'], defaultOn: DEFAULT_ON.massing !== false, extraKey: (ctx) => massingOwner(docNow(ctx)) }),
+    // a wrap or podium deck takes the place of the massing levels it uses (core/cover.js)
+    solidDef({ id: 'massing', label: 'Massing', order: 20, owner: massingOwner, layerIds: ['massing'], sections: ['massing', 'plates', 'parking'], defaultOn: DEFAULT_ON.massing !== false, extraKey: (ctx) => massingOwner(docNow(ctx)) + coverKey(docNow(ctx)),
+      keep: (doc) => { const skip = coveredMassingIndices(doc); return skip.size ? (it) => !skip.has(it.level) : null; } }),
     solidDef({ id: 'units', label: 'Units', order: 21, owner: 'plates', layerIds: ['units'], sections: ['plates', 'massing'], defaultOn: DEFAULT_ON.units !== false }),
     solidDef({ id: 'cores', label: 'Cores and corridors', order: 22, owner: 'plates', layerIds: ['cores'], sections: ['plates', 'massing'], defaultOn: DEFAULT_ON.cores !== false }),
     solidDef({ id: 'parking', label: 'Parking', order: 30, owner: 'parking', layerIds: ['parking'], sections: ['parking', 'massing'], defaultOn: DEFAULT_ON.parking !== false }),

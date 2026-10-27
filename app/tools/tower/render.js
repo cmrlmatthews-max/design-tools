@@ -7,6 +7,7 @@
    ranges maps a raycast face back to its item ({ kind: 'segment' | 'podium' | 'crown', index }).
    Materials belong to the group (core/layers.js disposes them with it), nothing is shared between builds.
    ========================================================================== */
+import { covered as coveredFloor } from '../../core/cover.js';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { planMatrix, planToWorld } from '../../core/frame.js';
@@ -79,7 +80,7 @@ export function plateMaterialKey(plate, view, programs, style) {
  * opts: { style: 'model'|'diagram', disp: { plates, solids, solidsOutside }, itemFor(item) -> card item, showSite (default true): draw the site outline }
  */
 export function buildModelGroup(state, opts) {
-  const { disp, style, itemFor, showSite = true } = opts;
+  const { disp, style, itemFor, showSite = true, cover = null } = opts;
   const view = state.view, diagram = style === 'diagram';
   const gap = view.floorLines ? CONFIG.floorGap : 0;
   const group = new THREE.Group();
@@ -93,6 +94,7 @@ export function buildModelGroup(state, opts) {
   };
   for (const plate of disp.plates) {
     if (plate.void || !plate.polygons.length) continue;
+    if (cover && coveredFloor(cover, plate.zone, plate.z)) continue;   // a wrap or podium deck draws these levels
     try { push(plateMaterialKey(plate, view, state.programs, style), extrudePolys(plate.polygons, plate.z, Math.max(0.1, plate.ftf - gap)), plateItem(plate)); }
     catch (e) { console.error(e); }
   }
