@@ -252,8 +252,10 @@ export function buildLayer(D, state, o) {
     if (ci.on && ci.proposed) {
       const coarse = safeContours(gridLike, D.proposedZ, interval), fineL = fine ? safeContours(fineLike, fine.z, interval) : [];
       const mk = (major) => contourSegs(coarse, rect, lift, (L) => L.major === major).concat(contourSegs(fineL, null, lift, (L) => L.major === major));
-      const minor = add(fat(mk(false), '#c5ccd4', 1, { opacity: 0.5, order: 4 }));
-      const major = add(fat(mk(true), '#eef1f4', 1.5, { opacity: 0.9, order: 4 }));
+      // quiet in the Model style (the site ground draws no contours); full strength in the Diagram style and in plan
+      const strong = o.style === 'diagram' || !!o.labels;
+      const minor = add(fat(mk(false), '#c5ccd4', 1, { opacity: strong ? 0.5 : 0.14, order: 4 }));
+      const major = add(fat(mk(true), '#eef1f4', strong ? 1.5 : 1, { opacity: strong ? 0.9 : 0.28, order: 4 }));
       if (minor) minor.userData.contour = 'proposed';
       if (major) major.userData.contour = 'proposed';
       const best = new Map();
@@ -269,7 +271,7 @@ export function buildLayer(D, state, o) {
     }
     if (ci.on && ci.existing) {
       const lines = safeContours(gridLike, g.z, interval);
-      const dashed = add(fat(contourSegs(lines, null, lift, () => true), CONFIG.existingColor, 1, { dashed: true, dash: 3, gap: 2.5, opacity: 0.9, order: 3 }));
+      const dashed = add(fat(contourSegs(lines, null, lift, () => true), CONFIG.existingColor, 1, { dashed: true, dash: 3, gap: 2.5, opacity: (o.style === 'diagram' || !!o.labels) ? 0.9 : 0.2, order: 3 }));
       if (dashed) dashed.userData.contour = 'existing';
     }
     if (diagram) {

@@ -48,9 +48,9 @@ export function coveredMassingIndices(doc) {
 
 /* ---------- floors the Plate Planner covers ---------- */
 /* The Plate Planner draws units and cores inside the massing walls. A massing solid on the same floor shares those wall
-   faces, and the two flicker (z-fighting). The Model Viewer skips the covered massing levels; the Tower live layer
-   does the same while the Tower is not the active tool. While the Tower is active, the shell hides the units instead
-   (they are out of date during an edit). */
+   faces, and the two flicker (z-fighting). Rule (one look in every tool, Cade, October 28, 2026): while the plates
+   match the massing (platesCurrent), the units draw those floors and the Tower skips them; once the massing changes,
+   the units hide and the Tower draws every floor. The active tool never changes this. */
 
 /** The z values (massing frame) of the massing levels that plates.derived covers. */
 export function platesCoverZs(doc) {
@@ -72,4 +72,35 @@ export function platesCovered(zs, z) {
 export function platesCoverKey(doc) {
   const zs = platesCoverZs(doc);
   return zs.length ? zs.map((z) => Math.round(z * 10)).join(',') : 'none';
+}
+
+/** True when the Plate Planner units still match the massing (they draw; the massing skips those floors).
+ *  The test is geometry, not dates: every plates level must find a massing level with the same index, z, floor-to-floor
+ *  height, and floor plate (plan ring within 0.05 ft). A move, a turn, or a new base elevation of the building changes
+ *  the placement only, so the units stay current. False with no plates. */
+export function platesCurrent(doc) {
+  const plates = getSection(doc, 'plates');
+  const mass = getSection(doc, 'massing');
+  const pl = plates && plates.derived && Array.isArray(plates.derived.levels) ? plates.derived.levels : [];
+  const ml = mass && mass.derived && Array.isArray(mass.derived.levels) ? mass.derived.levels : [];
+  if (!pl.length || !ml.length) return false;
+  const byIndex = new Map(ml.filter((l) => l && Number.isFinite(l.index)).map((l) => [l.index, l]));
+  const near = (a, b, t) => Number.isFinite(Number(a)) && Number.isFinite(Number(b)) && Math.abs(Number(a) - Number(b)) <= t;
+  const ringKey = (mp) => {
+    const out = [];
+    for (const poly of Array.isArray(mp) ? mp : []) {
+      for (const r of [poly && poly.outer, ...((poly && poly.holes) || [])]) {
+        if (!Array.isArray(r)) continue;
+        out.push(r.map((p) => `${Math.round(p[0] * 20)},${Math.round(p[1] * 20)}`).sort().join(';'));
+      }
+    }
+    return out.sort().join('|');
+  };
+  for (const l of pl) {
+    const m = l && byIndex.get(l.index);
+    if (!m) return false;
+    if (!near(l.z, m.z, 0.05) || !near(l.ftf, m.ftf, 0.05)) return false;
+    if (ringKey(l.plate) !== ringKey(m.plates)) return false;
+  }
+  return true;
 }

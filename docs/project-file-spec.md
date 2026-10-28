@@ -247,6 +247,11 @@ Optional keys (added with the Parking Deck Generator, October 21, 2026):
 - In `metrics`: `"accessible": { "required", "provided", "van" }`, `"ev": { "installed", "ready" }`, `"bike": { "required", "areaSf" }`, `"conflicts": 0`.
 - `index` 1 is the lowest parking level. `z` is relative to `baseZ`.
 
+Optional key (added October 28, 2026):
+
+- `"screen": { "type": "open" | "solid" | "mesh", "openness": 30, "wallArea": 18450.0, "openArea": 5535.0, "percent": 30.0 }`. The facade screen of the deck: `openness` is the mesh open area in percent (0 to 50); `wallArea` and `openArea` are in sf (outer perimeter times clear height of every screened level; the top level of a standalone deck is an open roof and is not screened); `percent` is `openArea / wallArea` in percent. It is kept for later open parking garage checks. A file without the key has no screen (`open`).
+- `state.linked: true` with `state.source: "podium"` marks a deck that follows the parking floors of the podium program (`massing.derived.levels`, zone `podium`, program `parking`). With no parking floors left, the section stays with `levels: []`.
+
 ### 6.5 `facade.derived` (writer: Facade Studio)
 
 **Hidden, October 26, 2026.** The Facade Studio is hidden (facades vary too much to model well with the current tools). The `facade` section stays valid. Project files keep it, and every reader keeps it. The Workspace page and the Model Viewer do not show or count it.

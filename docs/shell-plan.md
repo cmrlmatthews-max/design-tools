@@ -20,6 +20,10 @@ This plan merges the Site Model, the Tower Generator, the Parking Deck Generator
 | Repo | Same repo `design-tools`. The old tool pages stay live until Cade approves their removal. |
 | Freeze | The work Claude does not edit tool folders until the shell reaches parity (`docs/suite-roadmap.md` section 5). |
 | iPad | Required. Start a list of direct-drawing features: `docs/ipad-drawing-ideas.md`. |
+| One look (October 28, 2026) | The model looks the same in every tool and with no tool open. Each tool's own drawer draws its part, loaded in the background when a project opens. Edit aids (handles, envelope, conflict lines, labels for editing) show only in the active tool. View settings (style, color by, floor lines, shadows, sun) are app-wide in the View panel. |
+| Podium parking (October 28, 2026) | Direction B: podium floors with the Parking program become a linked podium deck in the Parking tool at once. The deck replaces those massing floors. A standalone deck stays as it is, with a warning. |
+| Screening (October 28, 2026) | Open, Solid, Mesh. Mesh openness 0 to 50 percent, written to `parking.derived.screen` for later open-garage checks. |
+| Units and massing (October 28, 2026) | Units draw while they match the massing geometry; the massing skips those floors. After a geometry change the massing draws and the units hide. A move or a new base does not count as a change. |
 | Future | More tools join the shell later. The tool contract (section 5) must make a new tool a new folder, not a shell rewrite. |
 
 ## 2. What the research found

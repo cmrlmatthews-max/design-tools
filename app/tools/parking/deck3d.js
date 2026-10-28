@@ -256,12 +256,15 @@ function slabGeos(D, lv) {
 /* ---------- model ---------- */
 /**
  * D: the Derived result. state: the parking state. disp: { quality: 'full' | 'draft' }. mats: createMats. style: 'model' | 'diagram'.
+ * opts.active: the Parking tool is the active tool. The edit aids (column conflicts in red, the isolated level, the ramp
+ * slope tints) draw only then; otherwise the deck looks the same in every tool (Cade, October 28, 2026).
  * -> [objects] in the layout frame.
  */
-export function buildModel(D, state, disp, mats, style) {
+export function buildModel(D, state, disp, mats, style, opts = {}) {
   const view = state.view, diagram = style === 'diagram';
+  const active = !!opts.active;
   const draft = disp.quality === 'draft';
-  const only = view.level > 0 ? view.level : 0;
+  const only = active && view.level > 0 ? view.level : 0;
   const levels = (D.levels || []).filter((l) => !only || l.index === only);
   const model = [];
   const meshGroups = new Map();
@@ -285,7 +288,7 @@ export function buildModel(D, state, disp, mats, style) {
     }
   };
   const top = levels.length ? Math.max(...levels.map((l) => l.z + l.ftf)) : 0;
-  const showConflicts = view.overlay !== false;
+  const showConflicts = active && view.overlay !== false;
   const conflictKeys = new Set(showConflicts ? (D.overlay && D.overlay.conflicts ? D.overlay.conflicts : []).map((c) => `${rnd(c.column[0], 10)},${rnd(c.column[1], 10)}`) : []);
 
   for (const lv of levels) {
@@ -332,9 +335,7 @@ export function buildModel(D, state, disp, mats, style) {
     } else {
       for (const s of lv.stalls || []) {
         const kind = kindOfStall(s);
-        if (diagram && view.colorBy === 'kind') fillQuad(kind, s.outer, fn, 0.04);
-        else if (diagram) fillQuad('standard', s.outer, fn, 0.04);
-        else if (kind !== 'standard') fillQuad(kind, s.outer, fn, 0.04);
+        if (diagram || kind !== 'standard') fillQuad(kind, s.outer, fn, 0.04);   // Diagram colors every stall by kind
         ringLines(linePos.stall, s.outer, fn, 0.07);
       }
     }
@@ -407,8 +408,8 @@ export function buildModel(D, state, disp, mats, style) {
     ls.raycast = () => {};
     model.push(ls);
   }
-  /* ramps coloured by slope (Diagram style): a thin tint over the sloped top */
-  if (diagram) {
+  /* ramps coloured by slope (Diagram style, an edit aid: the Parking tool active only): a thin tint over the sloped top */
+  if (diagram && active) {
     for (const r of D.ramps || []) {
       if (only && r.level !== only) continue;
       if (!Array.isArray(r.outer3d) || r.outer3d.length < 3) continue;

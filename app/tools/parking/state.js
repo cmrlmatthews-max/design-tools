@@ -12,6 +12,8 @@ import * as GridMod from '../../../src/parking/grid.js';
 import * as AccessibleMod from '../../../src/parking/accessible.js';
 import * as OverlayMod from '../../../src/parking/overlay.js';
 import * as MetricsMod from '../../../src/parking/metrics.js';
+import { defaultScreen, normScreen } from './screen.js';
+import { toProject } from '../../../src/shared/project.js';
 
 export { LayoutMod, RampsMod };
 
@@ -60,11 +62,14 @@ export function fillDefaults(src) {
   if (isObj(s.placement)) s.placement.baseMode = s.placement.baseMode === 'typed' ? 'typed' : 'follow';
   if (isObj(s.placement) && s.placement.pinned !== true) delete s.placement.pinned;
   if (!['standalone', 'wrap', 'podium'].includes(s.source)) s.source = 'standalone';
+  s.linked = s.source === 'podium' && s.linked === true;          // a podium deck that follows the parking floors of the massing program
+  s.screen = normScreen(isObj(s.screen) ? s.screen : defaultScreen());
   if (s.footprint.shape !== 'polygon') s.footprint.shape = 'rect';
   if (!Array.isArray(s.footprint.points)) s.footprint.points = [];
   s.footprint.points = s.footprint.points.filter((p) => Array.isArray(p) && isFinite(p[0]) && isFinite(p[1])).map((p) => [p[0], p[1]]);
   if (s.footprint.shape === 'polygon' && s.footprint.points.length < 3) s.footprint.shape = 'rect';
-  s.levels.count = Math.round(clamp(num(s.levels.count, 5), 1, CONFIG.limits.maxLevels));
+  // A linked podium deck with no parking floors in the program has zero levels (nothing draws).
+  s.levels.count = Math.round(clamp(num(s.levels.count, 5), s.linked ? 0 : 1, CONFIG.limits.maxLevels));
   s.levels.belowGrade = Math.round(clamp(num(s.levels.belowGrade, 0), 0, s.levels.count));
   s.levels.openTop = s.levels.openTop !== false;
   if (!RAMP_TYPES.includes(s.ramp.type)) s.ramp.type = 'single-helix';
@@ -258,8 +263,15 @@ function emptyDerived(message) {
   };
 }
 
+/** A linked podium deck whose massing has no parking floors: zero levels, nothing to build or draw. */
+export const isEmptyLinked = (s) => !!(s && s.source === 'podium' && s.linked === true && !(s.levels && s.levels.count > 0));
+
 /** Everything the panels, the layers, the exports and the project file need for one state (no caching). */
 export function computeDerived(s, { project = null, quality = 'full' } = {}) {
+  if (isEmptyLinked(s)) {
+    const d = emptyDerived('');
+    return { ...d, ok: true, warnings: [] };
+  }
   try {
     const raw = LayoutMod.layout(s, { project, quality });
     const ramps = RampsMod.rampsFor(s, raw);
@@ -307,7 +319,7 @@ export function computeDerived(s, { project = null, quality = 'full' } = {}) {
  */
 export function createDerived({ store, readers }) {
   let gKey = null, geomId = 0, counter = 0, cache = null;
-  const geomKeyOf = (s) => JSON.stringify([s.source, s.sourceLevel, s.footprint, s.levels, s.bays, s.grid, s.ramp, s.cores, s.coresFromProject, s.entries, s.liner, s.checks, s.accessible, s.ev, s.bike, s.required]);
+  const geomKeyOf = (s) => JSON.stringify([s.source, s.linked, s.sourceLevel, s.footprint, s.levels, s.bays, s.grid, s.ramp, s.cores, s.coresFromProject, s.entries, s.liner, s.checks, s.accessible, s.ev, s.bike, s.required]);
   function get() {
     const s = store.raw();
     const gk = `${geomKeyOf(s)}|${readers.dataKey()}`;
@@ -369,7 +381,42 @@ export function createReaders(ctx) {
       const m = sec && sec.derived && sec.derived.metrics;
       return m && isFinite(m.units) ? m.units : null;
     },
-    /** The massing levels drawn as a ghost: { polys, z, ftf }, in the massing (local) frame. The deck's own zone is left out. */
+    /**
+     * The podium parking floors of the massing program: the lowest podium level with program 'parking' and the
+     * contiguous run of parking podium levels above it. -> [{ index, z, ftf }], lowest first ([] when none).
+     */
+    parkingRun() {
+      const pod = massingLevels().filter((l) => l && l.zone === 'podium' && Array.isArray(l.plates) && l.plates.length)
+        .slice().sort((a, b) => num(a.z, 0) - num(b.z, 0));
+      const at = pod.findIndex((l) => l.program === 'parking');
+      if (at < 0) return [];
+      const out = [];
+      for (let i = at; i < pod.length && pod[i].program === 'parking'; i++) out.push({ index: pod[i].index, z: num(pod[i].z, 0), ftf: num(pod[i].ftf, 10.5) });
+      return out;
+    },
+    /** The z of the lowest massing level above z (massing frame), or null. */
+    massingZAbove(z) {
+      let best = null;
+      for (const l of massingLevels()) {
+        const lz = Number(l && l.z);
+        if (Number.isFinite(lz) && lz > z + 0.5 && (best === null || lz < best)) best = lz;
+      }
+      return best;
+    },
+    /** The massing footprint (all level plates) as rings in the PROJECT frame. */
+    massingRings() {
+      const sec = massing();
+      const p = sec && sec.placement;
+      if (!isObj(p)) return [];
+      const pl = { x: num(p.x, 0), y: num(p.y, 0), rotation: num(p.rotation, 0), baseZ: num(p.baseZ, 0) };
+      const out = [];
+      for (const l of massingLevels()) for (const poly of (l && l.plates) || []) {
+        const r = poly && poly.outer;
+        if (Array.isArray(r) && r.length >= 3) out.push(r.map((q) => { const t = toProject(pl, [q[0], q[1]]); return [t[0], t[1]]; }));
+      }
+      return out;
+    },
+    /** The massing levels as { polys, z, ftf } in the massing (local) frame, the deck's own zone left out (snap targets). */
     ghostLevels(state) {
       if (!dataDoc()) return [];
       const skip = state.source === 'wrap' ? 'deck' : state.source === 'podium' ? 'podium' : null;

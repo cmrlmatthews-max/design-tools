@@ -13,11 +13,12 @@
      prompts-ui.js  the AI prompt panel
    Live layers: 'tower-model' (replaces the derived 'massing' twin), 'tower-context', 'tower-envelope'.
    ========================================================================== */
+import * as Cover from '../../core/cover.js';
 import { deckCover, coverKey, platesCoverZs, platesCoverKey } from '../../core/cover.js';
 import { createPlacementGizmo } from '../../core/placement.js';
 import { Units } from '../../core/ui-kit.js';
 import { toProject } from '../../../src/shared/project.js';
-import { CONFIG, defaultState, fillDefaults, createDerived, unitBreakdown, num } from './state.js';
+import { CONFIG, defaultState, fillDefaults, createDerived, unitBreakdown } from './state.js';
 import { buildModelGroup, buildContextGroup, buildEnvelopeGroup, aiReadyModel, aiReadyContext, aiReadyEnvelope } from './render.js';
 import { createProject } from './project.js';
 import { createSelect } from './select.js';
@@ -43,7 +44,6 @@ let gizmo = null;
 let offModel = null, modelReplaces = null;
 let offs = [];
 let layerRaf = 0, hudRaf = 0;
-let saved = null;                       // sun and shadows of the scene before the tower took them
 
 const isDraft = () => {
   const st = T.store;
@@ -53,12 +53,20 @@ const isDraft = () => {
 };
 
 /* ---------- visibility rules ---------- */
-/** The tower's own massing section exists, or the user has worked on a tower in this visit. */
+/** The tower draws while it is the active tool (its working copy), or while the open project's massing section is the tower's
+ *  (background mode: the shell loads the tower on open, with no tool active). Otherwise the tower layers draw nothing. */
 const shown = () => {
   if (!T.project) return false;
   if (T.flags.active) return true;
-  return T.project.owned() && (T.flags.engaged || T.project.towerSection(T.project.sec('massing')));
+  return T.project.towerSection(T.project.sec('massing'));
 };
+
+/* ---------- app-wide view (Cade, October 28, 2026): the model looks the same in every tool ---------- */
+const V_DEFAULT = { colorBy: 'program', floorLines: true, shadows: true, sun: { az: 140, alt: 40 } };
+const appView = () => (T.ctx && T.ctx.view && T.ctx.view.get()) || V_DEFAULT;
+const viewKey = () => { try { return (T.ctx && T.ctx.view && T.ctx.view.key()) || ''; } catch (e) { return ''; } };
+/** The Plate Planner units were made from the current massing: the massing skips the floors they draw (in every tool state). */
+const platesOk = (doc) => (Cover.platesCurrent ? !!Cover.platesCurrent(doc) : true);
 
 /* ---------- layers ---------- */
 /* The geometry is built in the tower's local frame, so a placement or scene-shift change only moves the group:
@@ -87,13 +95,19 @@ function modelDef() {
       if (!shown()) return 'off';
       const s = T.store.raw();
       const d = T.derived.display(isDraft());
-      return [d.key, lctx.style, s.view.colorBy, s.view.floorLines, JSON.stringify(s.programs), JSON.stringify(s.site), T.flags.active ? 'on' : `idle:${platesCoverKey(lctx.doc)}`, coverKey(lctx.doc)].join('|');
+      const pc = platesOk(lctx.doc);
+      return [d.key, lctx.style, viewKey(), JSON.stringify(s.programs), JSON.stringify(s.site), T.flags.active ? 'on' : 'idle', pc ? `plates:${platesCoverKey(lctx.doc)}` : 'stale', coverKey(lctx.doc)].join('|');
     },
     build(lctx) {
       if (!shown()) return null;
       const s = T.store.raw();
-      // the blue site outline belongs to the active tool only
-      const group = buildModelGroup(s, { disp: T.derived.display(isDraft()), style: lctx.style, itemFor, showSite: T.flags.active, cover: deckCover(lctx.doc), platesZs: T.flags.active ? null : platesCoverZs(lctx.doc) });
+      const V = appView();
+      // the blue site outline is an edit aid: the active tool only. Nothing else differs between active and inactive.
+      // The floors the Plate Planner units draw are skipped while those units match the massing; out of date, they draw here.
+      const group = buildModelGroup(s, {
+        disp: T.derived.display(isDraft()), style: lctx.style, itemFor, showSite: T.flags.active, cover: deckCover(lctx.doc),
+        platesZs: platesOk(lctx.doc) ? platesCoverZs(lctx.doc) : null, view: { colorBy: V.colorBy, floorLines: V.floorLines },
+      });
       return placeNew(group, lctx);
     },
     always(lctx) { placeBuilt('tower-model', lctx); },
@@ -166,14 +180,6 @@ function syncLayersSoon() {
 function syncHudSoon() {
   if (hudRaf) return;
   hudRaf = requestAnimationFrame(() => { hudRaf = 0; try { T.ctx.refreshHud(); } catch (e) { console.error(e); } });
-}
-
-/* ---------- the scene's sun ---------- */
-function applySun() {
-  const sc = T.ctx.scene;
-  const v = T.store.raw().view;
-  sc.setSun({ az: num(v.sun && v.sun.azimuth, 135), alt: num(v.sun && v.sun.altitude, 40) });
-  sc.setShadows(v.shadows !== false);
 }
 
 /* ---------- metrics and warnings ---------- */
@@ -265,7 +271,6 @@ function onStore(state, info) {
   T.panels.refresh();
   T.prompts.refresh();
   T.select.onStore();
-  applySunIfActive();
   syncLayersSoon();
   syncHudSoon();
   T.gizmoSync();
@@ -280,7 +285,6 @@ function onStore(state, info) {
   if (P.hasDoc() && P.foreignTool() && !P.flags.confirmed) askAboutForeign();
   P.markDirty();
 }
-function applySunIfActive() { if (T.flags.active) applySun(); }
 
 /* ---------- the tool ---------- */
 export default {
@@ -318,6 +322,7 @@ export default {
     store.subscribe(onStore);
     syncModelLayer();
     T.select.bindKeys();
+    offs.push(ctx.bus.on('view:change', () => { try { T.panels.refresh(); } catch (e) { console.error(e); } syncLayersSoon(); }));
     offs.push(ctx.bus.on('selection', (e) => T.select.onShellSelection(e || {})));
     T.select.onChange((list) => {
       if (list.length === 1) { try { T.panels.openItem(list[0]); } catch (e) { /* the card still shows */ } }
@@ -345,8 +350,6 @@ export default {
     T.flags.active = true;
     T.flags.engaged = true;
     T.project.sync();
-    saved = { sun: ctx.scene.sun(), shadows: ctx.scene.shadows ? ctx.scene.shadows() : false };
-    applySun();
     syncModelLayer();
     invalidateLayers();
     makeGizmo();
@@ -362,7 +365,6 @@ export default {
     T.select.disable();
     T.flags.active = false;
     T.project.flush();
-    if (saved) { ctx.scene.setSun({ az: saved.sun.az, alt: saved.sun.alt }); ctx.scene.setShadows(saved.shadows); saved = null; }
     syncModelLayer();
     invalidateLayers();
     T.gizmoSync();
