@@ -208,6 +208,7 @@ function select(item, owner) {
 }
 
 input.onTap((ev) => {
+  if (ctx.section && ctx.section.drawing && ctx.section.drawing()) return;   // drawing a section cut: a tap places a point, it does not select
   const tool = active ? loaded.get(active) : null;
   if (tool && tool.onTap && tool.onTap(ev, ctx)) return;      // the active tool picks its own items first
   const hit = layers.pick(ev.clientX, ev.clientY);
@@ -255,6 +256,23 @@ styleSel.value = siteStyle;
 styleSel.addEventListener('change', () => ctx.setSiteStyle(styleSel.value));
 tb.right.append(styleSel, exportBtn, panelsBtn);
 
+/* Fit the top bar (Fable QA, October 28, 2026): when the full view, zoom, and style groups do not fit, one View menu
+   replaces them ("compact"). When that still does not fit, the tool tabs and the Section button show icons only ("tight"). */
+function fitTopbar() {
+  const bar = tb.center && tb.center.parentElement;
+  if (!bar) return;
+  const root = document.documentElement;
+  const fits = () => bar.scrollWidth <= bar.clientWidth + 1;
+  root.dataset.tb = 'full';
+  if (fits()) return;
+  root.dataset.tb = 'compact';
+  if (fits()) return;
+  root.dataset.tb = 'tight';
+}
+window.addEventListener('resize', () => fitTopbar());
+window.addEventListener('panels:resize', () => fitTopbar());
+new MutationObserver(() => fitTopbar()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-layout'] });
+
 let currentView = 'axon';
 function setView(id) { currentView = id; scene.setView(id); syncTopbar(); }
 function toggleStyle() { scene.setStyle(scene.style() === 'diagram' ? 'model' : 'diagram'); syncTopbar(); }
@@ -273,6 +291,7 @@ function syncTopbar() {
   viewBtns.forEach((b) => b.classList.toggle('on', b.dataset.view === currentView));
   viewCompact.textContent = `View: ${(VIEWS.find((v) => v[0] === currentView) || VIEWS[0])[1]} ▾`;
   styleBtn.classList.toggle('on', scene.style() === 'diagram');
+  fitTopbar();
 }
 
 function openProjectMenu(anchor) {

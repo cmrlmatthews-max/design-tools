@@ -676,6 +676,7 @@ html.sec-dragging, html.sec-dragging * { cursor: row-resize !important; -webkit-
 .stage.has-section .card { bottom: calc(var(--section-h) + 12px); max-height: calc(100% - var(--section-h) - 24px); }
 .stage.has-section .toasts { bottom: calc(var(--section-h) + 16px); }
 .stage.has-section .leftbar { bottom: calc(var(--section-h) + 10px); }
+.sec-btn { gap: 6px; }
 .sec-btn .ico-wrap svg { width: 16px; height: 16px; }
 .seg .sec-btn.drawing { color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
 html[data-layout="sheet"] #tbCenter .seg.sec-seg { display: inline-flex; }
@@ -692,3 +693,16 @@ html[data-layout="sheet"] #tbCenter .seg.sec-seg { display: inline-flex; }
 .sec-flip::before { content: ""; position: absolute; inset: -9px; }
 .sec-flip:hover { background: var(--scene-cut); color: #111; }
 html[data-layout="sheet"] .sec-pane { padding-bottom: 16px; }   /* the sheet overlaps the stage by 16 px */
+
+/* ---- top bar fit (main.js fitTopbar) and left tool bar neighbors (Fable QA, October 28, 2026) ---- */
+.tb-center { flex: 1 0 auto; }
+html[data-tb="compact"] #tbCenter .seg, html[data-tb="tight"] #tbCenter .seg { display: none; }
+html[data-tb="compact"] #tbCenter .seg.sec-seg, html[data-tb="tight"] #tbCenter .seg.sec-seg { display: inline-flex; }
+html[data-tb="compact"] .view-compact, html[data-tb="tight"] .view-compact { display: inline-flex; }
+html[data-tb="tight"] .tool-tab span, html[data-tb="tight"] .sec-btn .sec-btn-text { display: none; }
+html[data-tb="tight"] .tool-tab { padding: 0 8px; }
+html[data-tb="tight"] .view-compact { padding: 0 8px; }
+/* the selection card moves to the right while the left tool bar is open */
+html[data-leftbar="open"] .card { left: auto; right: 12px; }
+/* toasts center in the part of the view beside the left tool bar */
+html[data-leftbar="open"] .toasts { left: calc(50% + 160px); max-width: calc(100% - 344px); }

@@ -495,9 +495,9 @@ export function createSection(ctx, { stage, pane, setView, onLayout } = {}) {
   }
 
   /* ---- top bar button ---- */
-  const button = h('button', { class: 'seg-btn sec-btn', type: 'button', 'aria-pressed': 'false', 'data-tip': 'Draw a section cut in Plan view.', onclick: () => press() },
+  const button = h('button', { class: 'seg-btn sec-btn', type: 'button', 'aria-pressed': 'false', 'aria-label': 'Section', 'data-tip': 'Draw a section cut in Plan view.', onclick: () => press() },
     h('span', { class: 'ico-wrap', html: '<svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h18"/><path d="M5 12V7.5L3 9.5M5 7.5l2 2"/><path d="M19 12V7.5l-2 2M19 7.5l2 2"/><path d="M8 16h8" stroke-dasharray="2 2"/></svg>' }),
-    'Section');
+    h('span', { class: 'sec-btn-text' }, 'Section'));
 
   /* ---- pane ---- */
   const divider = h('div', { class: 'sec-divider', role: 'separator', 'aria-orientation': 'horizontal', 'aria-label': 'Resize the section', tabindex: '0', 'data-tip': 'Drag to resize the section.' });
@@ -624,7 +624,8 @@ export function createSection(ctx, { stage, pane, setView, onLayout } = {}) {
       drawMarker();
     },
   };
-  input.claim(drawHandler, PRIORITY.DRAW);
+  // Above the building move handle (GIZMO): in draw mode a press on the building draws the cut, it does not move the building.
+  input.claim(drawHandler, PRIORITY.GIZMO + 5);
 
   // mouse hover between the two clicks
   const canvas = scene.canvas ? scene.canvas() : null;
@@ -634,16 +635,19 @@ export function createSection(ctx, { stage, pane, setView, onLayout } = {}) {
     if (p) { draft.b = snapB(draft.a, p, ev); drawMarker(); }
   });
 
+  let drawToast = null;
   function startDraw() {
     if (!project.doc()) { Toast.show('Open a project first.'); return; }
     mode = 'draw'; draft = null;
     if (typeof setView === 'function') setView('plan'); else scene.setView('plan');
     if (canvas) canvas.style.cursor = 'crosshair';
-    Toast.show(input.isCoarse() ? 'Drag across the plan to draw the cut, or tap two points. Esc cancels.' : 'Drag across the plan to draw the cut, or click two points. Shift snaps to 15°. Esc cancels.');
+    if (drawToast) drawToast.remove();
+    drawToast = Toast.show(input.isCoarse() ? 'Drag across the plan to draw the cut, or tap two points. Esc cancels.' : 'Drag across the plan to draw the cut, or click two points. Shift snaps to 15°. Esc cancels.');
     applyLayout();
   }
   function stopDraw() {
     mode = null; draft = null;
+    if (drawToast) { drawToast.remove(); drawToast = null; }
     if (canvas) canvas.style.cursor = '';
     applyLayout();
   }
