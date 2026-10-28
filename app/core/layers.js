@@ -353,7 +353,7 @@ export function createLayers({ scene, bus } = {}) {
   }
 
   function levels(doc) {
-    try { return levelsIndex(doc || docOf(lastCtx)).map((l) => ({ key: l.key, z: l.z, name: l.name })); } catch (e) { return []; }
+    try { return levelsIndex(doc || docOf(lastCtx)).map((l) => ({ key: l.key, z: l.z, name: l.name, sources: l.sources })); } catch (e) { return []; }
   }
   function setCut(key) {
     const next = key || null;

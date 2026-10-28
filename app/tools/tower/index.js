@@ -359,6 +359,8 @@ export default {
     T.gizmoSync();
     ctx.layers.sync(ctx);
     if (first) { try { ctx.scene.frameBuilding(); } catch (e) { /* the view stays */ } }
+    // A project with no massing yet: save the tower on screen, so the file and the metrics match what the user sees.
+    try { const d = ctx.project.doc(); if (d && !(d.sections && d.sections.massing)) T.project.flush({ force: true }); } catch (e) { console.error(e); }
     ctx.refreshHud();
   },
 

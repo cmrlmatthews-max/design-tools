@@ -620,3 +620,10 @@ html[data-panels="hidden"] body { grid-template-columns: minmax(0, 1fr) 0; }
 }
 @media (pointer: coarse) { .tip kbd { display: none; } }
 .btn, .seg-btn, .tool-tab, .mark, .panel-head { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+
+/* ---- phone width: keep every top-bar control reachable (QA, October 28, 2026) ---- */
+@media (max-width: 560px) {
+  #tbLeft .btn.icon[aria-label="Undo"], #tbLeft .btn.icon[aria-label="Redo"] { display: none; }
+  .tool-tabs { margin-left: 2px; padding-left: 4px; }
+  .mark { letter-spacing: .08em; }
+}

@@ -32,7 +32,7 @@ export function createShellPanels(ctx, { loaded, activeId }) {
     if (num('massing.gfa') !== null) out.push({ label: 'Gross floor area', value: `${fmtInt(num('massing.gfa'))} sf` });
     if (num('massing.floors') !== null) out.push({ label: 'Floors', value: fmtInt(num('massing.floors')) });
     if (num('massing.height') !== null) out.push({ label: 'Height', value: fmtFtIn(num('massing.height')) });
-    if (num('massing.far') !== null) out.push({ label: 'FAR', value: num('massing.far').toFixed(2) });
+    if (num('massing.far') !== null && num('massing.far') > 0) out.push({ label: 'FAR', value: num('massing.far').toFixed(2) });
     const current = toolOn('plates') && platesCurrent(doc);
     if (current && num('plates.units') !== null) out.push({ label: 'Units', value: fmtInt(num('plates.units')) });
     else if (num('massing.units') !== null) out.push({ label: 'Units (estimate)', value: fmtInt(num('massing.units')) });
@@ -95,8 +95,14 @@ export function createShellPanels(ctx, { loaded, activeId }) {
     if (t && t.warnings) { try { out.push(...(t.warnings(ctx) || [])); } catch (e) { /* a tool error never breaks the panel */ } }
     const doc = ctx.project.doc();
     const SEC_TOOL = { site: 'site', massing: 'tower', plates: 'plates', parking: 'parking', grading: 'grading', facade: 'facade', sun: 'tower' };
-    if (doc) { try { staleFlags(doc).filter((f) => toolOn(SEC_TOOL[f.section] || f.section)).forEach((f) => out.push({ text: f.message, level: 'warn' })); } catch (e) { /* ignore */ } }
+    if (doc) { try { staleFlags(doc).filter((f) => toolOn(SEC_TOOL[f.section] || f.section)).forEach((f) => out.push({ text: plainStale(f), level: 'warn' })); } catch (e) { /* ignore */ } }
     return out;
+  }
+
+  // The app has no Plate Planner button: say what happened, not where to go.
+  function plainStale(f) {
+    if (f.section === 'plates' && /older massing/.test(f.message)) return 'The units were made for an earlier tower. The tower shows every floor until the units are made again.';
+    return String(f.message || '').replace(/ Open the [A-Z][\w ]+ to update (it|them)\./, '');
   }
 
   function buildWarnings(body) {
@@ -117,8 +123,8 @@ export function createShellPanels(ctx, { loaded, activeId }) {
       C.segmented({ label: 'Color by', bind: bind('colorBy'), options: [{ value: 'program', label: 'Program' }, { value: 'zone', label: 'Zone' }] }),
       C.toggle({ label: 'Floor lines', bind: bind('floorLines') }),
       C.toggle({ label: 'Shadows', bind: bind('shadows') }),
-      C.slider({ label: 'Sun azimuth', bind: sunBind('az'), min: 0, max: 360, step: 1, format: (v) => `${Math.round(v)}°` }),
-      C.slider({ label: 'Sun altitude', bind: sunBind('alt'), min: 3, max: 90, step: 1, format: (v) => `${Math.round(v)}°` }),
+      C.slider({ label: 'Sun azimuth', bind: sunBind('az'), min: 0, max: 360, hardMin: 0, hardMax: 360, step: 1, format: (v) => `${Math.round(v)}°` }),
+      C.slider({ label: 'Sun altitude', bind: sunBind('alt'), min: 3, max: 90, hardMin: 3, hardMax: 90, step: 1, format: (v) => `${Math.round(v)}°` }),
     ];
     parts.forEach((p) => body.append(p.el));
     // the color legend of the Diagram style (from the tools that draw colors)
@@ -161,11 +167,6 @@ export function createShellPanels(ctx, { loaded, activeId }) {
     if (entry && entry.ready && !entry.viewOnly && activeId() !== oid) actions.push({ label: `Edit in ${entry.label}`, action: () => openTool(oid) });
     const t = toolOf(oid);
     if (t && t.card) { try { actions.push(...(t.card(item, ctx) || [])); } catch (e) { /* ignore */ } }
-    if (oid === 'plates' && !t) {
-      // The plates tool loads lazily; its only action is a link to its own page.
-      const doc = ctx.project.doc();
-      if (doc) actions.push({ label: 'Open Plate Planner (new page)', action: () => { window.location.href = `../plate/?project=${encodeURIComponent(doc.id)}`; } });
-    }
     if (actions.length) el.append(h('div', { class: 'card-actions' }, ...actions.map((a) => h('button', { class: 'btn', type: 'button', onclick: a.action }, a.label))));
     el.hidden = false;
   }

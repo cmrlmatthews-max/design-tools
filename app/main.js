@@ -26,6 +26,7 @@ const VIEW_TIPS = { axon: 'Three-quarter view from above.', n: 'Look at the nort
 const VIEWS = [['axon', 'Axon', '1'], ['n', 'N', '2'], ['e', 'E', '3'], ['s', 'S', '4'], ['w', 'W', '5'], ['plan', 'Plan', '6']];
 
 /* ---------- core objects ---------- */
+bus.on('notice', ({ text, kind }) => Toast.show(text, { kind }));   // first, so startup notices show
 const project = createProjectStore({ bus });
 const scene = createScene($('view'), { bus });
 const input = createInput(scene, { bus });
@@ -345,6 +346,7 @@ async function loadForProject() {
 
 function onProjectOpen() {
   const doc = project.doc();
+  if (!doc && active) activate(null);   // no project: no tool stays open with work that cannot be saved
   frame.setShift(doc ? frame.shiftFor(doc) : { x: 0, y: 0, z: 0 });
   loadForProject();
   loaded.forEach((t) => { if (t.onProject) { try { t.onProject({ doc, keys: null, source: 'open' }, ctx); } catch (e) { console.error(e); } } });
@@ -369,7 +371,6 @@ bus.on('view:change', () => { syncLayers(); shell.refresh(['view']); });
 bus.on('style:change', () => { syncLayers(); syncTopbar(); shell.refresh(['view']); });
 bus.on('layers:change', () => { syncLayers(); shell.refresh(['layers']); });
 bus.on('frame:shift', () => syncLayers());
-bus.on('notice', ({ text, kind }) => Toast.show(text, { kind }));
 
 /* ---------- view insets: frame views in the area the panels leave free ---------- */
 function syncInsets() {
