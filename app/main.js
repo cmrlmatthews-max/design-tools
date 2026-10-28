@@ -42,6 +42,34 @@ let selection = null;            // { item, owner } or null
 const SITE_STYLE_KEY = 'cmrlm.app.siteStyle';
 let siteStyle = (() => { try { return localStorage.getItem(SITE_STYLE_KEY) || 'solid'; } catch (e) { return 'solid'; } })();
 
+/* ---------- app-wide view settings (Cade, October 28, 2026): one look in every tool ---------- */
+const VIEW_KEY = 'cmrlm.app.view';
+const VIEW_DEFAULT = { colorBy: 'program', floorLines: true, shadows: true, sun: { az: 140, alt: 40 } };
+let viewSettings = (() => {
+  try {
+    const v = JSON.parse(localStorage.getItem(VIEW_KEY) || 'null');
+    if (v && typeof v === 'object') return { ...VIEW_DEFAULT, ...v, sun: { ...VIEW_DEFAULT.sun, ...(v.sun || {}) } };
+  } catch (e) { /* blocked storage: defaults */ }
+  return { ...VIEW_DEFAULT, sun: { ...VIEW_DEFAULT.sun } };
+})();
+const viewApi = {
+  get: () => ({ ...viewSettings, sun: { ...viewSettings.sun } }),
+  key: () => `${viewSettings.colorBy}|${viewSettings.floorLines ? 1 : 0}`,
+  set(patch = {}) {
+    const next = { ...viewSettings, ...patch, sun: { ...viewSettings.sun, ...(patch.sun || {}) } };
+    if (!['program', 'zone'].includes(next.colorBy)) next.colorBy = 'program';
+    next.floorLines = !!next.floorLines; next.shadows = !!next.shadows;
+    viewSettings = next;
+    try { localStorage.setItem(VIEW_KEY, JSON.stringify(viewSettings)); } catch (e) { /* keep it for this visit */ }
+    applyView();
+    bus.emit('view:change', { view: viewApi.get() });
+  },
+};
+function applyView() {
+  scene.setShadows(viewSettings.shadows);
+  scene.setSun(viewSettings.sun);
+}
+
 const ctx = {
   THREE, bus, scene, layers, ground, input, keys, project, frame,
   ui: { h, ICONS, Toast, Pop, Controls, confirmDialog },
@@ -52,6 +80,7 @@ const ctx = {
   refreshPanels: () => refreshPanels(),
   refreshHud: () => shell.refresh(['metrics', 'warnings']),
   activeTool: () => active,
+  view: viewApi,
   siteStyle: () => siteStyle,
   setSiteStyle: (v) => {
     if (!['solid', 'glass', 'wireframe'].includes(v) || v === siteStyle) return;
@@ -62,8 +91,14 @@ const ctx = {
   tool: (id) => loaded.get(id) || null,
 };
 
-async function loadTool(id) {
-  if (loaded.has(id)) return loaded.get(id);
+const loading = new Map();       // id -> promise while a tool loads (two callers share one load)
+function loadTool(id) {
+  if (loaded.has(id)) return Promise.resolve(loaded.get(id));
+  if (!loading.has(id)) loading.set(id, loadToolNow(id).finally(() => loading.delete(id)));
+  return loading.get(id);
+}
+
+async function loadToolNow(id) {
   const entry = TOOLS.find((t) => t.id === id);
   if (!entry) return null;
   try {
@@ -277,9 +312,33 @@ function framingBoxes() {
 }
 framingBoxes();
 
+/** The tools whose drawers the open project needs (one look in every tool: the tool's own drawer draws its part). */
+function toolsFor(doc) {
+  const sec = (k) => (doc && doc.sections && doc.sections[k]) || null;
+  const out = [];
+  if (sec('site')) out.push('site');
+  const mass = sec('massing');
+  if (mass && mass.tool === 'tower') out.push('tower');
+  const podiumParking = !!(mass && mass.derived && Array.isArray(mass.derived.levels) && mass.derived.levels.some((l) => l && l.zone === 'podium' && l.program === 'parking'));
+  if (sec('parking') || podiumParking) out.push('parking');
+  if (sec('grading')) out.push('grading');
+  return out;
+}
+
+/** Loads the drawers of the open project in the background (no activate). */
+async function loadForProject() {
+  const doc = project.doc();
+  const ids = toolsFor(doc).filter((id) => !loaded.has(id));
+  if (!ids.length) return;
+  await Promise.all(ids.map((id) => loadTool(id)));
+  syncLayers();
+  shell.refresh(['metrics', 'warnings', 'layers']);
+}
+
 function onProjectOpen() {
   const doc = project.doc();
   frame.setShift(doc ? frame.shiftFor(doc) : { x: 0, y: 0, z: 0 });
+  loadForProject();
   loaded.forEach((t) => { if (t.onProject) { try { t.onProject({ doc, keys: null, source: 'open' }, ctx); } catch (e) { console.error(e); } } });
   syncLayers();
   scene.setView(currentView, { animate: false });
@@ -297,7 +356,9 @@ bus.on('project:change', (evt) => {
   shell.refresh(['metrics', 'warnings', 'layers']);
   syncTopbar();
 });
-bus.on('style:change', () => { syncLayers(); syncTopbar(); });
+bus.on('project:change', () => { loadForProject(); });
+bus.on('view:change', () => { syncLayers(); shell.refresh(['view']); });
+bus.on('style:change', () => { syncLayers(); syncTopbar(); shell.refresh(['view']); });
 bus.on('layers:change', () => { syncLayers(); shell.refresh(['layers']); });
 bus.on('frame:shift', () => syncLayers());
 bus.on('notice', ({ text, kind }) => Toast.show(text, { kind }));
@@ -317,6 +378,7 @@ window.addEventListener('resize', () => { syncInsets(); scene.resize(); });
 window.addEventListener('panels:resize', () => { syncInsets(); scene.resize(); });
 
 /* ---------- start ---------- */
+applyView();
 syncInsets();
 refreshPanels();
 syncTopbar();

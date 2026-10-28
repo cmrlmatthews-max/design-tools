@@ -89,7 +89,27 @@ export function createShellPanels(ctx, { loaded, activeId }) {
 
   /* ---------- groups ---------- */
   const metricsGroup = () => ({ id: 'shell-metrics', title: 'Metrics', build: buildMetrics, open: true, owner: 'shell' });
+  /* ---------- view: one look in every tool (Cade, October 28, 2026) ---------- */
+  function buildView(body) {
+    const C = ctx.ui.Controls;
+    const V = () => ctx.view.get();
+    const bind = (key) => ({ get: () => V()[key], set: (v) => ctx.view.set({ [key]: v }), commit: () => {} });
+    const sunBind = (key) => ({ get: () => V().sun[key], set: (v) => ctx.view.set({ sun: { [key]: v } }), commit: () => {} });
+    const style = { get: () => ctx.scene.style(), set: (v) => ctx.scene.setStyle(v), commit: () => {} };
+    const parts = [
+      C.segmented({ label: 'Style', bind: style, options: [{ value: 'model', label: 'Model' }, { value: 'diagram', label: 'Diagram' }] }),
+      C.segmented({ label: 'Color by', bind: bind('colorBy'), options: [{ value: 'program', label: 'Program' }, { value: 'zone', label: 'Zone' }] }),
+      C.toggle({ label: 'Floor lines', bind: bind('floorLines') }),
+      C.toggle({ label: 'Shadows', bind: bind('shadows') }),
+      C.slider({ label: 'Sun azimuth', bind: sunBind('az'), min: 0, max: 360, step: 1, format: (v) => `${Math.round(v)}°` }),
+      C.slider({ label: 'Sun altitude', bind: sunBind('alt'), min: 3, max: 90, step: 1, format: (v) => `${Math.round(v)}°` }),
+    ];
+    parts.forEach((p) => body.append(p.el));
+    body.append(h('p', { class: 'help' }, 'These settings apply in every tool. Color by applies in the Diagram style.'));
+  }
+
   const groups = () => [
+    { id: 'shell-view', title: 'View', build: buildView, open: false, owner: 'shell' },
     { id: 'shell-layers', title: 'Layers', build: buildLayers, open: !activeId(), owner: 'shell' },
     { id: 'shell-warnings', title: `Warnings${countLabel(warningRows().length)}`, build: buildWarnings, open: false, owner: 'shell' },
   ];
@@ -97,7 +117,7 @@ export function createShellPanels(ctx, { loaded, activeId }) {
 
   function refresh(which) {
     if (!which || which.includes('warnings')) { try { ctx.panelsApi && ctx.panelsApi.setTitle('shell-warnings', `Warnings${countLabel(warningRows().length)}`); } catch (e) { /* panel not shown */ } }
-    const ids = { metrics: 'shell-metrics', layers: 'shell-layers', warnings: 'shell-warnings' };
+    const ids = { metrics: 'shell-metrics', layers: 'shell-layers', warnings: 'shell-warnings', view: 'shell-view' };
     (which || Object.keys(ids)).forEach((k) => { try { refreshPanel(ids[k]); } catch (e) { /* panel not shown */ } });
   }
   let refreshPanel = () => {};

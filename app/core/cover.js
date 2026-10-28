@@ -73,3 +73,15 @@ export function platesCoverKey(doc) {
   const zs = platesCoverZs(doc);
   return zs.length ? zs.map((z) => Math.round(z * 10)).join(',') : 'none';
 }
+
+/** True when the Plate Planner units were made from the current massing (they draw; the massing skips those floors).
+ *  False when there are no plates or the massing changed after them (the massing draws all floors; units hide). */
+export function platesCurrent(doc) {
+  const plates = getSection(doc, 'plates');
+  const mass = getSection(doc, 'massing');
+  if (!plates || !mass || !plates.derived || !Array.isArray(plates.derived.levels) || !plates.derived.levels.length) return false;
+  const ms = (v) => { const t = Date.parse(v); return Number.isFinite(t) ? t : null; };
+  const made = ms(plates.derived.massingUpdatedAt) ?? ms(plates.updatedAt);
+  const now = ms(mass.updatedAt);
+  return made !== null && now !== null && made >= now;
+}
