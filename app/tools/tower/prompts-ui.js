@@ -5,12 +5,18 @@
    iPad bottom sheet. Not ported (Later): the custom-prompt editor and "My prompts".
    ========================================================================== */
 import { PROMPT_FIELDS, PROMPTS, fillPrompt, heroFor } from '../../../src/tower/prompts.js';
+import { Units } from '../../core/ui-kit.js';
 import { CONFIG, num } from './state.js';
 
 const FIELD_ORDER = ['time', 'material', 'location', 'season'];
 const ROW_LABELS = { time: 'Time', material: 'Material', location: 'Context', season: 'Season' };
 const AUTO = [['floors', 'Floors'], ['height', 'Height'], ['program', 'Program'], ['podium', 'Podium'], ['form', 'Form']];
 const FIELD_KEYS = Object.keys(PROMPT_FIELDS);
+/** The prompts shown up front: the hero, two times of day, a material, a context and a camera. The rest sit under "More prompts". */
+const FEATURED = ['hero-render', 'time-golden-hour', 'time-blue-hour', 'material-glass-curtain-wall', 'context-downtown', 'camera-aerial-300m'];
+const CARET = '<svg class="caret" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 5l4 4 4-4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+/** The description as shown: the library text, without the personal tag line. */
+const descText = (p) => String(p.description || '').replace(/\s*Cade['\u2019]s standard\.?/gi, '').trim();
 const SHAPE_WORDS = { rect: 'rectangular', square: 'rectangular', circle: 'round', ellipse: 'elliptical', triangle: 'triangular', L: 'L-shaped', U: 'U-shaped', polygon: 'custom-shaped' };
 const CROWN_WORDS = { none: 'a flat roof', flat: 'a flat roof', stepped: 'a stepped crown', sloped: 'a sloped crown', spire: 'a spire', screen: 'a rooftop screen' };
 const PROGRAM_WORDS = { residential: 'residential', hotel: 'hotel', office: 'office' };
@@ -70,7 +76,7 @@ export function createPrompts(T) {
   const { ctx } = T;
   const { h, Toast } = ctx.ui;
   const prefs = readPrefs();
-  const ui = { body: null, preview: null, count: null, chips: null, copyBtn: null, saveBtn: null, busy: false, raf: 0 };
+  const ui = { body: null, preview: null, count: null, chips: null, copyBtn: null, saveBtn: null, busy: false, raf: 0, moreOpen: false };
   const save = () => writePrefs(prefs);
 
   const currentAuto = () => autoValues(T.store.raw(), T.derived.get().metrics);
@@ -141,14 +147,28 @@ export function createPrompts(T) {
   /* ---- DOM ---- */
   function promptRow() {
     const cur = current();
-    const chips = h('div', { class: 'chips', role: 'group', 'aria-label': 'Prompt', id: 'tower-aiPromptRow' });
-    for (const p of PROMPTS) {
-      chips.append(h('button', {
-        class: 'chip', type: 'button', 'aria-pressed': String(!!cur && cur.id === p.id), 'data-id': p.id,
-        onclick: () => { prefs.selected = p.id; save(); render(); },
-      }, p.title));
+    const chip = (p) => h('button', {
+      class: 'chip', type: 'button', 'aria-pressed': String(!!cur && cur.id === p.id), 'data-id': p.id,
+      onclick: () => { prefs.selected = p.id; save(); render(); },
+    }, p.title);
+    const top = PROMPTS.filter((p) => FEATURED.includes(p.id)).sort((a, b) => FEATURED.indexOf(a.id) - FEATURED.indexOf(b.id));
+    const rest = PROMPTS.filter((p) => !FEATURED.includes(p.id));
+    const chips = h('div', { class: 'chips', role: 'group', 'aria-label': 'Prompt', id: 'tower-aiPromptRow' }, top.map(chip));
+    const row = h('div', { class: 'tower-ai-row' }, h('div', { class: 'label' }, 'Prompt'), chips);
+    if (rest.length) {
+      // the list stays open when the chosen prompt is in it, and keeps the last choice while you pick
+      let open = !!cur && rest.some((p) => p.id === cur.id) || ui.moreOpen === true;
+      const area = h('div', { class: 'chips more', role: 'group', 'aria-label': 'More prompts', id: 'tower-aiMoreRow', hidden: !open }, rest.map(chip));
+      const btn = h('button', { class: 'more-btn', type: 'button', id: 'tower-aiMore', 'aria-expanded': String(open), html: `<span>${open ? 'Fewer prompts' : 'More prompts'}</span>${CARET}` });
+      btn.addEventListener('click', () => {
+        open = !open; ui.moreOpen = open;
+        btn.setAttribute('aria-expanded', String(open));
+        btn.firstChild.textContent = open ? 'Fewer prompts' : 'More prompts';
+        area.hidden = !open;
+      });
+      row.append(btn, area);
     }
-    return h('div', { class: 'tower-ai-row' }, h('div', { class: 'label' }, 'Prompt'), chips);
+    return row;
   }
   function fieldsEl(prompt) {
     const wrap = h('div', { class: 'tower-ai-fields' });
@@ -191,7 +211,7 @@ export function createPrompts(T) {
   function updateChips() {
     if (!ui.chips) return;
     const a = currentAuto();
-    for (const [k] of AUTO) if (ui.chips[k]) ui.chips[k].textContent = a[k];
+    for (const [k] of AUTO) if (ui.chips[k]) ui.chips[k].textContent = k === 'height' ? Units.formatFeetInches(T.derived.get().metrics.totalHeight) : a[k];
   }
   function updatePreview() {
     if (!ui.preview) return;
@@ -206,7 +226,7 @@ export function createPrompts(T) {
     ui.body.append(promptRow());
     const p = current();
     if (p) {
-      if (p.description) ui.body.append(h('p', { class: 'help', id: 'tower-aiDesc' }, p.description));
+      if (descText(p)) ui.body.append(h('p', { class: 'help', id: 'tower-aiDesc' }, descText(p)));
       if ((p.uses || []).length) ui.body.append(fieldsEl(p));
       ui.body.append(autoEl(), previewEl());
     }

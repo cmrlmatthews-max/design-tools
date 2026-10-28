@@ -1,8 +1,8 @@
 /* ==========================================================================
    TOWER: panels
-   Port of the tabs in build/tower/08_ui.js. The four tabs become four panel groups (Form, Program, Site, View);
+   Port of the tabs in build/tower/08_ui.js. The tabs become three panel groups (Form, Program, Site);
    each holds accordion sections built with the shared Controls kit. The prompt panel is in prompts-ui.js.
-   Not ported: the Sun Study section (color, floor lines, shadows and sun are app-wide, in the shell View panel), image overlay choices, typed-base UI polish, the pin button.
+   Not ported: the View tab (the app has its own View and Layers panels; snap and the envelope toggle sit in the Editing section of the Form), image overlay choices, typed-base UI polish, the pin button.
    ========================================================================== */
 import { Units } from '../../core/ui-kit.js';
 import { CONFIG, num, clamp, deepClone, defaultSegment, surroundBlocks, unitBreakdown } from './state.js';
@@ -105,7 +105,7 @@ export function createPanels(T) {
     const menuBtn = h('button', { class: 'btn outline sm', type: 'button', id: 'tower-optionMenu', 'aria-haspopup': 'true', onclick: (e) => Pop.open(e.currentTarget, T.options.menuItems()) }, 'Options and presets');
     const saveBtn = h('button', { class: 'btn solid sm', type: 'button', id: 'tower-optionSave', onclick: () => T.options.save() }, 'Save');
     const dot = h('span', { class: 'help', id: 'tower-optionDirty', style: 'margin:0' });
-    const sync = () => { dot.textContent = T.options.dirty() ? 'Unsaved changes.' : 'Saved.'; };
+    const sync = () => { dot.textContent = T.options.dirty() ? 'Not saved as an option.' : 'Saved as an option.'; };
     swatchSyncs.push(sync); sync();
     // one listener for the Option section: a rebuild replaces the last one
     if (offOption) offOption();
@@ -137,7 +137,7 @@ export function createPanels(T) {
         ]).el,
       ],
       more: [C.when(on, [
-        C.label('Offset from the site center'),
+        C.label('Podium offset'),
         C.group(els([lenF('Offset x (east)', 'podium.offset.x', { hardMin: -MAXD }), lenF('Offset y (north)', 'podium.offset.y', { hardMin: -MAXD })])),
         sel('Ground floor program', 'podium.program', programOptions()),
         sel('Upper floors program', 'podium.upperProgram', programOptions()),
@@ -308,13 +308,12 @@ export function createPanels(T) {
   }
 
   /* ==================================================================== SITE */
-  const NO_SITE_HELP = 'Unlimited: no site line, setbacks, or site checks. Pick Rectangle or Polygon to test a real site.';
+  const NO_SITE_HELP = 'Unlimited: no lot line, setbacks, or lot checks. Pick Rectangle or Polygon to test a real zoning lot.';
   const hasSiteNow = () => get('site.shape') !== 'none';
 
   function projectSection() {
     const P = T.project;
     const line = h('div', { class: 'help', id: 'tower-projLine' });
-    const ffe = h('div', { class: 'help', id: 'tower-ffeNote' });
     const ctxNote = h('span', { class: 'help', style: 'margin:0', id: 'tower-ctxSiteNote' });
     const baseLine = h('p', { class: 'help', id: 'tower-baseLine' });
     const ft = (v) => `${(Math.round(v * 10) / 10).toLocaleString('en-US', { maximumFractionDigits: 1 })} ft`;
@@ -322,10 +321,6 @@ export function createPanels(T) {
       const doc = ctx.project.doc();
       const info = P.siteInfo();
       line.textContent = doc ? `Project “${doc.name}”. ${info ? `Site: ${Units.formatFeetInches(info.size)} square.` : 'No site in this project.'}` : '';
-      const tier = P.gradingFfe();
-      ffe.textContent = !doc ? '' : tier
-        ? `Grading Sketch sets the ground floor at ${Units.formatFeetInches(tier.ffe)}. The other tools read that height; the base elevation below stays editable.`
-        : 'The base elevation below is the ground floor.';
       const n = (store.raw().context.blocks || []).filter((b) => b && b.site).length;
       ctxNote.textContent = store.raw().context.fromSite ? `${n} block${n === 1 ? '' : 's'} from the site.` : '';
       const g = P.groundUnderFootprint();
@@ -336,10 +331,9 @@ export function createPanels(T) {
     const modeRow = C.when(() => { modeBtns.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.baseMode === P.baseMode()))); return true; },
       [h('div', { class: 'ctl' }, h('div', { class: 'ctl-label' }, 'Base elevation'), h('div', { class: 'chips', role: 'group', 'aria-label': 'Base elevation mode', id: 'tower-baseModeChips' }, modeBtns))]);
     const keep = C.toggle({ label: 'Keep manual blocks', bind: { get: () => P.flags.keepManual, set: (v) => { P.flags.keepManual = !!v; C.refreshAll(); }, commit: () => {} } });
-    const nameCtl = C.text({ label: 'Option name', bind: { get: () => get('name') || '', set: (v) => T.options.rename(v), commit: () => {} }, maxLength: 60 });
     return section('project', 'Project site', {
       children: [
-        line, nameCtl.el,
+        line,
         C.label('Placement of the tower in the project'),
         C.group(els([lenF('X (east)', 'placement.x', { hardMin: -1e6, hardMax: 1e6 }), lenF('Y (north)', 'placement.y', { hardMin: -1e6, hardMax: 1e6 })])),
         degS('Rotation (5 degree steps)', 'placement.rotation', -180, 180, { step: 5, hardMin: -360, hardMax: 360 }).el,
@@ -347,16 +341,14 @@ export function createPanels(T) {
         C.when(() => P.baseMode() === 'follow', [baseLine]).el,
         C.when(() => P.baseMode() === 'typed', [lenF('Base elevation (ft)', 'placement.baseZ', { hardMin: -1e5, hardMax: 1e5, step: 0.5 })]).el,
         C.help('Follow ground sets the base to the lowest ground under the building. Typed keeps the value you enter.'),
-        ffe,
         C.when(() => P.hasSite(), [
           h('div', { class: 'add-row' }, C.button('Center on site', () => P.centerOnSite()), h('span', { class: 'help', style: 'margin:0' }, 'Puts the tower at the site center and its ground floor at the ground there.')),
-          C.label('Neighbors from the Site Model'),
+          C.label('Neighbors from the project site'),
           C.slider({ label: 'Radius around the tower', bind: bs('context.radius'), min: 100, max: 2000, step: 50, hardMin: 50, hardMax: 5000, format: Units.formatFeetInches, parse: Units.parseLength, inputMode: 'text' }),
           h('div', { class: 'add-row' }, C.button('Context from site', () => P.contextFromSite()), ctxNote),
-          keep,
-          C.toggle({ label: 'Show the site neighbors as blocks', bind: bs('context.show') }),
         ]).el,
       ],
+      more: [C.when(() => P.hasSite(), [keep]).el],
     }, { when: () => P.hasDoc() });
   }
 
@@ -374,12 +366,12 @@ export function createPanels(T) {
       },
       commit: () => {},
     };
-    return section('site', 'Site', {
+    return section('site', 'Zoning lot', {
       children: els([
         sel('Shape', null, opts([['none', 'Unlimited'], ['rect', 'Rectangle'], ['polygon', 'Polygon']]), shapeBind),
         C.when(() => get('site.shape') === 'none', [C.help(NO_SITE_HELP)]),
         C.when(() => get('site.shape') === 'rect', [lenS('Width', 'site.width', 50, 600), lenS('Depth', 'site.depth', 50, 600)]),
-        C.when(() => get('site.shape') === 'polygon', [C.points({ label: 'Site corners (x, y in feet)', bind: bs('site.points'), need: 3, needText: 'Needs at least 3 points. Until then the rectangle is used.' })]),
+        C.when(() => get('site.shape') === 'polygon', [C.points({ label: 'Lot corners (x, y in feet)', bind: bs('site.points'), need: 3, needText: 'Needs at least 3 points. Until then the rectangle is used.' })]),
       ]),
     });
   }
@@ -390,7 +382,7 @@ export function createPanels(T) {
           lenF('Front (south)', 'site.setbacks.front', { hardMin: 0 }), lenF('Back (north)', 'site.setbacks.back', { hardMin: 0 }),
           lenF('Left (west)', 'site.setbacks.left', { hardMin: 0 }), lenF('Right (east)', 'site.setbacks.right', { hardMin: 0 }),
         ])),
-        C.help('The tower must stay inside the site shrunk by these distances.'),
+        C.help('The tower must stay inside the zoning lot shrunk by these distances.'),
       ]),
     }, { when: hasSiteNow });
   }
@@ -426,79 +418,50 @@ export function createPanels(T) {
     });
     return section('context', 'Context blocks', {
       children: els([
-        C.help('Neighboring buildings, drawn for scale. They never change any number. Show or hide them in the View panel.'),
+        C.help('Neighboring buildings, drawn for scale. They never change any number. Show or hide them in the Layers panel.'),
         list,
         h('div', { class: 'add-row' }, C.button('Surround', () => {
           store.set('context.blocks', surroundBlocks(store.raw()), { live: false });
-          if (!get('context.show')) store.set('context.show', true, { live: false });
-        }), h('span', { class: 'help', style: 'margin:0' }, 'One block on each side of the site (around the building when there is no site).')),
+        }), h('span', { class: 'help', style: 'margin:0' }, 'One block on each side of the zoning lot (around the building when there is no lot).')),
       ]),
     }, { open: true });
   }
 
-  /* ==================================================================== VIEW */
-  const appView = () => (ctx.view && ctx.view.get()) || { colorBy: 'program', floorLines: true, shadows: true, sun: { az: 140, alt: 40 } };
-  function legendEl() {
-    const box = h('div', { class: 'tower-legend', id: 'tower-legend', hidden: true });
-    const sync = () => {
-      const v = appView();
-      const d = T.derived.get();
-      const diagram = ctx.scene.style() === 'diagram';
-      const plates = d.plates || [];
-      const used = plates.filter((p) => !p.void && p.polygons && p.polygons.length);
-      const rows = [];
-      if (v.colorBy === 'program') {
-        const seen = new Set(used.filter((p) => p.outsideEnvelopeArea <= 1).map((p) => p.program));
-        for (const k of Object.keys(CONFIG.programs)) if (seen.has(k)) rows.push([progColor(k), CONFIG.programs[k].label]);
-      } else {
-        const seen = new Set(used.filter((p) => p.outsideEnvelopeArea <= 1).map((p) => p.zone));
-        for (const z of ['podium', 'tower', 'mechanical']) if (seen.has(z)) rows.push([CONFIG.zoneColors[z], z[0].toUpperCase() + z.slice(1)]);
-      }
-      if ((d.solids || []).some((x, i) => !(d.solidsOutside && d.solidsOutside[i]))) rows.push([CONFIG.zoneColors.crown, 'Crown']);
-      if (used.some((p) => p.outsideEnvelopeArea > 1) || (d.solidsOutside || []).some(Boolean)) rows.push([CONFIG.outsideColor, 'Outside envelope']);
-      box.hidden = !diagram || !rows.length;
-      const key = JSON.stringify([rows, v.colorBy]);
-      if (box.dataset.key === key) return;
-      box.dataset.key = key;
-      box.textContent = '';
-      box.append(h('div', { class: 'label' }, v.colorBy === 'program' ? 'Program colors' : 'Zone colors'));
-      for (const [color, text] of rows) box.append(h('div', { class: 'tower-lg-row' }, h('span', { class: 'sw', style: `background:${color}` }), h('span', null, text)));
-    };
-    swatchSyncs.push(sync); sync();
-    return box;
+  /* ================================================================ LEGEND */
+  /** The colors the Diagram style uses: [{ label, color }], or null in the Model style. The shell View panel shows it. */
+  function legendRows(lctx) {
+    const sc = (lctx && lctx.scene) || ctx.scene;
+    if (!sc || sc.style() !== 'diagram') return null;
+    const v = (lctx && lctx.view && lctx.view.get()) || (ctx.view && ctx.view.get()) || { colorBy: 'program' };
+    const d = T.derived.get();
+    const used = (d.plates || []).filter((p) => !p.void && p.polygons && p.polygons.length);
+    const inside = used.filter((p) => p.outsideEnvelopeArea <= 1);
+    const rows = [];
+    if (v.colorBy === 'program') {
+      const seen = new Set(inside.map((p) => p.program));
+      for (const k of Object.keys(CONFIG.programs)) if (seen.has(k)) rows.push({ label: CONFIG.programs[k].label, color: progColor(k) });
+    } else {
+      const seen = new Set(inside.map((p) => p.zone));
+      for (const z of ['podium', 'tower', 'mechanical']) if (seen.has(z)) rows.push({ label: z[0].toUpperCase() + z.slice(1), color: CONFIG.zoneColors[z] });
+    }
+    if ((d.solids || []).some((x, i) => !(d.solidsOutside && d.solidsOutside[i]))) rows.push({ label: 'Crown', color: CONFIG.zoneColors.crown });
+    if (used.some((p) => p.outsideEnvelopeArea > 1) || (d.solidsOutside || []).some(Boolean)) rows.push({ label: 'Outside envelope', color: CONFIG.outsideColor });
+    return rows.length ? rows : null;
   }
-  function displaySection() {
-    return section('display', 'Display', {
-      children: els([
-        legendEl(),
-        C.help('Use Model or Diagram in the top bar to change the style. Color, floor lines, shadows and sun are in the View panel of the app.'),
-      ]),
-    }, { open: true });
-  }
-  function sceneSection() {
-    return section('scene', 'Context and envelope', {
-      children: els([
-        C.toggle({ label: 'Show zoning envelope', bind: bs('view.envelope') }),
-        C.toggle({ label: 'Show context blocks', bind: bs('context.show') }),
-        C.help('Edit the context blocks in the Site panel.'),
-        C.segmented({
-          label: 'Neighbor buildings', options: opts([['solid', 'Solid'], ['glass', 'Glass'], ['wireframe', 'Wireframe']]),
-          bind: { get: () => (ctx.siteStyle ? ctx.siteStyle() : 'solid'), set: (v) => { if (ctx.setSiteStyle) ctx.setSiteStyle(v); }, commit() {} },
-        }),
-      ]),
-    }, { open: true });
-  }
-  function snapSection() {
+
+  function editingSection() {
     const snap = (patch) => store.set('view.snap', { ...(get('view.snap') || {}), ...patch }, { live: false });
     const gridChips = [5, 10].map((g) => h('button', { class: 'chip', type: 'button', 'data-grid': String(g), 'aria-pressed': 'false', onclick: () => { snap({ grid: g }); C.refreshAll(); } }, `${g} ft`));
-    return section('snap', 'Snap', {
+    return section('editing', 'Editing', {
       children: [
+        C.toggle({ label: 'Show zoning envelope', bind: bs('view.envelope') }).el,
+        C.help('The envelope draws when a zoning lot is set (Site and placement panel).'),
         C.toggle({ label: 'Snap while dragging', bind: { get: () => (get('view.snap') || {}).on !== false, set: (v) => snap({ on: !!v }), commit: () => {} } }).el,
         C.when(() => { const g = (get('view.snap') || {}).grid === 10 ? 10 : 5; gridChips.forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.grid) === g))); return true; },
           [h('div', { class: 'ctl' }, h('div', { class: 'ctl-label' }, 'Grid'), h('div', { class: 'chips', role: 'group', 'aria-label': 'Grid size' }, gridChips))]).el,
-        C.help('Snaps to the grid, the site, setbacks and the edges and centers of other pieces. Hold Option (Alt) while dragging to skip it.'),
+        C.help('Snaps to the grid, the zoning lot, setbacks and the edges and centers of other pieces. Hold Option (Alt) while dragging to skip it.'),
       ],
-    });
+    }, { open: true });
   }
 
   /* ================================================================== builders */
@@ -510,10 +473,9 @@ export function createPanels(T) {
     C.refreshAll();
     allSyncs().forEach((f) => { try { f(); } catch (e) { console.error(e); } });
   };
-  const form = host('form', () => [optionSection(), podiumSection(), segmentsSection(), movesSection(), carvesSection(), crownSection()]);
+  const form = host('form', () => [optionSection(), podiumSection(), segmentsSection(), movesSection(), carvesSection(), crownSection(), editingSection()]);
   const program = host('program', () => [programsSection(), targetsSection()]);
   const site = host('site', () => [projectSection(), siteSection(), setbacksSection(), heightSection(), contextSection()]);
-  const view = host('view', () => [displaySection(), sceneSection(), snapSection()]);
 
   /** Switches to the section that holds an item, opens its row, and scrolls it into view. */
   const ITEM_MAP = { segment: ['segments', 'segments'], podium: ['podium'], crown: ['crown'], carve: ['carves', 'carves'], context: ['context', 'context'] };
@@ -535,7 +497,7 @@ export function createPanels(T) {
     C.refreshAll();
     allSyncs().forEach((f) => { try { f(); } catch (e) { console.error(e); } });
   }
-  return { form, program, site, view, refresh, openItem, sections, lists, controls: C, syncCount: () => allSyncs().length };
+  return { form, program, site, legendRows, refresh, openItem, sections, lists, controls: C, syncCount: () => allSyncs().length };
 }
 
 export { unitBreakdown };

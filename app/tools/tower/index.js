@@ -9,7 +9,7 @@
      select.js   selection, five handles, snapping, copy and delete
      project.js  placement, base elevation, context from site, the 'massing' section
      options.js  saved options, presets, autosave
-     panels.js   Form, Program, Site and View panels
+     panels.js   Form, Program and Site panels (and the Diagram legend)
      prompts-ui.js  the AI prompt panel
    Live layers: 'tower-model' (replaces the derived 'massing' twin), 'tower-context', 'tower-envelope'.
    ========================================================================== */
@@ -131,17 +131,17 @@ function invalidateLayers() {
 function towerLayers(ctx) {
   return [
     {
-      id: 'tower-context', label: 'Tower context blocks', order: 21, defaultOn: true,
+      id: 'tower-context', label: 'Context blocks', order: 21, defaultOn: true,
       key(lctx) {
         if (!shown()) return 'off';
         const s = T.store.raw();
         const skip = T.project.hasSite() && ctx.layers.isOn('site-neighbors');
-        return [s.context.show ? 1 : 0, JSON.stringify(s.context.blocks), skip ? 1 : 0, lctx.style].join('|');
+        return [JSON.stringify(s.context.blocks), skip ? 1 : 0, lctx.style].join('|');
       },
       build(lctx) {
         if (!shown()) return null;
         const s = T.store.raw();
-        if (!s.context.show || !(s.context.blocks || []).length) return null;
+        if (!(s.context.blocks || []).length) return null;   // on or off: the Layers panel
         const skip = T.project.hasSite() && ctx.layers.isOn('site-neighbors');
         return placeNew(buildContextGroup(s, { style: lctx.style, skipSite: skip, itemFor }), lctx);
       },
@@ -150,6 +150,7 @@ function towerLayers(ctx) {
     },
     {
       id: 'tower-envelope', label: 'Zoning envelope', order: 22, defaultOn: true,
+      listed: false,       // on or off comes from the Editing toggle in the Tower form; the shell skips unlisted defs in the Layers list
       key() {
         if (!shown() || !T.flags.active) return 'inactive';      // the envelope shows only while the tower is the active tool
         const s = T.store.raw();
@@ -376,7 +377,6 @@ export default {
       { id: 'tower-form', title: 'Tower form', build: (body) => T.panels.form(body), open: true },
       { id: 'tower-program', title: 'Program', build: (body) => T.panels.program(body), open: false },
       { id: 'tower-site', title: 'Site and placement', build: (body) => T.panels.site(body), open: false },
-      { id: 'tower-view', title: 'View', build: (body) => T.panels.view(body), open: false },
       { id: 'tower-prompts', title: 'AI prompts', build: (body) => T.prompts.build(body), open: false },
     ];
   },
@@ -384,6 +384,11 @@ export default {
   layers(ctx) { return towerLayers(ctx); },
 
   metrics() { return metricRows(); },
+
+  /** The colors the Diagram style uses, for the shell View panel: [{ label, color }], or null in the Model style. */
+  legend(ctx) {
+    try { return T.panels.legendRows(ctx); } catch (e) { console.error(e); return null; }
+  },
 
   warnings() {
     return T.derived.get().warnings.map((w) => ({ text: w.text, level: w.level === 'error' ? 'error' : 'warn' }));
