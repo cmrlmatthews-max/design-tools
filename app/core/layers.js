@@ -316,7 +316,7 @@ export function createLayers({ scene, bus } = {}) {
   const isOn = (id) => { const e = entries.get(id); return !!e && e.on && !e.replaced; };
 
   function list() {
-    return ordered().map((e) => ({ id: e.def.id, label: e.def.label || e.def.id, owner: e.def.owner || null, on: e.on, count: e.count || 0, replaced: e.replaced }));
+    return ordered().map((e) => ({ id: e.def.id, label: e.def.label || e.def.id, owner: e.def.owner || null, on: e.on, count: e.count || 0, replaced: e.replaced, listed: e.def.listed !== false }));
   }
 
   function pick(clientX, clientY) {

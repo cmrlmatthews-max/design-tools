@@ -16,7 +16,6 @@ import { derivedLayerDefs } from './core/derived.js';
 import { createGround } from './core/ground.js';
 import { captureImage, deliver } from './core/capture.js';
 import { h, ICONS, Toast, Pop, Controls, confirmDialog } from './core/ui-kit.js';
-import { createDock } from './core/dock.js';
 import { createPanels } from './core/panels.js';
 import { createShellPanels } from './core/shell-panels.js';
 import { TOOLS, toolOn } from './tools/registry.js';
@@ -152,12 +151,17 @@ function refreshPanels() {
   panels.set([shell.metricsGroup(), ...toolGroups, ...shell.groups()]);
 }
 
-/* ---------- dock ---------- */
-const dock = createDock($('dock'), { onSelect: (id) => activate(id === active ? null : id) });
-dock.setTools(TOOLS.filter((t) => t.ready && !t.viewOnly).sort((a, b) => a.order - b.order).map((t) => ({ id: t.id, label: t.label, icon: t.icon })));
-dock.setExtras([
-  { id: 'layers', label: 'Layers', icon: 'layers', action: () => { if (active) activate(null); else panels.collapseAll(); } },
-]);
+/* ---------- tools in the top bar (Cade, October 28, 2026: the left dock moved to the top bar, layout A) ---------- */
+const toolTabs = h('div', { class: 'tool-tabs', role: 'toolbar', 'aria-label': 'Tools' });
+const dock = {
+  setActive(id) { toolTabs.querySelectorAll('.tool-tab').forEach((b) => b.setAttribute('aria-pressed', b.dataset.id === id ? 'true' : 'false')); },
+};
+TOOLS.filter((t) => t.ready && !t.viewOnly).sort((a, b) => a.order - b.order).forEach((t) => {
+  const b = h('button', { class: 'tool-tab', type: 'button', 'data-id': t.id, 'aria-pressed': 'false', title: `${t.label} (tap again to close)`, onclick: () => activate(t.id === active ? null : t.id) });
+  b.innerHTML = ICONS[t.icon] || '';
+  b.append(h('span', {}, t.label));
+  toolTabs.append(b);
+});
 
 /* ---------- selection card ---------- */
 const highlight = new THREE.Group();
@@ -208,12 +212,12 @@ const viewBtns = VIEWS.map(([id, label, key]) => h('button', { class: 'seg-btn',
 const zoomSite = h('button', { class: 'seg-btn', type: 'button', title: 'Zoom to the site', onclick: () => scene.frameSite() }, 'Site');
 const zoomBldg = h('button', { class: 'seg-btn', type: 'button', title: 'Zoom to the building', onclick: () => scene.frameBuilding() }, 'Building');
 const styleBtn = h('button', { class: 'seg-btn', type: 'button', title: 'Model or Diagram (D)', onclick: () => toggleStyle() }, 'Diagram');
-const exportBtn = h('button', { class: 'btn icon', type: 'button', title: 'Export', 'aria-label': 'Export', onclick: (e) => openExportMenu(e.currentTarget) });
+const exportBtn = h('button', { class: 'btn icon', type: 'button', title: 'Save image', 'aria-label': 'Save image', onclick: (e) => openExportMenu(e.currentTarget) });
 exportBtn.innerHTML = ICONS.export;
 const panelsBtn = h('button', { class: 'btn icon', type: 'button', title: 'Show or hide the panels (\\)', 'aria-label': 'Panels', onclick: () => panels.toggleColumn() });
 panelsBtn.innerHTML = ICONS.panels;
 
-tb.left.append(h('a', { class: 'mark', href: '../', title: 'Workspace' }, 'CMRLM'), projBtn, undoBtn, redoBtn);
+tb.left.append(h('a', { class: 'mark', href: '../', title: 'Workspace' }, 'CMRLM'), projBtn, undoBtn, redoBtn, toolTabs);
 const viewCompact = h('button', { class: 'btn view-compact', type: 'button', title: 'View', onclick: (e) => openViewMenu(e.currentTarget) }, 'Axon');
 tb.center.append(h('div', { class: 'seg views' }, ...viewBtns), h('div', { class: 'seg' }, zoomSite, zoomBldg), h('div', { class: 'seg' }, styleBtn), viewCompact);
 
@@ -246,7 +250,7 @@ function syncTopbar() {
   undoBtn.disabled = !(s && s.canUndo());
   redoBtn.disabled = !(s && s.canRedo());
   viewBtns.forEach((b) => b.classList.toggle('on', b.dataset.view === currentView));
-  viewCompact.textContent = (VIEWS.find((v) => v[0] === currentView) || VIEWS[0])[1];
+  viewCompact.textContent = `View: ${(VIEWS.find((v) => v[0] === currentView) || VIEWS[0])[1]} ▾`;
   styleBtn.classList.toggle('on', scene.style() === 'diagram');
 }
 
@@ -263,7 +267,6 @@ function openProjectMenu(anchor) {
     items.push({ sep: true });
     list.forEach((p) => items.push({ label: p.name, hint: shortDate(p.updatedAt), checked: doc && p.id === doc.id, action: () => project.open(p.id) }));
   }
-  items.push({ sep: true }, { label: 'Workspace page', action: () => { window.location.href = '../'; } });
   Pop.open(anchor, items);
 }
 

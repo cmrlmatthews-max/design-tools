@@ -176,7 +176,7 @@ export function derivedLayerDefs({ getDoc, ground, scene, siteStyle } = {}) {
   /** A layer of solid items from layersFrom. */
   // Units and cores draw only while they match the massing (core/cover.js platesCurrent); out of date, the massing draws.
   const platesStale = (ctx) => !platesCurrent(docNow(ctx));
-  function solidDef({ id, label, order, owner, layerIds, sections, defaultOn, extraKey, materialFor, keep, hideWhen }) {
+  function solidDef({ id, label, order, owner, layerIds, sections, defaultOn, extraKey, materialFor, keep, hideWhen, pickable = true }) {
     const def = {
       id, label, order, defaultOn,
       key(ctx) {
@@ -203,7 +203,8 @@ export function derivedLayerDefs({ getDoc, ground, scene, siteStyle } = {}) {
         });
         if (!g.userData.count) { g.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); return null; }
         const mesh = g.userData.mesh;
-        if (mesh) {
+        if (mesh && !pickable) { mesh.userData.pick = () => null; mesh.userData.occludes = false; }
+        else if (mesh) {
           const inner = mesh.userData.pick;
           mesh.userData.pick = (fi) => {
             const it = inner(fi);
@@ -359,7 +360,7 @@ export function derivedLayerDefs({ getDoc, ground, scene, siteStyle } = {}) {
     solidDef({ id: 'massing', label: 'Massing', order: 20, owner: massingOwner, layerIds: ['massing'], sections: ['massing', 'plates', 'parking'], defaultOn: DEFAULT_ON.massing !== false, extraKey: (ctx) => massingOwner(docNow(ctx)) + coverKey(docNow(ctx)),
       keep: (doc) => { const skip = coveredMassingIndices(doc); return skip.size ? (it) => !skip.has(it.level) : null; } }),
     solidDef({ id: 'units', label: 'Units', order: 21, owner: 'plates', layerIds: ['units'], sections: ['plates', 'massing'], defaultOn: DEFAULT_ON.units !== false, hideWhen: platesStale, extraKey: (ctx) => (platesStale(ctx) ? 'stale' : '') }),
-    solidDef({ id: 'cores', label: 'Cores and corridors', order: 22, owner: 'plates', layerIds: ['cores'], sections: ['plates', 'massing'], defaultOn: DEFAULT_ON.cores !== false, hideWhen: platesStale, extraKey: (ctx) => (platesStale(ctx) ? 'stale' : '') }),
+    solidDef({ id: 'cores', label: 'Cores and corridors', order: 22, owner: 'plates', layerIds: ['cores'], sections: ['plates', 'massing'], defaultOn: DEFAULT_ON.cores !== false, hideWhen: platesStale, pickable: false, extraKey: (ctx) => (platesStale(ctx) ? 'stale' : '') }),
     solidDef({ id: 'parking', label: 'Parking', order: 30, owner: 'parking', layerIds: ['parking'], sections: ['parking', 'massing'], defaultOn: DEFAULT_ON.parking !== false }),
     gradingDef,
   ];

@@ -33,6 +33,6 @@ export default {
     let doc = null;
     try { doc = ctx && ctx.project ? ctx.project.doc() : null; } catch (e) { doc = null; }
     if (!doc || !doc.id) return [];
-    return [{ label: 'Open Plate Planner', action: () => openPlanner(ctx) }];
+    return [{ label: 'Open Plate Planner (new page)', action: () => openPlanner(ctx) }];
   },
 };
