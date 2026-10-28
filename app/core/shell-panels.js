@@ -33,7 +33,9 @@ export function createShellPanels(ctx, { loaded, activeId }) {
     if (num('massing.gfa') !== null) out.push({ label: 'Gross floor area', value: `${fmtInt(num('massing.gfa'))} sf` });
     if (num('massing.floors') !== null) out.push({ label: 'Floors', value: fmtInt(num('massing.floors')) });
     if (num('massing.height') !== null) out.push({ label: 'Height', value: fmtFtIn(num('massing.height')) });
-    if (num('massing.far') !== null && num('massing.far') > 0) out.push({ label: 'FAR', value: num('massing.far').toFixed(2) });
+    // FAR uses the Site Model site area (Cade, October 28, 2026: the Zoning lot is hidden). Fallback: the saved massing FAR.
+    const far = num('massing.gfa') !== null && num('site.area') > 0 ? num('massing.gfa') / num('site.area') : num('massing.far');
+    if (far !== null && far > 0) out.push({ label: 'FAR', value: far.toFixed(2), hint: 'Gross floor area divided by the site area from the Site Model.' });
     const current = toolOn('plates') && platesCurrent(doc);
     if (current && num('plates.units') !== null) out.push({ label: 'Units', value: fmtInt(num('plates.units')) });
     else if (num('massing.units') !== null) out.push({ label: 'Units (estimate)', value: fmtInt(num('massing.units')) });
