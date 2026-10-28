@@ -286,11 +286,12 @@ export function sectionSvg(m, { width, height, style = 'model', colorBy = 'progr
   if (!m) { push('</svg>'); return out.join(''); }
 
   /* ---- extents and scale ---- */
-  const PAD_L = 96, PAD_R = 156, PAD_T = 22, PAD_B = 64;
+  const PAD_L = 40, PAD_R = 236, PAD_T = 22, PAD_B = 64;   // the dimension string and the level labels sit at the right
   const cutFloors = m.floors.filter((f) => f.cut.length);
-  const shownFloors = m.floors.filter((f) => f.cut.length || f.beyond.length);
+  // No buildings in the background (Cade, October 28, 2026): only what the cut crosses is drawn.
+  const shownFloors = cutFloors;
   const gz = m.ground.filter((g) => g.z !== null).map((g) => g.z);
-  const zs = [...gz, ...shownFloors.flatMap((f) => [f.z0, f.z1]), ...m.neighbors.flatMap((b) => [b.z0, b.z1])];
+  const zs = [...gz, ...shownFloors.flatMap((f) => [f.z0, f.z1]), ...m.neighbors.filter((b) => b.cut.length).flatMap((b) => [b.z0, b.z1])];
   let zLo = zs.length ? Math.min(...zs) : m.datum, zHi = zs.length ? Math.max(...zs) : m.datum + 10;
   const tall = Math.max(10, zHi - zLo);
   zLo -= Math.max(8, tall * 0.08); zHi += Math.max(4, tall * 0.04);
@@ -316,10 +317,8 @@ export function sectionSvg(m, { width, height, style = 'model', colorBy = 'progr
     push(`<polygon points="${f1(X(rr[0].s))},${f1(yBottom)} ${pts} ${f1(X(rr[rr.length - 1].s))},${f1(yBottom)}" fill="url(#secEarth)"/>`);
   }
 
-  /* ---- beyond: light lines (drawn first, the cut covers them) ---- */
-  const beyondAttr = `fill="none" stroke="${C.beyond}" stroke-width="0.9"`;
-  for (const b of m.neighbors) for (const [s0, s1] of minusSpans(b.beyond, b.cut)) rect(s0, s1, b.z0, b.z1, `${beyondAttr} stroke-dasharray="3 2"`);
-  for (const f of shownFloors) for (const [s0, s1] of f.beyond) rect(s0, s1, f.z0, f.z1, beyondAttr);
+  /* ---- beyond: not drawn (Cade, October 28, 2026: no buildings in the background). m.floors[].beyond and
+     m.neighbors[].beyond stay in the model for later. ---- */
 
   /* ---- neighbors in the cut: gray solids ---- */
   for (const b of m.neighbors) for (const [s0, s1] of b.cut) rect(s0, s1, b.z0, b.z1, `fill="${C.neighbor}" stroke="${C.neighborEdge}" stroke-width="1.2"`);
@@ -343,7 +342,7 @@ export function sectionSvg(m, { width, height, style = 'model', colorBy = 'progr
     for (const [s0, s1] of minusSpans(f.cut, above)) hline(s0, s1, f.z1, slabAttr);
   }
 
-  /* ---- levels: labels at the right, floor-to-floor dimensions at the left ---- */
+  /* ---- levels: at the right of the building, the floor-to-floor dimension string, then the level labels (Cade, October 28, 2026) ---- */
   const stack = cutFloors.some((f) => f.src === 'massing') ? cutFloors.filter((f) => f.src === 'massing') : cutFloors;
   const levels = [];
   for (const f of stack.slice().sort((a, b) => a.z0 - b.z0)) {
@@ -363,26 +362,31 @@ export function sectionSvg(m, { width, height, style = 'model', colorBy = 'progr
     const GAP = 13;
     const picked = [];
     for (const o of order) if (picked.every((q) => Math.abs(Y(q.z) - Y(o.l.z)) >= GAP)) picked.push(o.l);
-    // a column at the right of the drawing, with dotted leaders, so labels never sit on a neighbor
-    const xr = Math.max(X(sMax), X(m.L));
-    const xl = xr + 8, xt = xr + 24;
+    // columns at the right of the drawing: the dimension string first (xd), then the labels (xt), with dotted leaders
+    // next to the building (past any cut neighbor that touches its right side), not at the far end of the cut
+    const nbR = m.neighbors.flatMap((b) => b.cut.map((c) => c[1])).filter((v) => v > sMax && v < sMax + 40);
+    const xr = X(Math.max(sMax, ...nbR));
+    const xd = xr + 18;
+    const xl = xd + 70, xt = xl + 16;
     for (const l of picked.sort((a, b) => a.z - b.z)) {
       const y = Y(l.z);
-      push(`<line x1="${f1(X(l.sMax !== undefined ? l.sMax : sMax) + 3)}" y1="${f1(y)}" x2="${f1(xt - 4)}" y2="${f1(y)}" stroke="${C.ink3}" stroke-width="0.7" stroke-dasharray="1.5 2.5" opacity="0.8"/>`);
+      push(`<line x1="${f1(xl - 8)}" y1="${f1(y)}" x2="${f1(xt - 4)}" y2="${f1(y)}" stroke="${C.ink3}" stroke-width="0.7" stroke-dasharray="1.5 2.5" opacity="0.8"/>`);
       push(`<path d="M${f1(xl + 5)} ${f1(y)} l-4 -4 h8 z" fill="${C.ink2}"/>`);
+      // a clear box behind the label, so the ground line never runs through Floor 1
+      const elev = fmtFtIn(l.z - m.datum, true);
+      push(`<rect x="${f1(xt - 3)}" y="${f1(y - 14)}" width="${f1(l.name.length * 6.1 + 10 + elev.length * 6 + 4)}" height="15" fill="${C.bg}"/>`);
       text(xt, y - 3, l.name, { size: 10.5, weight: 600, fill: C.ink });
       text(xt + l.name.length * 6.1 + 6, y - 3, fmtFtIn(l.z - m.datum, true), { size: 10.5, fill: C.ink2 });
     }
 
     // dimensions: one string with a tick at every floor; runs of equal heights share one text when floors are small
-    // a column at the left of the drawing, with light extension lines to the building
-    const xd = Math.min(X(sMin), X(0)) - 14;
+    // the column between the building and the labels, with light extension lines from the building
     const zsAll = [...levels.map((l) => l.z), roof.z];
     push(`<line x1="${f1(xd)}" y1="${f1(Y(zsAll[0]))}" x2="${f1(xd)}" y2="${f1(Y(zsAll[zsAll.length - 1]))}" stroke="${C.ink3}" stroke-width="0.9"/>`);
     for (const z of zsAll) {
       const y = Y(z);
       push(`<line x1="${f1(xd - 4)}" y1="${f1(y + 4)}" x2="${f1(xd + 4)}" y2="${f1(y - 4)}" stroke="${C.ink2}" stroke-width="1.2"/>`);
-      push(`<line x1="${f1(xd + 2)}" y1="${f1(y)}" x2="${f1(X(sMin) - 3)}" y2="${f1(y)}" stroke="${C.ink3}" stroke-width="0.6" stroke-dasharray="1.5 2.5" opacity="0.7"/>`);
+      push(`<line x1="${f1(X(sMax) + 3)}" y1="${f1(y)}" x2="${f1(xd - 2)}" y2="${f1(y)}" stroke="${C.ink3}" stroke-width="0.6" stroke-dasharray="1.5 2.5" opacity="0.7"/>`);
     }
     const hs = zsAll.slice(1).map((z, i) => ({ z0: zsAll[i], z1: z, h: z - zsAll[i] }));
     let i = 0;
@@ -391,13 +395,13 @@ export function sectionSvg(m, { width, height, style = 'model', colorBy = 'progr
       while (j + 1 < hs.length && Math.abs(hs[j + 1].h - hs[i].h) < 0.01) j++;
       const n = j - i + 1, each = hs[i].h * k;
       if (n === 1 || (n < 4 && each >= 13)) {
-        for (let q = i; q <= j; q++) if (hs[q].h * k >= 11) text(xd - 6, (Y(hs[q].z0) + Y(hs[q].z1)) / 2 + 3.6, fmtFtIn(hs[q].h), { size: 10, anchor: 'end' });
+        for (let q = i; q <= j; q++) if (hs[q].h * k >= 11) text(xd + 7, (Y(hs[q].z0) + Y(hs[q].z1)) / 2 + 3.6, fmtFtIn(hs[q].h), { size: 10 });
       } else if (n * each >= 11) {
-        text(xd - 6, (Y(hs[i].z0) + Y(hs[j].z1)) / 2 + 3.6, `${n} × ${fmtFtIn(hs[i].h)}`, { size: 10, anchor: 'end' });
+        text(xd + 7, (Y(hs[i].z0) + Y(hs[j].z1)) / 2 + 3.6, `${n} × ${fmtFtIn(hs[i].h)}`, { size: 10 });
       }
       i = j + 1;
     }
-  } else if (!shownFloors.length && !m.neighbors.length) {
+  } else if (!shownFloors.length && !m.neighbors.some((b) => b.cut.length)) {
     text(W / 2, PAD_T + areaH / 2, 'The cut crosses no building. Redraw it across the tower.', { size: 12, fill: C.ink3, anchor: 'middle' });
   }
 
