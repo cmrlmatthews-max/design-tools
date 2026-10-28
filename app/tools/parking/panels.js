@@ -7,6 +7,7 @@
    ========================================================================== */
 import { Units } from '../../core/ui-kit.js';
 import { CONFIG, RAMP_TYPES, RAMP_LABELS, SOURCE_LABELS, num, clamp, deepClone } from './state.js';
+import { screenSection } from './screen.js';
 
 const MAXD = CONFIG.limits.maxDim;
 const pct1 = (f) => `${(f * 100).toFixed(1)}%`;
@@ -105,10 +106,11 @@ export function buildPanels(T, ctx) {
     const syncSource = () => {
       const s = get('source'), found = T.readers.sources();
       btns.forEach((b) => {
-        b.setAttribute('aria-pressed', String(b.dataset.source === s));
-        const need = b.dataset.source !== 'standalone' && !found.some((x) => x.source === b.dataset.source);
+        b.setAttribute('aria-pressed', String(T.hasDeck() && b.dataset.source === s));
+        const need = b.dataset.source === 'podium' ? !T.readers.parkingRun().length
+          : b.dataset.source !== 'standalone' && !found.some((x) => x.source === b.dataset.source);
         b.classList.toggle('is-disabled', need);
-        b.title = need ? (T.readers.has() ? 'The project has no such levels yet' : 'Open a project first') : '';
+        b.title = need ? (!T.readers.has() ? 'Open a project first' : b.dataset.source === 'podium' ? 'The podium program has no parking floors' : 'The project has no such levels yet') : '';
       });
     };
     const presetBind = { get: () => '', set: (v) => { if (v) T.applyPreset(v); }, commit() {} };
@@ -123,8 +125,14 @@ export function buildPanels(T, ctx) {
     const levelsOf = () => T.readers.sources().find((x) => x.source === get('source'));
     body.append(...els([
       CT.when(() => { syncSource(); return true; }, [h('div', { class: 'ctl' }, h('div', { class: 'ctl-label' }, 'Parking is'), wrap)]),
-      CT.help('A standalone deck is free-standing. A wrap deck or a podium takes its footprint, level heights and cores from the massing in the open project.'),
-      CT.when(() => !standalone(), [
+      CT.when(() => !T.hasDeck(), [CT.help('This project has no parking deck. Choose a source, or change any value to start a standalone deck beside the massing.')]),
+      CT.help('A standalone deck is free-standing. A wrap deck takes its footprint, level heights and cores from the massing. A podium deck covers the parking floors of the podium program and follows it.'),
+      CT.when(() => T.isLinked(), [live('help', () => {
+        const run = T.readers.parkingRun();
+        if (!run.length) return 'The podium program has no parking floors, so the deck has no levels. Set the podium program to Parking in the Tower.';
+        return `The deck covers massing level${run.length === 1 ? '' : 's'} ${run[0].index}${run.length > 1 ? ` to ${run[run.length - 1].index}` : ''}, the parking floors of the podium program. Change the program in the Tower.`;
+      }, 'parking-linked-note')]),
+      CT.when(() => !standalone() && !T.isLinked(), [
         dynSelect('First level of the deck', () => {
           const src = levelsOf();
           return src ? src.levels.map((l, i) => ({ value: l.index, label: `Level ${i + 1}, z ${Units.formatFeetInches(l.z)}` })) : [{ value: get('sourceLevel'), label: '-' }];
@@ -186,7 +194,7 @@ export function buildPanels(T, ctx) {
   function buildLevels() {
     const fromProject = () => get('source') !== 'standalone' && T.readers.has();
     return [
-      intS('Levels', 'levels.count', 1, 10, { hardMax: CONFIG.limits.maxLevels }),
+      CT.when(() => !T.isLinked(), [intS('Levels', 'levels.count', 1, 10, { hardMax: CONFIG.limits.maxLevels })]),
       lenS('Level 1 floor-to-floor', 'levels.ftf1', 9, 16, { step: 0.5, hardMin: 6, hardMax: 30 }),
       lenS('Typical floor-to-floor', 'levels.ftf', 9, 14, { step: 0.5, hardMin: 6, hardMax: 30 }),
       intS('Levels below grade', 'levels.belowGrade', 0, 3, { hardMin: 0, hardMax: 12 }),
@@ -321,6 +329,10 @@ export function buildPanels(T, ctx) {
       slopeS('Cross slope', 'checks.crossSlope'),
     ];
   }
+  /** The facade screen (Open, Solid, Mesh with openness). One undo step per change; the slider is live while dragging. */
+  function buildScreen() {
+    return screenSection(CT, { type: bs('screen.type'), openness: bs('screen.openness') });
+  }
   function buildLayout(body) {
     const g = buildGrid(), b = buildBays();
     body.append(
@@ -330,6 +342,7 @@ export function buildPanels(T, ctx) {
       section('grid', 'Column grid', g.children, { more: g.more }).el,
       section('cores', 'Cores', buildCores()).el,
       section('entries', 'Entries', buildEntries()).el,
+      section('screen', 'Screen', [buildScreen()], { open: true }).el,
       section('checks', 'Checks', buildChecks()).el,
     );
   }
@@ -400,17 +413,14 @@ export function buildPanels(T, ctx) {
      ========================================================================== */
   function buildView(body) {
     const levelBind = { get: () => get('view.level'), set: (x) => store.set('view.level', Math.round(x), { live: false }), commit() {} };
-    const ghostBind = { get: () => ctx.layers.isOn('parking-context'), set: (v) => ctx.layers.setOn('parking-context', !!v), commit() {} };
     const legend = h('div', { class: 'parking-legend', id: 'parking-legend' });
     const legendCtl = CT.when(() => {
-      const d = T.D(), v = get('view');
+      const d = T.D();
       const rows = [];
-      if (v.colorBy === 'slope') rows.push([CONFIG.slopeColors.ok, 'Under 80% of the limit'], [CONFIG.slopeColors.near, 'Up to the limit'], [CONFIG.slopeColors.over, 'Over the limit']);
-      else {
-        const seen = new Set();
-        for (const lv of d.levels || []) for (const s of lv.stalls) seen.add(s.kind || 'standard');
-        for (const k of Object.keys(CONFIG.kindColors)) if (seen.has(k)) rows.push([CONFIG.kindColors[k], CONFIG.kindLabels[k]]);
-      }
+      const seen = new Set();
+      for (const lv of d.levels || []) for (const s of lv.stalls) seen.add(s.kind || 'standard');
+      for (const k of Object.keys(CONFIG.kindColors)) if (seen.has(k)) rows.push([CONFIG.kindColors[k], CONFIG.kindLabels[k]]);
+      if (ctx.scene.style() === 'diagram' && (d.ramps || []).length) rows.push([CONFIG.slopeColors.ok, 'Ramp under 80% of the limit'], [CONFIG.slopeColors.near, 'Ramp up to the limit'], [CONFIG.slopeColors.over, 'Ramp over the limit']);
       rows.push([CONFIG.coreColors.stair, 'Stair'], [CONFIG.coreColors.elevator, 'Elevator']);
       if (d.overlay && d.overlay.conflicts.length) rows.push([CONFIG.conflictColor, 'Column conflict']);
       const key = JSON.stringify(rows);
@@ -428,11 +438,8 @@ export function buildPanels(T, ctx) {
       return b;
     });
     body.append(...els([
-      live('help', () => `Model and Diagram follow the view switch in the top bar (D). It is ${ctx.scene.style() === 'diagram' ? 'Diagram' : 'Model'} now.`, 'parking-style-note'),
-      sel('Color by (Diagram)', 'view.colorBy', opts([['kind', 'Stall kind'], ['slope', 'Ramp slope']])),
       CT.slider({ label: 'Isolate a level (0 = all levels)', bind: levelBind, min: 0, max: 10, step: 1, hardMin: 0, hardMax: CONFIG.limits.maxLevels, integer: true, format: (x) => (x === 0 ? 'All' : String(x)), inputMode: 'numeric', compact: true }),
       tog('Column overlay (demising lines, conflicts)', bs('view.overlay')),
-      tog('Massing context (ghost)', ghostBind),
       tog('Snap while dragging a handle', bs('view.snap.on')),
       CT.when(() => !!get('view.snap.on'), [h('div', { class: 'ctl' }, h('div', { class: 'ctl-label' }, 'Snap grid'),
         CT.when(() => { gridBtns.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.grid === String(get('view.snap.grid'))))); return true; }, [gridChips]).el)]),

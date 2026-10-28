@@ -74,14 +74,33 @@ export function platesCoverKey(doc) {
   return zs.length ? zs.map((z) => Math.round(z * 10)).join(',') : 'none';
 }
 
-/** True when the Plate Planner units were made from the current massing (they draw; the massing skips those floors).
- *  False when there are no plates or the massing changed after them (the massing draws all floors; units hide). */
+/** True when the Plate Planner units still match the massing (they draw; the massing skips those floors).
+ *  The test is geometry, not dates: every plates level must find a massing level with the same index, z, floor-to-floor
+ *  height, and floor plate (plan ring within 0.05 ft). A move, a turn, or a new base elevation of the building changes
+ *  the placement only, so the units stay current. False with no plates. */
 export function platesCurrent(doc) {
   const plates = getSection(doc, 'plates');
   const mass = getSection(doc, 'massing');
-  if (!plates || !mass || !plates.derived || !Array.isArray(plates.derived.levels) || !plates.derived.levels.length) return false;
-  const ms = (v) => { const t = Date.parse(v); return Number.isFinite(t) ? t : null; };
-  const made = ms(plates.derived.massingUpdatedAt) ?? ms(plates.updatedAt);
-  const now = ms(mass.updatedAt);
-  return made !== null && now !== null && made >= now;
+  const pl = plates && plates.derived && Array.isArray(plates.derived.levels) ? plates.derived.levels : [];
+  const ml = mass && mass.derived && Array.isArray(mass.derived.levels) ? mass.derived.levels : [];
+  if (!pl.length || !ml.length) return false;
+  const byIndex = new Map(ml.filter((l) => l && Number.isFinite(l.index)).map((l) => [l.index, l]));
+  const near = (a, b, t) => Number.isFinite(Number(a)) && Number.isFinite(Number(b)) && Math.abs(Number(a) - Number(b)) <= t;
+  const ringKey = (mp) => {
+    const out = [];
+    for (const poly of Array.isArray(mp) ? mp : []) {
+      for (const r of [poly && poly.outer, ...((poly && poly.holes) || [])]) {
+        if (!Array.isArray(r)) continue;
+        out.push(r.map((p) => `${Math.round(p[0] * 20)},${Math.round(p[1] * 20)}`).sort().join(';'));
+      }
+    }
+    return out.sort().join('|');
+  };
+  for (const l of pl) {
+    const m = l && byIndex.get(l.index);
+    if (!m) return false;
+    if (!near(l.z, m.z, 0.05) || !near(l.ftf, m.ftf, 0.05)) return false;
+    if (ringKey(l.plate) !== ringKey(m.plates)) return false;
+  }
+  return true;
 }
