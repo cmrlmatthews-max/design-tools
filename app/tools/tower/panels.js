@@ -102,7 +102,7 @@ export function createPanels(T) {
   let offOption = null;
   function optionSection() {
     const name = C.text({ label: 'Option name', bind: { get: () => get('name') || '', set: (v) => T.options.rename(v), commit: () => {} }, maxLength: 60 });
-    const menuBtn = h('button', { class: 'btn outline sm', type: 'button', id: 'tower-optionMenu', 'aria-haspopup': 'true', onclick: (e) => Pop.open(e.currentTarget, T.options.menuItems()) }, 'Options and presets');
+    const menuBtn = h('button', { class: 'btn outline sm', type: 'button', id: 'tower-optionMenu', 'aria-haspopup': 'true', onclick: (e) => Pop.open(e.currentTarget, T.options.menuItems()) }, 'Options');
     const saveBtn = h('button', { class: 'btn solid sm', type: 'button', id: 'tower-optionSave', onclick: () => T.options.save() }, 'Save');
     const dot = h('span', { class: 'help', id: 'tower-optionDirty', style: 'margin:0' });
     const sync = () => { dot.textContent = T.options.dirty() ? 'Not saved as an option.' : 'Saved as an option.'; };
@@ -128,7 +128,21 @@ export function createPanels(T) {
     swatchSyncs.push(syncSw);
     return section('podium', 'Podium', {
       children: [
-        C.toggle({ label: 'Podium', bind: bs('podium.on') }).el,
+        // A podium turned on starts centered under the tower (Cade, October 28, 2026): one undo step.
+        C.toggle({ label: 'Podium', bind: {
+          get: () => !!get('podium.on'),
+          set: (v) => {
+            if (v && !get('podium.on')) {
+              store.update((d) => {
+                const seg = (d.segments || [])[0] || {};
+                const o = seg.offset || {};
+                d.podium.on = true;
+                d.podium.offset = { x: Number(o.x) || 0, y: Number(o.y) || 0 };
+              });
+            } else store.set('podium.on', !!v);
+          },
+          commit: () => {},
+        } }).el,
         C.when(on, [
           intS('Floors', 'podium.floors', 1, 12, { hardMax: 100 }),
           lenS('Ground floor-to-floor', 'podium.groundFtf', 10, 40, { step: 0.5, hardMin: 6, hardMax: 100 }),
@@ -184,6 +198,8 @@ export function createPanels(T) {
   const SIDE_OPTS = opts([['front', 'Front (south)'], ['back', 'Back (north)'], ['left', 'Left (west)'], ['right', 'Right (east)']]);
   const SIDE_CHIPS = opts([['front', 'Front'], ['back', 'Back'], ['left', 'Left'], ['right', 'Right']]);
   const sidesText = (sides) => ((sides || []).length >= 4 || !(sides || []).length ? 'all sides' : sides.join(', '));
+  // Hidden October 28, 2026 (Cade). See docs/removed-features.md.
+  // The section is not added to the Form. Setbacks by floor and mechanical floors in a saved state still build the tower.
   function movesSection() {
     const mid = () => Math.max(2, Math.round(levels() / 2));
     const setbacks = C.list({
@@ -216,6 +232,8 @@ export function createPanels(T) {
     });
   }
 
+  // Hidden October 28, 2026 (Cade). See docs/removed-features.md.
+  // The section is not added to the Form. Carves and cuts in a saved state still build the tower.
   function carvesSection() {
     const mid = () => Math.max(2, Math.round(levels() / 2));
     const kind = (i) => () => get(`carves.${i}.kind`);
@@ -258,9 +276,22 @@ export function createPanels(T) {
 
   function crownSection() {
     const type = () => get('crown.type');
+    // Hidden October 28, 2026 (Cade). See docs/removed-features.md.
+    // Spire is not offered. A saved state with crown type spire still shows it, and keeps it until the user picks another type.
+    const typeSel = sel('Type', 'crown.type', opts([['none', 'None'], ['flat', 'Flat (parapet)'], ['stepped', 'Stepped'], ['sloped', 'Sloped'], ['screen', 'Screen']]));
+    const selectEl = typeSel.el.querySelector('select');
+    const syncSpire = () => {
+      if (!selectEl) return;
+      const has = [...selectEl.options].find((o) => o.value === 'spire');
+      if (type() === 'spire') {
+        if (!has) { const o = h('option', { value: 'spire' }, 'Spire'); selectEl.insertBefore(o, selectEl.options[4] || null); }
+        selectEl.value = 'spire';
+      } else if (has) has.remove();
+    };
+    swatchSyncs.push(syncSpire); syncSpire();
     return section('crown', 'Crown', {
       children: els([
-        sel('Type', 'crown.type', opts([['none', 'None'], ['flat', 'Flat (parapet)'], ['stepped', 'Stepped'], ['sloped', 'Sloped'], ['spire', 'Spire'], ['screen', 'Screen']])),
+        typeSel,
         C.when(() => !['flat', 'none'].includes(type()), [lenS('Height', 'crown.height', 0, 100, { hardMin: 0 })]),
         C.when(() => type() === 'stepped', [intS('Steps', 'crown.steps', 1, 8, { hardMax: 20 })]),
         C.when(() => type() === 'sloped', [sel('Low side', 'crown.slopeSide', SIDE_OPTS)]),
@@ -314,15 +345,12 @@ export function createPanels(T) {
   function projectSection() {
     const P = T.project;
     const line = h('div', { class: 'help', id: 'tower-projLine' });
-    const ctxNote = h('span', { class: 'help', style: 'margin:0', id: 'tower-ctxSiteNote' });
     const baseLine = h('p', { class: 'help', id: 'tower-baseLine' });
     const ft = (v) => `${(Math.round(v * 10) / 10).toLocaleString('en-US', { maximumFractionDigits: 1 })} ft`;
     const sync = () => {
       const doc = ctx.project.doc();
       const info = P.siteInfo();
       line.textContent = doc ? `Project “${doc.name}”. ${info ? `Site: ${Units.formatFeetInches(info.size)} square.` : 'No site in this project.'}` : '';
-      const n = (store.raw().context.blocks || []).filter((b) => b && b.site).length;
-      ctxNote.textContent = store.raw().context.fromSite ? `${n} block${n === 1 ? '' : 's'} from the site.` : '';
       const g = P.groundUnderFootprint();
       baseLine.textContent = info && g != null ? `Ground floor at ${ft(num(get('placement.baseZ'), 0))} above sea level.` : `This project has no site ground. The base stays at ${ft(num(get('placement.baseZ'), 0))}.`;
     };
@@ -330,7 +358,8 @@ export function createPanels(T) {
     const modeBtns = [['follow', 'Follow ground'], ['typed', 'Typed']].map(([mode, text]) => h('button', { class: 'chip', type: 'button', 'aria-pressed': 'false', 'data-base-mode': mode, onclick: () => { P.setBaseMode(mode); C.refreshAll(); } }, text));
     const modeRow = C.when(() => { modeBtns.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.baseMode === P.baseMode()))); return true; },
       [h('div', { class: 'ctl' }, h('div', { class: 'ctl-label' }, 'Base elevation'), h('div', { class: 'chips', role: 'group', 'aria-label': 'Base elevation mode', id: 'tower-baseModeChips' }, modeBtns))]);
-    const keep = C.toggle({ label: 'Keep manual blocks', bind: { get: () => P.flags.keepManual, set: (v) => { P.flags.keepManual = !!v; C.refreshAll(); }, commit: () => {} } });
+    // Hidden October 28, 2026 (Cade). See docs/removed-features.md.
+    // Removed from this panel: the neighbors radius, the Context from site button and Keep manual blocks. The site neighbors come from the Site Model.
     return section('project', 'Project site', {
       children: [
         line,
@@ -343,12 +372,8 @@ export function createPanels(T) {
         C.help('Follow ground sets the base to the lowest ground under the building. Typed keeps the value you enter.'),
         C.when(() => P.hasSite(), [
           h('div', { class: 'add-row' }, C.button('Center on site', () => P.centerOnSite()), h('span', { class: 'help', style: 'margin:0' }, 'Puts the tower at the site center and its ground floor at the ground there.')),
-          C.label('Neighbors from the project site'),
-          C.slider({ label: 'Radius around the tower', bind: bs('context.radius'), min: 100, max: 2000, step: 50, hardMin: 50, hardMax: 5000, format: Units.formatFeetInches, parse: Units.parseLength, inputMode: 'text' }),
-          h('div', { class: 'add-row' }, C.button('Context from site', () => P.contextFromSite()), ctxNote),
         ]).el,
       ],
-      more: [C.when(() => P.hasSite(), [keep]).el],
     }, { when: () => P.hasDoc() });
   }
 
@@ -386,6 +411,8 @@ export function createPanels(T) {
       ]),
     }, { when: hasSiteNow });
   }
+  // Hidden October 28, 2026 (Cade). See docs/removed-features.md.
+  // The section is not added to the Site panel. A height limit or stepback in a saved state still applies to the envelope.
   function heightSection() {
     const limitBind = C.mapBind(bs('site.heightLimit'), (v) => num(v, 0), (v) => Math.max(0, v));
     return section('height', 'Height limit and stepback', {
@@ -403,6 +430,8 @@ export function createPanels(T) {
       ]),
     });
   }
+  // Hidden October 28, 2026 (Cade). See docs/removed-features.md.
+  // The section is not added to the Site panel. The site neighbors come from the Site Model.
   function contextSection() {
     const list = lists.context = C.list({
       bind: bs('context.blocks'), addLabel: 'Add block', reorder: false, openDefault: () => false,
@@ -473,12 +502,13 @@ export function createPanels(T) {
     C.refreshAll();
     allSyncs().forEach((f) => { try { f(); } catch (e) { console.error(e); } });
   };
-  const form = host('form', () => [optionSection(), podiumSection(), segmentsSection(), movesSection(), carvesSection(), crownSection(), editingSection()]);
+  const form = host('form', () => [optionSection(), podiumSection(), segmentsSection(), crownSection(), editingSection()]);
   const program = host('program', () => [programsSection(), targetsSection()]);
-  const site = host('site', () => [projectSection(), siteSection(), setbacksSection(), heightSection(), contextSection()]);
+  const site = host('site', () => [projectSection(), siteSection(), setbacksSection()]);
 
   /** Switches to the section that holds an item, opens its row, and scrolls it into view. */
-  const ITEM_MAP = { segment: ['segments', 'segments'], podium: ['podium'], crown: ['crown'], carve: ['carves', 'carves'], context: ['context', 'context'] };
+  // Hidden October 28, 2026 (Cade). See docs/removed-features.md. (carve and context items no longer open a section)
+  const ITEM_MAP = { segment: ['segments', 'segments'], podium: ['podium'], crown: ['crown'] };
   function openItem(item) {
     const m = item && ITEM_MAP[item.kind];
     if (!m) return false;

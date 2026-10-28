@@ -18,6 +18,7 @@ import { captureImage, deliver } from './core/capture.js';
 import { h, ICONS, Toast, Pop, Controls, confirmDialog } from './core/ui-kit.js';
 import { createPanels } from './core/panels.js';
 import { initTips } from './core/tips.js';
+import { applyRealSun } from './core/sunstudy.js';
 import { createShellPanels } from './core/shell-panels.js';
 import { TOOLS, toolOn } from './tools/registry.js';
 
@@ -151,7 +152,8 @@ ctx.panelsApi = panels;
 function refreshPanels() {
   const tool = active ? loaded.get(active) : null;
   const toolGroups = tool && tool.panels ? tool.panels(ctx).map((g) => ({ owner: tool.id, ...g })) : [];
-  panels.set([shell.metricsGroup(), ...toolGroups, ...shell.groups()]);
+  // Metrics last (Cade, October 28, 2026). Warnings hidden for now (docs/removed-features.md).
+  panels.set([...toolGroups, ...shell.groups(), shell.metricsGroup()]);
 }
 
 /* ---------- tools in the top bar (Cade, October 28, 2026: the left dock moved to the top bar, layout A) ---------- */
@@ -235,7 +237,13 @@ function openViewMenu(anchor) {
     { label: 'Diagram style', checked: scene.style() === 'diagram', action: () => toggleStyle() },
   ]);
 }
-tb.right.append(exportBtn, panelsBtn);
+// Neighbor buildings style (Cade, October 28, 2026: its own dropdown in the top bar)
+const SITE_STYLES = [['solid', 'Solid'], ['glass', 'Glass'], ['wireframe', 'Wireframe']];
+const styleSel = h('select', { class: 'select tb-select', 'aria-label': 'Neighbor buildings', 'data-tip': 'How the neighbor buildings draw: solid, see-through glass, or lines only.' },
+  ...SITE_STYLES.map(([v, t]) => h('option', { value: v }, t)));
+styleSel.value = siteStyle;
+styleSel.addEventListener('change', () => ctx.setSiteStyle(styleSel.value));
+tb.right.append(styleSel, exportBtn, panelsBtn);
 
 let currentView = 'axon';
 function setView(id) { currentView = id; scene.setView(id); syncTopbar(); }
@@ -346,6 +354,7 @@ async function loadForProject() {
 
 function onProjectOpen() {
   const doc = project.doc();
+  try { applyRealSun(ctx); } catch (e) { console.error(e); }   // real sun at the new project's site
   if (!doc && active) activate(null);   // no project: no tool stays open with work that cannot be saved
   frame.setShift(doc ? frame.shiftFor(doc) : { x: 0, y: 0, z: 0 });
   loadForProject();
@@ -367,7 +376,13 @@ bus.on('project:change', (evt) => {
   syncTopbar();
 });
 bus.on('project:change', () => { loadForProject(); });
-bus.on('view:change', () => { syncLayers(); shell.refresh(['view']); });
+// The View panel rebuilds only when the sun mode changes (a rebuild during a slider drag would end the drag).
+let lastSunMode = (viewSettings.sun || {}).mode || 'manual';
+bus.on('view:change', ({ view }) => {
+  syncLayers();
+  const mode = (view && view.sun && view.sun.mode) || 'manual';
+  if (mode !== lastSunMode) { lastSunMode = mode; shell.refresh(['view']); }
+});
 bus.on('style:change', () => { syncLayers(); syncTopbar(); shell.refresh(['view']); });
 bus.on('layers:change', () => { syncLayers(); shell.refresh(['layers']); });
 bus.on('frame:shift', () => syncLayers());
