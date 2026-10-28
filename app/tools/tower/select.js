@@ -396,7 +396,8 @@ export function createSelect(T) {
   /* ---- picking ---- */
   function modelTargets() {
     const out = [];
-    for (const id of ['tower-model', 'tower-context']) {
+    // Hidden October 28, 2026 (Cade). See docs/removed-features.md. The context layer has no pickable meshes (it builds nothing), so only the model is picked.
+    for (const id of ['tower-model']) {
       const o = ctx.layers.get(id);
       if (!o || !o.visible) continue;
       o.updateWorldMatrix(true, true);

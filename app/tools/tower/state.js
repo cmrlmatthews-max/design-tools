@@ -308,6 +308,22 @@ export function hasCurves(s) {
   return (s.podium.on && curved(s.podium.shape)) || s.segments.some((g) => curved(g.shape));
 }
 
+/* Hidden October 28, 2026 (Cade). See docs/removed-features.md. While these features are hidden they have no effect on the
+   model, so a saved value cannot change the building with no control left to clear it. The values stay in the saved
+   state and work again when the feature comes back. Set HIDDEN_FEATURES_OFF to false to bring them back. */
+export const HIDDEN_FEATURES_OFF = true;
+let effSrc = null, effOut = null;
+/** The state the model is built from: the store state minus the hidden features. Same object while the state is the same. */
+export function effectiveState(s) {
+  if (!HIDDEN_FEATURES_OFF || !s) return s;
+  if (s === effSrc) return effOut;
+  const site = s.site ? { ...s.site, heightLimit: 0, stepback: { ...(s.site.stepback || {}), on: false } } : s.site;
+  const crown = s.crown && s.crown.type === 'spire' ? s.crown : s.crown;   // a saved spire stays until the user picks another type
+  effSrc = s;
+  effOut = { ...s, site, crown, setbacks: [], mechanical: [], carves: [], cuts: [], context: { ...(s.context || {}), blocks: [] } };
+  return effOut;
+}
+
 /** One cached run of the pipeline per store. get() is the full result; display(draft) is what to draw (coarser while a slider drags). */
 export function createDerived(store) {
   let gKey = null, aKey = null, geomId = 0, counter = 0;
@@ -315,7 +331,7 @@ export function createDerived(store) {
   const geomKeyOf = (s) => JSON.stringify([s.site, s.podium, s.segments, s.setbacks, s.mechanical, s.carves, s.cuts, s.crown]);
 
   function get() {
-    const s = store.raw();
+    const s = effectiveState(store.raw());
     const gk = geomKeyOf(s);
     if (gk !== gKey || !full) { gKey = gk; geomId++; full = computeGeometry(s); aKey = null; draftCache = null; }
     const ak = JSON.stringify([s.programs, s.targets, s.context]);
@@ -328,7 +344,7 @@ export function createDerived(store) {
   }
   function display(draft) {
     const d = get();
-    const s = store.raw();
+    const s = effectiveState(store.raw());
     if (!draft || !hasCurves(s)) return { key: `f${d.geomId}`, plates: d.plates, solids: d.solids, solidsOutside: d.solidsOutside, quality: 'full' };
     if (!draftCache || draftCache.geomId !== d.geomId) {
       let g;

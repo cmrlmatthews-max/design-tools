@@ -1,5 +1,5 @@
 /* ==========================================================================
-   TOWER: saved options, presets and the autosaved working copy
+   TOWER: saved options and the autosaved working copy (presets are hidden, see loadPreset)
    Port of the Options glue in build/tower/09_storage.js. The storage module stays in src/shared/storage.js and the
    localStorage key stays 'towergen.options.v1', so options saved in the old Tower page open here.
    Not ported (Later): option JSON import and export.
@@ -54,6 +54,8 @@ export function createOptions(T) {
     return true;
   }
 
+  // Hidden October 28, 2026 (Cade). See docs/removed-features.md.
+  // Presets are not in the Options menu. The code stays so they can come back.
   /** A preset becomes a new, unsaved option; its context is replaced by the Surround set for its site. */
   function loadPreset(id) {
     const p = CONFIG.presets.find((x) => x.id === id);
@@ -138,7 +140,7 @@ export function createOptions(T) {
   }
 
   const when = (t) => { try { return new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch (e) { return ''; } };
-  /** Pop menu items: saved options and presets. */
+  /** Pop menu items: New design, Duplicate, Delete and the saved options. */
   function menuItems() {
     const items = [
       { label: 'New design', hint: 'Default tower', action: () => { newDesign(); } },
@@ -150,8 +152,7 @@ export function createOptions(T) {
     const saved = storage.list();
     if (!saved.length) items.push({ label: 'Nothing saved yet', disabled: true });
     for (const o of saved) items.push({ label: o.name, hint: `Saved ${when(o.updatedAt)}`, checked: o.id === currentId, action: () => loadOption(o.id) });
-    items.push({ sep: true });
-    for (const p of CONFIG.presets) items.push({ label: `Preset: ${p.name}`, action: () => loadPreset(p.id) });
+    // Hidden October 28, 2026 (Cade). See docs/removed-features.md. (the preset list, `Preset: <name>` items)
     return items;
   }
 

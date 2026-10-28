@@ -4,6 +4,8 @@ Owner: Cade (CMRLM) · Started October 28, 2026
 
 This list keeps every feature that the Design App removed or hid. Some features come back after they are refined. Nothing here is deleted from the code unless the "Code" column says so.
 
+Rule for hidden Tower features: while hidden, a saved value has no effect on the model (`HIDDEN_FEATURES_OFF` in `app/tools/tower/state.js`). The value stays in the project file and works again when the feature comes back.
+
 How to bring a feature back: find the comment "Hidden October 28, 2026" (or the file named in the table), undo the change, then test.
 
 ## Tools

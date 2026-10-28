@@ -1,14 +1,14 @@
 /* ==========================================================================
    TOOL: tower (Tower Generator, docs/shell-plan.md section 9.2)
-   Podium, segments, setbacks, mechanical floors, carves, cuts and a crown; programs and targets; a site with an
-   envelope and context blocks; placement on the project site; the AI prompt library.
+   Podium, segments and a crown; programs and targets; a site with an
+   envelope; placement on the project site; the AI prompt library.
    Port of build/tower/*.js. The math stays in src/tower/ (geometry, envelope, snap, prompts, derived).
    Files here:
      state.js    state shape, defaults, migration, the cached geometry run (createDerived)
      render.js   Three.js groups for the model, the context blocks and the envelope
      select.js   selection, five handles, snapping, copy and delete
      project.js  placement, base elevation, context from site, the 'massing' section
-     options.js  saved options, presets, autosave
+     options.js  saved options, autosave
      panels.js   Form, Program and Site panels (and the Diagram legend)
      prompts-ui.js  the AI prompt panel
    Live layers: 'tower-model' (replaces the derived 'massing' twin), 'tower-context', 'tower-envelope'.
@@ -29,6 +29,8 @@ import { createPrompts } from './prompts-ui.js';
 const TOOL = CONFIG.tool;
 const FOOTPRINT_KEYS = ['placement', 'segments', 'podium', 'setbacks', 'carves', 'cuts'];
 const footprintPath = (path) => FOOTPRINT_KEYS.some((k) => path === k || String(path).startsWith(`${k}.`));
+/** Warning ids from features that are hidden in the UI (height limit, stepback). */
+const HIDDEN_WARNINGS = new Set(['height', 'stepback', 'crown-height']);
 const pct1 = (f) => `${(f * 100).toFixed(1)}%`;
 const signed = (v, fmt) => `${v > 0 ? '+' : v < 0 ? '−' : '±'}${fmt(Math.abs(v))}`;
 
@@ -131,7 +133,9 @@ function invalidateLayers() {
 function towerLayers(ctx) {
   return [
     {
-      id: 'tower-context', label: 'Context blocks', order: 21, defaultOn: true,
+      // Hidden October 28, 2026 (Cade). See docs/removed-features.md.
+      // The layer draws nothing and is not in the Layers list. The site neighbors come from the Site Model. The saved context blocks stay in the file.
+      id: 'tower-context', label: 'Context blocks', order: 21, defaultOn: true, listed: false,
       key(lctx) {
         if (!shown()) return 'off';
         const s = T.store.raw();
@@ -139,9 +143,11 @@ function towerLayers(ctx) {
         return [JSON.stringify(s.context.blocks), skip ? 1 : 0, lctx.style].join('|');
       },
       build(lctx) {
+        return null;   // hidden (see the note above); the code below stays for when the layer comes back
+        // eslint-disable-next-line no-unreachable
         if (!shown()) return null;
         const s = T.store.raw();
-        if (!(s.context.blocks || []).length) return null;   // on or off: the Layers panel
+        if (!(s.context.blocks || []).length) return null;
         const skip = T.project.hasSite() && ctx.layers.isOn('site-neighbors');
         return placeNew(buildContextGroup(s, { style: lctx.style, skipSite: skip, itemFor }), lctx);
       },
@@ -314,7 +320,7 @@ export default {
     T.prompts = createPrompts(T);
     T.panels = createPanels(T);
 
-    // the working copy: the project's tower, else the autosaved copy, else the default preset
+    // the working copy: the project's tower, else the autosaved copy, else the default state
     const working = T.options.restore() || fillDefaults(defaultState());
     T.project.load({ working });
     T.options.link(null);
@@ -393,7 +399,8 @@ export default {
   },
 
   warnings() {
-    return T.derived.get().warnings.map((w) => ({ text: w.text, level: w.level === 'error' ? 'error' : 'warn' }));
+    // Hidden October 28, 2026 (Cade). See docs/removed-features.md. Height limit, stepback and crown-height warnings do not show.
+    return T.derived.get().warnings.filter((w) => !HIDDEN_WARNINGS.has(w.id)).map((w) => ({ text: w.text, level: w.level === 'error' ? 'error' : 'warn' }));
   },
 
   onProject(evt, ctx) {
