@@ -606,3 +606,17 @@ html[data-panels="hidden"] body { grid-template-columns: minmax(0, 1fr) 0; }
   .panels-bar { position: relative; padding-top: 10px; border-top: 0; }
   .sheet-grab { display: block; position: absolute; left: 50%; top: 5px; width: 36px; height: 4px; margin-left: -18px; border-radius: 2px; background: var(--line-2); }
 }
+
+/* ---- tips (core/tips.js): a short description for every button ----------------------------------------- */
+.tip {
+  position: fixed; z-index: 1000; max-width: 260px; padding: 7px 10px; border-radius: 8px; pointer-events: none;
+  background: #0b0e11; color: #e9edf1; border: 1px solid var(--line-2); box-shadow: 0 6px 20px rgba(0,0,0,.45);
+  font-size: 12.5px; line-height: 1.35; opacity: 0; transform: translateY(-2px); transition: opacity .12s ease, transform .12s ease;
+}
+.tip.on { opacity: 1; transform: translateY(0); }
+.tip kbd {
+  display: inline-block; margin-left: 8px; padding: 0 5px; border: 1px solid var(--line-2); border-radius: 4px;
+  font: 600 11px/16px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink-2);
+}
+@media (pointer: coarse) { .tip kbd { display: none; } }
+.btn, .seg-btn, .tool-tab, .mark, .panel-head { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }

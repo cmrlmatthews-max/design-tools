@@ -17,10 +17,12 @@ import { createGround } from './core/ground.js';
 import { captureImage, deliver } from './core/capture.js';
 import { h, ICONS, Toast, Pop, Controls, confirmDialog } from './core/ui-kit.js';
 import { createPanels } from './core/panels.js';
+import { initTips } from './core/tips.js';
 import { createShellPanels } from './core/shell-panels.js';
 import { TOOLS, toolOn } from './tools/registry.js';
 
 const $ = (id) => document.getElementById(id);
+const VIEW_TIPS = { axon: 'Three-quarter view from above.', n: 'Look at the north side.', e: 'Look at the east side.', s: 'Look at the south side.', w: 'Look at the west side.', plan: 'Top view. A drag moves the view.' };
 const VIEWS = [['axon', 'Axon', '1'], ['n', 'N', '2'], ['e', 'E', '3'], ['s', 'S', '4'], ['w', 'W', '5'], ['plan', 'Plan', '6']];
 
 /* ---------- core objects ---------- */
@@ -157,7 +159,7 @@ const dock = {
   setActive(id) { toolTabs.querySelectorAll('.tool-tab').forEach((b) => b.setAttribute('aria-pressed', b.dataset.id === id ? 'true' : 'false')); },
 };
 TOOLS.filter((t) => t.ready && !t.viewOnly).sort((a, b) => a.order - b.order).forEach((t) => {
-  const b = h('button', { class: 'tool-tab', type: 'button', 'data-id': t.id, 'aria-pressed': 'false', title: `${t.label} (tap again to close)`, onclick: () => activate(t.id === active ? null : t.id) });
+  const b = h('button', { class: 'tool-tab', type: 'button', 'data-id': t.id, 'aria-pressed': 'false', 'data-tip': ({ site: 'Site Model: find a real site and remove buildings. Select it again to close it.', tower: 'Tower Generator: shape the building and place it on the site. Select it again to close it.' })[t.id] || `${t.label}. Select it again to close it.`, onclick: () => activate(t.id === active ? null : t.id) });
   b.innerHTML = ICONS[t.icon] || '';
   b.append(h('span', {}, t.label));
   toolTabs.append(b);
@@ -204,21 +206,21 @@ input.onTap((ev) => {
 
 /* ---------- top bar ---------- */
 const tb = { left: $('tbLeft'), center: $('tbCenter'), right: $('tbRight') };
-const projBtn = h('button', { class: 'btn proj', type: 'button', title: 'Project', onclick: (e) => openProjectMenu(e.currentTarget) });
-const undoBtn = h('button', { class: 'btn icon', type: 'button', title: 'Undo (Cmd+Z)', 'aria-label': 'Undo', onclick: () => undo() });
-const redoBtn = h('button', { class: 'btn icon', type: 'button', title: 'Redo (Shift+Cmd+Z)', 'aria-label': 'Redo', onclick: () => redo() });
+const projBtn = h('button', { class: 'btn proj', type: 'button', 'data-tip': 'Projects: new, open, import, and export.', onclick: (e) => openProjectMenu(e.currentTarget) });
+const undoBtn = h('button', { class: 'btn icon', type: 'button', 'data-tip': 'Undo the last change.', 'data-tip-key': '⌘Z', 'aria-label': 'Undo', onclick: () => undo() });
+const redoBtn = h('button', { class: 'btn icon', type: 'button', 'data-tip': 'Redo the change.', 'data-tip-key': '⇧⌘Z', 'aria-label': 'Redo', onclick: () => redo() });
 undoBtn.innerHTML = ICONS.undo; redoBtn.innerHTML = ICONS.redo;
-const viewBtns = VIEWS.map(([id, label, key]) => h('button', { class: 'seg-btn', type: 'button', title: `${label} view (${key})`, 'data-view': id, onclick: () => setView(id) }, label));
-const zoomSite = h('button', { class: 'seg-btn', type: 'button', title: 'Zoom to the site', onclick: () => scene.frameSite() }, 'Site');
-const zoomBldg = h('button', { class: 'seg-btn', type: 'button', title: 'Zoom to the building', onclick: () => scene.frameBuilding() }, 'Building');
-const styleBtn = h('button', { class: 'seg-btn', type: 'button', title: 'Model or Diagram (D)', onclick: () => toggleStyle() }, 'Diagram');
-const exportBtn = h('button', { class: 'btn icon', type: 'button', title: 'Save image', 'aria-label': 'Save image', onclick: (e) => openExportMenu(e.currentTarget) });
+const viewBtns = VIEWS.map(([id, label, key]) => h('button', { class: 'seg-btn', type: 'button', 'data-tip': VIEW_TIPS[id], 'data-tip-key': key, 'data-view': id, onclick: () => setView(id) }, label));
+const zoomSite = h('button', { class: 'seg-btn', type: 'button', 'data-tip': 'Fit the whole site in the view.', onclick: () => scene.frameSite() }, 'Site');
+const zoomBldg = h('button', { class: 'seg-btn', type: 'button', 'data-tip': 'Fit the building in the view.', onclick: () => scene.frameBuilding() }, 'Building');
+const styleBtn = h('button', { class: 'seg-btn', type: 'button', 'data-tip': 'Color the model by program. Select it again for the white model.', 'data-tip-key': 'D', onclick: () => toggleStyle() }, 'Diagram');
+const exportBtn = h('button', { class: 'btn icon', type: 'button', 'data-tip': 'Save a picture of the view, or an AI-ready image.', 'aria-label': 'Save image', onclick: (e) => openExportMenu(e.currentTarget) });
 exportBtn.innerHTML = ICONS.export;
-const panelsBtn = h('button', { class: 'btn icon', type: 'button', title: 'Show or hide the panels (\\)', 'aria-label': 'Panels', onclick: () => panels.toggleColumn() });
+const panelsBtn = h('button', { class: 'btn icon', type: 'button', 'data-tip': 'Show or hide the panels.', 'data-tip-key': '\\', 'aria-label': 'Panels', onclick: () => panels.toggleColumn() });
 panelsBtn.innerHTML = ICONS.panels;
 
-tb.left.append(h('a', { class: 'mark', href: '../', title: 'Workspace' }, 'CMRLM'), projBtn, undoBtn, redoBtn, toolTabs);
-const viewCompact = h('button', { class: 'btn view-compact', type: 'button', title: 'View', onclick: (e) => openViewMenu(e.currentTarget) }, 'Axon');
+tb.left.append(h('a', { class: 'mark', href: '../', 'data-tip': 'Back to the Workspace page and the project list.' }, 'CMRLM'), projBtn, undoBtn, redoBtn, toolTabs);
+const viewCompact = h('button', { class: 'btn view-compact', type: 'button', 'data-tip': 'Change the view, zoom, or style.', onclick: (e) => openViewMenu(e.currentTarget) }, 'Axon');
 tb.center.append(h('div', { class: 'seg views' }, ...viewBtns), h('div', { class: 'seg' }, zoomSite, zoomBldg), h('div', { class: 'seg' }, styleBtn), viewCompact);
 
 // Narrow screens (the bottom-sheet layout): one View menu replaces the three button groups.
@@ -384,6 +386,7 @@ window.addEventListener('resize', () => { syncInsets(); scene.resize(); });
 window.addEventListener('panels:resize', () => { syncInsets(); scene.resize(); });
 
 /* ---------- start ---------- */
+initTips();
 applyView();
 syncInsets();
 refreshPanels();
