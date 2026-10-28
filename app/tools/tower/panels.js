@@ -128,7 +128,21 @@ export function createPanels(T) {
     swatchSyncs.push(syncSw);
     return section('podium', 'Podium', {
       children: [
-        C.toggle({ label: 'Podium', bind: bs('podium.on') }).el,
+        // A podium turned on starts centered under the tower (Cade, October 28, 2026): one undo step.
+        C.toggle({ label: 'Podium', bind: {
+          get: () => !!get('podium.on'),
+          set: (v) => {
+            if (v && !get('podium.on')) {
+              store.update((d) => {
+                const seg = (d.segments || [])[0] || {};
+                const o = seg.offset || {};
+                d.podium.on = true;
+                d.podium.offset = { x: Number(o.x) || 0, y: Number(o.y) || 0 };
+              });
+            } else store.set('podium.on', !!v);
+          },
+          commit: () => {},
+        } }).el,
         C.when(on, [
           intS('Floors', 'podium.floors', 1, 12, { hardMax: 100 }),
           lenS('Ground floor-to-floor', 'podium.groundFtf', 10, 40, { step: 0.5, hardMin: 6, hardMax: 100 }),
