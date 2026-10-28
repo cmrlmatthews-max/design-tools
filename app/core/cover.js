@@ -7,6 +7,7 @@
    The deck levels come from parking.derived.levels (z in the deck frame). A podium or wrap deck copies the massing
    placement and level heights, so the deck z and the massing z are in the same frame. Match tolerance: 0.5 ft.
    ========================================================================== */
+import { toolOn } from '../tools/registry.js';
 import { getSection } from '../../src/shared/project.js';
 
 const TOL = 0.5;
@@ -14,6 +15,7 @@ const ZONE_OF = { podium: 'podium', wrap: 'deck' };
 
 /** { zone, zs: [z...] } for a wrap or podium deck in the project, else null. */
 export function deckCover(doc) {
+  if (!toolOn('parking')) return null;   // the Parking Deck is hidden: the massing draws every podium floor (registry.js)
   const sec = getSection(doc, 'parking');
   const source = sec && sec.state && sec.state.source;
   const zone = ZONE_OF[source];

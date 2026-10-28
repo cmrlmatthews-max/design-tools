@@ -19,7 +19,7 @@ import { h, ICONS, Toast, Pop, Controls, confirmDialog } from './core/ui-kit.js'
 import { createDock } from './core/dock.js';
 import { createPanels } from './core/panels.js';
 import { createShellPanels } from './core/shell-panels.js';
-import { TOOLS } from './tools/registry.js';
+import { TOOLS, toolOn } from './tools/registry.js';
 
 const $ = (id) => document.getElementById(id);
 const VIEWS = [['axon', 'Axon', '1'], ['n', 'N', '2'], ['e', 'E', '3'], ['s', 'S', '4'], ['w', 'W', '5'], ['plan', 'Plan', '6']];
@@ -299,7 +299,10 @@ keys.bind('shell', '\\', () => panels.toggleColumn());
 keys.bind('shell', 'Escape', () => select(null));
 
 /* ---------- layers and project ---------- */
-derivedLayerDefs({ getDoc: () => project.doc(), ground, scene }).forEach((d) => layers.register(d));
+// A hidden tool (registry ready: false) draws nothing: its derived layers are not registered.
+const HIDDEN_LAYERS = { parking: ['parking'], grading: ['grading'] };
+const hiddenIds = new Set(Object.entries(HIDDEN_LAYERS).filter(([tool]) => !toolOn(tool)).flatMap(([, ids]) => ids));
+derivedLayerDefs({ getDoc: () => project.doc(), ground, scene }).filter((d) => !hiddenIds.has(d.id)).forEach((d) => layers.register(d));
 
 function syncLayers() { layers.sync(ctx); scene.requestRender(); }
 
@@ -322,7 +325,7 @@ function toolsFor(doc) {
   const podiumParking = !!(mass && mass.derived && Array.isArray(mass.derived.levels) && mass.derived.levels.some((l) => l && l.zone === 'podium' && l.program === 'parking'));
   if (sec('parking') || podiumParking) out.push('parking');
   if (sec('grading')) out.push('grading');
-  return out;
+  return out.filter((id) => toolOn(id));
 }
 
 /** Loads the drawers of the open project in the background (no activate). */

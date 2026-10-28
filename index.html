@@ -122,110 +122,36 @@ li.warn .stl{color:var(--red)}
 <main class="sheet"><div class="draw">
 <div class="date rc" id="date"></div>
 <h1>Design Tools — Workspace</h1>
-<p class="lede">One project file moves between the tools. Pick a project, then open a tool.</p>
+<p class="lede">Pick a project, then open the Design App.</p>
 <p id="notice" class="note" role="alert" hidden>Browser storage is not available. Projects cannot be saved on this device.</p>
-<p id="modNote" class="note" hidden>Projects are not available right now. The tools below still open on their own.</p>
+<p id="modNote" class="note" hidden>Projects are not available right now. The Design App still opens on its own.</p>
 <p id="testNote" class="note info" hidden>Test mode. Projects on this page are temporary. Nothing is read from or saved to the browser.</p>
-<details class="howto" id="howto" open><summary><svg viewBox="0 0 44 44" class="bub" aria-hidden="true"><circle cx="22" cy="22" r="20" fill="#fff" stroke="#1D2733" stroke-width="1.4"/><line x1="4" y1="22" x2="40" y2="22" stroke="#1D2733" stroke-width="1"/><text x="22" y="18" text-anchor="middle" class="rc" font-size="13" fill="#1D2733">?</text><text x="22" y="35" text-anchor="middle" class="rc" font-size="9.5" fill="#1D2733">G-001</text></svg><div><h2 class="dtt" style="margin:0">How projects work</h2><div class="dts">General notes · moving work from tool to tool</div></div><span class="tog" aria-hidden="true"></span></summary>
+<details class="howto" id="howto" open><summary><svg viewBox="0 0 44 44" class="bub" aria-hidden="true"><circle cx="22" cy="22" r="20" fill="#fff" stroke="#1D2733" stroke-width="1.4"/><line x1="4" y1="22" x2="40" y2="22" stroke="#1D2733" stroke-width="1"/><text x="22" y="18" text-anchor="middle" class="rc" font-size="13" fill="#1D2733">?</text><text x="22" y="35" text-anchor="middle" class="rc" font-size="9.5" fill="#1D2733">G-001</text></svg><div><h2 class="dtt" style="margin:0">How projects work</h2><div class="dts">General notes · the Design App</div></div><span class="tog" aria-hidden="true"></span></summary>
 <div class="hw">
 <h3>1 · What a project is</h3>
-<p>A project is one file that holds the work of every tool for one design study. Each tool writes one part of the file. That part is the section of the tool. A tool reads the sections of the tools before it.</p>
-<p>The tools run in this order: Site → Massing (Tower or Mid-Rise) → Plates → Parking → Sun → Grading → Model Viewer (every section in one model). Hidden: Facade Studio (facades vary too much to model well with the current tools). The <b>Single tools</b> list on this page uses the same order.</p>
-<ul>
-<li><b>Open project</b>: the project that the tools on this page open. The <b>Project schedule</b> marks it <b>Open</b>.</li>
-<li><b>Site layer</b>: the project site from the Site Model. It shows the ground, the site boundary, roads, water, trees, and neighbor buildings. Every tool draws it.</li>
-<li><b>Placement</b>: the position of the building on the site. It is X (east), Y (north), rotation, and base elevation. The base elevation is the elevation of the ground floor, in feet.</li>
-</ul>
-
+<p>A project is one file for one design study. It holds the site, the tower, and the units. The Design App works on them in one 3D view.</p>
 <h3>2 · Start a project</h3>
-<p>Start a project on this page or in the Site Model. Use the Site Model when the design has a real site.</p>
-<p><b>On this page</b></p>
 <ol class="steps">
-<li>Select <b>New project</b> below the <b>Project schedule</b>.</li>
-<li>Type a name. Select <b>Create</b>. The new project becomes the open project.</li>
+<li>Select <b>New project</b> below the <b>Project schedule</b>. Type a name. Select <b>Create</b>.</li>
+<li>Open the <b>Design App</b>.</li>
+<li>Select <b>Site Model</b> in the dock. Type an address. Select <b>Go</b>.</li>
 </ol>
-<p><b>In the Site Model</b></p>
+<h3>3 · Work in the Design App</h3>
 <ol class="steps">
-<li>Open the <b>Site Model</b>. Type an address. Select <b>Go</b>.</li>
-<li>In the top bar, select <b>Send to Tower Generator</b> or <b>Send to Mid-Rise Generator</b>.</li>
-<li>With no open project, the Site Model makes a project. The project has the name of the address.</li>
-<li>The massing tool opens with the project. Go to section 3.</li>
+<li>Select a tool in the dock on the left: <b>Site Model</b> or <b>Tower Generator</b>. Its panels open on the right.</li>
+<li>Use the <b>View</b> panel for the style, floor lines, shadows, and sun. Use the <b>Layers</b> panel to show or hide each part.</li>
+<li>Tap any part of the model to see its data.</li>
 </ol>
-<p>A tool can also start a project. Open the <b>Project</b> menu in its top bar. Select <b>New project</b>.</p>
-<p>To open a saved project, select it in the <b>Project schedule</b>. Its status changes to <b>Open</b>.</p>
-
-<h3>3 · Take the site into a massing tool</h3>
-<ol class="steps">
-<li>Select the project in the <b>Project schedule</b>.</li>
-<li>In <b>Tools</b>, select <b>Tower Generator</b> or <b>Mid-Rise Generator</b> on the <b>Massing</b> card. The tool opens with the project.</li>
-<li>Look at the top bar. The tool shows the project name there.</li>
-<li>Look at the model. The site layer shows the ground, roads and water. The Site Model makes no trees yet. A project opens with the site in Glass, so the neighbor buildings are see-through blocks. Select <b>Site</b> or <b>Building</b> in the top bar to frame the site or the building. A building you removed in the Site Model does not show, and casts no shadow.</li>
-<li>Drag the building on the ground to move it. The base elevation follows the lowest ground under the building unless you select <b>Typed</b> in the <b>Site</b> tab. Each drag is one undo step. Select <b>Pin placement</b> in the top bar when the building sits right. The building does not move while it is pinned. Select <b>Unpin</b> to move it again.</li>
-<li>Drag the rotation handle to turn the building. It turns in 5-degree steps.</li>
-<li>To type exact values, open the <b>Site</b> tab. Type X, Y, rotation, and base elevation under <b>Placement</b>.</li>
-<li>To put the building at the center of the site, select <b>Center on site</b> in the <b>Site</b> tab. The base elevation goes to the lowest ground under the building.</li>
-<li>To hide the site layer, turn off <b>Site</b> in the <b>View</b> tab. The placement and the numbers do not change.</li>
-<li>To change how the neighbor buildings draw, select <b>Solid</b>, <b>Glass</b>, or <b>Wireframe</b> under <b>Site style</b> in the <b>View</b> tab.</li>
-</ol>
+<h3>4 · Move around the model</h3>
 <ul>
-<li>On a slope, the building cuts into the ground. The Grading Sketch sets the pads later.</li>
-<li>Neighbor buildings in the site layer do not change a number. For sun hours and metrics, select <b>Context from site</b> in the <b>Site</b> tab. It makes context blocks from the neighbors within the radius. The context blocks cast shadows in the Sun Study.</li>
-<li>A standalone Parking Deck moves the same way: drag it, and turn it with the handle. A wrap deck or a podium follows the massing.</li>
-<li>To study the sun and the shadows, select <b>Sun Study</b> in <b>Tools</b>. The Tower Generator opens in study mode, with the sun tools only. Select <b>Edit the tower</b> in the top bar to go back to the full tool.</li>
-<li>The Plate Planner shows the site under the massing. You cannot drag the building there. The Grading Sketch draws its own ground and shows the rest of the site on it.</li>
+<li><b>Mouse</b>: left drag turns the view. Right drag or Shift + drag moves the view. The wheel zooms.</li>
+<li><b>iPad</b>: one finger turns the view. Two fingers move and zoom the view.</li>
+<li><b>Plan</b> view: a drag moves the view.</li>
 </ul>
-
-<h3>4 · Move to the next tool</h3>
+<h3>5 · Keep a copy and move between devices</h3>
 <ol class="steps">
-<li>Do the work in the tool. The tool saves its section about one second after each change. There is no save button.</li>
-<li>Open the <b>Export</b> menu. Select <b>Send to</b> and the next tool. In the Site Model, the <b>Send to</b> buttons are in the top bar.</li>
-<li>The tool saves the project. Then it opens the next tool with the same project.</li>
-<li>The next tool reads the sections it needs when it opens.</li>
-<li>Or come back to this page. Select <b>Open</b> on the card of the next tool. The tool opens with the open project.</li>
-<li>The Site Model card says <b>Open with project</b> while a project is open. The Massing card has two buttons: <b>Tower Generator</b> and <b>Mid-Rise Generator</b>.</li>
-<li>Look at the tool cards on this page. A tool with work in the project shows <b>Has data</b> and the date.</li>
-<li>Use the Design App to work on the site, the tower, the parking, and the grading in one view. Use the Plate Planner page for units.</li>
-</ol>
-
-<h3>5 · What each tool reads and writes</h3>
-<table aria-label="What each tool reads and writes"><thead><tr><th>Tool</th><th>Reads from the project</th><th>Writes to the project</th><th>Send to</th></tr></thead><tbody>
-<tr><td>Site Model</td><td>Nothing</td><td>Site: ground, site boundary, neighbor buildings (removed buildings are flagged), roads, walks, water, trees</td><td>Tower Generator, Mid-Rise Generator, Grading Sketch</td></tr>
-<tr><td>Site layer (every tool)</td><td>Site: ground, boundary, roads, walks, water, neighbor buildings (View tab, Site toggle)</td><td>Nothing. A drag writes the placement of the tool (Tower, Mid-Rise, standalone Parking Deck).</td><td>—</td></tr>
-<tr><td>Tower Generator</td><td>Site: ground for the base elevation; neighbors for context blocks (Site tab, Context from site); site location for the Sun Study</td><td>Massing: floor plates, crown, placement (no core: the Plate Planner makes it); Sun (see the Sun Study row)</td><td>Plate Planner, Grading Sketch</td></tr>
-<tr><td>Mid-Rise Generator</td><td>Site: ground for the base elevation; neighbors for context blocks (Site tab, Context from site)</td><td>Massing: floor plates, corridors, stairs, deck and podium levels, placement</td><td>Plate Planner, Parking Deck, Grading Sketch</td></tr>
-<tr><td>Plate Planner</td><td>Massing: floor plates by level and placement (levels with the same plate share one fill)</td><td>Plates: units by type, corridors, stairs, the core (auto from the elevator count), net rentable area</td><td>Parking Deck</td></tr>
-<tr><td>Parking Deck</td><td>Massing: deck or podium levels, stairs and elevators (wrap deck or podium); Plates: unit walls for the column overlay</td><td>Parking: stalls, ramps, columns; placement of a standalone deck</td><td>Grading Sketch</td></tr>
-<tr><td>Sun Study</td><td>Site location; Massing; context blocks from the site (shadows)</td><td>Sun: dates, sun positions, sun hours</td><td>— (inside the Tower Generator, View tab)</td></tr>
-<tr><td>Grading Sketch</td><td>Site: ground; Massing: footprint; Parking: deck footprint</td><td>Grading: finished floor elevations, proposed ground, walls, earthwork</td><td>—</td></tr>
-<tr><td>Model Viewer</td><td>Every section of the project</td><td>Nothing</td><td>—</td></tr>
-</tbody></table>
-
-<h3>6 · Rules</h3>
-<ul>
-<li><b>One tool, one section.</b> Each tool writes only its own section. It never changes the work of another tool.</li>
-<li><b>Reopen later tools.</b> After you change an earlier tool, open each later tool again. A tool reads the new data only when it opens.</li>
-<li><b>Re-fill in the Plate Planner.</b> The Plate Planner keeps its fill when the massing changes. Use the steps below to take the new massing.</li>
-<li><b>Unlimited site.</b> A new Tower or Mid-Rise design has an Unlimited site. Unlimited means no site line, no setbacks, and no site checks. A project site from the Site Model gives the site line: its boundary draws on the ground. For setbacks and site checks, set <b>Shape</b> to <b>Rectangle</b> or <b>Polygon</b> in the <b>Site</b> tab.</li>
-<li><b>One massing per project.</b> The Tower Generator or the Mid-Rise Generator writes it. When the project holds a massing from the other tool, the tool asks first. Until you select <b>Replace</b>, the tool does not save to the project.</li>
-<li><b>Sun Study.</b> The Sun Study is in the Tower Generator (View tab). It writes the sun dates and sun hours.</li>
-<li><b>Options stay in the tool.</b> Each tool keeps its own saved options (the <b>Option</b> menu). The project holds only the current design of each tool.</li>
-<li><b>Newer version.</b> A card that shows <b>Newer version</b> holds work from a newer version of that tool. The tool opens it read-only.</li>
-<li><b>Close.</b> Select <b>Close</b> next to the open project name to stop using it. The tools then open with no project.</li>
-</ul>
-<p><b>Re-fill the plates after a massing change</b></p>
-<p class="caution">Caution: Re-fill recomputes every unlocked unit from the mix. A locked unit keeps its outline and its type.</p>
-<ol class="steps">
-<li>Change the massing in the Tower Generator or the Mid-Rise Generator.</li>
-<li>Open the Plate Planner with the project. A notice says “The massing changed after this fill.”</li>
-<li>Select <b>Re-fill</b> in the notice. The fill takes the new massing.</li>
-</ol>
-
-<h3>7 · Keep a copy and move between devices</h3>
-<p class="caution">Caution: projects live in this browser on this device only. Clearing the browser data deletes them. Export a project to keep a copy.</p>
-<ol class="steps">
-<li>Select the project in the <b>Project schedule</b>. Select <b>Export</b>. A file named <b>name.cmrlm.json</b> downloads.</li>
-<li>Move the file to the other device, for example with AirDrop or the Files app.</li>
-<li>On the other device, open this page. Select <b>Import</b>. Choose the file.</li>
+<li>Select the project in the <b>Project schedule</b>. Select <b>Export</b>. The project downloads as one file.</li>
+<li>On the other device, select <b>Import</b> and choose the file.</li>
 <li>A project that is already on that device comes in as a copy named “Name (2)”.</li>
 </ol>
 </div></details>
@@ -238,9 +164,8 @@ li.warn .stl{color:var(--red)}
 </section>
 <div class="lists"><section><div class="dt"><svg viewBox="0 0 44 44" class="bub" aria-hidden="true"><circle cx="22" cy="22" r="20" fill="#fff" stroke="#1D2733" stroke-width="1.4"/><line x1="4" y1="22" x2="40" y2="22" stroke="#1D2733" stroke-width="1"/><text x="22" y="18" text-anchor="middle" class="rc" font-size="13" fill="#1D2733">8</text><text x="22" y="35" text-anchor="middle" class="rc" font-size="9.5" fill="#1D2733">G-001</text></svg><div><h2 class="dtt" style="margin:0">Tools</h2><div class="dts" id="toolSub">No project open</div></div></div>
 <p id="open" class="hint">No project open. Each tool opens on its own.</p>
-<ol><li class="tool" id="appCard"><div class="tag"><svg class="tri" viewBox="0 0 26 23" aria-hidden="true"><path d="M13,1.5 L24.5,21.5 L1.5,21.5 Z"/><text x="13" y="18" text-anchor="middle" font-size="11">A</text></svg></div><div class="c"><h3 class="t">Design App</h3><p class="d">Site, tower, parking, and grading in one 3D view.</p><p class="stl"></p><div class="stamps"><a class="stamp" id="appOpen" data-base="app/" href="app/" aria-label="Open Design App">Open</a></div></div></li></ol>
-<h3 class="subhd">Single tools</h3>
-<ol><li class="tool" data-section="site"><div class="tag"><svg class="tri" viewBox="0 0 26 23" aria-hidden="true"><path d="M13,1.5 L24.5,21.5 L1.5,21.5 Z"/><text x="13" y="18" text-anchor="middle" font-size="11">1</text></svg></div><div class="c"><h3 class="t">Site Model</h3><p class="d">Context model of a real site from public map data, with Revit CSV and DXF downloads.</p><p class="stl"></p><div class="stamps"><a class="stamp" id="siteOpen" data-base="site/" href="site/" aria-label="Open Site Model">Open</a></div></div></li><li class="tool" data-section="massing"><div class="tag"><svg class="tri" viewBox="0 0 26 23" aria-hidden="true"><path d="M13,1.5 L24.5,21.5 L1.5,21.5 Z"/><text x="13" y="18" text-anchor="middle" font-size="11">2</text></svg></div><div class="c"><h3 class="t">Massing</h3><p class="d">Tower or mid-rise form with live floor-area metrics. A project holds one massing.</p><p class="stl"></p><div class="stamps"><a class="stamp" data-base="tower/" href="tower/">Tower Generator</a><a class="stamp" data-base="midrise/" href="midrise/">Mid-Rise Generator</a></div></div></li><li class="tool" data-section="plates"><div class="tag"><svg class="tri" viewBox="0 0 26 23" aria-hidden="true"><path d="M13,1.5 L24.5,21.5 L1.5,21.5 Z"/><text x="13" y="18" text-anchor="middle" font-size="11">3</text></svg></div><div class="c"><h3 class="t">Plate Planner</h3><p class="d">Counted test fit of every floor plate: corridor, stairs, core, and units by type, with net rentable area and efficiency. Multifamily or hotel.</p><p class="stl"></p><div class="stamps"><a class="stamp" data-base="plate/" href="plate/" aria-label="Open Plate Planner">Open</a></div></div></li><li class="tool" data-section="parking"><div class="tag"><svg class="tri" viewBox="0 0 26 23" aria-hidden="true"><path d="M13,1.5 L24.5,21.5 L1.5,21.5 Z"/><text x="13" y="18" text-anchor="middle" font-size="11">4</text></svg></div><div class="c"><h3 class="t">Parking Deck</h3><p class="d">Stalls, aisles, ramps, and columns for a parking deck.</p><p class="stl"></p><div class="stamps"><a class="stamp" data-base="parking/" href="parking/" aria-label="Open Parking Deck">Open</a></div></div></li><li class="tool" data-section="sun"><div class="tag"><svg class="tri" viewBox="0 0 26 23" aria-hidden="true"><path d="M13,1.5 L24.5,21.5 L1.5,21.5 Z"/><text x="13" y="18" text-anchor="middle" font-size="11">5</text></svg></div><div class="c"><h3 class="t">Sun Study</h3><p class="d">Sun paths, real shadows, shadow study sheets, and sun hours on the ground. Inside the Tower Generator (View tab).</p><p class="stl"></p><div class="stamps"><a class="stamp" data-base="tower/?study=sun" href="tower/?study=sun" aria-label="Open the Sun Study in the Tower Generator">Open</a></div></div></li><li class="tool" data-section="grading"><div class="tag"><svg class="tri" viewBox="0 0 26 23" aria-hidden="true"><path d="M13,1.5 L24.5,21.5 L1.5,21.5 Z"/><text x="13" y="18" text-anchor="middle" font-size="11">6</text></svg></div><div class="c"><h3 class="t">Grading Sketch</h3><p class="d">Rough site grading and the finished floor elevation.</p><p class="stl"></p><div class="stamps"><a class="stamp" data-base="grading/" href="grading/" aria-label="Open Grading Sketch">Open</a></div></div></li><li class="tool" data-section="viewer"><div class="tag"><svg class="tri" viewBox="0 0 26 23" aria-hidden="true"><path d="M13,1.5 L24.5,21.5 L1.5,21.5 Z"/><text x="13" y="18" text-anchor="middle" font-size="11">7</text></svg></div><div class="c"><h3 class="t">Model Viewer</h3><p class="d">Every section of the project in one model, with a summary table. View only.</p><p class="stl"></p><div class="stamps"><a class="stamp" data-base="viewer/" href="viewer/" aria-label="Open Model Viewer">Open</a></div></div></li></ol></section>
+<ol><li class="tool" id="appCard"><div class="tag"><svg class="tri" viewBox="0 0 26 23" aria-hidden="true"><path d="M13,1.5 L24.5,21.5 L1.5,21.5 Z"/><text x="13" y="18" text-anchor="middle" font-size="11">A</text></svg></div><div class="c"><h3 class="t">Design App</h3><p class="d">Site and tower in one 3D view.</p><p class="stl"></p><div class="stamps"><a class="stamp" id="appOpen" data-base="app/" href="app/" aria-label="Open Design App">Open</a></div></div></li></ol>
+</section>
 <section class="sched" id="testBox" hidden><div class="st">Self-test</div><pre id="testOut" hidden></pre></section>
 </div>
 </div><aside class="tb">
@@ -324,8 +249,8 @@ function viewerStatus(doc) {
   }
   return { text: "Empty", cls: "" };
 }
-// The Design App shows the four sections it draws: site, massing, parking, grading.
-const APP_SECTIONS = ["site", "massing", "parking", "grading"];
+// The Design App shows the sections it draws: site and massing (Parking Deck and Grading Sketch hidden, October 28, 2026).
+const APP_SECTIONS = ["site", "massing"];
 function appStatus(doc) {
   const n = APP_SECTIONS.filter((k) => statusFor(doc, k).cls === "data").length;
   return { text: (n ? "Has data" : "Empty") + " · " + n + " of " + APP_SECTIONS.length + " sections", cls: n ? "data" : "" };
@@ -384,7 +309,7 @@ function renderTools() {
   const hint = $("#open"), d = openDoc;
   hint.replaceChildren();
   if (d) hint.append("Open project:", h("strong", {}, d.name), h("button", { class: "link", id: "closeBtn", type: "button" }, "Close"));
-  else hint.append(openId ? "The open project could not be read. Each tool opens on its own." : "No project is open. Each tool opens on its own.");
+  else hint.append(openId ? "The open project could not be read. The Design App opens on its own." : "No project is open. The Design App opens on its own.");
   let withData = 0, sections = 0;
   document.querySelectorAll("li.tool").forEach((card) => {
     card.querySelectorAll("a[data-base]").forEach((a) => a.setAttribute("href", a.dataset.base + (d ? (a.dataset.base.indexOf("?") < 0 ? "?" : "&") + "project=" + encodeURIComponent(d.id) : "")));
@@ -396,10 +321,10 @@ function renderTools() {
     card.classList.toggle("warn", s.cls === "warn");
     if (s.cls === "data" && !viewer) withData++;
   });
-  const so = $("#siteOpen");
-  so.textContent = d ? "Open with project" : "Open";
-  so.setAttribute("aria-label", (d ? "Open with project" : "Open") + ", Site Model");
-  $("#toolSub").textContent = d ? withData + " of " + sections + " with data" : "No project open";
+  const ao = $("#appOpen");
+  ao.textContent = d ? "Open with project" : "Open";
+  ao.setAttribute("aria-label", (d ? "Open with project" : "Open") + ", Design App");
+  $("#toolSub").textContent = d ? appStatus(d).text : "No project open";
   $("#tbName").textContent = d ? d.name : "—";
   $("#tbFrame").textContent = frameText(d);
   $("#tbUpd").textContent = d ? shortDate(d.updatedAt) || "—" : "—";
@@ -573,27 +498,20 @@ async function selfTest() {
     ok(getLast(mem) === "", "open id was not cleared");
     ok(Project.loadProject(mem, B.id) === null, "loadProject should return null");
   });
-  await t("the Facade Studio is hidden: no card, no link", () => {
-    ok(!document.querySelector('li.tool[data-section="facade"]'), "a Facade card is on the page");
-    ok(!document.querySelector('a[href*="facade/"]'), "a link opens facade/");
-    ok(![...document.querySelectorAll("li.tool .t")].some((e) => /facade/i.test(e.textContent)), "a card is named Facade");
-    const flow = [...document.querySelectorAll("p")].map((e) => e.textContent).find((x) => /^The tools run in this order/.test(x)) || "";
-    ok(flow && !/→ Facade/.test(flow) && /Hidden: Facade Studio/.test(flow), "the pipeline sentence is: " + flow);
+  await t("the menu shows only the Design App (Cade, October 28, 2026)", () => {
+    const cards = [...document.querySelectorAll("li.tool")];
+    ok(cards.length === 1 && cards[0].id === "appCard", "cards on the page: " + cards.length);
+    ok(document.getElementById("appCard").querySelector(".t").textContent === "Design App", "the card is not the Design App");
+    ok(document.getElementById("appCard").querySelector(".d").textContent === "Site and tower in one 3D view.", "the Design App line is wrong");
+    const single = ["site/", "tower/", "midrise/", "plate/", "parking/", "grading/", "viewer/", "facade/"];
+    const hit = [...document.querySelectorAll("main a[href]")].map((e) => e.getAttribute("href")).find((h) => single.some((x) => h.startsWith(x)));
+    ok(!hit, "a link opens a single tool: " + hit);
+    ok(![...document.querySelectorAll("h3.subhd")].some((e) => e.textContent === "Single tools"), "the Single tools heading is on the page");
   });
-  await t("single tool cards are numbered in pipeline order", () => {
-    const nums = [...document.querySelectorAll("li.tool[data-section] .tri text")].map((e) => e.textContent).join(",");
-    ok(nums === "1,2,3,4,5,6,7", "card numbers are " + nums);
-  });
-  await t("Design App card comes first, then the Single tools heading", () => {
-    const app = document.getElementById("appCard"), sub = [...document.querySelectorAll("h3.subhd")].find((e) => e.textContent === "Single tools");
-    ok(document.querySelector("li.tool") === app && app.querySelector(".t").textContent === "Design App", "Design App is not the first card");
-    ok(app.querySelector(".d").textContent === "Site, tower, parking, and grading in one 3D view.", "the Design App line is wrong");
-    ok(sub && (app.compareDocumentPosition(sub) & Node.DOCUMENT_POSITION_FOLLOWING) && (sub.compareDocumentPosition(document.querySelector('li.tool[data-section="site"]')) & Node.DOCUMENT_POSITION_FOLLOWING), "Single tools heading is not between the app card and the single tools");
-  });
-  await t("Design App link opens app/ with the open project, and its status counts four sections", () => {
+  await t("Design App link opens app/ with the open project, and its status counts two sections", () => {
     const a = document.getElementById("appOpen"), id = getLast(store), st = document.querySelector("#appCard .stl").textContent;
     ok(id && a.getAttribute("href") === "app/?project=" + encodeURIComponent(id), "link is " + a.getAttribute("href"));
-    ok(/ · 2 of 4 sections$/.test(st), "status is " + st);
+    ok(/ · 2 of 2 sections$/.test(st), "status is " + st);
   });
   await t("no Later, Planned, coming soon, Egress, or View Study text on the page", () => {
     const page = document.querySelector("main").cloneNode(true);
@@ -601,8 +519,10 @@ async function selfTest() {
     const hit = (page.textContent.match(/\bLater:|planned|coming soon|egress|view study/i) || [""])[0];
     ok(!hit, "page still says " + hit);
   });
-  await t("how it works has the Design App step", () => {
-    ok([...document.querySelectorAll("#howto li")].some((e) => e.textContent === "Use the Design App to work on the site, the tower, the parking, and the grading in one view. Use the Plate Planner page for units."), "step is missing");
+  await t("how it works is about the Design App", () => {
+    const text = document.getElementById("howto").textContent;
+    ok(/Work in the Design App/.test(text) && /Move around the model/.test(text), "the Design App steps are missing");
+    ok(!/Send to|Single tools/.test(text), "how it works still talks about single tools");
   });
   await t("a saved facade section does not count as data", () => {
     let F = Project.newProject({ name: "Facade only" });

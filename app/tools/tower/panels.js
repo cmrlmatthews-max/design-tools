@@ -325,7 +325,7 @@ export function createPanels(T) {
       const tier = P.gradingFfe();
       ffe.textContent = !doc ? '' : tier
         ? `Grading Sketch sets the ground floor at ${Units.formatFeetInches(tier.ffe)}. The other tools read that height; the base elevation below stays editable.`
-        : 'No Grading Sketch height yet, so the tools read the base elevation below as the ground floor.';
+        : 'The base elevation below is the ground floor.';
       const n = (store.raw().context.blocks || []).filter((b) => b && b.site).length;
       ctxNote.textContent = store.raw().context.fromSite ? `${n} block${n === 1 ? '' : 's'} from the site.` : '';
       const g = P.groundUnderFootprint();
