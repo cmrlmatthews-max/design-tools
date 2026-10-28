@@ -31,6 +31,7 @@ How to bring a feature back: find the comment "Hidden October 28, 2026" (or the 
 | Layer switches: Zoning envelope, Units, Cores and corridors, Context blocks | October 28, 2026 | Clutter | `listed: false` on the layer | Remove `listed: false` |
 | Neighbor style in the Layers panel | October 28, 2026 | Moved to the top bar | — | — |
 | Site file downloads (Revit CSV, DXF, SketchUp, Notes) and "Load again for downloads" | October 28, 2026 | Need a fresh site search and network | `HIDE_DOWNLOADS_FOR_DEMO` in `app/tools/site/index.js` | Set the flag to false |
+| Level cut (Layers panel) | October 28, 2026 | Did nothing useful. Replaced by the Section cut (Plan view, drawing below the 3D view) | `setCut` kept in `app/core/layers.js` | Add the select back in `app/core/shell-panels.js` |
 | Site data count list and its style control | October 28, 2026 | Same as Metrics and the top bar | Removed | Git history |
 
 ## Tower Generator
@@ -46,6 +47,11 @@ How to bring a feature back: find the comment "Hidden October 28, 2026" (or the 
 | Presets in the Options menu | October 28, 2026 | Simplify | Saved options stay | Same |
 | Height limit and stepback | October 28, 2026 | Simplify | Section hidden | Same |
 | Context blocks (Add block, Surround, Context from site) and the context layer | October 28, 2026 | The Site Model adds the context | Hidden; layer draws nothing | Same |
+| Program panel (program list with floor-to-floor heights, unit sizes, colors; GFA and FAR targets) | October 28, 2026 | Simplify. The segment and podium program dropdowns stay | Panel hidden; program defaults stay in the file | Comment "Hidden October 28, 2026" in `app/tools/tower/panels.js` |
+| "Show zoning envelope" switch | October 28, 2026 | Simplify | Envelope is off; layer kept | Same |
+| Zoning lot | October 28, 2026 | FAR uses the site area from the Site Model | Hidden; a saved lot has no effect (`effectiveState`) | Same, and `app/tools/tower/state.js` |
+| Setbacks | October 28, 2026 | Went away with the Zoning lot | Hidden; saved setbacks have no effect | Same |
+| Segments in the Tower panel | October 28, 2026 | Moved to a left tool bar that the user can hide (only while the Tower is open) | Moved, not removed | — |
 | Sun hours heat map and the ?study=sun page | October 27, 2026 | Not in the app's first version | Old tower page only | The app View panel has Real sun and "Create sun study" (October 28, 2026) |
 | Compare view | October 27, 2026 | Cade: not needed now | Old tower page only | Not planned |
 
