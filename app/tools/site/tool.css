@@ -22,7 +22,3 @@
 .site-recent:hover { color: var(--ink); border-color: var(--ink-3); }
 .site-recent .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px; }
 .site-recent .s { color: var(--ink-3); }
-.site-kv { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; margin: 4px 0 8px; font-size: 13px; }
-.site-kv dt { color: var(--ink-3); }
-.site-kv dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
-.site-kv dd small { color: var(--ink-3); }
