@@ -6,6 +6,7 @@
 import { summary, staleFlags } from '../../src/viewer/summary.js';
 import { TOOLS, toolOn } from '../tools/registry.js';
 import { platesCurrent } from './cover.js';
+import { sunStudyControls } from './sunstudy.js';
 
 const TOOL_LABEL = Object.fromEntries(TOOLS.map((t) => [t.id, t.label]));
 const OWNER_ALIAS = { plate: 'plates', midrise: 'tower' };
@@ -120,10 +121,14 @@ export function createShellPanels(ctx, { loaded, activeId }) {
       C.segmented({ label: 'Color by', bind: bind('colorBy'), options: [{ value: 'program', label: 'Program' }, { value: 'zone', label: 'Zone' }] }),
       C.toggle({ label: 'Floor lines', bind: bind('floorLines') }),
       C.toggle({ label: 'Shadows', bind: bind('shadows') }),
-      C.slider({ label: 'Sun azimuth', bind: sunBind('az'), min: 0, max: 360, hardMin: 0, hardMax: 360, step: 1, format: (v) => `${Math.round(v)}°` }),
-      C.slider({ label: 'Sun altitude', bind: sunBind('alt'), min: 3, max: 90, hardMin: 3, hardMax: 90, step: 1, format: (v) => `${Math.round(v)}°` }),
     ];
     parts.forEach((p) => body.append(p.el));
+    // Sun: Manual (azimuth and altitude) or Real sun (date and time at the project site), and Create sun study (Cade, October 28, 2026)
+    try { body.append(sunStudyControls(ctx)); } catch (e) { console.error(e); }
+    if ((V().sun || {}).mode !== 'real') {
+      body.append(C.slider({ label: 'Sun azimuth', bind: sunBind('az'), min: 0, max: 360, hardMin: 0, hardMax: 360, step: 1, format: (v) => `${Math.round(v)}°` }).el);
+      body.append(C.slider({ label: 'Sun altitude', bind: sunBind('alt'), min: 3, max: 90, hardMin: 3, hardMax: 90, step: 1, format: (v) => `${Math.round(v)}°` }).el);
+    }
     // the color legend of the Diagram style (from the tools that draw colors)
     const items = [];
     loaded().forEach((t) => { if (t.legend) { try { (t.legend(ctx) || []).forEach((x) => items.push(x)); } catch (e) { /* ignore */ } } });

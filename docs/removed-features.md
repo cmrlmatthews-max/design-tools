@@ -46,7 +46,7 @@ How to bring a feature back: find the comment "Hidden October 28, 2026" (or the 
 | Presets in the Options menu | October 28, 2026 | Simplify | Saved options stay | Same |
 | Height limit and stepback | October 28, 2026 | Simplify | Section hidden | Same |
 | Context blocks (Add block, Surround, Context from site) and the context layer | October 28, 2026 | The Site Model adds the context | Hidden; layer draws nothing | Same |
-| Sun Study mode inside the Tower (sun hours map, ?study=sun page) | October 27, 2026 | Not in the app's first version | Old tower page only | The app View panel has "Create sun study" (October 28, 2026) |
+| Sun hours heat map and the ?study=sun page | October 27, 2026 | Not in the app's first version | Old tower page only | The app View panel has Real sun and "Create sun study" (October 28, 2026) |
 | Compare view | October 27, 2026 | Cade: not needed now | Old tower page only | Not planned |
 
 ## Earlier
