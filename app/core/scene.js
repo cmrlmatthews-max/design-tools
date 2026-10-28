@@ -229,7 +229,7 @@ export function createScene(hostEl, { bus, renderer: injected } = {}) {
 
   /* ---- state ---- */
   let style = 'model', shadowsOn = true, sunDir = { ...DEFAULT_SUN };
-  let insets = { right: 0, bottom: 0 };
+  let insets = { right: 0, bottom: 0, left: 0 };
   let framing = { site: () => null, building: () => null };
   let preset = null, planLock = false, tween = null;
   let needsRender = true, rafId = 0, capturing = false, sceneRadius = 200;
@@ -254,18 +254,18 @@ export function createScene(hostEl, { bus, renderer: injected } = {}) {
   const hostH = () => Math.max(1, (host && host.clientHeight) || 1);
   function insetPx() {
     const w = hostW(), h = hostH();
-    return { r: clamp(fin(insets.right) ? insets.right : 0, 0, w * 0.6), b: clamp(fin(insets.bottom) ? insets.bottom : 0, 0, h * 0.7) };
+    return { r: clamp(fin(insets.right) ? insets.right : 0, 0, w * 0.6), b: clamp(fin(insets.bottom) ? insets.bottom : 0, 0, h * 0.7), l: clamp(fin(insets.left) ? insets.left : 0, 0, w * 0.4) };
   }
   /** The part of the view the panels leave free: { aspect (whole view), fw, fh (free fractions) }. */
   function frameGeom() {
-    const w = hostW(), h = hostH(), { r, b } = insetPx();
-    return { aspect: Math.max(0.1, w / h), fw: Math.max(0.2, (w - r) / w), fh: Math.max(0.2, (h - b) / h) };
+    const w = hostW(), h = hostH(), { r, b, l } = insetPx();
+    return { aspect: Math.max(0.1, w / h), fw: Math.max(0.2, (w - r - l) / w), fh: Math.max(0.2, (h - b) / h) };
   }
   function applyViewOffset() {
-    const w = hostW(), h = hostH(), { r, b } = insetPx();
-    const ox = r / 2, oy = b / 2;
+    const w = hostW(), h = hostH(), { r, b, l } = insetPx();
+    const ox = (r - l) / 2, oy = b / 2;
     for (const c of [persp, ortho]) {
-      if (ox > 0 || oy > 0) c.setViewOffset(w, h, ox, oy, w, h); else c.clearViewOffset();
+      if (ox !== 0 || oy > 0) c.setViewOffset(w, h, ox, oy, w, h); else c.clearViewOffset();
     }
   }
   function setCamAspect(a) {
@@ -700,9 +700,9 @@ export function createScene(hostEl, { bus, renderer: injected } = {}) {
     shadows: () => shadowsOn,
     setOrbitEnabled: (on) => { if (controls) { controls.enabled = !!on; if (!on) tween = null; } },
     orbitEnabled: () => !!controls && controls.enabled,
-    setInsets: ({ right, bottom } = {}) => {
-      const next = { right: fin(right) ? right : insets.right, bottom: fin(bottom) ? bottom : insets.bottom };
-      if (next.right === insets.right && next.bottom === insets.bottom) return;
+    setInsets: ({ right, bottom, left } = {}) => {
+      const next = { right: fin(right) ? right : insets.right, bottom: fin(bottom) ? bottom : insets.bottom, left: fin(left) ? left : insets.left };
+      if (next.right === insets.right && next.bottom === insets.bottom && next.left === insets.left) return;
       insets = next;
       applyViewOffset();
       if (preset) setView(preset, { animate: true }); else requestRender();
