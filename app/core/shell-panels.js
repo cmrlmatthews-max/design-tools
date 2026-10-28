@@ -4,12 +4,12 @@
    The project numbers come from src/viewer/summary.js (the same numbers the Model Viewer showed).
    ========================================================================== */
 import { summary, staleFlags } from '../../src/viewer/summary.js';
-import { TOOLS } from '../tools/registry.js';
+import { TOOLS, toolOn } from '../tools/registry.js';
+import { platesCurrent } from './cover.js';
 
 const TOOL_LABEL = Object.fromEntries(TOOLS.map((t) => [t.id, t.label]));
 const OWNER_ALIAS = { plate: 'plates', midrise: 'tower' };
 const ownerId = (o) => OWNER_ALIAS[o] || o;
-const SUMMARY_IDS = ['gfa', 'far', 'floors', 'height', 'units', 'efficiency', 'stalls', 'cut', 'fill', 'net'];
 
 export function createShellPanels(ctx, { loaded, activeId }) {
   const { h, ICONS } = ctx.ui;
@@ -17,23 +17,39 @@ export function createShellPanels(ctx, { loaded, activeId }) {
   const activeTool = () => (activeId() ? toolOf(activeId()) : null);
 
   /* ---------- metrics ---------- */
+  /* One set of model numbers in every tool (Cade, October 28, 2026): the same six rows, from the saved project, in one
+     format. The Site tool shows its site rows instead while it is the active tool. */
+  const fmtInt = (v) => Math.round(v).toLocaleString('en-US');
+  const fmtFtIn = (ft) => { const t = Math.round(ft * 12); const f = Math.floor(t / 12), i = t - f * 12; return `${f.toLocaleString('en-US')}'-${i}"`; };
   function projectRows() {
     const doc = ctx.project.doc();
     if (!doc) return [];
     let rows = [];
     try { rows = summary(doc) || []; } catch (e) { rows = []; }
-    let pick = rows.filter((r) => SUMMARY_IDS.some((k) => String(r.id).toLowerCase().includes(k)));
-    // Counted units (Plate Planner) replace the massing estimate.
-    const counted = pick.some((r) => r.label === 'Units');
-    if (counted) pick = pick.filter((r) => !/estimate/i.test(r.label));
-    return (pick.length ? pick : rows).slice(0, 8).map((r) => ({ label: r.label, value: r.text, group: r.group }));
+    const by = Object.fromEntries(rows.map((r) => [r.id, r]));
+    const out = [];
+    const num = (id) => (by[id] && Number.isFinite(Number(by[id].value)) ? Number(by[id].value) : null);
+    if (num('massing.gfa') !== null) out.push({ label: 'Gross floor area', value: `${fmtInt(num('massing.gfa'))} sf` });
+    if (num('massing.floors') !== null) out.push({ label: 'Floors', value: fmtInt(num('massing.floors')) });
+    if (num('massing.height') !== null) out.push({ label: 'Height', value: fmtFtIn(num('massing.height')) });
+    if (num('massing.far') !== null && num('massing.far') > 0) out.push({ label: 'FAR', value: num('massing.far').toFixed(2) });
+    const current = toolOn('plates') && platesCurrent(doc);
+    if (current && num('plates.units') !== null) out.push({ label: 'Units', value: fmtInt(num('plates.units')) });
+    else if (num('massing.units') !== null) out.push({ label: 'Units (estimate)', value: fmtInt(num('massing.units')) });
+    if (current && num('plates.efficiency') !== null) out.push({ label: 'Efficiency', value: `${Math.round(num('plates.efficiency') * 100)}%` });
+    if (!out.length && num('site.area') !== null) out.push({ label: 'Site area', value: `${fmtInt(num('site.area'))} sf` });
+    return out;
   }
 
   function metricRows() {
-    const t = activeTool();
-    let rows = [];
-    if (t && t.metrics) { try { rows = t.metrics(ctx) || []; } catch (e) { rows = []; } }
-    return rows.length ? rows : projectRows();
+    // Only the Site tool shows its own rows (the site numbers); every other state shows the same model numbers.
+    if (activeId() === 'site') {
+      const t = activeTool();
+      let rows = [];
+      if (t && t.metrics) { try { rows = t.metrics(ctx) || []; } catch (e) { rows = []; } }
+      if (rows.length) return rows;
+    }
+    return projectRows();
   }
 
   function buildMetrics(body) {
@@ -47,14 +63,14 @@ export function createShellPanels(ctx, { loaded, activeId }) {
 
   /* ---------- layers ---------- */
   function buildLayers(body) {
-    const list = ctx.layers.list().filter((l) => !l.replaced);
+    const list = ctx.layers.list().filter((l) => !l.replaced && l.listed !== false);
     if (!list.length) { body.append(h('p', { class: 'muted' }, 'No layers yet.')); return; }
     for (const l of list) {
       const sw = h('input', { type: 'checkbox', class: 'switch', checked: l.on ? '' : null, 'aria-label': `Show ${l.label}` });
       sw.checked = !!l.on;
       sw.addEventListener('change', () => ctx.layers.setOn(l.id, sw.checked));
       body.append(h('label', { class: 'layer-row' },
-        h('span', { class: 'layer-text' }, h('span', { class: 'layer-label' }, l.label), h('span', { class: 'layer-sub' }, [TOOL_LABEL[ownerId(l.owner)], l.count ? `${l.count}` : ''].filter(Boolean).join(' · '))),
+        h('span', { class: 'layer-text' }, h('span', { class: 'layer-label' }, l.label)),
         sw));
     }
     const style = h('select', { class: 'select', 'aria-label': 'Neighbor buildings' }, ...[['solid', 'Solid'], ['glass', 'Glass'], ['wireframe', 'Wireframe']].map(([v, t]) => h('option', { value: v }, t)));
@@ -62,7 +78,8 @@ export function createShellPanels(ctx, { loaded, activeId }) {
     style.addEventListener('change', () => ctx.setSiteStyle && ctx.setSiteStyle(style.value));
     body.append(h('div', { class: 'field-row' }, h('span', { class: 'field-label' }, 'Neighbors'), style));
     const doc = ctx.project.doc();
-    const levels = doc && ctx.layers.levels ? ctx.layers.levels(doc) : [];
+    const SRC_TOOL = { massing: 'tower', plates: 'plates', parking: 'parking' };
+    const levels = (doc && ctx.layers.levels ? ctx.layers.levels(doc) : []).filter((v) => !Array.isArray(v.sources) || v.sources.some((src) => toolOn(SRC_TOOL[src] || src)));
     if (levels.length) {
       const sel = h('select', { class: 'select', 'aria-label': 'Cut at level' }, h('option', { value: '' }, 'No cut'), ...levels.map((v) => h('option', { value: v.key }, v.name || `Level at ${Math.round(v.z)} ft`)));
       sel.value = ctx.layers.cut() || '';
@@ -77,8 +94,15 @@ export function createShellPanels(ctx, { loaded, activeId }) {
     const t = activeTool();
     if (t && t.warnings) { try { out.push(...(t.warnings(ctx) || [])); } catch (e) { /* a tool error never breaks the panel */ } }
     const doc = ctx.project.doc();
-    if (doc) { try { staleFlags(doc).forEach((f) => out.push({ text: f.message, level: 'warn' })); } catch (e) { /* ignore */ } }
+    const SEC_TOOL = { site: 'site', massing: 'tower', plates: 'plates', parking: 'parking', grading: 'grading', facade: 'facade', sun: 'tower' };
+    if (doc) { try { staleFlags(doc).filter((f) => toolOn(SEC_TOOL[f.section] || f.section)).forEach((f) => out.push({ text: plainStale(f), level: 'warn' })); } catch (e) { /* ignore */ } }
     return out;
+  }
+
+  // The app has no Plate Planner button: say what happened, not where to go.
+  function plainStale(f) {
+    if (f.section === 'plates' && /older massing/.test(f.message)) return 'The units were made for an earlier tower. The tower shows every floor until the units are made again.';
+    return String(f.message || '').replace(/ Open the [A-Z][\w ]+ to update (it|them)\./, '');
   }
 
   function buildWarnings(body) {
@@ -95,17 +119,19 @@ export function createShellPanels(ctx, { loaded, activeId }) {
     const V = () => ctx.view.get();
     const bind = (key) => ({ get: () => V()[key], set: (v) => ctx.view.set({ [key]: v }), commit: () => {} });
     const sunBind = (key) => ({ get: () => V().sun[key], set: (v) => ctx.view.set({ sun: { [key]: v } }), commit: () => {} });
-    const style = { get: () => ctx.scene.style(), set: (v) => ctx.scene.setStyle(v), commit: () => {} };
     const parts = [
-      C.segmented({ label: 'Style', bind: style, options: [{ value: 'model', label: 'Model' }, { value: 'diagram', label: 'Diagram' }] }),
       C.segmented({ label: 'Color by', bind: bind('colorBy'), options: [{ value: 'program', label: 'Program' }, { value: 'zone', label: 'Zone' }] }),
       C.toggle({ label: 'Floor lines', bind: bind('floorLines') }),
       C.toggle({ label: 'Shadows', bind: bind('shadows') }),
-      C.slider({ label: 'Sun azimuth', bind: sunBind('az'), min: 0, max: 360, step: 1, format: (v) => `${Math.round(v)}°` }),
-      C.slider({ label: 'Sun altitude', bind: sunBind('alt'), min: 3, max: 90, step: 1, format: (v) => `${Math.round(v)}°` }),
+      C.slider({ label: 'Sun azimuth', bind: sunBind('az'), min: 0, max: 360, hardMin: 0, hardMax: 360, step: 1, format: (v) => `${Math.round(v)}°` }),
+      C.slider({ label: 'Sun altitude', bind: sunBind('alt'), min: 3, max: 90, hardMin: 3, hardMax: 90, step: 1, format: (v) => `${Math.round(v)}°` }),
     ];
     parts.forEach((p) => body.append(p.el));
-    body.append(h('p', { class: 'help' }, 'These settings apply in every tool. Color by applies in the Diagram style.'));
+    // the color legend of the Diagram style (from the tools that draw colors)
+    const items = [];
+    loaded().forEach((t) => { if (t.legend) { try { (t.legend(ctx) || []).forEach((x) => items.push(x)); } catch (e) { /* ignore */ } } });
+    if (items.length) body.append(h('div', { class: 'legend-list' }, ...items.map((x) => h('span', { class: 'legend-item' }, h('span', { class: 'legend-sw', style: `background:${x.color}` }), x.label))));
+    body.append(h('p', { class: 'help' }, 'These settings apply in every tool. Color by applies in the Diagram style (top bar, or the D key).'));
   }
 
   const groups = () => [
@@ -141,11 +167,6 @@ export function createShellPanels(ctx, { loaded, activeId }) {
     if (entry && entry.ready && !entry.viewOnly && activeId() !== oid) actions.push({ label: `Edit in ${entry.label}`, action: () => openTool(oid) });
     const t = toolOf(oid);
     if (t && t.card) { try { actions.push(...(t.card(item, ctx) || [])); } catch (e) { /* ignore */ } }
-    if (oid === 'plates' && !t) {
-      // The plates tool loads lazily; its only action is a link to its own page.
-      const doc = ctx.project.doc();
-      if (doc) actions.push({ label: 'Open Plate Planner', action: () => { window.location.href = `../plate/?project=${encodeURIComponent(doc.id)}`; } });
-    }
     if (actions.length) el.append(h('div', { class: 'card-actions' }, ...actions.map((a) => h('button', { class: 'btn', type: 'button', onclick: a.action }, a.label))));
     el.hidden = false;
   }

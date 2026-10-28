@@ -65,7 +65,7 @@ export function createOptions(T) {
     s.context.show = true;
     s.view.colorBy = 'program';
     show(s, { id: null, name: p.name });
-    Toast.show(`Started from the preset ${quoted(p.name)}. It is not saved yet.`);
+    Toast.show(`Started from the preset ${quoted(p.name)}. It is not saved as an option.`);
     return true;
   }
 
@@ -77,7 +77,7 @@ export function createOptions(T) {
   /** A fresh default design as a new, unsaved option. Resolves true when it happened. */
   async function newDesign({ confirm = true } = {}) {
     if (confirm && hasUnsavedChanges()) {
-      const ok = await ctx.ui.confirmDialog({ title: 'Start a new design?', body: `Unsaved changes to ${quoted(store.get('name') || 'this design')} will be lost. You can undo this.`, ok: 'Start new', cancel: 'Cancel' });
+      const ok = await ctx.ui.confirmDialog({ title: 'Start a new design?', body: `Changes to ${quoted(store.get('name') || 'this design')} that are not saved as an option will be lost. You can undo this.`, ok: 'Start new', cancel: 'Cancel' });
       if (!ok) return false;
     }
     T.select.clear();
@@ -133,7 +133,7 @@ export function createOptions(T) {
     if (!ok) return false;
     storage.remove(rec.id);
     link(null);
-    Toast.show(`Deleted ${quoted(rec.name)}. The design on screen is now unsaved.`);
+    Toast.show(`Deleted ${quoted(rec.name)}. The design on screen is not saved as an option.`);
     return true;
   }
 
@@ -143,7 +143,6 @@ export function createOptions(T) {
     const items = [
       { label: 'New design', hint: 'Default tower', action: () => { newDesign(); } },
       { sep: true },
-      { label: 'Save', hint: 'Keep this design', action: () => save() },
       { label: 'Duplicate', hint: 'Save a copy', action: () => duplicate() },
       { label: 'Delete', hint: 'Remove the saved option', disabled: !currentId, action: () => { remove(); } },
       { sep: true },

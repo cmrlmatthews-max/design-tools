@@ -15,7 +15,6 @@ import { CONFIG, num, deepClone, fillDefaults, migrateTower, defaultState } from
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const r1 = (v) => Math.round(v * 10) / 10;
 const ZERO = () => ({ x: 0, y: 0, rotation: 0, baseZ: 0 });
-export const TOOL_NAMES = { midrise: 'Mid-Rise Generator', tower: 'Tower Generator', plate: 'Plate Planner', parking: 'Parking Deck', facade: 'Facade Studio', grading: 'Grading Sketch', site: 'Site Model' };
 
 export function createProject(T) {
   const { ctx, store } = T;
@@ -256,14 +255,13 @@ export function createProject(T) {
 
   /** Asks to replace a massing from another tool. Resolves true when the user agrees. */
   async function askReplace() {
-    const other = TOOL_NAMES[foreignTool()] || 'another tool';
     if (flags.asking) return false;
     flags.asking = true;
     let ok = false;
     try {
       ok = await ctx.ui.confirmDialog({
         title: 'Replace the massing?',
-        body: `This project holds a massing from the ${other}. Saving here replaces it with this tower.`,
+        body: 'This project holds a massing made another way. Saving here replaces it with this tower.',
         ok: 'Replace', cancel: 'Keep it',
       });
     } finally { flags.asking = false; }

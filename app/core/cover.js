@@ -78,14 +78,18 @@ export function platesCoverKey(doc) {
 
 /** True when the Plate Planner units still match the massing (they draw; the massing skips those floors).
  *  The test is geometry, not dates: every plates level must find a massing level with the same index, z, floor-to-floor
- *  height, and floor plate (plan ring within 0.05 ft). A move, a turn, or a new base elevation of the building changes
- *  the placement only, so the units stay current. False with no plates. */
+ *  height, and floor plate (plan ring within 0.05 ft), and the same placement (the units draw where they were made).
+ *  False with no plates. */
 export function platesCurrent(doc) {
   const plates = getSection(doc, 'plates');
   const mass = getSection(doc, 'massing');
   const pl = plates && plates.derived && Array.isArray(plates.derived.levels) ? plates.derived.levels : [];
   const ml = mass && mass.derived && Array.isArray(mass.derived.levels) ? mass.derived.levels : [];
   if (!pl.length || !ml.length) return false;
+  // The units draw at the placement stored with them. When the building moved or turned since, they are out of date.
+  const pp = plates.placement || {}, mp = mass.placement || {};
+  const same = (a, b, t) => Math.abs((Number(a) || 0) - (Number(b) || 0)) <= t;
+  if (!same(pp.x, mp.x, 0.05) || !same(pp.y, mp.y, 0.05) || !same(pp.rotation, mp.rotation, 0.01) || !same(pp.baseZ, mp.baseZ, 0.05)) return false;
   const byIndex = new Map(ml.filter((l) => l && Number.isFinite(l.index)).map((l) => [l.index, l]));
   const near = (a, b, t) => Number.isFinite(Number(a)) && Number.isFinite(Number(b)) && Math.abs(Number(a) - Number(b)) <= t;
   const ringKey = (mp) => {

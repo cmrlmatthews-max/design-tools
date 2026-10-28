@@ -398,7 +398,7 @@ function makeControls() {
     field.addEventListener('focus', () => setTimeout(() => field.select(), 0));
     field.addEventListener('blur', () => { if (field.dataset.dirty === '1') apply(); else refresh(); });
     field.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { apply(); field.select(); }
+      if (e.key === 'Enter') { apply(); field.blur(); }
       else if (e.key === 'Escape') { field.dataset.dirty = ''; refresh(); field.value = format(o.bind.get()); field.blur(); }
       else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
         e.preventDefault();

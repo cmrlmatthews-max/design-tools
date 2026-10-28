@@ -2,11 +2,11 @@
    TOOL: site (Site Model, docs/shell-plan.md section 9.1)
    Address, coordinates or a Google Maps link -> USGS ground + Overture buildings, roads, water -> the `site` section.
    The scene is drawn by the shell from site.derived (core/derived.js, core/sitelayer3d.js). This tool adds:
-   - panel 'site-find': input, size, Go, one progress row per data theme
-   - panel 'site-data': counts, Restore all, neighbor style
+   - panel 'site-find': input, size, Go, one progress row per data theme, recent sites, and (once a site is loaded)
+     a one-line remove/restore hint with Restore all. The neighbor style lives in the shell Layers panel.
    - tap a neighbor building: card with Remove or Restore (state.removed + derived.buildings[].removed)
    - layer 'site-removed': a dashed outline where a removed building stood (so it can be tapped and restored)
-   - downloads after a run: Revit CSV, DXF, SketchUp, Notes
+   - downloads after a run: Revit CSV, DXF, SketchUp, Notes (hidden for the demo, October 28, 2026; the code stays, see exports())
    Port of build/site/02_pipeline.js and 04_ui.js. The math stays in src/site/.
    ========================================================================== */
 import { parseCoordinates, googleMapsUrl } from '../../../src/site/geocode.js';
@@ -26,10 +26,12 @@ const RECENT_MAX = 8;
 const SCHEMA = 1;
 const IDENTITY = { x: 0, y: 0, rotation: 0, baseZ: 0 };
 const REMOVED_LAYER = 'site-removed';
-const STYLE_OPTIONS = [{ value: 'solid', label: 'Solid' }, { value: 'glass', label: 'Glass' }, { value: 'wireframe', label: 'Wireframe' }];
+const HIDE_DOWNLOADS_FOR_DEMO = true;    // October 28, 2026 demo: no Site downloads, no "Load again for downloads" button
 
 const grouped = (n, digits = 0) => Number(n).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 const fmtFt = (v, d = 1) => (Number.isFinite(v) ? `${grouped(v, d)} ft` : '-');
+/** A height without a needless decimal: "50 ft", "52.5 ft". */
+const fmtHeight = (v) => (Number.isFinite(v) ? fmtFt(v, Math.abs(v - Math.round(v)) < 0.05 ? 0 : 1) : '-');
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const fin = (v) => typeof v === 'number' && Number.isFinite(v);
 const secs = (ms) => `${(ms / 1000).toFixed(1)} s`;
@@ -55,7 +57,7 @@ const run = {
   started: false,
 };
 const hooks = {};                     // tests: { fetchFn, fetchThemeFn }
-const views = { find: null, data: null, steps: null, status: null, go: null, input: null };
+const views = { find: null, steps: null, status: null, go: null, input: null };
 const ui = { controls: null };
 
 /* ---------- reading the project ---------- */
@@ -364,7 +366,7 @@ function buildRemoved(THREE) {
     mesh.renderOrder = 2;
     const item = {
       id: `site:${b.id}`, title: b.name || 'Removed building', owner: 'site', layer: REMOVED_LAYER, removed: true,
-      rows: [['Status', 'Removed'], ['Height', fmtFt(b.height, 1)], ['Floors', String(b.floors || '')]],
+      rows: [['Status', 'Removed'], ['Height', fmtHeight(b.height)], ['Floors', String(b.floors || '')]],
     };
     mesh.userData.pick = () => item;
     group.add(mesh);
@@ -422,6 +424,16 @@ function buildFind(body) {
   body.append(h('div', { class: 'site-addr-row' }, input, sizeCtl.el), h('div', { class: 'site-go-row' }, goBtn, maps), status, steps);
   renderSteps();
 
+  const c = counts();
+  if (c) {
+    const restoreRow = Controls.row([{ label: 'Restore all', action: () => restoreAll(), title: 'Put back every removed building' }]);
+    const restoreBtn = restoreRow.querySelector('button');
+    restoreBtn.id = 'site-restore-all';
+    restoreBtn.disabled = !c.removed;
+    body.append(h('div', { class: 'label sub-label' }, 'Neighbor buildings'),
+      h('p', { class: 'help' }, 'Tap a neighbor building to remove it or bring it back.'), restoreRow);
+  }
+
   const list = recents();
   if (list.length) {
     body.append(h('div', { class: 'label sub-label' }, 'Recent sites'),
@@ -436,49 +448,6 @@ function renderFind() {
   if (!b || !b.isConnected) return;
   b.replaceChildren();
   buildFind(b);
-}
-
-function buildData(body) {
-  views.data = body;
-  renderData();
-}
-function renderData() {
-  const body = views.data;
-  if (!body || !body.isConnected) return;
-  const { h, Controls } = C.ui;
-  body.replaceChildren();
-  const c = counts();
-  if (!c) {
-    body.append(h('p', { class: 'help' }, 'The numbers appear after the site loads.'));
-  } else {
-    const row = (k, v, small) => [h('dt', null, k), h('dd', null, v, small ? h('small', null, ` ${small}`) : null)];
-    body.append(h('dl', { class: 'site-kv', id: 'site-counts' },
-      row('Buildings', grouped(c.buildings), c.estimated ? `${grouped(c.estimated)} estimated` : ''),
-      row('Removed', grouped(c.removedFeatures)),
-      row('Roads', grouped(c.roads), c.roads ? fmtFt(c.roadFt, 0) : ''),
-      row('Water areas', grouped(c.water)),
-      row('Ground', `${grouped(c.size)} ft square`, `${c.gridN} by ${c.gridN} points`),
-      row('Elevation', `${grouped(c.zMin, 1)} to ${grouped(c.zMax, 1)} ft`)));
-    const restoreRow = Controls.row([{ label: 'Restore all', action: () => restoreAll(), title: 'Put back every removed building' }]);
-    const restoreBtn = restoreRow.querySelector('button');
-    restoreBtn.id = 'site-restore-all';
-    restoreBtn.disabled = !c.removed;
-    body.append(restoreRow);
-  }
-  const style = Controls.segmented({
-    label: 'Neighbor buildings', options: STYLE_OPTIONS,
-    bind: { get: () => (C.siteStyle ? C.siteStyle() : 'solid'), set: (v) => { if (C.setSiteStyle) C.setSiteStyle(v); }, commit() {} },
-  });
-  body.append(style.el);
-  body.append(h('p', { class: 'help' }, 'Tap a neighbor building and select Remove on its card to take it out of the site. A dashed outline stays where it stood. Tap the outline and select Restore to put it back. Other tools and every download leave out a removed building.'));
-  const r = liveResult();
-  if (c && !r && !run.busy) {
-    const { st } = secInfo();
-    if (st && typeof st.query === 'string' && st.query.trim() && fin(st.lat) && fin(st.lon) && fin(st.size)) {
-      body.append(Controls.row([{ label: 'Load again for downloads', title: 'Load the data again so the downloads are ready', action: () => go({ text: st.query, size: st.size, loc: { lat: st.lat, lon: st.lon, label: st.query }, skipConfirm: true, fromRecent: true }) }]));
-      body.append(h('p', { class: 'help' }, 'Downloads need the data of a fresh load.'));
-    }
-  }
 }
 
 /* ---------- the tool ---------- */
@@ -506,7 +475,7 @@ export default {
       if (JSON.stringify(savedRemoved()) === JSON.stringify(state.removed)) return;
       writeRemoved(state.removed);
       ctx.select(null);
-      renderData();
+      renderFind();
       ctx.refreshHud();
     });
     loadFromProject();
@@ -526,14 +495,13 @@ export default {
     } catch (e) { /* tests only */ }
   },
 
-  activate() { renderFind(); renderData(); },
-  deactivate() { views.find = null; views.data = null; views.steps = null; views.status = null; views.go = null; views.input = null; },
+  activate() { renderFind(); },
+  deactivate() { views.find = null; views.steps = null; views.status = null; views.go = null; views.input = null; },
 
   panels() {
     return [
       { id: 'site-find', title: 'Find a site', build: buildFind, open: true },
-      { id: 'site-data', title: 'Site data', build: buildData, open: true },
-    ];
+          ];
   },
 
   layers(ctx) {
@@ -552,12 +520,11 @@ export default {
     const c = counts();
     if (!c) return [];
     return [
+      { label: 'Site size', value: `${grouped(c.size)} ft square` },
+      { label: 'Ground elevation', value: `${grouped(c.zMin, 0)} to ${grouped(c.zMax, 0)} ft` },
       { label: 'Buildings', value: grouped(c.buildings), hint: c.estimated ? `${c.estimated} with an estimated height` : '' },
       { label: 'Removed', value: grouped(c.removedFeatures) },
       { label: 'Roads', value: fmtFt(c.roadFt, 0), hint: `${c.roads} road segments` },
-      { label: 'Water areas', value: grouped(c.water) },
-      { label: 'Site', value: `${grouped(c.size)} ft square` },
-      { label: 'Elevation', value: `${grouped(c.zMin, 1)} to ${grouped(c.zMax, 1)} ft` },
     ];
   },
 
@@ -578,10 +545,13 @@ export default {
     if (!evt || (evt.source !== 'open' && evt.keys && !evt.keys.includes('site'))) return;
     loadFromProject();
     renderFind();
-    renderData();
   },
 
   exports() {
+    // Hidden for the demo, October 28, 2026: the Site downloads (Revit CSV, DXF, SketchUp, Notes) stay out of the
+    // Export menu. To bring them back, set HIDE_DOWNLOADS_FOR_DEMO to false (and restore the "Load again for downloads"
+    // button in the Find a site panel if a loaded project should offer them).
+    if (HIDE_DOWNLOADS_FOR_DEMO) return [];
     if (!liveResult()) return [];
     return [
       { id: 'site-csv', label: 'Revit CSV (ground points)', run: () => download('csv') },

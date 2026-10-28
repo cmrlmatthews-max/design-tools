@@ -36,7 +36,7 @@ export function createPanels(el, { storageKey = 'cmrlm.app.panels' } = {}) {
 
   el.classList.add('panels');
   const grab = h('span', { class: 'sheet-grab', 'aria-hidden': 'true' });
-  const collapseBtn = h('button', { class: 'btn icon panels-collapse', type: 'button', title: 'Collapse all', 'aria-label': 'Collapse all panels', html: ICONS.collapse });
+  const collapseBtn = h('button', { class: 'btn icon panels-collapse', type: 'button', 'data-tip': 'Fold every panel.', 'aria-label': 'Collapse all panels', html: ICONS.collapse });
   const bar = h('div', { class: 'panels-bar', role: 'separator', 'aria-orientation': 'horizontal', 'aria-label': 'Panels. Drag to resize the sheet.', tabindex: '-1' },
     grab, h('span', { class: 'panels-label' }, 'Panels'), collapseBtn);
   const scroll = h('div', { class: 'panels-scroll' });

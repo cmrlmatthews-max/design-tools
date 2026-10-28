@@ -16,15 +16,17 @@ import { derivedLayerDefs } from './core/derived.js';
 import { createGround } from './core/ground.js';
 import { captureImage, deliver } from './core/capture.js';
 import { h, ICONS, Toast, Pop, Controls, confirmDialog } from './core/ui-kit.js';
-import { createDock } from './core/dock.js';
 import { createPanels } from './core/panels.js';
+import { initTips } from './core/tips.js';
 import { createShellPanels } from './core/shell-panels.js';
 import { TOOLS, toolOn } from './tools/registry.js';
 
 const $ = (id) => document.getElementById(id);
+const VIEW_TIPS = { axon: 'Three-quarter view from above.', n: 'Look at the north side.', e: 'Look at the east side.', s: 'Look at the south side.', w: 'Look at the west side.', plan: 'Top view. A drag moves the view.' };
 const VIEWS = [['axon', 'Axon', '1'], ['n', 'N', '2'], ['e', 'E', '3'], ['s', 'S', '4'], ['w', 'W', '5'], ['plan', 'Plan', '6']];
 
 /* ---------- core objects ---------- */
+bus.on('notice', ({ text, kind }) => Toast.show(text, { kind }));   // first, so startup notices show
 const project = createProjectStore({ bus });
 const scene = createScene($('view'), { bus });
 const input = createInput(scene, { bus });
@@ -152,12 +154,17 @@ function refreshPanels() {
   panels.set([shell.metricsGroup(), ...toolGroups, ...shell.groups()]);
 }
 
-/* ---------- dock ---------- */
-const dock = createDock($('dock'), { onSelect: (id) => activate(id === active ? null : id) });
-dock.setTools(TOOLS.filter((t) => t.ready && !t.viewOnly).sort((a, b) => a.order - b.order).map((t) => ({ id: t.id, label: t.label, icon: t.icon })));
-dock.setExtras([
-  { id: 'layers', label: 'Layers', icon: 'layers', action: () => { if (active) activate(null); else panels.collapseAll(); } },
-]);
+/* ---------- tools in the top bar (Cade, October 28, 2026: the left dock moved to the top bar, layout A) ---------- */
+const toolTabs = h('div', { class: 'tool-tabs', role: 'toolbar', 'aria-label': 'Tools' });
+const dock = {
+  setActive(id) { toolTabs.querySelectorAll('.tool-tab').forEach((b) => b.setAttribute('aria-pressed', b.dataset.id === id ? 'true' : 'false')); },
+};
+TOOLS.filter((t) => t.ready && !t.viewOnly).sort((a, b) => a.order - b.order).forEach((t) => {
+  const b = h('button', { class: 'tool-tab', type: 'button', 'data-id': t.id, 'aria-pressed': 'false', 'data-tip': ({ site: 'Site Model: find a real site and remove buildings. Select it again to close it.', tower: 'Tower Generator: shape the building and place it on the site. Select it again to close it.' })[t.id] || `${t.label}. Select it again to close it.`, onclick: () => activate(t.id === active ? null : t.id) });
+  b.innerHTML = ICONS[t.icon] || '';
+  b.append(h('span', {}, t.label));
+  toolTabs.append(b);
+});
 
 /* ---------- selection card ---------- */
 const highlight = new THREE.Group();
@@ -200,21 +207,21 @@ input.onTap((ev) => {
 
 /* ---------- top bar ---------- */
 const tb = { left: $('tbLeft'), center: $('tbCenter'), right: $('tbRight') };
-const projBtn = h('button', { class: 'btn proj', type: 'button', title: 'Project', onclick: (e) => openProjectMenu(e.currentTarget) });
-const undoBtn = h('button', { class: 'btn icon', type: 'button', title: 'Undo (Cmd+Z)', 'aria-label': 'Undo', onclick: () => undo() });
-const redoBtn = h('button', { class: 'btn icon', type: 'button', title: 'Redo (Shift+Cmd+Z)', 'aria-label': 'Redo', onclick: () => redo() });
+const projBtn = h('button', { class: 'btn proj', type: 'button', 'data-tip': 'Projects: new, open, import, and export.', onclick: (e) => openProjectMenu(e.currentTarget) });
+const undoBtn = h('button', { class: 'btn icon', type: 'button', 'data-tip': 'Undo the last change.', 'data-tip-key': '⌘Z', 'aria-label': 'Undo', onclick: () => undo() });
+const redoBtn = h('button', { class: 'btn icon', type: 'button', 'data-tip': 'Redo the change.', 'data-tip-key': '⇧⌘Z', 'aria-label': 'Redo', onclick: () => redo() });
 undoBtn.innerHTML = ICONS.undo; redoBtn.innerHTML = ICONS.redo;
-const viewBtns = VIEWS.map(([id, label, key]) => h('button', { class: 'seg-btn', type: 'button', title: `${label} view (${key})`, 'data-view': id, onclick: () => setView(id) }, label));
-const zoomSite = h('button', { class: 'seg-btn', type: 'button', title: 'Zoom to the site', onclick: () => scene.frameSite() }, 'Site');
-const zoomBldg = h('button', { class: 'seg-btn', type: 'button', title: 'Zoom to the building', onclick: () => scene.frameBuilding() }, 'Building');
-const styleBtn = h('button', { class: 'seg-btn', type: 'button', title: 'Model or Diagram (D)', onclick: () => toggleStyle() }, 'Diagram');
-const exportBtn = h('button', { class: 'btn icon', type: 'button', title: 'Export', 'aria-label': 'Export', onclick: (e) => openExportMenu(e.currentTarget) });
+const viewBtns = VIEWS.map(([id, label, key]) => h('button', { class: 'seg-btn', type: 'button', 'data-tip': VIEW_TIPS[id], 'data-tip-key': key, 'data-view': id, onclick: () => setView(id) }, label));
+const zoomSite = h('button', { class: 'seg-btn', type: 'button', 'data-tip': 'Fit the whole site in the view.', onclick: () => scene.frameSite() }, 'Site');
+const zoomBldg = h('button', { class: 'seg-btn', type: 'button', 'data-tip': 'Fit the building in the view.', onclick: () => scene.frameBuilding() }, 'Building');
+const styleBtn = h('button', { class: 'seg-btn', type: 'button', 'data-tip': 'Color the model by program. Select it again for the white model.', 'data-tip-key': 'D', onclick: () => toggleStyle() }, 'Diagram');
+const exportBtn = h('button', { class: 'btn icon', type: 'button', 'data-tip': 'Save a picture of the view, or an AI-ready image.', 'aria-label': 'Save image', onclick: (e) => openExportMenu(e.currentTarget) });
 exportBtn.innerHTML = ICONS.export;
-const panelsBtn = h('button', { class: 'btn icon', type: 'button', title: 'Show or hide the panels (\\)', 'aria-label': 'Panels', onclick: () => panels.toggleColumn() });
+const panelsBtn = h('button', { class: 'btn icon', type: 'button', 'data-tip': 'Show or hide the panels.', 'data-tip-key': '\\', 'aria-label': 'Panels', onclick: () => panels.toggleColumn() });
 panelsBtn.innerHTML = ICONS.panels;
 
-tb.left.append(h('a', { class: 'mark', href: '../', title: 'Workspace' }, 'CMRLM'), projBtn, undoBtn, redoBtn);
-const viewCompact = h('button', { class: 'btn view-compact', type: 'button', title: 'View', onclick: (e) => openViewMenu(e.currentTarget) }, 'Axon');
+tb.left.append(h('a', { class: 'mark', href: '../', 'data-tip': 'Back to the Workspace page and the project list.' }, 'CMRLM'), projBtn, undoBtn, redoBtn, toolTabs);
+const viewCompact = h('button', { class: 'btn view-compact', type: 'button', 'data-tip': 'Change the view, zoom, or style.', onclick: (e) => openViewMenu(e.currentTarget) }, 'Axon');
 tb.center.append(h('div', { class: 'seg views' }, ...viewBtns), h('div', { class: 'seg' }, zoomSite, zoomBldg), h('div', { class: 'seg' }, styleBtn), viewCompact);
 
 // Narrow screens (the bottom-sheet layout): one View menu replaces the three button groups.
@@ -246,7 +253,7 @@ function syncTopbar() {
   undoBtn.disabled = !(s && s.canUndo());
   redoBtn.disabled = !(s && s.canRedo());
   viewBtns.forEach((b) => b.classList.toggle('on', b.dataset.view === currentView));
-  viewCompact.textContent = (VIEWS.find((v) => v[0] === currentView) || VIEWS[0])[1];
+  viewCompact.textContent = `View: ${(VIEWS.find((v) => v[0] === currentView) || VIEWS[0])[1]} ▾`;
   styleBtn.classList.toggle('on', scene.style() === 'diagram');
 }
 
@@ -263,7 +270,6 @@ function openProjectMenu(anchor) {
     items.push({ sep: true });
     list.forEach((p) => items.push({ label: p.name, hint: shortDate(p.updatedAt), checked: doc && p.id === doc.id, action: () => project.open(p.id) }));
   }
-  items.push({ sep: true }, { label: 'Workspace page', action: () => { window.location.href = '../'; } });
   Pop.open(anchor, items);
 }
 
@@ -340,6 +346,7 @@ async function loadForProject() {
 
 function onProjectOpen() {
   const doc = project.doc();
+  if (!doc && active) activate(null);   // no project: no tool stays open with work that cannot be saved
   frame.setShift(doc ? frame.shiftFor(doc) : { x: 0, y: 0, z: 0 });
   loadForProject();
   loaded.forEach((t) => { if (t.onProject) { try { t.onProject({ doc, keys: null, source: 'open' }, ctx); } catch (e) { console.error(e); } } });
@@ -364,7 +371,6 @@ bus.on('view:change', () => { syncLayers(); shell.refresh(['view']); });
 bus.on('style:change', () => { syncLayers(); syncTopbar(); shell.refresh(['view']); });
 bus.on('layers:change', () => { syncLayers(); shell.refresh(['layers']); });
 bus.on('frame:shift', () => syncLayers());
-bus.on('notice', ({ text, kind }) => Toast.show(text, { kind }));
 
 /* ---------- view insets: frame views in the area the panels leave free ---------- */
 function syncInsets() {
@@ -381,6 +387,7 @@ window.addEventListener('resize', () => { syncInsets(); scene.resize(); });
 window.addEventListener('panels:resize', () => { syncInsets(); scene.resize(); });
 
 /* ---------- start ---------- */
+initTips();
 applyView();
 syncInsets();
 refreshPanels();
