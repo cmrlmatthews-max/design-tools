@@ -632,3 +632,77 @@ html[data-panels="hidden"] body { grid-template-columns: minmax(0, 1fr) 0; }
 .tb-select { height: 32px; min-width: 0; width: auto; padding: 0 28px 0 10px; font-size: 13px; margin-right: 4px; }
 @media (pointer: coarse) { .tb-select { height: 40px; } }
 @media (max-width: 560px) { .tb-select { max-width: 96px; } }
+
+/* ---- left tool bar (core/leftbar.js) ---- */
+.leftbar {
+  position: absolute; z-index: 5; left: 10px; top: 10px; bottom: 10px; width: 300px; max-width: calc(100% - 20px);
+  display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line-2); border-radius: 12px;
+  box-shadow: var(--shadow); overflow: hidden;
+}
+.leftbar-head { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 4px 0 14px; border-bottom: 1px solid var(--line); flex: none; }
+.leftbar-title { flex: 1 1 auto; font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
+.leftbar-body { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 4px 14px 14px; -webkit-overflow-scrolling: touch; }
+.leftbar-tab {
+  position: absolute; z-index: 5; left: 10px; top: 10px; height: 34px; padding: 0 12px; border-radius: 10px;
+  background: var(--panel); color: var(--ink-2); border: 1px solid var(--line-2); box-shadow: var(--shadow);
+  font: inherit; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; cursor: pointer;
+}
+.leftbar-tab:hover { color: var(--ink); }
+.leftbar-tab::before { content: "›"; margin-right: 6px; font-size: 14px; }
+@media (pointer: coarse) { .leftbar-tab { height: 44px; } }
+@media (max-width: 819.98px), (orientation: portrait) and (pointer: coarse) { .leftbar { width: min(300px, 70vw); bottom: 10px; } }
+
+/* ---- section cut (core/section.js, Cade October 28, 2026): split view, the drawing below the 3D view ---- */
+.sec-pane {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 4; display: flex; flex-direction: column;
+  background: #14181c; border-top: 1px solid var(--line-2); box-shadow: 0 -6px 18px rgba(0, 0, 0, .28);
+}
+.sec-divider { position: absolute; left: 0; right: 0; top: -8px; height: 16px; z-index: 2; cursor: row-resize; touch-action: none; }
+.sec-divider::after {
+  content: ""; position: absolute; left: 50%; top: 6px; width: 44px; height: 4px; margin-left: -22px; border-radius: 2px;
+  background: var(--line-2); transition: background-color .12s;
+}
+.sec-divider:hover::after, .sec-divider.active::after, .sec-divider:focus-visible::after { background: var(--accent); }
+.sec-divider:focus-visible { outline: none; }
+@media (pointer: coarse) { .sec-divider { top: -14px; height: 28px; } .sec-divider::after { top: 12px; } }
+html.sec-dragging, html.sec-dragging * { cursor: row-resize !important; -webkit-user-select: none !important; user-select: none !important; }
+.sec-head { display: flex; align-items: center; gap: 6px; flex: none; min-height: 38px; padding: 4px 8px 0 14px; }
+.sec-label { font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
+.sec-sp { flex: 1 1 auto; }
+.sec-head .btn.sm { min-height: 28px; padding: 0 10px; font-size: 12.5px; }
+@media (pointer: coarse) { .sec-head .btn.sm { min-height: 40px; } }
+.sec-body { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.sec-body svg { display: block; width: 100%; height: 100%; }
+.stage.has-section .card { bottom: calc(var(--section-h) + 12px); max-height: calc(100% - var(--section-h) - 24px); }
+.stage.has-section .toasts { bottom: calc(var(--section-h) + 16px); }
+.stage.has-section .leftbar { bottom: calc(var(--section-h) + 10px); }
+.sec-btn { gap: 6px; }
+.sec-btn .ico-wrap svg { width: 16px; height: 16px; }
+.seg .sec-btn.drawing { color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+html[data-layout="sheet"] #tbCenter .seg.sec-seg { display: inline-flex; }
+/* the cut marks over the 3D view */
+.sec-tag, .sec-flip { position: absolute; left: 0; top: 0; will-change: transform; }
+.sec-tag {
+  width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; pointer-events: none !important;
+  background: var(--panel); border: 1.5px solid var(--scene-cut); color: var(--scene-cut); font-size: 11px; font-weight: 700;
+}
+.sec-flip {
+  min-width: 30px; height: 26px; padding: 0 8px; border-radius: 13px; border: 1px solid var(--scene-cut);
+  background: var(--hud-bg); color: var(--ink); font-size: 14px; line-height: 1; cursor: pointer; touch-action: manipulation;
+}
+.sec-flip::before { content: ""; position: absolute; inset: -9px; }
+.sec-flip:hover { background: var(--scene-cut); color: #111; }
+html[data-layout="sheet"] .sec-pane { padding-bottom: 16px; }   /* the sheet overlaps the stage by 16 px */
+
+/* ---- top bar fit (main.js fitTopbar) and left tool bar neighbors (Fable QA, October 28, 2026) ---- */
+.tb-center { flex: 1 0 auto; }
+html[data-tb="compact"] #tbCenter .seg, html[data-tb="tight"] #tbCenter .seg { display: none; }
+html[data-tb="compact"] #tbCenter .seg.sec-seg, html[data-tb="tight"] #tbCenter .seg.sec-seg { display: inline-flex; }
+html[data-tb="compact"] .view-compact, html[data-tb="tight"] .view-compact { display: inline-flex; }
+html[data-tb="tight"] .tool-tab span, html[data-tb="tight"] .sec-btn .sec-btn-text { display: none; }
+html[data-tb="tight"] .tool-tab { padding: 0 8px; }
+html[data-tb="tight"] .view-compact { padding: 0 8px; }
+/* the selection card moves to the right while the left tool bar is open */
+html[data-leftbar="open"] .card { left: auto; right: 12px; }
+/* toasts center in the part of the view beside the left tool bar */
+html[data-leftbar="open"] .toasts { left: calc(50% + 160px); max-width: calc(100% - 344px); }

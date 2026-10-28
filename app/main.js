@@ -18,8 +18,10 @@ import { captureImage, deliver } from './core/capture.js';
 import { h, ICONS, Toast, Pop, Controls, confirmDialog } from './core/ui-kit.js';
 import { createPanels } from './core/panels.js';
 import { initTips } from './core/tips.js';
+import { createLeftbar } from './core/leftbar.js';
 import { applyRealSun } from './core/sunstudy.js';
 import { createShellPanels } from './core/shell-panels.js';
+import { createSection } from './core/section.js';
 import { TOOLS, toolOn } from './tools/registry.js';
 
 const $ = (id) => document.getElementById(id);
@@ -83,6 +85,7 @@ const ctx = {
   refreshPanels: () => refreshPanels(),
   refreshHud: () => shell.refresh(['metrics', 'warnings']),
   activeTool: () => active,
+  leftbar: null,   // set below (core/leftbar.js)
   view: viewApi,
   siteStyle: () => siteStyle,
   setSiteStyle: (v) => {
@@ -133,6 +136,7 @@ async function activate(id) {
   const prev = active;
   const prevTool = prev ? loaded.get(prev) : null;
   if (prevTool && prevTool.deactivate) { try { prevTool.deactivate(ctx); } catch (e) { console.error(e); } }
+  if (prev) ctx.leftbar.set(prev, null);
   active = tool ? id : null;
   select(null);
   if (tool && tool.activate) { try { tool.activate(ctx); } catch (e) { console.error(e); } }
@@ -143,6 +147,9 @@ async function activate(id) {
   bus.emit('tool:active', { id: active, prev });
   syncLayers();   // some layers depend on the active tool (units hide while the Tower is active)
 }
+
+/* ---------- left tool bar (one tool's main list, for example the Tower segments) ---------- */
+ctx.leftbar = createLeftbar({ h, ICONS, onResize: () => { syncInsets(); scene.resize(); } });
 
 /* ---------- panels ---------- */
 const shell = createShellPanels(ctx, { loaded: () => loaded, activeId: () => active });
@@ -201,6 +208,7 @@ function select(item, owner) {
 }
 
 input.onTap((ev) => {
+  if (ctx.section && ctx.section.drawing && ctx.section.drawing()) return;   // drawing a section cut: a tap places a point, it does not select
   const tool = active ? loaded.get(active) : null;
   if (tool && tool.onTap && tool.onTap(ev, ctx)) return;      // the active tool picks its own items first
   const hit = layers.pick(ev.clientX, ev.clientY);
@@ -224,7 +232,10 @@ panelsBtn.innerHTML = ICONS.panels;
 
 tb.left.append(h('a', { class: 'mark', href: '../', 'data-tip': 'Back to the Workspace page and the project list.' }, 'CMRLM'), projBtn, undoBtn, redoBtn, toolTabs);
 const viewCompact = h('button', { class: 'btn view-compact', type: 'button', 'data-tip': 'Change the view, zoom, or style.', onclick: (e) => openViewMenu(e.currentTarget) }, 'Axon');
-tb.center.append(h('div', { class: 'seg views' }, ...viewBtns), h('div', { class: 'seg' }, zoomSite, zoomBldg), h('div', { class: 'seg' }, styleBtn), viewCompact);
+// Section cut (Cade, October 28, 2026): the drawing shows in a pane below the 3D view (core/section.js).
+const section = createSection(ctx, { stage: $('stage'), pane: $('sectionPane'), setView: (id) => setView(id), onLayout: () => { syncInsets(); scene.resize(); } });
+ctx.section = section;
+tb.center.append(h('div', { class: 'seg views' }, ...viewBtns), h('div', { class: 'seg sec-seg' }, section.button), h('div', { class: 'seg' }, zoomSite, zoomBldg), h('div', { class: 'seg' }, styleBtn), viewCompact);
 
 // Narrow screens (the bottom-sheet layout): one View menu replaces the three button groups.
 function openViewMenu(anchor) {
@@ -245,6 +256,23 @@ styleSel.value = siteStyle;
 styleSel.addEventListener('change', () => ctx.setSiteStyle(styleSel.value));
 tb.right.append(styleSel, exportBtn, panelsBtn);
 
+/* Fit the top bar (Fable QA, October 28, 2026): when the full view, zoom, and style groups do not fit, one View menu
+   replaces them ("compact"). When that still does not fit, the tool tabs and the Section button show icons only ("tight"). */
+function fitTopbar() {
+  const bar = tb.center && tb.center.parentElement;
+  if (!bar) return;
+  const root = document.documentElement;
+  const fits = () => bar.scrollWidth <= bar.clientWidth + 1;
+  root.dataset.tb = 'full';
+  if (fits()) return;
+  root.dataset.tb = 'compact';
+  if (fits()) return;
+  root.dataset.tb = 'tight';
+}
+window.addEventListener('resize', () => fitTopbar());
+window.addEventListener('panels:resize', () => fitTopbar());
+new MutationObserver(() => fitTopbar()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-layout'] });
+
 let currentView = 'axon';
 function setView(id) { currentView = id; scene.setView(id); syncTopbar(); }
 function toggleStyle() { scene.setStyle(scene.style() === 'diagram' ? 'model' : 'diagram'); syncTopbar(); }
@@ -263,6 +291,7 @@ function syncTopbar() {
   viewBtns.forEach((b) => b.classList.toggle('on', b.dataset.view === currentView));
   viewCompact.textContent = `View: ${(VIEWS.find((v) => v[0] === currentView) || VIEWS[0])[1]} ▾`;
   styleBtn.classList.toggle('on', scene.style() === 'diagram');
+  fitTopbar();
 }
 
 function openProjectMenu(anchor) {
@@ -292,8 +321,9 @@ function openExportMenu(anchor) {
   const title = doc ? doc.name : 'CMRLM';
   const rows = shell.metricRows().slice(0, 6).map((r) => [r.label, r.value]);
   const items = [
-    { label: 'Image', action: async () => deliver(await captureImage(scene, { title, rows }), title) },
-    { label: 'AI-ready image', action: async () => deliver(await captureImage(scene, { aiReady: true, title, rows, hooks: [(on) => layers.setAiReady(on)] }), `${title} ai-ready`) },
+    // With the section pane open, the image has the section drawing below the view.
+    { label: 'Image', action: async () => deliver(await section.compose(await captureImage(scene, { title, rows })), title) },
+    { label: 'AI-ready image', action: async () => deliver(await captureImage(scene, { aiReady: true, title, rows, hooks: [(on) => layers.setAiReady(on), (on) => section.setCaptureHidden(on)] }), `${title} ai-ready`) },
   ];
   const tool = active ? loaded.get(active) : null;
   const extra = tool && tool.exports ? tool.exports(ctx) : [];
@@ -310,12 +340,14 @@ keys.bind('shell', 'mod+z', () => undo());
 keys.bind('shell', 'shift+mod+z', () => redo());
 keys.bind('shell', 'mod+y', () => redo());
 keys.bind('shell', '\\', () => panels.toggleColumn());
-keys.bind('shell', 'Escape', () => select(null));
+keys.bind('shell', 'Escape', () => { if (section.drawing()) { section.stopDraw(); return; } select(null); });
 
 /* ---------- layers and project ---------- */
 // A hidden tool (registry ready: false) draws nothing: its derived layers are not registered.
 const HIDDEN_LAYERS = { parking: ['parking'], grading: ['grading'] };
 const hiddenIds = new Set(Object.entries(HIDDEN_LAYERS).filter(([tool]) => !toolOn(tool)).flatMap(([, ids]) => ids));
+// Level cut replaced by Section cut October 28, 2026 (Cade). See docs/removed-features.md.
+layers.setCut(null);
 derivedLayerDefs({ getDoc: () => project.doc(), ground, scene }).filter((d) => !hiddenIds.has(d.id)).forEach((d) => layers.register(d));
 
 function syncLayers() { layers.sync(ctx); scene.requestRender(); }
@@ -396,7 +428,10 @@ function syncInsets() {
   const hidden = document.documentElement.dataset.panels === 'hidden';
   const right = !sheet && !hidden ? Math.max(0, Math.min(v.right, p.right) - Math.max(v.left, p.left)) : 0;
   const bottom = sheet && !hidden ? Math.max(0, v.bottom - p.top) : 0;
-  if (scene.setInsets) scene.setInsets({ right, bottom });
+  // the left tool bar (Tower segments) covers the left edge of the view while it is open
+  const lb = $('leftbar');
+  const left = lb && !lb.hidden ? Math.max(0, lb.getBoundingClientRect().right - v.left) : 0;
+  if (scene.setInsets) scene.setInsets({ right, bottom, left });
 }
 window.addEventListener('resize', () => { syncInsets(); scene.resize(); });
 window.addEventListener('panels:resize', () => { syncInsets(); scene.resize(); });
@@ -411,4 +446,4 @@ if (project.doc()) onProjectOpen();
 else scene.setView('axon', { animate: false });
 
 // Tests and debugging only.
-window.__app = { ctx, activate, loaded, panels, layers, project, scene, select, version: 'phase-0' };
+window.__app = { ctx, activate, loaded, panels, layers, project, scene, select, section, version: 'phase-0' };

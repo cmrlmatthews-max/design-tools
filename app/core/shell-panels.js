@@ -33,7 +33,9 @@ export function createShellPanels(ctx, { loaded, activeId }) {
     if (num('massing.gfa') !== null) out.push({ label: 'Gross floor area', value: `${fmtInt(num('massing.gfa'))} sf` });
     if (num('massing.floors') !== null) out.push({ label: 'Floors', value: fmtInt(num('massing.floors')) });
     if (num('massing.height') !== null) out.push({ label: 'Height', value: fmtFtIn(num('massing.height')) });
-    if (num('massing.far') !== null && num('massing.far') > 0) out.push({ label: 'FAR', value: num('massing.far').toFixed(2) });
+    // FAR uses the Site Model site area (Cade, October 28, 2026: the Zoning lot is hidden). Fallback: the saved massing FAR.
+    const far = num('massing.gfa') !== null && num('site.area') > 0 ? num('massing.gfa') / num('site.area') : num('massing.far');
+    if (far !== null && far > 0) out.push({ label: 'FAR', value: far.toFixed(2), hint: 'Gross floor area divided by the site area from the Site Model.' });
     const current = toolOn('plates') && platesCurrent(doc);
     if (current && num('plates.units') !== null) out.push({ label: 'Units', value: fmtInt(num('plates.units')) });
     else if (num('massing.units') !== null) out.push({ label: 'Units (estimate)', value: fmtInt(num('massing.units')) });
@@ -75,15 +77,8 @@ export function createShellPanels(ctx, { loaded, activeId }) {
         sw));
     }
     // The neighbor style moved to the top bar (Cade, October 28, 2026).
-    const doc = ctx.project.doc();
-    const SRC_TOOL = { massing: 'tower', plates: 'plates', parking: 'parking' };
-    const levels = (doc && ctx.layers.levels ? ctx.layers.levels(doc) : []).filter((v) => !Array.isArray(v.sources) || v.sources.some((src) => toolOn(SRC_TOOL[src] || src)));
-    if (levels.length) {
-      const sel = h('select', { class: 'select', 'aria-label': 'Cut at level' }, h('option', { value: '' }, 'No cut'), ...levels.map((v) => h('option', { value: v.key }, v.name || `Level at ${Math.round(v.z)} ft`)));
-      sel.value = ctx.layers.cut() || '';
-      sel.addEventListener('change', () => { ctx.layers.setCut(sel.value || null); });
-      body.append(h('div', { class: 'field-row' }, h('span', { class: 'field-label' }, 'Level cut'), sel));
-    }
+    // Level cut replaced by Section cut October 28, 2026 (Cade). See docs/removed-features.md.
+    // ctx.layers.setCut stays in core/layers.js; main.js clears any cut on load.
   }
 
   /* ---------- warnings ---------- */

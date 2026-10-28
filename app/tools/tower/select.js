@@ -15,7 +15,7 @@ import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { toProject } from '../../../src/shared/project.js';
 import * as Snap from '../../../src/tower/snap.js';
-import { CONFIG, Geo, num, clamp, deepClone } from './state.js';
+import { CONFIG, Geo, num, clamp, deepClone, effectiveState } from './state.js';
 import { extrudePolys, solidGeometry } from './render.js';
 import { planToWorld } from '../../core/frame.js';
 import { Units } from '../../core/ui-kit.js';
@@ -575,7 +575,7 @@ export function createSelect(T) {
     const centerW = lw((info.fp.box.minX + info.fp.box.maxX) / 2, (info.fp.box.minY + info.fp.box.maxY) / 2, 0);
     drag = {
       id, item: it, info, fp: info.fp, snapBox, p0: anchor, axis, n, t0: 0, touch, orig: {}, pending: null, raf: 0,
-      targets: Snap.collectSnapTargets(s, d.plates, { exclude: it }),
+      targets: Snap.collectSnapTargets(effectiveState(s), d.plates, { exclude: it }),   // the hidden zoning lot and setbacks are not snap lines (October 28, 2026)
       tol: clamp(ftPerPx(centerW) * (touch ? TOL_PX_TOUCH : TOL_PX), 0.5, 20),
       base: deepClone(it.kind === 'segment' ? s.segments[it.index] : it.kind === 'podium' ? s.podium : s.context.blocks[it.index]),
     };

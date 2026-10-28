@@ -317,15 +317,33 @@ let effSrc = null, effOut = null;
 export function effectiveState(s) {
   if (!HIDDEN_FEATURES_OFF || !s) return s;
   if (s === effSrc) return effOut;
-  const site = s.site ? { ...s.site, heightLimit: 0, stepback: { ...(s.site.stepback || {}), on: false } } : s.site;
+  // Hidden October 28, 2026 (Cade). See docs/removed-features.md. The zoning lot and its setbacks have no effect: the tower is built as
+  // "Unlimited" (no lot line, no setback checks, no lot snap lines). The saved lot, setbacks, height limit and stepback stay in the state.
+  // The FAR comes from the Site Model site area instead (createDerived, siteArea).
+  const site = s.site ? { ...s.site, shape: 'none', setbacks: { front: 0, back: 0, left: 0, right: 0 }, heightLimit: 0, stepback: { ...(s.site.stepback || {}), on: false } } : s.site;
   const crown = s.crown && s.crown.type === 'spire' ? s.crown : s.crown;   // a saved spire stays until the user picks another type
   effSrc = s;
-  effOut = { ...s, site, crown, setbacks: [], mechanical: [], carves: [], cuts: [], context: { ...(s.context || {}), blocks: [] } };
+  // The Program panel (with the GFA and FAR targets) is hidden too (October 28, 2026): the targets are off. The program defaults stay.
+  effOut = { ...s, site, crown, targets: { gfa: 0, far: 0 }, view: s.view ? { ...s.view, envelope: false } : s.view, setbacks: [], mechanical: [], carves: [], cuts: [], context: { ...(s.context || {}), blocks: [] } };
   return effOut;
 }
 
-/** One cached run of the pipeline per store. get() is the full result; display(draft) is what to draw (coarser while a slider drags). */
-export function createDerived(store) {
+/** Metrics with the Site Model site area (sf) in place of the zoning lot: siteArea, far, siteCoverage, hasSite and the FAR target check.
+ *  No area (null or 0) means no site: the FAR and the site coverage are 0 and hasSite is false. */
+export function withSiteArea(m, area, targets) {
+  const A = typeof area === 'number' && isFinite(area) && area > 0 ? area : 0;
+  const t = targets || {};
+  const check = (target, current) => (num(target, 0) > 0 ? { target, current, diff: current - target, pct: ((current - target) / target) * 100 } : null);
+  const far = A > 0 ? m.gfa / A : 0;
+  return {
+    ...m, siteArea: A, hasSite: A > 0, far, siteCoverage: A > 0 ? m.floor1Area / A : 0,
+    target: { gfa: check(num(t.gfa, 0), m.gfa), far: check(num(t.far, 0), far) },
+  };
+}
+
+/** One cached run of the pipeline per store. opts.siteArea() gives the Site Model site area in sf (or null), which the FAR uses. get() is the full result; display(draft) is what to draw (coarser while a slider drags). */
+export function createDerived(store, opts = {}) {
+  const siteAreaOf = () => { try { return (opts.siteArea && opts.siteArea()) || null; } catch (e) { return null; } };
   let gKey = null, aKey = null, geomId = 0, counter = 0;
   let full = null, cache = null, draftCache = null;
   const geomKeyOf = (s) => JSON.stringify([s.site, s.podium, s.segments, s.setbacks, s.mechanical, s.carves, s.cuts, s.crown]);
@@ -334,10 +352,11 @@ export function createDerived(store) {
     const s = effectiveState(store.raw());
     const gk = geomKeyOf(s);
     if (gk !== gKey || !full) { gKey = gk; geomId++; full = computeGeometry(s); aKey = null; draftCache = null; }
-    const ak = JSON.stringify([s.programs, s.targets, s.context]);
+    const area = siteAreaOf();
+    const ak = JSON.stringify([s.programs, s.targets, s.context, area]);
     if (ak !== aKey || !cache) {
       aKey = ak;
-      const metrics = Geo.computeMetrics(s, full.plates);
+      const metrics = withSiteArea(Geo.computeMetrics(s, full.plates), area, s.targets);
       cache = { id: ++counter, geomId, ...full, metrics, bounds: computeBounds(s, full.plates, metrics.totalHeight), wire: safeWire(s, metrics.totalHeight) };
     }
     return cache;

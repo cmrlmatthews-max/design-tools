@@ -56,6 +56,26 @@ export function createProject(T) {
   }
   const hasSite = () => !!siteInfo();
 
+  /** The site area in sf from the Site Model, or null when the project has no site. Same rule as src/viewer/summary.js (the boundary ring,
+   *  else size x size). The FAR and the site coverage use it (October 28, 2026: the zoning lot is hidden). */
+  let areaMemo = { src: null, value: null };
+  function siteArea() {
+    const s = sec('site');
+    const dv = s && isObj(s.derived) && Object.keys(s.derived).length ? s.derived : null;
+    if (!dv) return null;
+    if (areaMemo.src === dv) return areaMemo.value;
+    const fin = (v) => typeof v === 'number' && Number.isFinite(v);
+    let area = null;
+    if (Array.isArray(dv.boundary) && dv.boundary.length >= 3 && dv.boundary.every((p) => Array.isArray(p) && fin(p[0]) && fin(p[1]))) {
+      let a = 0;
+      const r = dv.boundary;
+      for (let i = 0, n = r.length; i < n; i++) { const p = r[i], q = r[(i + 1) % n]; a += p[0] * q[1] - q[0] * p[1]; }
+      area = Math.abs(a / 2);
+    } else if (fin(dv.size)) area = dv.size * dv.size;
+    areaMemo = { src: dv, value: area && area > 0 ? area : null };
+    return areaMemo.value;
+  }
+
   /** Grading Sketch tier of this building: { ffe, id } or null (the lowest tier that came from the massing). Read from the project, so it does not need the Grading tool. */
   function gradingFfe() {
     if (!toolOn('grading')) return null;   // the Grading Sketch is hidden: no grading height (registry.js)
@@ -329,7 +349,7 @@ export function createProject(T) {
   }
 
   return {
-    flags, sec, hasDoc, placement, baseMode, pinned, siteInfo, hasSite, gradingFfe,
+    flags, sec, hasDoc, placement, baseMode, pinned, siteInfo, hasSite, siteArea, gradingFfe,
     groundUnderFootprint, followGround, setBaseMode, centerOnSite, contextFromSite, prepareNew,
     foreignTool, owned, towerSection, stateFrom, show, sectionPatch, markDirty, flush, askReplace, load, sync, detach, foreignPlacement,
   };

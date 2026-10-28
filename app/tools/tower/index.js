@@ -1,7 +1,7 @@
 /* ==========================================================================
    TOOL: tower (Tower Generator, docs/shell-plan.md section 9.2)
-   Podium, segments and a crown; programs and targets; a site with an
-   envelope; placement on the project site; the AI prompt library.
+   Podium, segments and a crown; placement on the project site; the AI prompt library.
+   Segments live in the shell left tool bar (ctx.leftbar). The FAR uses the Site Model site area.
    Port of build/tower/*.js. The math stays in src/tower/ (geometry, envelope, snap, prompts, derived).
    Files here:
      state.js    state shape, defaults, migration, the cached geometry run (createDerived)
@@ -9,16 +9,16 @@
      select.js   selection, five handles, snapping, copy and delete
      project.js  placement, base elevation, context from site, the 'massing' section
      options.js  saved options, autosave
-     panels.js   Form, Program and Site panels (and the Diagram legend)
+     panels.js   Form and Site panels, the Segments list for the left tool bar (and the Diagram legend)
      prompts-ui.js  the AI prompt panel
-   Live layers: 'tower-model' (replaces the derived 'massing' twin), 'tower-context', 'tower-envelope'.
+   Live layers: 'tower-model' (replaces the derived 'massing' twin), 'tower-context' (hidden), 'tower-envelope' (hidden).
    ========================================================================== */
 import * as Cover from '../../core/cover.js';
 import { deckCover, coverKey, platesCoverZs, platesCoverKey } from '../../core/cover.js';
 import { createPlacementGizmo } from '../../core/placement.js';
 import { Units } from '../../core/ui-kit.js';
 import { toProject } from '../../../src/shared/project.js';
-import { CONFIG, defaultState, fillDefaults, createDerived, unitBreakdown } from './state.js';
+import { CONFIG, defaultState, fillDefaults, createDerived, effectiveState, unitBreakdown } from './state.js';
 import { buildModelGroup, buildContextGroup, buildEnvelopeGroup, aiReadyModel, aiReadyContext, aiReadyEnvelope } from './render.js';
 import { createProject } from './project.js';
 import { createSelect } from './select.js';
@@ -106,7 +106,8 @@ function modelDef() {
       const V = appView();
       // the blue site outline is an edit aid: the active tool only. Nothing else differs between active and inactive.
       // The floors the Plate Planner units draw are skipped while those units match the massing; out of date, they draw here.
-      const group = buildModelGroup(s, {
+      // built from the effective state: the hidden zoning lot draws no site outline (October 28, 2026)
+      const group = buildModelGroup(effectiveState(s), {
         disp: T.derived.display(isDraft()), style: lctx.style, itemFor, showSite: T.flags.active, cover: deckCover(lctx.doc),
         platesZs: platesOk(lctx.doc) ? platesCoverZs(lctx.doc) : null, view: { colorBy: V.colorBy, floorLines: V.floorLines },
       });
@@ -155,15 +156,16 @@ function towerLayers(ctx) {
       aiReady: aiReadyContext,
     },
     {
-      id: 'tower-envelope', label: 'Zoning envelope', order: 22, defaultOn: true,
-      listed: false,       // on or off comes from the Editing toggle in the Tower form; the shell skips unlisted defs in the Layers list
+      // Hidden October 28, 2026 (Cade). See docs/removed-features.md.
+      // The "Show zoning envelope" toggle is gone and the layer draws nothing, whatever view.envelope was saved. The zoning lot is hidden, so there is no envelope.
+      id: 'tower-envelope', label: 'Zoning envelope', order: 22, defaultOn: false,
+      listed: false,       // the shell skips unlisted defs in the Layers list
       key() {
-        if (!shown() || !T.flags.active) return 'inactive';      // the envelope shows only while the tower is the active tool
-        const s = T.store.raw();
-        const d = T.derived.get();
-        return [s.view.envelope ? 1 : 0, JSON.stringify(s.site), d.bounds.model.height].join('|');
+        return 'off';
       },
       build(lctx) {
+        return null;   // hidden (see the note above); the code below stays for when the layer comes back
+        // eslint-disable-next-line no-unreachable
         if (!shown() || !T.flags.active) return null;
         const s = T.store.raw();
         if (!s.view.envelope || s.site.shape === 'none') return null;
@@ -259,6 +261,16 @@ function makeGizmo() {
 }
 T.gizmoSync = () => { if (gizmo) { try { gizmo.sync(); } catch (e) { console.error(e); } } };
 
+/* ---------- the Segments list in the left tool bar (Cade, October 28, 2026) ---------- */
+function showSegmentsBar(ctx) {
+  try { ctx.leftbar.set(TOOL, { title: 'Segments', build: (bodyEl) => T.panels.segments(bodyEl) }); } catch (e) { console.error(e); }
+}
+/** Rebuilds the bar body (an option switch, a project open). Edits and undo keep the rows as they are: the list updates in place with the panels. */
+function refreshSegmentsBar() {
+  if (!T.flags.active) return;
+  try { T.ctx.leftbar.refresh(); } catch (e) { console.error(e); }
+}
+
 /* ---------- reacting to the store ---------- */
 async function askAboutForeign() {
   const P = T.project;
@@ -276,6 +288,7 @@ function onStore(state, info) {
   const path = info ? String(info.path || '') : '';
   const P = T.project;
   T.panels.refresh();
+  if (kind === 'replace') refreshSegmentsBar();   // an option switch or a project load swaps the whole state
   T.prompts.refresh();
   T.select.onStore();
   syncLayersSoon();
@@ -313,7 +326,7 @@ export default {
     } catch (e) { /* the panels still work */ }
 
     const store = T.store = this.store = ctx.store(fillDefaults(defaultState()));
-    T.derived = createDerived(store);
+    T.derived = createDerived(store, { siteArea: () => (T.project ? T.project.siteArea() : null) });   // the FAR uses the Site Model site area
     T.project = createProject(T);
     T.select = createSelect(T);
     T.options = createOptions(T);
@@ -356,6 +369,7 @@ export default {
     const first = !T.flags.engaged;
     T.flags.active = true;
     T.flags.engaged = true;
+    showSegmentsBar(ctx);
     T.project.sync();
     syncModelLayer();
     invalidateLayers();
@@ -371,6 +385,7 @@ export default {
   },
 
   deactivate(ctx) {
+    try { ctx.leftbar.set(TOOL, null); } catch (e) { /* the bar clears with the next tool */ }
     T.select.disable();
     T.flags.active = false;
     T.project.flush();
@@ -383,7 +398,8 @@ export default {
   panels() {
     return [
       { id: 'tower-form', title: 'Tower form', build: (body) => T.panels.form(body), open: true },
-      { id: 'tower-program', title: 'Program', build: (body) => T.panels.program(body), open: false },
+      // Hidden October 28, 2026 (Cade). See docs/removed-features.md. (the Program panel: programs list and GFA and FAR targets)
+      // { id: 'tower-program', title: 'Program', build: (body) => T.panels.program(body), open: false },
       { id: 'tower-site', title: 'Site and placement', build: (body) => T.panels.site(body), open: false },
       { id: 'tower-prompts', title: 'AI prompts', build: (body) => T.prompts.build(body), open: false },
     ];
@@ -418,6 +434,7 @@ export default {
     }
     syncModelLayer();
     T.panels.refresh();
+    refreshSegmentsBar();
     ctx.refreshHud();
     if (open) ctx.refreshPanels();
   },
