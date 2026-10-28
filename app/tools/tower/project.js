@@ -7,6 +7,7 @@
    - a massing written by another tool (the Mid-Rise Generator) is kept until the user confirms the replacement
    The tower state lives in the tool store (ctx.store). The project section holds a copy (docs/project-file-spec.md 6.2).
    ========================================================================== */
+import { toolOn } from '../registry.js';
 import { towerDerived } from '../../../src/tower/derived.js';
 import { siteContextFor, toProject, transformRing } from '../../../src/shared/project.js';
 import { CONFIG, num, deepClone, fillDefaults, migrateTower, defaultState } from './state.js';
@@ -58,6 +59,7 @@ export function createProject(T) {
 
   /** Grading Sketch tier of this building: { ffe, id } or null (the lowest tier that came from the massing). Read from the project, so it does not need the Grading tool. */
   function gradingFfe() {
+    if (!toolOn('grading')) return null;   // the Grading Sketch is hidden: no grading height (registry.js)
     const g = sec('grading');
     const list = g && isObj(g.derived) && Array.isArray(g.derived.ffe) ? g.derived.ffe : [];
     let best = null;

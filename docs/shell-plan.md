@@ -24,6 +24,7 @@ This plan merges the Site Model, the Tower Generator, the Parking Deck Generator
 | Podium parking (October 28, 2026) | Direction B: podium floors with the Parking program become a linked podium deck in the Parking tool at once. The deck replaces those massing floors. A standalone deck stays as it is, with a warning. |
 | Screening (October 28, 2026) | Open, Solid, Mesh. Mesh openness 0 to 50 percent, written to `parking.derived.screen` for later open-garage checks. |
 | Units and massing (October 28, 2026) | Units draw while they match the massing geometry; the massing skips those floors. After a geometry change the massing draws and the units hide. A move or a new base does not count as a change. |
+| Simple app (October 28, 2026) | Parking Deck and Grading Sketch are hidden for now (`app/tools/registry.js`, ready: false): no dock icon, no drawer, no layers, no grading height for the tower base. Their code and saved sections stay. Podium floors with the Parking program draw as massing. |
 | Future | More tools join the shell later. The tool contract (section 5) must make a new tool a new folder, not a shell rewrite. |
 
 ## 2. What the research found

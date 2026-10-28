@@ -129,7 +129,7 @@ li.warn .stl{color:var(--red)}
 <details class="howto" id="howto" open><summary><svg viewBox="0 0 44 44" class="bub" aria-hidden="true"><circle cx="22" cy="22" r="20" fill="#fff" stroke="#1D2733" stroke-width="1.4"/><line x1="4" y1="22" x2="40" y2="22" stroke="#1D2733" stroke-width="1"/><text x="22" y="18" text-anchor="middle" class="rc" font-size="13" fill="#1D2733">?</text><text x="22" y="35" text-anchor="middle" class="rc" font-size="9.5" fill="#1D2733">G-001</text></svg><div><h2 class="dtt" style="margin:0">How projects work</h2><div class="dts">General notes · the Design App</div></div><span class="tog" aria-hidden="true"></span></summary>
 <div class="hw">
 <h3>1 · What a project is</h3>
-<p>A project is one file for one design study. It holds the site, the massing, the parking, the grading, and the units. The Design App works on all of them in one 3D view.</p>
+<p>A project is one file for one design study. It holds the site, the tower, and the units. The Design App works on them in one 3D view.</p>
 <h3>2 · Start a project</h3>
 <ol class="steps">
 <li>Select <b>New project</b> below the <b>Project schedule</b>. Type a name. Select <b>Create</b>.</li>
@@ -138,8 +138,7 @@ li.warn .stl{color:var(--red)}
 </ol>
 <h3>3 · Work in the Design App</h3>
 <ol class="steps">
-<li>Select a tool in the dock on the left: <b>Site Model</b>, <b>Tower Generator</b>, <b>Parking Deck</b>, or <b>Grading Sketch</b>. Its panels open on the right.</li>
-<li>Set podium floors to the <b>Parking</b> program in the Tower Generator. The Parking Deck makes the deck for those floors.</li>
+<li>Select a tool in the dock on the left: <b>Site Model</b> or <b>Tower Generator</b>. Its panels open on the right.</li>
 <li>Use the <b>View</b> panel for the style, floor lines, shadows, and sun. Use the <b>Layers</b> panel to show or hide each part.</li>
 <li>Tap any part of the model to see its data.</li>
 </ol>
@@ -165,7 +164,7 @@ li.warn .stl{color:var(--red)}
 </section>
 <div class="lists"><section><div class="dt"><svg viewBox="0 0 44 44" class="bub" aria-hidden="true"><circle cx="22" cy="22" r="20" fill="#fff" stroke="#1D2733" stroke-width="1.4"/><line x1="4" y1="22" x2="40" y2="22" stroke="#1D2733" stroke-width="1"/><text x="22" y="18" text-anchor="middle" class="rc" font-size="13" fill="#1D2733">8</text><text x="22" y="35" text-anchor="middle" class="rc" font-size="9.5" fill="#1D2733">G-001</text></svg><div><h2 class="dtt" style="margin:0">Tools</h2><div class="dts" id="toolSub">No project open</div></div></div>
 <p id="open" class="hint">No project open. Each tool opens on its own.</p>
-<ol><li class="tool" id="appCard"><div class="tag"><svg class="tri" viewBox="0 0 26 23" aria-hidden="true"><path d="M13,1.5 L24.5,21.5 L1.5,21.5 Z"/><text x="13" y="18" text-anchor="middle" font-size="11">A</text></svg></div><div class="c"><h3 class="t">Design App</h3><p class="d">Site, tower, parking, and grading in one 3D view.</p><p class="stl"></p><div class="stamps"><a class="stamp" id="appOpen" data-base="app/" href="app/" aria-label="Open Design App">Open</a></div></div></li></ol>
+<ol><li class="tool" id="appCard"><div class="tag"><svg class="tri" viewBox="0 0 26 23" aria-hidden="true"><path d="M13,1.5 L24.5,21.5 L1.5,21.5 Z"/><text x="13" y="18" text-anchor="middle" font-size="11">A</text></svg></div><div class="c"><h3 class="t">Design App</h3><p class="d">Site and tower in one 3D view.</p><p class="stl"></p><div class="stamps"><a class="stamp" id="appOpen" data-base="app/" href="app/" aria-label="Open Design App">Open</a></div></div></li></ol>
 </section>
 <section class="sched" id="testBox" hidden><div class="st">Self-test</div><pre id="testOut" hidden></pre></section>
 </div>
@@ -250,8 +249,8 @@ function viewerStatus(doc) {
   }
   return { text: "Empty", cls: "" };
 }
-// The Design App shows the four sections it draws: site, massing, parking, grading.
-const APP_SECTIONS = ["site", "massing", "parking", "grading"];
+// The Design App shows the sections it draws: site and massing (Parking Deck and Grading Sketch hidden, October 28, 2026).
+const APP_SECTIONS = ["site", "massing"];
 function appStatus(doc) {
   const n = APP_SECTIONS.filter((k) => statusFor(doc, k).cls === "data").length;
   return { text: (n ? "Has data" : "Empty") + " · " + n + " of " + APP_SECTIONS.length + " sections", cls: n ? "data" : "" };
@@ -503,16 +502,16 @@ async function selfTest() {
     const cards = [...document.querySelectorAll("li.tool")];
     ok(cards.length === 1 && cards[0].id === "appCard", "cards on the page: " + cards.length);
     ok(document.getElementById("appCard").querySelector(".t").textContent === "Design App", "the card is not the Design App");
-    ok(document.getElementById("appCard").querySelector(".d").textContent === "Site, tower, parking, and grading in one 3D view.", "the Design App line is wrong");
+    ok(document.getElementById("appCard").querySelector(".d").textContent === "Site and tower in one 3D view.", "the Design App line is wrong");
     const single = ["site/", "tower/", "midrise/", "plate/", "parking/", "grading/", "viewer/", "facade/"];
     const hit = [...document.querySelectorAll("main a[href]")].map((e) => e.getAttribute("href")).find((h) => single.some((x) => h.startsWith(x)));
     ok(!hit, "a link opens a single tool: " + hit);
     ok(![...document.querySelectorAll("h3.subhd")].some((e) => e.textContent === "Single tools"), "the Single tools heading is on the page");
   });
-  await t("Design App link opens app/ with the open project, and its status counts four sections", () => {
+  await t("Design App link opens app/ with the open project, and its status counts two sections", () => {
     const a = document.getElementById("appOpen"), id = getLast(store), st = document.querySelector("#appCard .stl").textContent;
     ok(id && a.getAttribute("href") === "app/?project=" + encodeURIComponent(id), "link is " + a.getAttribute("href"));
-    ok(/ · 2 of 4 sections$/.test(st), "status is " + st);
+    ok(/ · 2 of 2 sections$/.test(st), "status is " + st);
   });
   await t("no Later, Planned, coming soon, Egress, or View Study text on the page", () => {
     const page = document.querySelector("main").cloneNode(true);
