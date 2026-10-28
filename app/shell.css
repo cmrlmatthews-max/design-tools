@@ -627,3 +627,8 @@ html[data-panels="hidden"] body { grid-template-columns: minmax(0, 1fr) 0; }
   .tool-tabs { margin-left: 2px; padding-left: 4px; }
   .mark { letter-spacing: .08em; }
 }
+
+/* ---- neighbor style dropdown in the top bar ---- */
+.tb-select { height: 32px; min-width: 0; width: auto; padding: 0 28px 0 10px; font-size: 13px; margin-right: 4px; }
+@media (pointer: coarse) { .tb-select { height: 40px; } }
+@media (max-width: 560px) { .tb-select { max-width: 96px; } }

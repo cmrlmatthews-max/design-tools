@@ -73,10 +73,7 @@ export function createShellPanels(ctx, { loaded, activeId }) {
         h('span', { class: 'layer-text' }, h('span', { class: 'layer-label' }, l.label)),
         sw));
     }
-    const style = h('select', { class: 'select', 'aria-label': 'Neighbor buildings' }, ...[['solid', 'Solid'], ['glass', 'Glass'], ['wireframe', 'Wireframe']].map(([v, t]) => h('option', { value: v }, t)));
-    style.value = ctx.siteStyle ? ctx.siteStyle() : 'solid';
-    style.addEventListener('change', () => ctx.setSiteStyle && ctx.setSiteStyle(style.value));
-    body.append(h('div', { class: 'field-row' }, h('span', { class: 'field-label' }, 'Neighbors'), style));
+    // The neighbor style moved to the top bar (Cade, October 28, 2026).
     const doc = ctx.project.doc();
     const SRC_TOOL = { massing: 'tower', plates: 'plates', parking: 'parking' };
     const levels = (doc && ctx.layers.levels ? ctx.layers.levels(doc) : []).filter((v) => !Array.isArray(v.sources) || v.sources.some((src) => toolOn(SRC_TOOL[src] || src)));
@@ -137,7 +134,7 @@ export function createShellPanels(ctx, { loaded, activeId }) {
   const groups = () => [
     { id: 'shell-view', title: 'View', build: buildView, open: false, owner: 'shell' },
     { id: 'shell-layers', title: 'Layers', build: buildLayers, open: !activeId(), owner: 'shell' },
-    { id: 'shell-warnings', title: `Warnings${countLabel(warningRows().length)}`, build: buildWarnings, open: false, owner: 'shell' },
+    // Warnings hidden October 28, 2026 (Cade). See docs/removed-features.md. buildWarnings stays for later.
   ];
   const countLabel = (n) => (n ? ` (${n})` : '');
 

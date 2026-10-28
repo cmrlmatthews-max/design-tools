@@ -151,7 +151,8 @@ ctx.panelsApi = panels;
 function refreshPanels() {
   const tool = active ? loaded.get(active) : null;
   const toolGroups = tool && tool.panels ? tool.panels(ctx).map((g) => ({ owner: tool.id, ...g })) : [];
-  panels.set([shell.metricsGroup(), ...toolGroups, ...shell.groups()]);
+  // Metrics last (Cade, October 28, 2026). Warnings hidden for now (docs/removed-features.md).
+  panels.set([...toolGroups, ...shell.groups(), shell.metricsGroup()]);
 }
 
 /* ---------- tools in the top bar (Cade, October 28, 2026: the left dock moved to the top bar, layout A) ---------- */
@@ -235,7 +236,13 @@ function openViewMenu(anchor) {
     { label: 'Diagram style', checked: scene.style() === 'diagram', action: () => toggleStyle() },
   ]);
 }
-tb.right.append(exportBtn, panelsBtn);
+// Neighbor buildings style (Cade, October 28, 2026: its own dropdown in the top bar)
+const SITE_STYLES = [['solid', 'Solid'], ['glass', 'Glass'], ['wireframe', 'Wireframe']];
+const styleSel = h('select', { class: 'select tb-select', 'aria-label': 'Neighbor buildings', 'data-tip': 'How the neighbor buildings draw: solid, see-through glass, or lines only.' },
+  ...SITE_STYLES.map(([v, t]) => h('option', { value: v }, t)));
+styleSel.value = siteStyle;
+styleSel.addEventListener('change', () => ctx.setSiteStyle(styleSel.value));
+tb.right.append(styleSel, exportBtn, panelsBtn);
 
 let currentView = 'axon';
 function setView(id) { currentView = id; scene.setView(id); syncTopbar(); }
