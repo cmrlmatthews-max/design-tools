@@ -2,7 +2,8 @@
    TOWER: panels
    Port of the tabs in build/tower/08_ui.js. The tabs become three panel groups (Form, Program, Site);
    each holds accordion sections built with the shared Controls kit. The prompt panel is in prompts-ui.js.
-   Not ported: the View tab (the app has its own View and Layers panels; snap and the envelope toggle sit in the Editing section of the Form), image overlay choices, typed-base UI polish, the pin button.
+   Not ported: the View tab (the app has its own View and Layers panels; snap sits in the Editing section of the Form), image overlay choices, typed-base UI polish, the pin button.
+   Segments are not in the Form: they build into the shell left tool bar (ctx.leftbar, see segments below and index.js).
    ========================================================================== */
 import { Units } from '../../core/ui-kit.js';
 import { CONFIG, num, clamp, deepClone, defaultSegment, surroundBlocks, unitBreakdown } from './state.js';
@@ -160,11 +161,12 @@ export function createPanels(T) {
   }
 
   const CURVES = opts([['linear', 'Linear'], ['eased', 'Eased']]);
-  function segmentsSection() {
+  /** The Segments list and its help line, for the left tool bar. */
+  function segmentsParts() {
     const list = lists.segments = C.list({
       bind: bs('segments'), addLabel: 'Add segment', min: 1,
       swatch: (i, g) => progColor(g.program),
-      title: (i, g) => `Segment ${i + 1} · ${g.floors} fl · ${(CONFIG.programs[g.program] || {}).label || g.program}`,
+      title: (i, g) => `Segment ${i + 1} · ${g.floors} fl`,   // short, the left bar is narrow; the swatch shows the program
       make: (arr) => { const s = deepClone(arr[arr.length - 1] || defaultSegment()); s.floors = 10; return s; },
       render: (i) => {
         const p = `segments.${i}`;
@@ -192,7 +194,13 @@ export function createPanels(T) {
         };
       },
     });
-    return section('segments', 'Segments', { children: [C.help('Segments stack from bottom to top. Use the arrows to reorder them.'), list.el] }, { open: true });
+    return [C.help('Segments stack from bottom to top. Use the arrows to reorder them.'), list.el];
+  }
+  // Hidden October 28, 2026 (Cade). See docs/removed-features.md. (moved to the left tool bar)
+  // The Segments section is not added to the Form. The same list builds into the left tool bar (the `segments` builder below).
+  // eslint-disable-next-line no-unused-vars
+  function segmentsSection() {
+    return section('segments', 'Segments', { children: segmentsParts() }, { open: true });
   }
 
   const SIDE_OPTS = opts([['front', 'Front (south)'], ['back', 'Back (north)'], ['left', 'Left (west)'], ['right', 'Right (east)']]);
@@ -301,6 +309,9 @@ export function createPanels(T) {
   }
 
   /* ================================================================= PROGRAM */
+  // Hidden October 28, 2026 (Cade). See docs/removed-features.md.
+  // The Program panel (programs list and targets) is not added to the app. The program defaults stay in the state and the
+  // per-segment and podium program dropdowns stay. Saved program values still apply; the saved GFA and FAR targets do not (effectiveState).
   function programsSection() {
     const cards = Object.keys(CONFIG.programs).map((k) => {
       const path = `programs.${k}`;
@@ -377,6 +388,9 @@ export function createPanels(T) {
     }, { when: () => P.hasDoc() });
   }
 
+  // Hidden October 28, 2026 (Cade). See docs/removed-features.md.
+  // The Zoning lot control and the Setbacks controls are not added to the Site panel. A saved lot and setbacks have no effect
+  // (effectiveState). The FAR uses the Site Model site area.
   function siteSection() {
     const shapeBind = {
       get: () => get('site.shape'),
@@ -483,12 +497,11 @@ export function createPanels(T) {
     const gridChips = [5, 10].map((g) => h('button', { class: 'chip', type: 'button', 'data-grid': String(g), 'aria-pressed': 'false', onclick: () => { snap({ grid: g }); C.refreshAll(); } }, `${g} ft`));
     return section('editing', 'Editing', {
       children: [
-        C.toggle({ label: 'Show zoning envelope', bind: bs('view.envelope') }).el,
-        C.help('The envelope draws when a zoning lot is set (Site and placement panel).'),
+        // Hidden October 28, 2026 (Cade). See docs/removed-features.md. (the "Show zoning envelope" toggle; the envelope layer draws nothing)
         C.toggle({ label: 'Snap while dragging', bind: { get: () => (get('view.snap') || {}).on !== false, set: (v) => snap({ on: !!v }), commit: () => {} } }).el,
         C.when(() => { const g = (get('view.snap') || {}).grid === 10 ? 10 : 5; gridChips.forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.grid) === g))); return true; },
           [h('div', { class: 'ctl' }, h('div', { class: 'ctl-label' }, 'Grid'), h('div', { class: 'chips', role: 'group', 'aria-label': 'Grid size' }, gridChips))]).el,
-        C.help('Snaps to the grid, the zoning lot, setbacks and the edges and centers of other pieces. Hold Option (Alt) while dragging to skip it.'),
+        C.help('Snaps to the grid and the edges and centers of other pieces. Hold Option (Alt) while dragging to skip it.'),
       ],
     }, { open: true });
   }
@@ -502,14 +515,35 @@ export function createPanels(T) {
     C.refreshAll();
     allSyncs().forEach((f) => { try { f(); } catch (e) { console.error(e); } });
   };
-  const form = host('form', () => [optionSection(), podiumSection(), segmentsSection(), crownSection(), editingSection()]);
+  const form = host('form', () => [optionSection(), podiumSection(), crownSection(), editingSection()]);
+  /** The left tool bar body (ctx.leftbar.set('tower', { title: 'Segments', build })). */
+  const segments = host('segments', () => segmentsParts());
+  // Hidden October 28, 2026 (Cade). See docs/removed-features.md. (the Program panel is not listed in index.js panels())
   const program = host('program', () => [programsSection(), targetsSection()]);
-  const site = host('site', () => [projectSection(), siteSection(), setbacksSection()]);
+  const noDoc = () => {
+    const note = h('p', { class: 'help', id: 'tower-noProject' }, 'Open a project to place the tower on its site.');
+    const sync = () => { note.hidden = T.project.hasDoc(); };
+    swatchSyncs.push(sync); sync();
+    return note;
+  };
+  const site = host('site', () => [noDoc(), projectSection()]);
 
   /** Switches to the section that holds an item, opens its row, and scrolls it into view. */
   // Hidden October 28, 2026 (Cade). See docs/removed-features.md. (carve and context items no longer open a section)
   const ITEM_MAP = { segment: ['segments', 'segments'], podium: ['podium'], crown: ['crown'] };
+  function openSegment(item) {
+    // the Segments list is in the left tool bar: it opens the row only while the bar is on screen
+    const lst = lists.segments;
+    if (!lst || !lst.el.isConnected || !Number.isInteger(item.index)) return false;
+    const row = lst.openAt(item.index);
+    if (!row) return false;
+    try { row.scrollIntoView({ block: 'nearest', behavior: 'auto' }); } catch (e) { /* the row stays where it is */ }
+    row.classList.remove('is-focus'); void row.offsetWidth; row.classList.add('is-focus');
+    setTimeout(() => row.classList.remove('is-focus'), 1600);
+    return true;
+  }
   function openItem(item) {
+    if (item && item.kind === 'segment') return openSegment(item);
     const m = item && ITEM_MAP[item.kind];
     if (!m) return false;
     const sec = sections[m[0]];
@@ -527,7 +561,7 @@ export function createPanels(T) {
     C.refreshAll();
     allSyncs().forEach((f) => { try { f(); } catch (e) { console.error(e); } });
   }
-  return { form, program, site, legendRows, refresh, openItem, sections, lists, controls: C, syncCount: () => allSyncs().length };
+  return { form, segments, program, site, legendRows, refresh, openItem, sections, lists, controls: C, syncCount: () => allSyncs().length };
 }
 
 export { unitBreakdown };
