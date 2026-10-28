@@ -312,17 +312,22 @@ export function hasCurves(s) {
    model, so a saved value cannot change the building with no control left to clear it. The values stay in the saved
    state and work again when the feature comes back. Set HIDDEN_FEATURES_OFF to false to bring them back. */
 export const HIDDEN_FEATURES_OFF = true;
-let effSrc = null, effOut = null;
+let effSrc = null, effOut = null, effRefs = null;
+const refsOf = (s) => Object.keys(s).map((k) => [k, s[k]]);
+const sameRefs = (s, refs) => refs.length === Object.keys(s).length && refs.every(([k, v]) => s[k] === v);
 /** The state the model is built from: the store state minus the hidden features. Same object while the state is the same. */
 export function effectiveState(s) {
   if (!HIDDEN_FEATURES_OFF || !s) return s;
-  if (s === effSrc) return effOut;
+  // The store changes its state in place (set replaces one top-level value, for example the whole segments list after a
+  // reorder). So the cache checks the top-level values too, not only the state object (fix, Cade, October 28, 2026).
+  if (s === effSrc && effRefs && sameRefs(s, effRefs)) return effOut;
   // Hidden October 28, 2026 (Cade). See docs/removed-features.md. The zoning lot and its setbacks have no effect: the tower is built as
   // "Unlimited" (no lot line, no setback checks, no lot snap lines). The saved lot, setbacks, height limit and stepback stay in the state.
   // The FAR comes from the Site Model site area instead (createDerived, siteArea).
   const site = s.site ? { ...s.site, shape: 'none', setbacks: { front: 0, back: 0, left: 0, right: 0 }, heightLimit: 0, stepback: { ...(s.site.stepback || {}), on: false } } : s.site;
   const crown = s.crown && s.crown.type === 'spire' ? s.crown : s.crown;   // a saved spire stays until the user picks another type
   effSrc = s;
+  effRefs = refsOf(s);
   // The Program panel (with the GFA and FAR targets) is hidden too (October 28, 2026): the targets are off. The program defaults stay.
   effOut = { ...s, site, crown, targets: { gfa: 0, far: 0 }, view: s.view ? { ...s.view, envelope: false } : s.view, setbacks: [], mechanical: [], carves: [], cuts: [], context: { ...(s.context || {}), blocks: [] } };
   return effOut;
