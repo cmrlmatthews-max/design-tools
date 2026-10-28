@@ -77,11 +77,13 @@ export function plateMaterialKey(plate, view, programs, style) {
 
 /**
  * Floors, crown and the tower's own site outline.
- * opts: { style: 'model'|'diagram', disp: { plates, solids, solidsOutside }, itemFor(item) -> card item, showSite (default true): draw the site outline }
+ * opts: { style: 'model'|'diagram', disp: { plates, solids, solidsOutside }, itemFor(item) -> card item, showSite (default true): draw the site outline,
+ *         view: { colorBy, floorLines } from the shell }
  */
 export function buildModelGroup(state, opts) {
   const { disp, style, itemFor, showSite = true, cover = null, platesZs = null } = opts;
-  const view = state.view, diagram = style === 'diagram';
+  // colorBy and floorLines are app-wide (opts.view, from the shell); the saved state fields are not read for drawing
+  const view = { ...state.view, ...(opts.view || {}) }, diagram = style === 'diagram';
   const gap = view.floorLines ? CONFIG.floorGap : 0;
   const group = new THREE.Group();
   group.name = 'tower-model';

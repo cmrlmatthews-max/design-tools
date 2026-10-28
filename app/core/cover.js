@@ -48,9 +48,9 @@ export function coveredMassingIndices(doc) {
 
 /* ---------- floors the Plate Planner covers ---------- */
 /* The Plate Planner draws units and cores inside the massing walls. A massing solid on the same floor shares those wall
-   faces, and the two flicker (z-fighting). The Model Viewer skips the covered massing levels; the Tower live layer
-   does the same while the Tower is not the active tool. While the Tower is active, the shell hides the units instead
-   (they are out of date during an edit). */
+   faces, and the two flicker (z-fighting). Rule (one look in every tool, Cade, October 28, 2026): while the plates
+   match the massing (platesCurrent), the units draw those floors and the Tower skips them; once the massing changes,
+   the units hide and the Tower draws every floor. The active tool never changes this. */
 
 /** The z values (massing frame) of the massing levels that plates.derived covers. */
 export function platesCoverZs(doc) {

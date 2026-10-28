@@ -2,7 +2,7 @@
    TOWER: panels
    Port of the tabs in build/tower/08_ui.js. The four tabs become four panel groups (Form, Program, Site, View);
    each holds accordion sections built with the shared Controls kit. The prompt panel is in prompts-ui.js.
-   Not ported (Later): the Sun Study section, image overlay choices, typed-base UI polish, the pin button.
+   Not ported: the Sun Study section (color, floor lines, shadows and sun are app-wide, in the shell View panel), image overlay choices, typed-base UI polish, the pin button.
    ========================================================================== */
 import { Units } from '../../core/ui-kit.js';
 import { CONFIG, num, clamp, deepClone, defaultSegment, surroundBlocks, unitBreakdown } from './state.js';
@@ -437,10 +437,11 @@ export function createPanels(T) {
   }
 
   /* ==================================================================== VIEW */
+  const appView = () => (ctx.view && ctx.view.get()) || { colorBy: 'program', floorLines: true, shadows: true, sun: { az: 140, alt: 40 } };
   function legendEl() {
     const box = h('div', { class: 'tower-legend', id: 'tower-legend', hidden: true });
     const sync = () => {
-      const v = store.raw().view;
+      const v = appView();
       const d = T.derived.get();
       const diagram = ctx.scene.style() === 'diagram';
       const plates = d.plates || [];
@@ -469,11 +470,8 @@ export function createPanels(T) {
   function displaySection() {
     return section('display', 'Display', {
       children: els([
-        sel('Color by (diagram)', 'view.colorBy', opts([['program', 'Program'], ['zone', 'Zone']])),
-        C.toggle({ label: 'Floor lines', bind: bs('view.floorLines') }),
-        C.toggle({ label: 'Shadows', bind: bs('view.shadows') }),
         legendEl(),
-        C.help('Use Model or Diagram in the top bar to change the style.'),
+        C.help('Use Model or Diagram in the top bar to change the style. Color, floor lines, shadows and sun are in the View panel of the app.'),
       ]),
     }, { open: true });
   }
@@ -489,15 +487,6 @@ export function createPanels(T) {
         }),
       ]),
     }, { open: true });
-  }
-  function sunSection() {
-    return section('sun', 'Sun', {
-      children: els([
-        C.slider({ label: 'Sun azimuth', bind: bs('view.sun.azimuth'), min: 0, max: 360, step: 1, hardMin: 0, hardMax: 360, integer: true, format: Units.formatDeg, inputMode: 'numeric' }),
-        C.slider({ label: 'Sun altitude', bind: bs('view.sun.altitude'), min: 5, max: 90, step: 1, hardMin: 3, hardMax: 90, integer: true, format: Units.formatDeg, inputMode: 'numeric' }),
-        C.help('The sun sets the shadows when Shadows is on.'),
-      ]),
-    });
   }
   function snapSection() {
     const snap = (patch) => store.set('view.snap', { ...(get('view.snap') || {}), ...patch }, { live: false });
@@ -524,7 +513,7 @@ export function createPanels(T) {
   const form = host('form', () => [optionSection(), podiumSection(), segmentsSection(), movesSection(), carvesSection(), crownSection()]);
   const program = host('program', () => [programsSection(), targetsSection()]);
   const site = host('site', () => [projectSection(), siteSection(), setbacksSection(), heightSection(), contextSection()]);
-  const view = host('view', () => [displaySection(), sceneSection(), sunSection(), snapSection()]);
+  const view = host('view', () => [displaySection(), sceneSection(), snapSection()]);
 
   /** Switches to the section that holds an item, opens its row, and scrolls it into view. */
   const ITEM_MAP = { segment: ['segments', 'segments'], podium: ['podium'], crown: ['crown'], carve: ['carves', 'carves'], context: ['context', 'context'] };
