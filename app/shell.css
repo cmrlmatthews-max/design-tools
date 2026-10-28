@@ -632,3 +632,22 @@ html[data-panels="hidden"] body { grid-template-columns: minmax(0, 1fr) 0; }
 .tb-select { height: 32px; min-width: 0; width: auto; padding: 0 28px 0 10px; font-size: 13px; margin-right: 4px; }
 @media (pointer: coarse) { .tb-select { height: 40px; } }
 @media (max-width: 560px) { .tb-select { max-width: 96px; } }
+
+/* ---- left tool bar (core/leftbar.js) ---- */
+.leftbar {
+  position: absolute; z-index: 5; left: 10px; top: 10px; bottom: 10px; width: 300px; max-width: calc(100% - 20px);
+  display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line-2); border-radius: 12px;
+  box-shadow: var(--shadow); overflow: hidden;
+}
+.leftbar-head { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 4px 0 14px; border-bottom: 1px solid var(--line); flex: none; }
+.leftbar-title { flex: 1 1 auto; font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
+.leftbar-body { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 4px 14px 14px; -webkit-overflow-scrolling: touch; }
+.leftbar-tab {
+  position: absolute; z-index: 5; left: 10px; top: 10px; height: 34px; padding: 0 12px; border-radius: 10px;
+  background: var(--panel); color: var(--ink-2); border: 1px solid var(--line-2); box-shadow: var(--shadow);
+  font: inherit; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; cursor: pointer;
+}
+.leftbar-tab:hover { color: var(--ink); }
+.leftbar-tab::before { content: "›"; margin-right: 6px; font-size: 14px; }
+@media (pointer: coarse) { .leftbar-tab { height: 44px; } }
+@media (max-width: 819.98px), (orientation: portrait) and (pointer: coarse) { .leftbar { width: min(300px, 70vw); bottom: 10px; } }

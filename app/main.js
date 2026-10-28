@@ -18,6 +18,7 @@ import { captureImage, deliver } from './core/capture.js';
 import { h, ICONS, Toast, Pop, Controls, confirmDialog } from './core/ui-kit.js';
 import { createPanels } from './core/panels.js';
 import { initTips } from './core/tips.js';
+import { createLeftbar } from './core/leftbar.js';
 import { applyRealSun } from './core/sunstudy.js';
 import { createShellPanels } from './core/shell-panels.js';
 import { TOOLS, toolOn } from './tools/registry.js';
@@ -83,6 +84,7 @@ const ctx = {
   refreshPanels: () => refreshPanels(),
   refreshHud: () => shell.refresh(['metrics', 'warnings']),
   activeTool: () => active,
+  leftbar: null,   // set below (core/leftbar.js)
   view: viewApi,
   siteStyle: () => siteStyle,
   setSiteStyle: (v) => {
@@ -133,6 +135,7 @@ async function activate(id) {
   const prev = active;
   const prevTool = prev ? loaded.get(prev) : null;
   if (prevTool && prevTool.deactivate) { try { prevTool.deactivate(ctx); } catch (e) { console.error(e); } }
+  if (prev) ctx.leftbar.set(prev, null);
   active = tool ? id : null;
   select(null);
   if (tool && tool.activate) { try { tool.activate(ctx); } catch (e) { console.error(e); } }
@@ -143,6 +146,9 @@ async function activate(id) {
   bus.emit('tool:active', { id: active, prev });
   syncLayers();   // some layers depend on the active tool (units hide while the Tower is active)
 }
+
+/* ---------- left tool bar (one tool's main list, for example the Tower segments) ---------- */
+ctx.leftbar = createLeftbar({ h, ICONS, onResize: () => { scene.resize(); } });
 
 /* ---------- panels ---------- */
 const shell = createShellPanels(ctx, { loaded: () => loaded, activeId: () => active });
