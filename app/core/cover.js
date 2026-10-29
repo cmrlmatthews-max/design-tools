@@ -86,6 +86,9 @@ export function platesCurrent(doc) {
   const pl = plates && plates.derived && Array.isArray(plates.derived.levels) ? plates.derived.levels : [];
   const ml = mass && mass.derived && Array.isArray(mass.derived.levels) ? mass.derived.levels : [];
   if (!pl.length || !ml.length) return false;
+  // Several towers on one podium (October 29, 2026): the Plate Planner units are never current. Only a multi-tower
+  // massing writes `tower` on its levels (src/tower/derived.js).
+  if (ml.some((l) => l && typeof l.tower === 'number')) return false;
   // The units draw at the placement stored with them. When the building moved or turned since, they are out of date.
   const pp = plates.placement || {}, mp = mass.placement || {};
   const same = (a, b, t) => Math.abs((Number(a) || 0) - (Number(b) || 0)) <= t;

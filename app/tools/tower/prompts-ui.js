@@ -48,7 +48,9 @@ export function formPhrase(state) {
   if (nSet) withs.push(`${countWord(nSet)} setback${nSet === 1 ? '' : 's'}`);
   if ((state.carves || []).length) withs.push('a sky garden');
   withs.push(CROWN_WORDS[state.crown && state.crown.type] || 'a flat roof');
-  return `${articleFor(lead)} ${lead} tower with ${oxford(withs)}`;
+  const nTowers = new Set(segs.map((x) => Math.max(0, Math.floor(Number(x && x.tower)) || 0))).size;
+  const group = nTowers > 1 ? `, one of ${countWord(nTowers)} towers` : '';   // several towers on one podium
+  return `${articleFor(lead)} ${lead} tower with ${oxford(withs)}${group}`;
 }
 export function podiumPhrase(state) {
   if (!state.podium || !state.podium.on) return 'no podium';

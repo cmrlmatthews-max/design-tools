@@ -17,6 +17,7 @@ import { toProject } from '../../../src/shared/project.js';
 import * as Snap from '../../../src/tower/snap.js';
 import { CONFIG, Geo, num, clamp, deepClone, effectiveState } from './state.js';
 import { extrudePolys, solidGeometry } from './render.js';
+import { towerOf, towerIds, indicesOf } from './towers.js';
 import { planToWorld } from '../../core/frame.js';
 import { Units } from '../../core/ui-kit.js';
 
@@ -83,9 +84,14 @@ export function createSelect(T) {
       default: return false;
     }
   }
+  /** "Segment 2", or "Tower 2 · Segment 1" when the project has several towers. */
+  function segmentName(index) {
+    const segs = store.raw().segments, t = towerOf(segs[index]), ids = towerIds(segs);
+    return ids.length > 1 ? `Tower ${ids.indexOf(t) + 1} · Segment ${indicesOf(segs, t).indexOf(index) + 1}` : `Segment ${index + 1}`;
+  }
   function itemName(it) {
     switch (it.kind) {
-      case 'segment': return `Segment ${it.index + 1}`;
+      case 'segment': return segmentName(it.index);
       case 'podium': return 'Podium';
       case 'crown': return 'Crown';
       case 'carve': return `Carve ${it.index + 1}`;
@@ -578,6 +584,9 @@ export function createSelect(T) {
       targets: Snap.collectSnapTargets(effectiveState(s), d.plates, { exclude: it }),   // the hidden zoning lot and setbacks are not snap lines (October 28, 2026)
       tol: clamp(ftPerPx(centerW) * (touch ? TOL_PX_TOUCH : TOL_PX), 0.5, 20),
       base: deepClone(it.kind === 'segment' ? s.segments[it.index] : it.kind === 'podium' ? s.podium : s.context.blocks[it.index]),
+      // the other segments of the same tower go with it (several towers on one podium, October 29, 2026)
+      sibs: it.kind === 'segment' ? indicesOf(s.segments, towerOf(s.segments[it.index])).filter((j) => j !== it.index)
+        .map((j) => ({ index: j, x: num(s.segments[j].offset && s.segments[j].offset.x, 0), y: num(s.segments[j].offset && s.segments[j].offset.y, 0) })) : [],
     };
     const t0 = pointerParam(cx, cy);
     if (t0 == null) { drag = null; return null; }
@@ -622,6 +631,7 @@ export function createSelect(T) {
       guides = res.guides.filter((g) => g.axis === ax && g.kind !== 'grid');
       const v = rnd(posBase(ax) + delta, 10000);
       write(posPath(ax), v);
+      for (const sb of drag.sibs || []) write(`segments.${sb.index}.offset.${ax}`, rnd(sb[ax] + (v - posBase(ax)), 10000));
       label = `${centerName} ${ax} ${fmt(v)}`;
     } else if (id === 'width' || id === 'depth') {
       const ax = id === 'width' ? 'x' : 'y';
@@ -753,9 +763,17 @@ export function createSelect(T) {
     const next = deepClone(store.raw());
     let removed = 0;
     let segIdx = [...new Set(sel.filter((i) => i.kind === 'segment').map((i) => i.index))].sort((a, b) => a - b);
-    if (segIdx.length && segIdx.length >= next.segments.length) {
-      segIdx = segIdx.slice(1);                  // never delete the last segment: the lowest one stays
-      ctx.ui.Toast.show('A tower needs at least one segment, so one was kept.', { kind: 'warn' });
+    {
+      // never delete the last segment of a tower: the lowest one of that tower stays
+      const keep = new Set();
+      for (const t of new Set(segIdx.map((i) => towerOf(next.segments[i])))) {
+        const mine = indicesOf(next.segments, t);
+        if (mine.every((i) => segIdx.includes(i))) keep.add(mine[0]);
+      }
+      if (keep.size) {
+        segIdx = segIdx.filter((i) => !keep.has(i));
+        ctx.ui.Toast.show('A tower needs at least one segment, so one was kept.', { kind: 'warn' });
+      }
     }
     for (const i of segIdx.slice().reverse()) { next.segments.splice(i, 1); removed++; }
     for (const i of [...new Set(sel.filter((x) => x.kind === 'carve').map((x) => x.index))].sort((a, b) => b - a)) { next.carves.splice(i, 1); removed++; }

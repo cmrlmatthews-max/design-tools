@@ -347,7 +347,8 @@ export function sectionSvg(m, { width, height, style = 'model', colorBy = 'progr
   const levels = [];
   for (const f of stack.slice().sort((a, b) => a.z0 - b.z0)) {
     const last = levels[levels.length - 1];
-    if (last && Math.abs(last.z - f.z0) < 0.1) continue;
+    // floors of several towers at one level: one label, and the level spans every tower (the dimension string goes right of all)
+    if (last && Math.abs(last.z - f.z0) < 0.1) { last.sMin = Math.min(last.sMin, ...f.cut.map((c) => c[0])); last.sMax = Math.max(last.sMax, ...f.cut.map((c) => c[1])); continue; }
     levels.push({ z: f.z0, name: f.name, ftf: f.z1 - f.z0, key: `${f.zone}|${f.program}`, sMin: Math.min(...f.cut.map((c) => c[0])), sMax: Math.max(...f.cut.map((c) => c[1])) });
   }
   if (levels.length) {

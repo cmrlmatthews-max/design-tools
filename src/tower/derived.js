@@ -7,6 +7,13 @@
      built    buildPlates(state) → { plates, solids, warnings, floors }
      metrics  computeMetrics(state, built.plates); computed here when missing
 
+   Several towers on one podium (October 29, 2026): one level per tower per level. The podium levels and the lead
+   tower's levels come first, in elevation order, with index = the level number n (exactly the one-tower list). Then
+   each other tower's levels, bottom up, with ids that go on after the highest n. Then the crown levels, one per tower.
+   Levels of a multi-tower design that belong to a tower carry `tower` (tower index, 0 = Tower 1) and `level` (the
+   shared level number n); floors of one level share z, ftf and name ("Floor 7"). A one-tower design writes neither
+   key, so its output is unchanged. Readers that need elevation order sort by z (docs/project-file-spec.md 6.2).
+
    Pure: no DOM, no mutation of the inputs. Clipper (globalThis.ClipperLib, SCALE 1000) is used only for the
    footprint union. Units: feet, square feet. Plan (x, y): x = east, y = north, in the tower local frame.
    ========================================================================== */
@@ -113,10 +120,20 @@ export function towerDerived(state, built, metrics) {
   const solids = Array.isArray(built.solids) ? built.solids : [];
   const m = metrics || computeMetrics(state, plates);
 
-  const levels = plates.map((p) => {
+  const towerSet = new Set(plates.filter((p) => p.zone === "tower" && isNum(p.tower)).map((p) => p.tower));
+  const multi = towerSet.size > 1;
+  const leadTower = towerSet.size ? Math.min(...towerSet) : 0;
+  const isLeadList = (p) => !multi || !isNum(p.tower) || p.tower < 0 || p.tower === leadTower;
+  // list order: podium + lead tower (index = n), then the other towers by index (ids after the highest n)
+  const ordered = multi
+    ? [...plates.filter(isLeadList), ...[...towerSet].filter((k) => k !== leadTower).sort((a, b) => a - b).flatMap((k) => plates.filter((p) => p.tower === k))]
+    : plates;
+  let nextId = plates.reduce((mx, p) => Math.max(mx, p.n), 0);
+  const levels = ordered.map((p) => {
     const isVoid = !!p.void || !(p.area > 0);
+    const extra = multi && isNum(p.tower) && p.tower >= 0 ? { tower: p.tower, level: p.n } : null;
     return {
-      index: p.n,
+      index: isLeadList(p) ? p.n : ++nextId,
       name: `Floor ${p.n}`,
       zone: p.zone,
       z: r3(p.z),
@@ -126,31 +143,50 @@ export function towerDerived(state, built, metrics) {
       core: null,          // the Tower Generator makes no core; the Plate Planner does
       spines: [],
       seeds: [],
+      ...(extra || {}),
     };
   });
 
   // the crown level: only when the crown adds height (a flat crown is a parapet and adds none)
+  // With several towers there is one crown per tower (built.solids carry `tower`), each on its own top plate.
   const crownHeight = isNum(m.crownHeight) ? m.crownHeight : 0;
   const real = plates.filter((p) => !p.void && p.area > 0);
-  const topPlate = real.length ? real[real.length - 1] : null;
   const crownSolids = solids.filter((s) => s && (s.role === "screen" || s.role === "crown" || s.role === "spire"));
-  const crownPieces = crownSolids.map((s) => ({ s, fp: solidFootprint(s, state, topPlate) }));
-  if (crownHeight > 0 && crownPieces.length) {
+  const crownGroups = [];
+  if (multi) {
+    for (const k of [...towerSet].sort((a, b) => a - b)) {
+      const mine = real.filter((p) => p.tower === k);
+      const ss = crownSolids.filter((s) => s.tower === k);
+      if (!ss.length) continue;
+      const topPlate = mine.length ? mine[mine.length - 1] : null;
+      const z = plates.reduce((mx, p) => (p.tower === k ? Math.max(mx, p.z + p.ftf) : mx), 0);
+      crownGroups.push({ tower: k, z, pieces: ss.map((s) => ({ s, fp: solidFootprint(s, state, topPlate) })) });
+    }
+  } else {
+    const topPlate = real.length ? real[real.length - 1] : null;
+    const z = isNum(m.topOfFloors) ? m.topOfFloors : plates.reduce((mx, p) => Math.max(mx, p.z + p.ftf), 0);
+    crownGroups.push({ tower: null, z, pieces: crownSolids.map((s) => ({ s, fp: solidFootprint(s, state, topPlate) })) });
+  }
+  const crownPieces = crownGroups.flatMap((g) => g.pieces);
+  if (crownHeight > 0) {
     const zOf = (c) => (isNum(c.s.z0) ? c.s.z0 : Infinity);
-    const lowest = crownPieces.reduce((a, b) => (zOf(b) < zOf(a) ? b : a));
-    const lastN = plates.reduce((mx, p) => Math.max(mx, p.n), 0);
-    levels.push({
-      index: lastN + 1,
-      name: "Crown",
-      zone: "crown",
-      z: r3(isNum(m.topOfFloors) ? m.topOfFloors : plates.reduce((mx, p) => Math.max(mx, p.z + p.ftf), 0)),
-      ftf: r3(crownHeight),
-      program: null,
-      plates: lowest.fp,
-      core: null,
-      spines: [],
-      seeds: [],
-    });
+    for (const g of crownGroups) {
+      if (!g.pieces.length) continue;
+      const lowest = g.pieces.reduce((a, b) => (zOf(b) < zOf(a) ? b : a));
+      levels.push({
+        index: ++nextId,
+        name: "Crown",
+        zone: "crown",
+        z: r3(g.z),
+        ftf: r3(crownHeight),
+        program: null,
+        plates: lowest.fp,
+        core: null,
+        spines: [],
+        seeds: [],
+        ...(g.tower === null ? {} : { tower: g.tower }),
+      });
+    }
   }
 
   const footprint = unionMulti([...levels.filter((l) => l.zone !== "crown").map((l) => l.plates), ...crownPieces.filter((c) => c.s.polygons).map((c) => c.fp)]);

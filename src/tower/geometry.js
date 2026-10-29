@@ -80,7 +80,25 @@
    - spire: cone mesh at the top plate centroid, radius max(1, 6% of min(W,D)).
    - screen: top plate minus a 1 ft inward offset, extruded to crown.height.
    - Non-flat crowns add crown.height to total height. Crowns add no GFA.
+   TOWERS (several towers on one podium, October 29, 2026)
+   - A segment's optional `tower` (whole number, default 0) names its tower. Segments of one tower stack bottom up in
+     list order. The lowest tower index present is the lead tower (Tower 1).
+   - Shared levels: the lead tower stacks as a one-tower design always has (its floors, floor-to-floor and mechanical
+     floors). Every other tower sits on the same base (podium top or ground); its i-th floor takes the i-th level above
+     the podium (that level's n, z and ftf; the tower's own ftf is ignored). Above the lead tower's top the levels go on
+     at the lead tower's top floor-to-floor (its last segment's ftf).
+   - Floors and plates: one entry per tower per level, sorted by n, then the lead first, then by tower index. Entries
+     of one level share n (the level number), z and ftf; each keeps its program, segmentIndex (flat index into
+     state.segments) and `tower` (-1 for podium floors and mechanical floors on the podium). Setbacks and carves by n
+     apply to every tower at that level; a cut's reference edge is taken per tower; mechanical floors belong to the
+     lead tower and copy the plate below them in that tower.
+   - Crown: every tower gets the same crown on its own top plate, at the top of its own floors. Crown solids carry
+     `tower`.
+   - One tower (no `tower` keys): the floor list, plates, crown and metrics are the same as before, plus `tower` fields.
    METRICS
+   - Several towers: GFA and the areas sum every plate; floorCount, voidFloors, levelCount and floorsByZone count
+     distinct levels (podium + the tallest tower); floor1Area sums the plates of level 1; topOfFloors is the top of the
+     tallest tower. byProgram counts plates (a level of two residential towers is 2 residential floors).
    - netArea = GFA - mechanicalArea (sum of the area of non-mechanical plates).
      It is "before core": no core is taken out. coreArea is always 0. There is
      no efficiency metric; the Plate Planner computes it.
@@ -497,30 +515,51 @@ function programsOf(state) {
   return out;
 }
 
+/** Tower index of a segment: a whole number >= 0; a missing or bad value is tower 0. */
+export function towerOf(seg) {
+  const t = seg && seg.tower;
+  return typeof t === "number" && Number.isFinite(t) && t > 0 ? Math.round(t) : 0;
+}
+
+/** The towers of a state, lowest index first: [{ tower, segments: [flat segment index, ...] }]. The first entry is the lead
+ *  tower (Tower 1 when it has segments): its segments set the shared levels. */
+export function towersOf(state) {
+  const by = new Map();
+  (Array.isArray(state && state.segments) ? state.segments : []).forEach((seg, si) => {
+    const k = towerOf(seg);
+    if (!by.has(k)) by.set(k, []);
+    by.get(k).push(si);
+  });
+  return [...by.keys()].sort((a, b) => a - b).map((tower) => ({ tower, segments: by.get(tower) }));
+}
+
 function floorListInternal(state, warnings) {
   const floors = [];
   let n = 0, z = 0, capped = false;
   const progs = programsOf(state);
+  const towers = towersOf(state);
+  const lead = towers.length ? towers[0].tower : 0;
+  const leadSet = new Set(towers.length ? towers[0].segments : []);
   const mechDefs = (Array.isArray(state.mechanical) ? state.mechanical : []).map((m) => ({
     afterFloor: Math.round(num(m && m.afterFloor, 0)),
     ftf: Math.max(1, num(m && m.ftf, num(progs.mechanical && progs.mechanical.ftf, 16))),
     used: false,
   }));
-  const push = (zone, program, segmentIndex, t, ftf) => {
+  const push = (zone, program, segmentIndex, t, ftf, tower) => {
     if (n >= MAX_FLOORS) { capped = true; return false; }
     n += 1;
-    floors.push({ n, zone, program, segmentIndex, t, z, ftf });
+    floors.push({ n, zone, program, segmentIndex, t, z, ftf, tower });
     z += ftf;
     return true;
   };
-  const insertMechanical = (segmentIndex, t) => {
+  const insertMechanical = (segmentIndex, t, tower) => {
     let again = true;
     while (again) {
       again = false;
       for (const m of mechDefs) {
         if (!m.used && m.afterFloor === n) {
           m.used = true;
-          if (push("mechanical", "mechanical", segmentIndex, t, m.ftf)) again = true;
+          if (push("mechanical", "mechanical", segmentIndex, t, m.ftf, tower)) again = true;
         }
       }
     }
@@ -531,18 +570,53 @@ function floorListInternal(state, warnings) {
     for (let i = 0; i < count; i++) {
       const t = count > 1 ? i / (count - 1) : 0;
       const ftf = Math.max(1, num(i === 0 ? pod.groundFtf : pod.ftf, 14));
-      if (!push("podium", (i === 0 ? pod.program : pod.upperProgram) || "retail", -1, t, ftf)) break;
-      insertMechanical(-1, t);
+      if (!push("podium", (i === 0 ? pod.program : pod.upperProgram) || "retail", -1, t, ftf, -1)) break;
+      insertMechanical(-1, t, -1);
     }
   }
-  (Array.isArray(state.segments) ? state.segments : []).forEach((seg, si) => {
+  const firstAbove = floors.length;       // the levels above the podium start here
+  const segs = Array.isArray(state.segments) ? state.segments : [];
+  // The lead tower (Tower 1) stacks exactly as a one-tower design always has: its floors and mechanical floors set the
+  // shared levels above the podium.
+  let leadFtf = 10;
+  segs.forEach((seg, si) => {
+    if (!leadSet.has(si)) return;
     const count = Math.max(1, Math.round(num(seg && seg.floors, 1)));
+    leadFtf = Math.max(1, num(seg && seg.ftf, 10));
     for (let i = 0; i < count; i++) {
       const t = count > 1 ? i / (count - 1) : 0;
-      if (!push("tower", (seg && seg.program) || "residential", si, t, Math.max(1, num(seg && seg.ftf, 10)))) break;
-      insertMechanical(si, t);
+      if (!push("tower", (seg && seg.program) || "residential", si, t, leadFtf, lead)) break;
+      insertMechanical(si, t, lead);
     }
   });
+  // Every other tower stands on the same base and takes the same levels, bottom up: its i-th floor sits on the i-th level
+  // above the podium (z and floor-to-floor of that level; the tower's own ftf is not used). Above the top of Tower 1 the
+  // levels go on at Tower 1's top floor-to-floor. Floors of one level share n (the level number) and z.
+  if (towers.length > 1) {
+    const slots = floors.slice(firstAbove).map((f) => ({ n: f.n, z: f.z, ftf: f.ftf }));
+    const extra = [];
+    for (const tw of towers.slice(1)) {
+      let k = 0;
+      for (const si of tw.segments) {
+        const seg = segs[si];
+        const count = Math.max(1, Math.round(num(seg && seg.floors, 1)));
+        for (let i = 0; i < count; i++, k++) {
+          while (k >= slots.length) {
+            if (n >= MAX_FLOORS) { capped = true; break; }
+            n += 1;
+            slots.push({ n, z, ftf: leadFtf });
+            z += leadFtf;
+          }
+          if (k >= slots.length) break;
+          const sl = slots[k];
+          extra.push({ n: sl.n, zone: "tower", program: (seg && seg.program) || "residential", segmentIndex: si, t: count > 1 ? i / (count - 1) : 0, z: sl.z, ftf: sl.ftf, tower: tw.tower });
+        }
+      }
+    }
+    // bottom up; within one level the podium or lead tower floor first, then the towers by index (a stable sort)
+    floors.push(...extra);
+    floors.sort((a, b) => a.n - b.n);
+  }
   if (capped) warnings.push(warn("floor-cap", [], `Floor count is limited to ${MAX_FLOORS}. Extra floors were not built.`));
   const unplaced = mechDefs.filter((m) => !m.used).map((m) => m.afterFloor);
   if (unplaced.length) {
@@ -551,7 +625,10 @@ function floorListInternal(state, warnings) {
   return floors;
 }
 
-/** Plan 3.1: ordered floors { n, zone, program, segmentIndex, t, z, ftf }, bottom up. */
+/** Plan 3.1: ordered floors { n, zone, program, segmentIndex, t, z, ftf, tower }, bottom up.
+ *  n is the level number. With several towers, one entry per tower per level: entries of one level share n, z and ftf,
+ *  and keep their own program, segmentIndex and tower. tower is the segment's tower index (-1 for podium floors and
+ *  for mechanical floors that sit on the podium). */
 export function buildFloorList(state) {
   return floorListInternal(state || {}, []);
 }
@@ -600,7 +677,7 @@ function normCuts(list, lastN, floorByN) {
     const side = String((c && c.side) || "front").toLowerCase();
     const fs = floorByN.get(s), fe = floorByN.get(e);
     return { s, e, side: SIDES.includes(side) ? side : "front", depth: Math.max(0, num(c && c.depth, 0)),
-      zs: fs ? fs.z : 0, ze: fe ? fe.z : 0, ref: null };
+      zs: fs ? fs.z : 0, ze: fe ? fe.z : 0, ref: new Map() };
   }).filter((c) => c.s <= c.e && c.depth > 0);
 }
 
@@ -865,7 +942,11 @@ export function buildPlates(state, { quality = "full" } = {}) {
 
   const plates = [];
   const empty = { shape: [], taper: [], setbacks: [], carves: [], cuts: [] };
-  let below = null;   // { mp (pre-carve), cause } of the floor below
+  // { mp (pre-carve), cause } of the floor below, per tower. Podium floors and the mechanical floors on the podium are
+  // tower -1; the lead tower's first floor sits on them (one tower: this is simply the floor below in the list).
+  const belowBy = new Map();
+  const lead = floors.reduce((m, f) => (f.zone === "tower" && (m === null || f.tower < m) ? f.tower : m), null);
+  const belowOf = (f) => (belowBy.has(f.tower) ? belowBy.get(f.tower) : f.tower === lead ? belowBy.get(-1) || null : null);
 
   for (const f of floors) {
     let pre, cause = null;
@@ -873,6 +954,7 @@ export function buildPlates(state, { quality = "full" } = {}) {
       pre = cloneMP(podiumMP);
       if (!pre.length) cause = "shape";
     } else if (f.zone === "mechanical") {
+      const below = belowOf(f);
       pre = below ? cloneMP(below.mp) : [];
       if (!pre.length) cause = below && below.cause ? below.cause : "shape";
     } else {
@@ -880,7 +962,7 @@ export function buildPlates(state, { quality = "full" } = {}) {
       const r = towerPre(sc, f, setbacks);
       pre = r.mp; cause = r.cause;
     }
-    below = { mp: pre, cause };
+    belowBy.set(f.tower, { mp: pre, cause });
     if (!pre.length) { empty[cause || "shape"].push(f.n); continue; }
 
     // 5. carves
@@ -912,12 +994,13 @@ export function buildPlates(state, { quality = "full" } = {}) {
       let cutEmpty = false;
       for (const c of cuts) {
         if (f.n < c.s || f.n > c.e) continue;
-        if (!c.ref) c.ref = mpBounds(pre);
+        if (!c.ref.has(f.tower)) c.ref.set(f.tower, mpBounds(pre));   // the reference edge, per tower
+        const ref = c.ref.get(f.tower);
         const dz = c.ze - c.zs;
         const dep = dz > 0 ? (c.depth * (f.z - c.zs)) / dz : c.depth;
         if (!(dep > 0)) continue;
-        const v = c.side === "front" ? c.ref.minY + dep : c.side === "back" ? c.ref.maxY - dep
-          : c.side === "left" ? c.ref.minX + dep : c.ref.maxX - dep;
+        const v = c.side === "front" ? ref.minY + dep : c.side === "back" ? ref.maxY - dep
+          : c.side === "left" ? ref.minX + dep : ref.maxX - dep;
         mp = clipSide(mp, c.side, v);
         if (!mp.length) { cutEmpty = true; break; }
       }
@@ -926,7 +1009,7 @@ export function buildPlates(state, { quality = "full" } = {}) {
 
     const area = isVoid ? 0 : multiPolyArea(mp);
     plates.push({
-      n: f.n, zone: f.zone, program: f.program, segmentIndex: f.segmentIndex,
+      n: f.n, zone: f.zone, program: f.program, segmentIndex: f.segmentIndex, tower: f.tower,
       t: f.t, z: f.z, ftf: f.ftf,
       polygons: mp, area,
       coreRect: null, coreArea: 0,      // the core moved to the Plate Planner; the fields stay for readers
@@ -945,13 +1028,22 @@ export function buildPlates(state, { quality = "full" } = {}) {
     warnings.push(warn("plate-empty", list, msg));
   }
 
-  // crown
+  // crown: every tower gets the same crown on its own top floor (base = the top of that tower's floors). With no tower
+  // floor that has area, the crown sits on the highest plate (the podium), as it always has.
   let solids = [];
   const real = plates.filter((p) => !p.void && p.area > AREA_EPS);
-  if (real.length) {
+  const towerKeys = [...new Set(real.filter((p) => p.tower >= 0).map((p) => p.tower))].sort((a, b) => a - b);
+  if (towerKeys.length) {
+    for (const k of towerKeys) {
+      const mine = real.filter((p) => p.tower === k);
+      const top = mine[mine.length - 1];
+      const topOfFloors = plates.reduce((m, p) => (p.tower === k ? Math.max(m, p.z + p.ftf) : m), 0);
+      for (const s of buildCrown(state, top.polygons, topOfFloors, segN)) solids.push({ ...s, tower: k });
+    }
+  } else if (real.length) {
     const top = real[real.length - 1];
     const topOfFloors = plates.reduce((m, p) => Math.max(m, p.z + p.ftf), 0);
-    solids = buildCrown(state, top.polygons, topOfFloors, segN);
+    solids = buildCrown(state, top.polygons, topOfFloors, segN).map((s) => ({ ...s, tower: top.tower }));
   }
   return { plates, solids, warnings, floors };
 }
@@ -983,15 +1075,20 @@ export function computeMetrics(state, plates) {
   const towerAreas = [];
   const byProgram = {};
   let floor1Area = 0;
+  // Several towers: plates of one level share n. Floors count LEVELS (podium + the tallest tower), not plates; the
+  // areas sum every plate. With one tower every level has one plate, so this is the plain count.
+  const levels = new Set(), realLevels = new Set(), voidLevels = new Set(), zoneLevels = new Set();
 
   for (const p of plates) {
     top = Math.max(top, p.z + p.ftf);
-    if (p.void || !(p.area > 0)) { voidFloors += p.void ? 1 : 0; continue; }
+    levels.add(p.n);
+    if (p.void || !(p.area > 0)) { if (p.void) voidLevels.add(p.n); continue; }
     const area = p.area;
     gfa += area;
-    floorCount += 1;
-    byZone[p.zone] = (byZone[p.zone] || 0) + 1;
-    if (p.n === 1) floor1Area = area;
+    realLevels.add(p.n);
+    const zk = `${p.zone}|${p.n}`;
+    if (!zoneLevels.has(zk)) { zoneLevels.add(zk); byZone[p.zone] = (byZone[p.zone] || 0) + 1; }
+    if (p.n === 1) floor1Area += area;
     const key = p.program || p.zone;
     const bp = byProgram[key] || (byProgram[key] = { floors: 0, gross: 0, net: 0 });
     bp.floors += 1; bp.gross += area;
@@ -1003,6 +1100,8 @@ export function computeMetrics(state, plates) {
     }
     if (p.zone === "tower") { towerAreas.push(area); towerArea += area; }
   }
+  floorCount = realLevels.size;
+  for (const n of voidLevels) if (!realLevels.has(n)) voidFloors += 1;
   for (const [k, bp] of Object.entries(byProgram)) {
     const pr = progs[k] || {};
     const unitSize = Math.max(0, num(pr.unitSize, 0));
@@ -1025,7 +1124,7 @@ export function computeMetrics(state, plates) {
     gfa,
     floorCount,
     voidFloors,
-    levelCount: plates.length,
+    levelCount: levels.size,
     floorsByZone: byZone,
     topOfFloors: top,
     crownHeight,

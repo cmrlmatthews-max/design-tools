@@ -167,7 +167,7 @@ export function casters(state, built, placement) {
   const fr = framer(placement);
   const out = [];
   const plates = ((built && built.plates) || []).filter((p) => p && !p.void && Array.isArray(p.polygons) && p.polygons.length)
-    .slice().sort((a, b) => num(a.z) - num(b.z));
+    .slice().sort((a, b) => num(a.tower) - num(b.tower) || num(a.z) - num(b.z));   // several towers: one run per tower
   let run = null;
   const flush = () => { if (run) out.push(...prismCasters(run.mp, run.z0, run.z1, "plate", null, fr)); run = null; };
   for (const p of plates) {

@@ -17,6 +17,11 @@
      snapLength(length, { step })                          → number
    Extra helper (not in the contract, for the UI):
      itemBox(state, plates, { kind, index })               → box | null
+       kind "tower" (index = tower index, 0 = Tower 1): the box of every plate of that tower.
+
+   Several towers (segments with `tower`, October 29, 2026): segment lines keep their flat index; the label names the
+   tower ("Tower 2 segment 1") when there are two towers or more. exclude { kind: "tower", index } leaves out every
+   segment of that tower (moving a whole tower).
 
    Notes
    - `plates` may be the Plate[] from buildPlates(...).plates or the whole
@@ -100,10 +105,11 @@ function shapeBox(shape, rotation, ox, oy) {
   return validBox(b) ? b : null;
 }
 
-/** First-plate boxes: { podium: box|null, segments: Map<index, box> } in one pass. */
+/** First-plate boxes: { podium: box|null, segments: Map<index, box>, towers: Map<tower, box> } in one pass.
+ *  A tower's box holds every tower-zone plate of that tower. */
 function plateBoxes(plates) {
   let podium = null;
-  const segments = new Map();
+  const segments = new Map(), towers = new Map();
   for (const p of plateList(plates)) {
     if (!p || p.void) continue;
     if (p.zone === "podium") {
@@ -114,9 +120,34 @@ function plateBoxes(plates) {
         const b = mpBox(p.polygons);
         if (b) segments.set(i, b);
       }
+      const k = typeof p.tower === "number" ? p.tower : 0;
+      const b = mpBox(p.polygons);
+      if (b) {
+        const t = towers.get(k);
+        towers.set(k, t ? { minX: Math.min(t.minX, b.minX), minY: Math.min(t.minY, b.minY), maxX: Math.max(t.maxX, b.maxX), maxY: Math.max(t.maxY, b.maxY) } : b);
+      }
     }
   }
-  return { podium, segments };
+  return { podium, segments, towers };
+}
+
+/** Tower index of a segment (default 0). */
+function segTower(seg) {
+  const t = seg && seg.tower;
+  return typeof t === "number" && Number.isFinite(t) && t > 0 ? Math.round(t) : 0;
+}
+
+/** Box of a tower from the state alone (union of its segment fallbacks). */
+function towerFallback(state, k) {
+  const segs = state && Array.isArray(state.segments) ? state.segments : [];
+  let out = null;
+  segs.forEach((seg, i) => {
+    if (segTower(seg) !== k) return;
+    const b = segmentFallback(state, i);
+    if (!b) return;
+    out = out ? { minX: Math.min(out.minX, b.minX), minY: Math.min(out.minY, b.minY), maxX: Math.max(out.maxX, b.maxX), maxY: Math.max(out.maxY, b.maxY) } : b;
+  });
+  return out;
 }
 
 function podiumFallback(state) {
@@ -156,6 +187,7 @@ export function itemBox(state, plates, item) {
   }
   if (item.kind === "podium") return plateBoxes(plates).podium || podiumFallback(state);
   if (item.kind === "segment") return plateBoxes(plates).segments.get(i) || segmentFallback(state, i);
+  if (item.kind === "tower") return plateBoxes(plates).towers.get(i) || towerFallback(state, i);
   return null;
 }
 
@@ -237,10 +269,15 @@ export function collectSnapTargets(state, plates, { exclude } = {}) {
   }
 
   const segs = Array.isArray(state.segments) ? state.segments : [];
+  const multi = new Set(segs.map(segTower)).size > 1;
+  const nth = new Map();                          // segment number within its tower
   for (let i = 0; i < segs.length; i++) {
+    const tw = segTower(segs[i]);
+    nth.set(tw, (nth.get(tw) || 0) + 1);
     if (ex.kind === "segment" && exIndex === i) continue;
+    if (ex.kind === "tower" && exIndex === tw) continue;
     const b = pb.segments.get(i) || segmentFallback(state, i);
-    if (b) boxLines(lines, b, "segment", `Segment ${i + 1}`, true);
+    if (b) boxLines(lines, b, "segment", multi ? `Tower ${tw + 1} segment ${nth.get(tw)}` : `Segment ${i + 1}`, true);
   }
 
   if (contextShown(state)) {

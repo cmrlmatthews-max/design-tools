@@ -20,6 +20,9 @@
    - Crown meshes are welded (equal points share a vertex) and triangles that collapse are
      dropped. Prisms become solids, one per polygon piece.
    - Context blocks come from state.context.blocks; none when state.context.show is false.
+   - Several towers (segments with `tower`, October 29, 2026): every tower is exported. A segment group is named
+     "Tower k · Segment j · Program" (j counts the segments of that tower). Crown solids carry the tower name
+     ("Tower k · Parapet"). One tower: names as before.
    ========================================================================== */
 
 import { cleanRing2, makeDoc } from "../shared/sketchup-format.js";
@@ -95,13 +98,20 @@ export function towerToSketchup(state, built) {
   };
 
   // ---- floors, grouped by zone ------------------------------------------------
+  const segsAll = Array.isArray(state.segments) ? state.segments : [];
+  const towerOfSeg = (seg) => (seg && typeof seg.tower === "number" && Number.isFinite(seg.tower) && seg.tower > 0 ? Math.round(seg.tower) : 0);
+  const towerKeys = [...new Set(segsAll.map(towerOfSeg))].sort((a, b) => a - b);
+  const multi = towerKeys.length > 1;
   const groups = new Map();                       // key → { name, children, order }
   const groupFor = (plate) => {
     if (plate.zone === "podium" || plate.segmentIndex < 0) return ["podium", "Podium", -1];
     const si = plate.segmentIndex;
-    const seg = (state.segments || [])[si];
+    const seg = segsAll[si];
     const prog = (seg && seg.program) || plate.program;
-    return [`seg${si}`, `Segment ${si + 1} · ${programLabel(prog)}`, si];
+    if (!multi) return [`seg${si}`, `Segment ${si + 1} · ${programLabel(prog)}`, si];
+    const tw = towerOfSeg(seg);
+    const j = segsAll.slice(0, si + 1).filter((g) => towerOfSeg(g) === tw).length;   // 1-based within the tower
+    return [`seg${si}`, `Tower ${tw + 1} · Segment ${j} · ${programLabel(prog)}`, towerKeys.indexOf(tw) * 100000 + si];
   };
 
   let floorSolids = 0;
@@ -136,23 +146,26 @@ export function towerToSketchup(state, built) {
   // ---- crown ---------------------------------------------------------------------
   const crownType = String((state.crown && state.crown.type) || "flat").toLowerCase();
   const crownKids = [];
-  let prismN = 0;
+  const prismBy = new Map();                      // crown step numbers count per tower
+  const towerPrefix = (s) => (multi && typeof s.tower === "number" && s.tower >= 0 ? `Tower ${s.tower + 1} · ` : "");
   for (const s of crownSolids) {
     if (s.kind === "prism") {
       const base = s.role === "parapet" ? "Parapet" : s.role === "screen" ? "Screen" : "Crown step";
       const pieces = piecesOf(s.polygons);
       const z0 = r3(s.z0), z1 = r3(s.z1);
       if (!(z1 - z0 > 0.001)) continue;
-      prismN++;
+      const pk = multi ? s.tower : 0;
+      const prismN = (prismBy.get(pk) || 0) + 1;
+      prismBy.set(pk, prismN);
       pieces.forEach((pc, i) => {
-        const nm = base === "Crown step" ? `${base} ${prismN}` : base;
+        const nm = towerPrefix(s) + (base === "Crown step" ? `${base} ${prismN}` : base);
         crownKids.push({ type: "solid", name: pieces.length > 1 ? `${nm} · piece ${i + 1}` : nm, tag: "Crown", material: "Crown", outer: pc.outer, holes: pc.holes, z0, z1 });
       });
     } else if (s.kind === "mesh") {
       const { vertices, triangles } = weldMesh(s.positions || [], s.indices || []);
       if (!vertices.length || !triangles.length) continue;
       crownKids.push({
-        type: "mesh", name: crownType === "spire" ? "Spire" : crownType === "sloped" ? "Sloped roof" : "Crown",
+        type: "mesh", name: towerPrefix(s) + (crownType === "spire" ? "Spire" : crownType === "sloped" ? "Sloped roof" : "Crown"),
         tag: "Crown", material: "Crown", vertices, triangles, soft: false, closed: true,
       });
     }
