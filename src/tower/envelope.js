@@ -317,6 +317,7 @@ export function describeFloors(numbers) {
 }
 
 function floorWarning(code, floors, verbSingular, verbPlural, tail) {
+  floors = [...new Set(floors)];   // several towers: one level number per level
   const text = describeFloors(floors);
   return {
     code, severity: "error", floors: floors.slice().sort((a, b) => a - b),
@@ -367,9 +368,9 @@ export function checkEnvelope(state, plates, solids = []) {
 
     const area = free ? 0 : differenceArea(p.polygons, allowed);
     p.outsideEnvelopeArea = area;
-    outside.set(p.n, area);
+    outside.set(p.n, Math.max(outside.get(p.n) || 0, area));   // several towers: plates of one level share n
 
-    if (limit > 0 && top > limit + H_TOL) heightFloors.push(p.n);
+    if (limit > 0 && top > limit + H_TOL && !heightFloors.includes(p.n)) heightFloors.push(p.n);
     if (area > AREA_TOL) {
       // Which rule? If the plate already breaks the base (setback) footprint it is a setback
       // problem; otherwise it only breaks the stepped footprint.

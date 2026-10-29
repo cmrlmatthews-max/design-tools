@@ -11,6 +11,7 @@
    store change, so every field and every note follows the model.
    ========================================================================== */
 import { Units } from '../../core/ui-kit.js';
+import { toolOn } from '../registry.js';
 import {
   CONFIG, FeaturesMod, fmt, num, clamp, rnd, deepClone, polyLength, ringArea, compassOf, pct1, classWord, projectInfo, SOURCE_LABELS,
 } from './model.js';
@@ -183,7 +184,7 @@ export function createPanels(env) {
           children: [
             textField('Name', bPath(i, 'name'), 40),
             choiceB('Footprint from', { get: () => bAt(i).source, set: (k) => setBuildingSource(i, k), commit: () => {} },
-              [['typed', 'Drawn'], ['massing', 'Massing'], ['parking', 'Parking']]),
+              [['typed', 'Drawn'], ['massing', 'Massing'], ...(toolOn('parking') || bAt(i).source === 'parking' ? [['parking', 'Parking']] : [])]),   // Parking only while the Parking Deck shows
             C.when(() => !typed(), [C.help('The footprint comes from the open project and is not edited here.')]),
             C.when(typed, [
               C.when(() => !!rectOf(i), [
@@ -220,7 +221,7 @@ export function createPanels(env) {
     });
     body.append(...els([
       choiceB('Work is on', { get: () => get('source'), set: (k) => tool.setSource(k), commit: () => {} }, [['standalone', SOURCE_LABELS.standalone], ['project', SOURCE_LABELS.project]]),
-      C.help('Standalone uses the typed ground and the buildings below. An open project adds its massing and parking deck as buildings and, when it has one, its site ground.'),
+      C.help(toolOn('parking') ? 'Standalone uses the typed ground and the buildings below. An open project adds its massing and parking deck as buildings and, when it has one, its site ground.' : 'Standalone uses the typed ground and the buildings below. An open project adds its massing as a building and, when it has one, its site ground.'),
       info(() => {
         const D = getD();
         if (!D) return '';

@@ -122,7 +122,8 @@ function massingLevelList(doc) {
     if (!isObj(l)) return;
     const index = fin(l.index) ? l.index : i + 1;
     const ftf = fin(l.ftf) && l.ftf > 0 ? l.ftf : DEFAULT_FTF;
-    out.push({ index, name: typeof l.name === "string" && l.name ? l.name : `Floor ${index}`, z: fin(l.z) ? l.z : (index - 1) * ftf, ftf, program: typeof l.program === "string" && l.program ? l.program : null, zone: typeof l.zone === "string" ? l.zone : null, plates: l.plates });
+    out.push({ index, name: typeof l.name === "string" && l.name ? l.name : `Floor ${index}`, z: fin(l.z) ? l.z : (index - 1) * ftf, ftf, program: typeof l.program === "string" && l.program ? l.program : null, zone: typeof l.zone === "string" ? l.zone : null, plates: l.plates,
+      tower: fin(l.tower) ? l.tower : null, level: fin(l.level) ? l.level : null });
   });
   return out;
 }
@@ -182,15 +183,17 @@ function massingLayer(doc) {
   const sec = secOf(doc, "massing");
   const L = empty();
   if (!sec) return L;
-  const pl = placeOf(sec, ZERO), covered = coveredIndices(doc), levels = massingLevelList(doc);
+  const pl = placeOf(sec, ZERO), levels = massingLevelList(doc);
   if (!levels.length) return L;
+  // Several towers (levels carry `tower`): the Plate Planner units are never current (app/core/cover.js), so no level is covered.
+  const covered = levels.some((lv) => lv.tower !== null) ? new Set() : coveredIndices(doc);
   for (const lv of levels) {
     if (covered.has(lv.index)) continue;
     const ps = pieces(pl, lv.plates);
     ps.forEach((p, k) => {
       const z0 = r3(lv.z + pl.baseZ);
       L.items.push({ id: `massing:${lv.index}:${k}`, layer: "massing", kind: "level", outer: p.outer, holes: p.holes, z0, z1: r3(z0 + lv.ftf), program: lv.program, level: lv.index, tool: sec.tool || "tower",
-        data: card(lv.name, [["Program", lv.program || ""], ["Zone", lv.zone || ""], ["Plate area", sf(areaOf(p))], ["Floor to floor", ft(lv.ftf)], ["Level", String(lv.index)]]) });
+        data: card(lv.name, [...(lv.tower !== null ? [["Tower", String(lv.tower + 1)]] : []), ["Program", lv.program || ""], ["Zone", lv.zone || ""], ["Plate area", sf(areaOf(p))], ["Floor to floor", ft(lv.ftf)], ["Level", String(lv.level !== null ? lv.level : lv.index)]]) });
     });
   }
   return finish(L, true);

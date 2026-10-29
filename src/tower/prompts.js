@@ -131,8 +131,43 @@ const FACADE_SYSTEMS = {
   curtainWall: "curtain wall with vision glass and opaque spandrels", storefront: "storefront glazing", solid: "solid wall panels",
 };
 
+const towerIdx = (sg) => (typeof (sg && sg.tower) === "number" && Number.isFinite(sg.tower) && sg.tower > 0 ? Math.round(sg.tower) : 0);
+
+/** Several towers on one podium (segments with `tower`, October 29, 2026): one line per tower. */
+function heroTowers(state, m, segs, keys) {
+  const pod = state.podium && state.podium.on ? Math.max(1, Math.round(nz(state.podium.floors, 1))) : 0;
+  const twist = segs.some((sg) => nz(sg.twist && sg.twist.deg) !== 0);
+  const taper = segs.some((sg) => nz(sg.taper && sg.taper.x) !== 0 || nz(sg.taper && sg.taper.y) !== 0);
+  const out = [`The hero building is the group of ${countWord(keys.length)} towers at the center of the image.${pod ? ` They stand on ${articleFor(String(pod))} ${pod}-story shared podium.` : ""} ${RENDER_ONLY}`];
+  out.push(`* Height is about ${feet(m.totalHeight)} at the top of the tallest tower.`);
+  const programs = new Set();
+  keys.forEach((k, i) => {
+    const mine = segs.filter((sg) => towerIdx(sg) === k);
+    let tall = null, tallH = -1;
+    for (const sg of mine) { const h = nz(sg.floors); if (h > tallH) { tall = sg; tallH = h; } }
+    const floors = Math.round(mine.reduce((a, sg) => a + Math.max(1, Math.round(nz(sg.floors, 1))), 0));
+    const shape = TOWER_SHAPES[tall && tall.shape && tall.shape.type] || "custom-shaped";
+    const prog = [];
+    for (const sg of mine) {
+      const name = sg.program ? String(sg.program) : "";
+      if (!name) continue;
+      programs.add(name);
+      const last = prog[prog.length - 1];
+      if (last && last.name === name) last.floors += nz(sg.floors); else prog.push({ name, floors: nz(sg.floors) });
+    }
+    const holds = prog.length === 1 ? `, all ${prog[0].name}` : prog.length ? `; from the bottom up, ${oxford(prog.map((x) => `${Math.round(x.floors)} ${x.floors === 1 ? "floor" : "floors"} of ${x.name}`))}` : "";
+    out.push(`* Tower ${i + 1} is ${articleFor(shape)} ${shape} tower with ${plural(floors, "floor", "floors")}${holds}.`);
+  });
+  out.push(`* Each tower has ${CROWNS[state.crown && state.crown.type] || "a flat roof"}. Keep the space between the towers exactly as the massing shows it.`);
+  if (twist) out.push("* Each floor plate rotates slightly from the floor below. Keep the twist exactly as the massing shows it.");
+  if (taper) out.push("* The floor plates change in size with height. Keep the taper exactly as the massing shows it.");
+  return out.join("\n");
+}
+
 function heroTower(state, m) {
   const segs = (state.segments || []).filter(Boolean);
+  const keys = [...new Set(segs.map(towerIdx))].sort((a, b) => a - b);
+  if (keys.length > 1) return heroTowers(state, m, segs, keys);
   let tall = null, tallH = -1;
   for (const sg of segs) { const h = nz(sg.floors) * nz(sg.ftf); if (h > tallH) { tall = sg; tallH = h; } }
   const twist = segs.some((sg) => nz(sg.twist && sg.twist.deg) !== 0);

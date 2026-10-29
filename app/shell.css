@@ -706,3 +706,5 @@ html[data-tb="tight"] .view-compact { padding: 0 8px; }
 html[data-leftbar="open"] .card { left: auto; right: 12px; }
 /* toasts center in the part of the view beside the left tool bar */
 html[data-leftbar="open"] .toasts { left: calc(50% + 160px); max-width: calc(100% - 344px); }
+html[data-tb="tight"] .tb-select { max-width: 104px; padding-right: 24px; }
+html[data-tb="tight"] .btn.proj { max-width: 150px; }

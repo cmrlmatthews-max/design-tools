@@ -77,6 +77,7 @@ export const ICONS = {
   sun: svg('<circle cx="12" cy="12" r="3.8"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6L7 7M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/>'),
   home: svg('<path d="M4 11l8-6.5 8 6.5"/><path d="M6 9.5V19.5h12V9.5"/>'),
   info: svg('<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5"/><circle cx="12" cy="7.8" r=".4"/>'),
+  copy: svg('<rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15.5 8.5V6.5a2 2 0 00-2-2h-7a2 2 0 00-2 2v7a2 2 0 002 2h2"/>'),
 };
 
 /** Icon element: <span class="ico-wrap">svg</span>. */
@@ -579,8 +580,9 @@ function makeControls() {
 
   /**
    * Editable list of cards. o: { bind (array), title(i, item), render(i) -> { children, more }, make(arr),
-   *   addLabel, min, reorder, openDefault(i), empty, swatch(i, item) -> css color or null }
-   * Returns { el, refresh, openAt(i), rowAt(i) }.
+   *   addLabel, min, reorder, openDefault(i), empty, swatch(i, item) -> css color or null,
+   *   copy (true: a Copy button on each row that inserts a deep copy right after it), copyTip (its tooltip) }
+   * Returns { el, refresh, rebuild(), openAt(i), rowAt(i) }.
    */
   function list(o) {
     const host = h('div', { class: 'list' });
@@ -623,6 +625,11 @@ function makeControls() {
       const del = mk(ICON_X, 'Remove', () => { open.splice(i, 1); mutate((a) => { a.splice(i, 1); }); });
       const bar = h('div', { class: 'item-head' }, head);
       if (o.reorder !== false) bar.append(up, down);
+      if (o.copy) {
+        const cp = mk(ICONS.copy, 'Copy', () => { open.splice(i + 1, 0, true); mutate((a) => { a.splice(i + 1, 0, deepClone(a[i])); }); });
+        if (o.copyTip) cp.setAttribute('data-tip', o.copyTip);
+        bar.append(cp);
+      }
       bar.append(del);
       item.append(bar, h('div', { class: 'item-body' }, (part && part.children) || [], moreBlock(part && part.more)));
       reg.push(() => {
@@ -657,6 +664,7 @@ function makeControls() {
     }
     const ctl = track({ el, refresh });
     ctl.openAt = openAt;
+    ctl.rebuild = rebuild;                       // redraw every row (an owner whose rows read paths that moved); open rows stay open
     ctl.rowAt = (i) => host.children[i] || null;
     return ctl;
   }

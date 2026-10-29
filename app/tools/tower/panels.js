@@ -5,8 +5,9 @@
    Not ported: the View tab (the app has its own View and Layers panels; snap sits in the Editing section of the Form), image overlay choices, typed-base UI polish, the pin button.
    Segments are not in the Form: they build into the shell left tool bar (ctx.leftbar, see segments below and index.js).
    ========================================================================== */
-import { Units } from '../../core/ui-kit.js';
+import { Units, ICONS } from '../../core/ui-kit.js';
 import { CONFIG, num, clamp, deepClone, defaultSegment, surroundBlocks, unitBreakdown } from './state.js';
+import { towerOf, towerIds, indicesOf, replaceTower, copyTowerInState, removeTowerInState, addTowerInState } from './towers.js';
 
 const MAXD = CONFIG.limits.maxDim;
 const UI_KEY = 'cmrlm.tower.ui';
@@ -161,40 +162,126 @@ export function createPanels(T) {
   }
 
   const CURVES = opts([['linear', 'Linear'], ['eased', 'Eased']]);
-  /** The Segments list and its help line, for the left tool bar. */
+  const CARET = '<svg class="caret" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 5l4 4 4-4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const towerOpen = new Map();                       // tower index -> header open (kept while the bar is redrawn)
+  const tip = (el, text) => { el.setAttribute('data-tip', text); return el; };
+
+  /** The segment fields in one row. Towers 2 and up take their floor levels from Tower 1, so they have no Floor-to-floor. */
+  function segmentRow(t, i) {
+    const gi = indicesOf(store.raw().segments, t)[i];
+    const p = `segments.${gi}`;
+    return {
+      children: els([
+        intS('Floors', `${p}.floors`, 1, 150),
+        ...(t === 0 ? [lenS('Floor-to-floor', `${p}.ftf`, 8, 30, { step: 0.5, hardMin: 6, hardMax: 100 })] : []),
+        sel('Program', `${p}.program`, programOptions()),
+        ...shapeControls(`${p}.shape`, 400),
+      ]),
+      more: els([
+        C.label('Shift'),
+        C.group(els([lenF('Offset x (east)', `${p}.offset.x`, { hardMin: -MAXD }), lenF('Offset y (north)', `${p}.offset.y`, { hardMin: -MAXD })])),
+        degS('Rotation', `${p}.rotation`, -180, 180),
+        C.label('Taper (change bottom to top)'),
+        pctS('Taper x', `${p}.taper.x`, -60, 60), pctS('Taper y', `${p}.taper.y`, -60, 60),
+        sel('Taper curve', `${p}.taper.curve`, CURVES),
+        C.label('Twist'),
+        degS('Twist (total)', `${p}.twist.deg`, -180, 180),
+        fracS('Twist starts at height', `${p}.twist.start`), fracS('Twist ends at height', `${p}.twist.end`),
+        sel('Twist curve', `${p}.twist.curve`, CURVES),
+        C.label('Lean (movement at the top)'),
+        C.group(els([lenF('Lean x (east)', `${p}.lean.x`, { hardMin: -MAXD }), lenF('Lean y (north)', `${p}.lean.y`, { hardMin: -MAXD })])),
+      ]),
+    };
+  }
+
+  /** The Segments list for the left tool bar: one group per tower (Cade, October 29, 2026). Each group is a row list over that tower's segments. */
   function segmentsParts() {
-    const list = lists.segments = C.list({
-      bind: bs('segments'), addLabel: 'Add segment', min: 1,
-      swatch: (i, g) => progColor(g.program),
-      title: (i, g) => `Segment ${i + 1} · ${g.floors} fl`,   // short, the left bar is narrow; the swatch shows the program
-      make: (arr) => { const s = deepClone(arr[arr.length - 1] || defaultSegment()); s.floors = 10; return s; },
-      render: (i) => {
-        const p = `segments.${i}`;
-        return {
-          children: els([
-            intS('Floors', `${p}.floors`, 1, 150),
-            lenS('Floor-to-floor', `${p}.ftf`, 8, 30, { step: 0.5, hardMin: 6, hardMax: 100 }),
-            sel('Program', `${p}.program`, programOptions()),
-            ...shapeControls(`${p}.shape`, 400),
-          ]),
-          more: els([
-            C.label('Shift'),
-            C.group(els([lenF('Offset x (east)', `${p}.offset.x`, { hardMin: -MAXD }), lenF('Offset y (north)', `${p}.offset.y`, { hardMin: -MAXD })])),
-            degS('Rotation', `${p}.rotation`, -180, 180),
-            C.label('Taper (change bottom to top)'),
-            pctS('Taper x', `${p}.taper.x`, -60, 60), pctS('Taper y', `${p}.taper.y`, -60, 60),
-            sel('Taper curve', `${p}.taper.curve`, CURVES),
-            C.label('Twist'),
-            degS('Twist (total)', `${p}.twist.deg`, -180, 180),
-            fracS('Twist starts at height', `${p}.twist.start`), fracS('Twist ends at height', `${p}.twist.end`),
-            sel('Twist curve', `${p}.twist.curve`, CURVES),
-            C.label('Lean (movement at the top)'),
-            C.group(els([lenF('Lean x (east)', `${p}.lean.x`, { hardMin: -MAXD }), lenF('Lean y (north)', `${p}.lean.y`, { hardMin: -MAXD })])),
-          ]),
-        };
-      },
+    const mySyncs = swatchSyncs;
+    const root = h('div', { class: 'tower-groups' });
+    const groups = new Map();                        // tower index -> { el, list, title, rm }
+    const segs = () => store.raw().segments || [];
+    let sig = null;
+
+    const towerBind = (t) => ({
+      get: () => segs().filter((x) => towerOf(x) === t),
+      set: (arr) => store.update((d) => { replaceTower(d.segments, t, arr); }),
+      commit: () => {},
     });
-    return [C.help('Segments stack from bottom to top. Use the arrows to reorder them.'), list.el];
+    const copyTower = (t) => {
+      let made = null;
+      store.update((d) => { made = copyTowerInState(d, t); });
+      const g = made != null && groups.get(made);
+      if (g) { towerOpen.set(made, true); setGroupOpen(g, true); try { g.el.scrollIntoView({ block: 'nearest', behavior: 'auto' }); } catch (e) { /* stays */ } }
+    };
+    const removeTower = (t) => { store.update((d) => { removeTowerInState(d, t); }); };
+    const addTower = () => {
+      let made = null;
+      store.update((d) => { made = addTowerInState(d, defaultSegment); });
+      const g = made != null && groups.get(made);
+      if (g) { towerOpen.set(made, true); setGroupOpen(g, true); try { g.el.scrollIntoView({ block: 'nearest', behavior: 'auto' }); } catch (e) { /* stays */ } }
+    };
+    function setGroupOpen(g, open) {
+      g.el.dataset.open = open ? 'true' : 'false';
+      g.head.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+
+    function buildGroup(t) {
+      const list = C.list({
+        bind: towerBind(t), addLabel: 'Add segment', min: 1, copy: true, copyTip: 'Copy this segment. The copy goes on top of it.',
+        swatch: (i, g) => progColor(g.program),
+        title: (i, g) => `Segment ${i + 1} · ${g.floors} fl`,   // short, the left bar is narrow; the swatch shows the program
+        make: (arr) => { const s = deepClone(arr[arr.length - 1] || defaultSegment()); s.floors = 10; return s; },
+        render: (i) => segmentRow(t, i),
+      });
+      const title = h('span', { class: 't' });
+      const head = h('button', { class: 'item-title tower-title', type: 'button', html: CARET });
+      head.append(title);
+      const copy = tip(h('button', { class: 'ibtn tower-copy', type: 'button', 'aria-label': 'Copy tower', html: ICONS.copy, onclick: () => copyTower(t) }), 'Copy this tower to the other end of the podium.');
+      const rm = tip(h('button', { class: 'ibtn tower-remove', type: 'button', 'aria-label': 'Remove tower', html: ICONS.close, onclick: () => removeTower(t) }), 'Remove this tower.');
+      const body = h('div', { class: 'tower-body' }, t > 0 ? C.help('Floor levels follow Tower 1.') : null, list.el);
+      const el = h('div', { class: 'tower-group', 'data-tower': String(t) }, h('div', { class: 'tower-head' }, head, copy, rm), body);
+      const g = { el, list, title, rm, head };
+      setGroupOpen(g, towerOpen.has(t) ? towerOpen.get(t) : true);
+      head.addEventListener('click', () => { const next = el.dataset.open !== 'true'; towerOpen.set(t, next); setGroupOpen(g, next); });
+      return g;
+    }
+
+    const addRow = h('div', { class: 'add-row tower-add' }, tip(C.button('Add tower', addTower), 'Add another tower on the podium.'));
+    function sync() {
+      const all = segs();
+      const ids = towerIds(all);
+      const next = `${ids.join(',')}|${all.map(towerOf).join('')}`;
+      if (next === sig) return;
+      sig = next;
+      const have = [...groups.keys()];
+      const additive = have.every((id) => ids.includes(id));
+      if (!additive) groups.clear();                 // a tower went away: the numbers moved, so every group is drawn again
+      const fresh = new Set();
+      for (const t of ids) if (!groups.has(t)) { groups.set(t, buildGroup(t)); fresh.add(t); }
+      root.replaceChildren(...ids.map((t) => groups.get(t).el), addRow);
+      ids.forEach((t, rank) => {
+        const g = groups.get(t);
+        g.title.textContent = `Tower ${rank + 1}`;
+        g.rm.disabled = ids.length <= 1;
+        if (!fresh.has(t)) g.list.rebuild();         // the rows read paths in the flat list, which moved
+      });
+    }
+    mySyncs.push(sync); sync();
+
+    // The row list the 3D pick opens a row in (by index in the flat list)
+    lists.segments = {
+      el: root,
+      openAt: (gi) => {
+        const all = segs();
+        if (!(gi >= 0 && gi < all.length)) return null;
+        const t = towerOf(all[gi]);
+        const g = groups.get(t);
+        if (!g) return null;
+        towerOpen.set(t, true); setGroupOpen(g, true);
+        return g.list.openAt(indicesOf(all, t).indexOf(gi));
+      },
+    };
+    return [C.help('Segments stack from bottom to top. Use the arrows to reorder them.'), root];
   }
   // Hidden October 28, 2026 (Cade). See docs/removed-features.md. (moved to the left tool bar)
   // The Segments section is not added to the Form. The same list builds into the left tool bar (the `segments` builder below).
