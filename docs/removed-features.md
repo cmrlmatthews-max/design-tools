@@ -13,8 +13,8 @@ How to bring a feature back: find the comment "Hidden October 28, 2026" (or the 
 | Item | Date | Why | Code | How to bring it back |
 |---|---|---|---|---|
 | Parking Deck tool (podium deck from the Parking program, screening Open/Solid/Mesh with openness, standalone deck) | October 28, 2026 | Keep the app simple for the demo | Kept in `app/tools/parking/` | `app/tools/registry.js`: set `ready: true` |
-| Grading Sketch tool (pads, FFE, drives, walls, routes, cut and fill) | October 28, 2026 | Keep the app simple | Kept in `app/tools/grading/` | `app/tools/registry.js`: set `ready: true` |
-| Tower base from the Grading floor elevation | October 28, 2026 | Grading is hidden | Kept (`app/tools/tower/project.js` `gradingFfe`) | Comes back with the Grading Sketch |
+| Grading Sketch tool (pads, FFE, drives, walls, routes, cut and fill) | October 28, 2026 | Keep the app simple | **Back October 29, 2026** (Cade): a tab next to Site Model and Tower Generator. Parking options stay hidden while the Parking Deck is hidden | — |
+| Tower base from the Grading floor elevation | October 28, 2026 | Grading is hidden | **Back October 29, 2026** with the Grading Sketch | — |
 | Single tool cards on the Workspace page (Site Model, Massing, Plate Planner, Parking Deck, Sun Study, Grading Sketch, Model Viewer) | October 28, 2026 | Demo shows only the Design App | The old pages still work by URL | Restore the cards in `index.html` (git history, pull request #32) |
 | "Open Plate Planner" link on unit cards | October 28, 2026 | No links out of the app | Removed from `app/core/shell-panels.js` and `app/tools/plates/index.js` | Git history, pull request #33 |
 

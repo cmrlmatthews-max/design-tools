@@ -235,7 +235,7 @@ const viewCompact = h('button', { class: 'btn view-compact', type: 'button', 'da
 // Section cut (Cade, October 28, 2026): the drawing shows in a pane below the 3D view (core/section.js).
 const section = createSection(ctx, { stage: $('stage'), pane: $('sectionPane'), setView: (id) => setView(id), onLayout: () => { syncInsets(); scene.resize(); } });
 ctx.section = section;
-tb.center.append(h('div', { class: 'seg views' }, ...viewBtns), h('div', { class: 'seg sec-seg' }, section.button), h('div', { class: 'seg' }, zoomSite, zoomBldg), h('div', { class: 'seg' }, styleBtn), viewCompact);
+tb.center.append(h('div', { class: 'seg views' }, ...viewBtns), h('div', { class: 'seg sec-seg' }, section.button), h('div', { class: 'seg' }, zoomSite, zoomBldg), h('div', { class: 'seg' }, styleBtn), viewCompact);   // the neighbor style select joins after Diagram (below)
 
 // Narrow screens (the bottom-sheet layout): one View menu replaces the three button groups.
 function openViewMenu(anchor) {
@@ -254,7 +254,9 @@ const styleSel = h('select', { class: 'select tb-select', 'aria-label': 'Neighbo
   ...SITE_STYLES.map(([v, t]) => h('option', { value: v }, t)));
 styleSel.value = siteStyle;
 styleSel.addEventListener('change', () => ctx.setSiteStyle(styleSel.value));
-tb.right.append(styleSel, exportBtn, panelsBtn);
+// Next to the Diagram button (Cade, October 29, 2026).
+tb.center.append(styleSel);
+tb.right.append(exportBtn, panelsBtn);
 
 /* Fit the top bar (Fable QA, October 28, 2026): when the full view, zoom, and style groups do not fit, one View menu
    replaces them ("compact"). When that still does not fit, the tool tabs and the Section button show icons only ("tight"). */

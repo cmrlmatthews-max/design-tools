@@ -187,9 +187,9 @@ function onSelection({ item }) {
 function setSource(k) {
   const d = doc();
   if (k === 'standalone') { const next = stateStandalone(store.raw()); if (next) store.replace(next); return; }
-  if (!d) { ctx.bus.emit('notice', { text: 'Open a project first. The site, the massing and the parking deck come from the project.', kind: 'warn' }); return; }
+  if (!d) { ctx.bus.emit('notice', { text: 'Open a project first. The site and the massing come from the project.', kind: 'warn' }); return; }
   const next = stateUsingProject(store.raw(), d);
-  if (!next) { ctx.bus.emit('notice', { text: 'This project has no site ground, massing or parking deck yet.', kind: 'warn' }); return; }
+  if (!next) { ctx.bus.emit('notice', { text: 'This project has no site ground or massing yet.', kind: 'warn' }); return; }
   store.replace(next);
 }
 function toggleAutoWall(id) {

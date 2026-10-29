@@ -12,6 +12,7 @@ import * as EarthMod from '../../../src/grading/earthwork.js';
 import * as PresetsMod from '../../../src/grading/presets.js';
 import { gradingDerived } from '../../../src/grading/derived.js';
 import { getSection } from '../../../src/shared/project.js';
+import { toolOn } from '../registry.js';
 import { Units } from '../../core/ui-kit.js';
 
 export { FeaturesMod, GradMetricsMod, EarthMod, PresetsMod };
@@ -329,7 +330,8 @@ export function sectionPatch(state, D) {
 export function projectInfo(doc) {
   const has = (k) => !!(doc && getSection(doc, k));
   const site = getSection(doc, 'site');
-  return { massing: has('massing'), parking: has('parking'), siteGround: !!(site && site.derived && site.derived.ground) };
+  // The Parking Deck is hidden (October 28, 2026): its deck is not a grading building while hidden (registry.js).
+  return { massing: has('massing'), parking: has('parking') && toolOn('parking'), siteGround: !!(site && site.derived && site.derived.ground) };
 }
 const projectBuilding = (source, n) => ({ id: `${source === 'massing' ? 'M' : 'P'}${n}`, name: source === 'massing' ? 'Massing' : 'Parking deck', source, axis: 'auto', tiers: [{ length: null, ffe: 'balance' }], padOffset: 5, padDepth: 1 });
 const isDefaultBar = (b) => b.source === 'typed' && JSON.stringify(b.outer) === JSON.stringify(defaultState().buildings[0].outer) && (b.tiers || []).length === 1;
