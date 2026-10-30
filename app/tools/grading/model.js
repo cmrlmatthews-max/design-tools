@@ -11,6 +11,7 @@ import * as GradMetricsMod from '../../../src/grading/metrics.js';
 import * as EarthMod from '../../../src/grading/earthwork.js';
 import * as PresetsMod from '../../../src/grading/presets.js';
 import { gradingDerived } from '../../../src/grading/derived.js';
+import { applyTowerBase, drivingBase } from '../../../src/grading/towerlink.js';
 import { getSection } from '../../../src/shared/project.js';
 import { toolOn } from '../registry.js';
 import { Units } from '../../core/ui-kit.js';
@@ -106,6 +107,8 @@ export function fillDefaults(src) {
     if (!BUILDING_SOURCES.includes(out.source)) out.source = 'typed';
     if (out.source === 'typed') out.outer = cleanPts(b.outer, 3) || [[-50, -30], [50, -30], [50, 30], [-50, 30]];
     else delete out.outer;
+    // The tower link (src/grading/towerlink.js): only a massing building follows the tower base.
+    if (out.source === 'massing' && b.followTower === true) out.followTower = true; else delete out.followTower;
     out.axis = typeof b.axis === 'number' && Number.isFinite(b.axis) ? b.axis : 'auto';
     let tiers = (Array.isArray(b.tiers) ? b.tiers : []).filter(isObj).slice(0, CONFIG.limits.maxTiers).map((t) => ({
       length: typeof t.length === 'number' && Number.isFinite(t.length) && t.length > 0 ? t.length : null,
@@ -287,9 +290,11 @@ function summarize(built, metrics) {
 /** Everything the panels, the layer and the section writer need for one state (no caching). `project` is the project document or null. */
 export function computeDerived(s, { project = null, quality = 'full' } = {}) {
   try {
-    const built = FeaturesMod.buildGrading(s, { project, quality });
-    const metrics = GradMetricsMod.computeMetrics(s, built);
-    const checks = Array.isArray(metrics.warnings) ? metrics.warnings : GradMetricsMod.checks(s, metrics);
+    // A building linked to the tower stands on the tower's typed base (the state on screen normally holds it already).
+    const eff = applyTowerBase(s, drivingBase(project));
+    const built = FeaturesMod.buildGrading(eff, { project, quality });
+    const metrics = GradMetricsMod.computeMetrics(eff, built);
+    const checks = Array.isArray(metrics.warnings) ? metrics.warnings : GradMetricsMod.checks(eff, metrics);
     const warnings = (checks || []).map(mapWarning);
     const proposedZ = EarthMod.proposedGrid(built);
     let zLo = Infinity, zHi = -Infinity;
@@ -344,7 +349,12 @@ export function stateUsingProject(cur, doc) {
   next.source = 'project';
   if (info.siteGround) next.ground.mode = 'site';
   const add = [];
-  if (info.massing && !next.buildings.some((b) => b.source === 'massing')) add.push(projectBuilding('massing', 1));
+  if (info.massing && !next.buildings.some((b) => b.source === 'massing')) {
+    // A tower already in Typed mode drives the new massing building at once (Fable QA, October 30, 2026).
+    const base = drivingBase(doc);
+    const mb = projectBuilding('massing', 1);
+    add.push(base == null ? mb : { ...mb, followTower: true, tiers: [{ length: null, ffe: base }] });
+  }
   if (info.parking && !next.buildings.some((b) => b.source === 'parking')) add.push(projectBuilding('parking', 1));
   if (add.length) {
     if (next.buildings.length === 1 && isDefaultBar(next.buildings[0])) next.buildings = [];

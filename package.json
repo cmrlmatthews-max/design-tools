@@ -17,7 +17,7 @@
     "build:plate": "python3 build/plate/build.py",
     "test:plate": "node test/plate.mix.test.mjs && node test/plate.fill.test.mjs && node test/plate.exports.test.mjs && node test/plate.cases.test.mjs && node test/plate.rework.test.mjs && node test/plate.draw.test.mjs && node test/plate.leftover.test.mjs",
     "test:viewer": "node test/viewer.scene.test.mjs && node test/viewer.summary.test.mjs && node test/viewer.sketchup.test.mjs",
-    "test:grading": "node test/grading.surface.test.mjs && node test/grading.earthwork.test.mjs && node test/grading.exports.test.mjs",
+    "test:grading": "node test/grading.surface.test.mjs && node test/grading.earthwork.test.mjs && node test/grading.exports.test.mjs && node test/grading.towerlink.test.mjs",
     "test:facade": "node test/facade.faces.test.mjs && node test/facade.panels.test.mjs && node test/facade.exports.test.mjs",
     "test:parking": "node test/parking.layout.test.mjs && node test/parking.rules.test.mjs && node test/parking.exports.test.mjs",
     "test:midrise": "node test/midrise.bars.test.mjs && node test/midrise.assemble.test.mjs && node test/midrise.units.test.mjs && node test/midrise.derived.test.mjs",

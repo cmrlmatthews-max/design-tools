@@ -27,6 +27,7 @@ import {
 import { buildLayer, setAiReady, setLabelsVisible, disposeExtras } from './ground3d.js';
 import { createEditor } from './edit.js';
 import { createPanels } from './panels.js';
+import { towerBaseOf, drivingBase, linkAction, linkTower, unlinkTower, applyTowerBase, isLinked } from '../../../src/grading/towerlink.js';
 
 const LAYER_ID = 'grading-live';
 const OWNER = 'grading';
@@ -34,6 +35,8 @@ const OWNER = 'grading';
 let ctx = null, store = null, editor = null, panelsApi = null;
 let D = null, dKey = '', layerVer = 0, stamp = 0, overStamp = -1, overFn = null;
 let quiet = 0, uiRaf = 0, active = false, warnedReadOnly = false, overWanted = false;
+let seenTower = null;            // the tower base last seen in the massing section ({ mode, baseZ } or null), for the tower link
+let linkedIds = [];              // the buildings that followed the tower before the last store change (an undo keeps the link)
 let offs = [];
 
 /* ---------------------------------------------------------------- state and derived */
@@ -77,6 +80,54 @@ function writeSection({ onlyIfExists = false } = {}) {
     return true;
   } catch (e) { console.error(e); return false; }
 }
+
+/* ---------------------------------------------------------------- the tower link (src/grading/towerlink.js) */
+/** The FFE a tier has in the build on screen (to fix a balanced tier before the link moves it). */
+function ffeNow(b, tier) {
+  if (!D || !D.ok) return null;
+  const id = b.source === 'typed' ? b.id : b.source;
+  const t = (D.built.tiers || []).find((x) => x.building === id && x.tier === tier);
+  return t && Number.isFinite(t.ffe) ? t.ffe : null;
+}
+/** Puts a link change in the state without an undo step of its own: the tower owns it (an undo in the Tower brings it back). */
+function applyLink(next) {
+  const s = store.raw();
+  if (!next || next === s || JSON.stringify(next) === JSON.stringify(s)) return false;
+  store.update(() => fillDefaults(next), { merge: true });
+  return true;
+}
+/**
+ * The massing changed. Only a tower in Typed mode drives the grade: going to Typed or typing a base links the massing building
+ * and moves it there; Follow ground unlinks it (the tiers keep their last values). No loop: this writes the grading section
+ * only when the state changes, and the Tower ignores the grading while it is Typed.
+ */
+function followTower() {
+  const cur = towerBaseOf(doc()), prev = seenTower;
+  seenTower = cur;
+  const s = store.raw();
+  const act = linkAction(s, prev, cur);
+  if (act === 'link') return applyLink(linkTower(s, cur.baseZ, ffeNow));
+  if (act === 'sync') return applyLink(applyTowerBase(s, cur.baseZ));
+  if (act === 'unlink') return applyLink(unlinkTower(s, prev && prev.mode === 'typed' ? prev.baseZ : null));
+  return false;
+}
+/**
+ * After a change in the Grading Sketch: while the tower is Typed, a linked building stays on the tower base (an applied
+ * suggestion, for example, keeps the first tier there). After an undo or redo, prevIds (the buildings linked before) stay linked.
+ */
+function keepLink(prevIds = []) {
+  const base = drivingBase(doc());
+  if (base == null) return false;
+  const s = store.raw();
+  let next = s;
+  if (prevIds.some((id) => !s.buildings.some((b) => b.id === id && isLinked(b)))) {
+    next = deepCloneState(s);
+    next.buildings = next.buildings.map((b) => (prevIds.includes(b.id) && b.source === 'massing' ? { ...b, followTower: true } : b));
+  }
+  return applyLink(applyTowerBase(next, base));
+}
+const deepCloneState = (o) => JSON.parse(JSON.stringify(o));
+const linkedOf = (s) => (s && Array.isArray(s.buildings) ? s.buildings.filter(isLinked).map((b) => b.id) : []);
 
 /* ---------------------------------------------------------------- ground override */
 function overrideFor(d) {
@@ -148,6 +199,9 @@ function scheduleUi() {
 }
 function onStore(state, info) {
   const live = !!(info && info.live);
+  const prevIds = linkedIds;
+  linkedIds = linkedOf(state);
+  if (!live && !quiet && keepLink(info && (info.kind === 'undo' || info.kind === 'redo') ? prevIds : [])) return;   // the nested change did the rest
   compute(live ? 'draft' : 'full');
   layerVer++;
   if (live) { scheduleUi(); return; }
@@ -164,6 +218,7 @@ function onStore(state, info) {
 
 /** Replaces the state without an undo step and without a write (the project opened, or another tab saved). */
 function reloadState() {
+  seenTower = towerBaseOf(doc());
   quiet++;
   try { store.replace(loadState(), { undoable: false }); } finally { quiet--; }
 }
@@ -234,6 +289,8 @@ const tool = {
     loadCss();
     store = ctx.store(loadState());
     tool.store = store;
+    seenTower = towerBaseOf(doc());
+    linkedIds = linkedOf(store.raw());
     compute('full');
     offs.push(store.subscribe(onStore));
     editor = createEditor({
@@ -320,6 +377,7 @@ const tool = {
       if (sec && isObj(sec.state) && JSON.stringify(fillDefaults(sec.state)) !== JSON.stringify(store.raw())) { reloadState(); scheduleUi(); return; }
     }
     if (keys.some((k) => k === 'site' || k === 'massing' || k === 'parking')) {   // the data this design stands on changed
+      if (keys.includes('massing') && followTower()) { scheduleUi(); return; }   // the store change rebuilt and wrote the section
       compute('full');
       layerVer++;
       if (overWanted) syncOverride(true);

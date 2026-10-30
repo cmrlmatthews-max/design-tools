@@ -12,6 +12,7 @@
    Everything drawn here is DOM and SVG in #handles, so it never shows in a captured image.
    ========================================================================== */
 import { PRIORITY } from '../../core/input.js';
+import { driveFeature } from '../../../src/grading/features.js';
 import { CONFIG, clamp, rnd, deepClone, nearestOnSeg, pointInRing } from './model.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
@@ -165,7 +166,7 @@ export function createEditor(env) {
   }
 
   /* ---------------------------------------------------------------- the DOM layer */
-  let layer = null, svg = null, haloEl = null, lineEl = null, prevEl = null, bar = null, barText = null, barFinish = null;
+  let layer = null, svg = null, haloEl = null, lineEl = null, prevEl = null, bandEl = null, bar = null, barText = null, barFinish = null;
   const vDots = [], mDots = [], dDots = [];
   const mkPath = (cls) => { const p = document.createElementNS(SVGNS, 'path'); p.setAttribute('class', cls); p.setAttribute('fill', 'none'); p.setAttribute('stroke-linecap', 'round'); p.setAttribute('stroke-linejoin', 'round'); return p; };
   function buildLayer() {
@@ -180,8 +181,8 @@ export function createEditor(env) {
     svg.setAttribute('class', 'grading-svg');
     svg.setAttribute('aria-hidden', 'true');
     svg.setAttribute('style', 'position:absolute;left:0;top:0;width:100%;height:100%;overflow:visible;pointer-events:none');
-    haloEl = mkPath('grading-halo'); lineEl = mkPath('grading-line'); prevEl = mkPath('grading-preview');
-    svg.append(haloEl, lineEl, prevEl);
+    haloEl = mkPath('grading-halo'); lineEl = mkPath('grading-line'); bandEl = mkPath('grading-band'); prevEl = mkPath('grading-preview');
+    svg.append(haloEl, lineEl, bandEl, prevEl);                 // the width band sits under the dashed centerline
     layer.append(svg);
     host.append(layer);
     bar = document.createElement('div');
@@ -241,12 +242,30 @@ export function createEditor(env) {
       const pts = draw.pts.concat(hover ? [[hover.x, hover.y]] : []);
       const closed = KINDS[draw.kind].closed && pts.length >= 3;
       prevEl.setAttribute('d', pts.length >= 2 ? pathOf(drape(pts, closed, 6, 1), o) : '');
+      bandEl.setAttribute('d', draw.kind === 'drive' ? bandPath(pts, o) : '');
       useDots(dDots, draw.pts.length, 'hdl vertex grading-d');
       draw.pts.forEach((p, i) => place(dDots[i], { x: p[0], y: p[1], z: groundAt(p[0], p[1]) + 1 }, o));
     } else {
-      prevEl.setAttribute('d', '');
+      prevEl.setAttribute('d', ''); bandEl.setAttribute('d', '');
       useDots(dDots, 0, 'hdl vertex grading-d');
     }
+  }
+  /** The width a drive gets: the one being redrawn, else the most recently added drive, else 24 ft. */
+  function driveWidth() {
+    const s = store.raw(), list = s.drives || [];
+    let w = NaN;
+    if (draw && draw.replace) { const i = indexOf(list, draw.replace.id); if (i >= 0) w = Number(list[i].width); }
+    if (!(w > 0) && list.length) w = Number(list[list.length - 1].width);
+    return w > 0 && Number.isFinite(w) ? w : 24;
+  }
+  /** The full-width outline of a drive being drawn (the finished drive's own miter outline), draped on the ground, as an SVG path. */
+  function bandPath(pts, o) {
+    if (pts.length < 2) return '';
+    let ring = [];
+    try { ring = driveFeature({ line: pts, width: driveWidth() }, () => 0).ring || []; } catch (e) { ring = []; }
+    if (ring.length < 3) return '';
+    const d = pathOf(drape(ring, true, 6, 0.5), o);
+    return d ? `${d}Z` : '';
   }
   function place(el, h, o) {
     if (!el) return;
@@ -365,7 +384,7 @@ export function createEditor(env) {
       }
     } else if (kind === 'drive') {
       const id = nextId(s.drives, 'D');
-      store.set('drives', [...s.drives, { id, line: pts, width: 24, start: 'existing', slope: 5, cross: 2, crown: true }], { live: false }); item = { kind, id };
+      store.set('drives', [...s.drives, { id, line: pts, width: driveWidth(), start: 'existing', slope: 5, cross: 2, crown: true }], { live: false }); item = { kind, id };
     } else if (kind === 'lot') {
       const id = nextId(s.lots, 'L');
       store.set('lots', [...s.lots, { id, ring: pts, anchor: null, start: 'existing', dir: 0, slope: 2, cross: 1 }], { live: false }); item = { kind, id };

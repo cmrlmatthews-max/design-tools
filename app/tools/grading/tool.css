@@ -3,6 +3,7 @@
 /* the outline of the selected item and the drawing preview (SVG in #handles) */
 .grading-halo { stroke: var(--panel, #171b1f); stroke-width: 5.5; opacity: .85; }
 .grading-line { stroke: var(--accent, #6aa2ea); stroke-width: 3; }
+.grading-band { fill: var(--accent, #6aa2ea); fill-opacity: .24; stroke: var(--accent, #6aa2ea); stroke-width: 1; stroke-opacity: .7; }
 .grading-preview { stroke: var(--accent, #6aa2ea); stroke-width: 3; stroke-dasharray: 7 5; }
 
 /* handles: a square at each vertex, a smaller dot at each edge midpoint (the shell's .hdl look) */
@@ -35,3 +36,5 @@ canvas.grading-drawing { cursor: crosshair; }
 .grading-sw { width: 18px; height: 12px; border-radius: 3px; border: 1px solid var(--line-2, rgba(255, 255, 255, .25)); flex: 0 0 auto; }
 .grading-auto { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 4px 0; font-size: 12.5px; }
 .grading-grow { flex: 1 1 auto; min-width: 0; }
+/* The first tier of a massing building that follows the tower's typed base (read-only value). */
+.grading-from-tower { margin: 2px 0 0; font-variant-numeric: tabular-nums; color: var(--ink, #e7eaee); }
