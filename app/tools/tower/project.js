@@ -329,8 +329,11 @@ export function createProject(T) {
     if (towerSection(s)) {
       if (stampOf(s) !== flags.seen && !store.gestureActive()) {
         flags.seen = stampOf(s);
+        const next = stateFrom(s);
+        // The project save re-stamps the section this page wrote (project-store flush). The same tower: no replace, so no empty undo step.
+        if (JSON.stringify(next) === JSON.stringify(fillDefaults(store.snapshot()))) return false;
         flags.dirty = false;
-        show(stateFrom(s), { resetHistory: false });
+        show(next, { resetHistory: false });
         return true;
       }
     }

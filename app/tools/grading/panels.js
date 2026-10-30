@@ -12,6 +12,7 @@
    ========================================================================== */
 import { Units } from '../../core/ui-kit.js';
 import { toolOn } from '../registry.js';
+import { isLinked, drivingBase } from '../../../src/grading/towerlink.js';
 import {
   CONFIG, FeaturesMod, fmt, num, clamp, rnd, deepClone, polyLength, ringArea, compassOf, pct1, classWord, projectInfo, SOURCE_LABELS,
 } from './model.js';
@@ -105,6 +106,8 @@ export function createPanels(env) {
     else delete b.outer;
     store.set(`buildings.${i}`, b, { live: false });
   }
+  /** True when building i follows the tower's typed base (the link in src/grading/towerlink.js, on only while the tower is Typed). */
+  const fromTower = (i) => isLinked(bAt(i)) && drivingBase(doc()) != null;
   const tierBind = (i, j, key) => ({ get: () => ((bAt(i).tiers || [])[j] || {})[key], set: (v, live) => store.set(`${bPath(i, 'tiers')}.${j}.${key}`, v, { live: !!live }), commit: () => store.commit() });
   function suggestionFor(i) {
     const bb = builtOf(i), D = getD();
@@ -152,11 +155,16 @@ export function createPanels(env) {
         const typed = () => bAt(i).source === 'typed';
         const tierList = mkList({
           bind: bs(bPath(i, 'tiers')), addLabel: 'Add tier', min: 1, reorder: false, openDefault: () => false, empty: '',
-          title: (j, t) => `Tier ${j + 1} · FFE ${typeof t.ffe === 'number' ? E(t.ffe) : 'balanced'}${t.length ? ` · ${FT(t.length)}` : ''}`,
+          title: (j, t) => `Tier ${j + 1} · FFE ${typeof t.ffe === 'number' ? E(t.ffe) : 'balanced'}${j === 0 && fromTower(i) ? ' · tower' : ''}${t.length ? ` · ${FT(t.length)}` : ''}`,
           make: () => ({ length: null, ffe: 'balance' }),
           render: (j) => ({
             children: [
-              choiceB('Floor elevation', {
+              // The tower link (src/grading/towerlink.js): the first tier of the massing building takes the tower's typed base. Read-only here.
+              C.when(() => j === 0 && fromTower(i), [
+                h('div', { class: 'ctl' }, h('div', { class: 'ctl-label' }, 'Floor elevation'), info(() => `FFE ${E(tierBind(i, j, 'ffe').get())} ft · from tower`, 'grading-from-tower').el),
+                C.help('The tower\'s typed base elevation sets this floor. Change it in the Tower Generator, or switch the tower to Follow ground.'),
+              ]),
+              C.when(() => !(j === 0 && fromTower(i)), [choiceB('Floor elevation', {
                 get: () => (typeof tierBind(i, j, 'ffe').get() === 'number' ? 'typed' : 'balance'),
                 set: (k) => {
                   if (k === 'balance') { store.set(`${bPath(i, 'tiers')}.${j}.ffe`, 'balance', { live: false }); return; }
@@ -164,8 +172,8 @@ export function createPanels(env) {
                   store.set(`${bPath(i, 'tiers')}.${j}.ffe`, row ? rnd(row.ffe, 100) : 1000, { live: false });
                 },
                 commit: () => {},
-              }, [['balance', 'Balance'], ['typed', 'Typed']]),
-              C.when(() => typeof tierBind(i, j, 'ffe').get() === 'number', [C.slider({ label: 'FFE (ft)', bind: tierBind(i, j, 'ffe'), min: 0, max: 1, step: 0.01, compact: true, hardMin: -1000, hardMax: 20000, format: E, inputMode: 'decimal' })]),
+              }, [['balance', 'Balance'], ['typed', 'Typed']])]),
+              C.when(() => !(j === 0 && fromTower(i)) && typeof tierBind(i, j, 'ffe').get() === 'number', [C.slider({ label: 'FFE (ft)', bind: tierBind(i, j, 'ffe'), min: 0, max: 1, step: 0.01, compact: true, hardMin: -1000, hardMax: 20000, format: E, inputMode: 'decimal' })]),
               choiceB('Length along the axis', {
                 get: () => (typeof tierBind(i, j, 'length').get() === 'number' ? 'typed' : 'equal'),
                 set: (k) => {

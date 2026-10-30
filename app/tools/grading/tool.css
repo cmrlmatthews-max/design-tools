@@ -36,3 +36,5 @@ canvas.grading-drawing { cursor: crosshair; }
 .grading-sw { width: 18px; height: 12px; border-radius: 3px; border: 1px solid var(--line-2, rgba(255, 255, 255, .25)); flex: 0 0 auto; }
 .grading-auto { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 4px 0; font-size: 12.5px; }
 .grading-grow { flex: 1 1 auto; min-width: 0; }
+/* The first tier of a massing building that follows the tower's typed base (read-only value). */
+.grading-from-tower { margin: 2px 0 0; font-variant-numeric: tabular-nums; color: var(--ink, #e7eaee); }
