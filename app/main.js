@@ -277,6 +277,11 @@ new MutationObserver(() => fitTopbar()).observe(document.documentElement, { attr
 
 let currentView = 'axon';
 function setView(id) { currentView = id; scene.setView(id); syncTopbar(); }
+// A tool that sets the view itself (for example Draw a drive goes to Plan) keeps the top bar in step (Fable QA, October 30, 2026).
+{
+  const sceneSetView = scene.setView.bind(scene);
+  scene.setView = (id, opts) => { const out = sceneSetView(id, opts); if (typeof id === 'string' && id !== currentView) { currentView = id; try { syncTopbar(); } catch (e) { /* the top bar is not built yet */ } } return out; };
+}
 function toggleStyle() { scene.setStyle(scene.style() === 'diagram' ? 'model' : 'diagram'); syncTopbar(); }
 
 function activeStore() { const t = active ? loaded.get(active) : null; return t && t.store ? t.store : null; }

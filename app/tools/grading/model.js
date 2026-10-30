@@ -349,7 +349,12 @@ export function stateUsingProject(cur, doc) {
   next.source = 'project';
   if (info.siteGround) next.ground.mode = 'site';
   const add = [];
-  if (info.massing && !next.buildings.some((b) => b.source === 'massing')) add.push(projectBuilding('massing', 1));
+  if (info.massing && !next.buildings.some((b) => b.source === 'massing')) {
+    // A tower already in Typed mode drives the new massing building at once (Fable QA, October 30, 2026).
+    const base = drivingBase(doc);
+    const mb = projectBuilding('massing', 1);
+    add.push(base == null ? mb : { ...mb, followTower: true, tiers: [{ length: null, ffe: base }] });
+  }
   if (info.parking && !next.buildings.some((b) => b.source === 'parking')) add.push(projectBuilding('parking', 1));
   if (add.length) {
     if (next.buildings.length === 1 && isDefaultBar(next.buildings[0])) next.buildings = [];
