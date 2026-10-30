@@ -3,6 +3,7 @@
 /* the outline of the selected item and the drawing preview (SVG in #handles) */
 .grading-halo { stroke: var(--panel, #171b1f); stroke-width: 5.5; opacity: .85; }
 .grading-line { stroke: var(--accent, #6aa2ea); stroke-width: 3; }
+.grading-band { fill: var(--accent, #6aa2ea); fill-opacity: .24; stroke: var(--accent, #6aa2ea); stroke-width: 1; stroke-opacity: .7; }
 .grading-preview { stroke: var(--accent, #6aa2ea); stroke-width: 3; stroke-dasharray: 7 5; }
 
 /* handles: a square at each vertex, a smaller dot at each edge midpoint (the shell's .hdl look) */
